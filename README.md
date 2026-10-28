@@ -16,6 +16,7 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 - **Mission checks look at the server's real state**, not the exact command you typed — creative solutions count.
 - **Investigation scenarios** (Chapters 31–35): a real senior-admin incident is paged in, you're asked diagnostic questions (`submit` your findings), troubleshoot with the live tools (`df -i`, `lsof +L1`, `du --inodes`, `dmesg`, `iostat`, `w`/`last`, `awk` on `/etc/passwd`), then apply the fix.
 - **Optional Speed tracker** — opt in with `tracker on` to time each ticket and keep a performance log (`stats`).
+- **Race mode** — two or more players pick one of the incident scenarios and race live to resolve it first, with a real-time leaderboard. (Online racing runs through the hosted claude.ai version; the offline/downloaded builds show a notice and otherwise play normally.)
 - A `check` command that tells you *why* a ticket hasn't advanced, plus three-step hints and a `retry` checkpoint.
 - Progress saved in your browser; works fully **offline** (installable as a PWA).
 - Light/dark aware, responsive down to phone width.

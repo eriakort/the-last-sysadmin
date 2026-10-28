@@ -126,6 +126,51 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
 }
 @media (pointer:coarse){.keys{display:flex}}
 @media (prefers-reduced-motion:reduce){.led.cur{animation:none}}
+
+/* ---- Race mode ---- */
+body.racing #leds,body.racing #chips,body.racing #speed,body.racing #finale,body.racing .panel>div:last-child{display:none!important}
+body.racing #raceBoard{display:block!important}
+#raceOverlay{position:fixed;inset:0;z-index:50;background:rgba(7,10,15,.82);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left)) 16px}
+.race-modal{position:relative;width:min(560px,100%);max-height:88vh;max-height:88svh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.race-x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:26px;line-height:1;padding:4px 8px;border-radius:6px}
+.race-x:hover{color:var(--ink);background:var(--raise)}
+.race-modal h2{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.03em;margin:0 0 4px}
+.race-modal .rlead{color:var(--muted);font-size:13.5px;margin:0 0 16px;max-width:46ch}
+.race-modal .rlabel{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:16px 0 7px}
+.race-modal input[type=text]{width:100%;box-sizing:border-box;background:var(--term);border:1px solid var(--line);border-radius:7px;color:var(--ink);font:inherit;padding:9px 11px;outline:0}
+.race-modal input[type=text]:focus{border-color:var(--amber)}
+.race-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.race-row .btn{flex:0 0 auto}
+.scenarios{display:flex;flex-direction:column;gap:7px;margin-top:4px}
+.scn{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--raise);color:var(--ink);cursor:pointer}
+.scn:hover{border-color:var(--muted)}
+.scn.sel{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,var(--raise))}
+.scn .sn{font-family:var(--f-display);font-weight:600;font-size:14.5px}
+.scn .sd{font-size:12.5px;color:var(--muted);margin-top:2px}
+.scn .sx{margin-left:auto;font-family:var(--f-mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.race-note{font-size:12.5px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.race-err{color:var(--red);font-size:13px;margin-top:10px}
+.lobby-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.lobby-p{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--raise);font-size:14px}
+.pdot{width:11px;height:11px;border-radius:50%;flex:none}
+.lobby-p .pst{margin-left:auto;font-size:12px;color:var(--muted);font-family:var(--f-mono)}
+.lobby-p .pst.ready{color:var(--green)}
+.rcode{font-family:var(--f-mono);font-weight:700;font-size:20px;letter-spacing:.18em;color:var(--amber)}
+.count-big{font-family:var(--f-display);font-weight:700;font-size:72px;line-height:1;color:var(--amber);text-align:center;padding:18px 0}
+.rb-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.rb-row:last-child{border-bottom:0}
+.rb-row .rbrank{width:20px;font-family:var(--f-display);font-weight:700;color:var(--muted);text-align:center;flex:none}
+.rb-row.win .rbrank{color:var(--amber)}
+.rb-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb-name .you{color:var(--amber);font-size:11px;margin-left:5px}
+.rb-prog{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}
+.rb-bar{width:72px;height:7px;border-radius:4px;background:var(--led-off);overflow:hidden}
+.rb-bar i{display:block;height:100%;background:var(--green);transition:width .3s}
+.rb-time{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--muted);min-width:52px;text-align:right}
+.rb-row.done .rb-time{color:var(--green)}
+.rb-row.win .rb-time{color:var(--amber);font-weight:600}
+.race-winner{font-family:var(--f-display);font-weight:700;font-size:18px;color:var(--amber);text-align:center;margin:4px 0 14px}
+@media (max-width:860px){.count-big{font-size:56px}}
 </style>
 </head>
 <body>
@@ -143,6 +188,7 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
       <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
+      <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>
@@ -176,6 +222,11 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
         <div class="label">Speed tracker <span id="spdCount"></span></div>
         <div id="speedBody"></div>
       </div>
+      <div id="raceBoard" hidden>
+        <div class="label">Race · live standings <span id="rbMeta"></span></div>
+        <div id="rbBody"></div>
+        <button class="btn" id="btnRaceExit" type="button" style="margin-top:10px">Leave race</button>
+      </div>
       <div>
         <div class="label">Commands you've used <span>tap one to read its manual</span></div>
         <div class="chips" id="chips"></div>
@@ -200,6 +251,13 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
       </div>
     </section>
   </main>
+</div>
+
+<div id="raceOverlay" hidden>
+  <div class="race-modal" role="dialog" aria-label="Race">
+    <button class="race-x" id="raceClose" type="button" aria-label="Close">×</button>
+    <div id="raceContent"></div>
+  </div>
 </div>
 
 <script>
@@ -769,7 +827,7 @@ function migrate() {
     S.mig = 8;
   }
 }
-function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } }
+function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
   S = freshState(); return false;
@@ -4632,6 +4690,7 @@ function completeMission() {
   }
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
+  if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
   const next = MISSIONS[S.mission];
   if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
   if (!next) S.finished = true;
@@ -4771,6 +4830,17 @@ function render() {
   });
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
+  if (RACE.active) {
+    renderBoard();
+    if (RACE.finished) {
+      $('#pChapter').textContent = 'Race';
+      $('#pTicket').textContent = RACE.scenario ? RACE.scenario.name : '';
+      $('#pTitle').textContent = 'Incident resolved ✓';
+      $('#pStory').innerHTML = md(`Your time: **${fmtDur(RACE.myFinishMs)}**. Final standings are below.`);
+      show('.objective', false); show('.hints', false); show('#finale', false);
+      return;
+    }
+  }
   if (S.finished) {
     $('#pChapter').textContent = `Chapters 1–${CHAPTERS.length} complete`;
     $('#pTicket').textContent = 'Case file: open';
@@ -4799,6 +4869,7 @@ $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });
 $('#btnTimer').addEventListener('click', () => { toggleTracker(); scrollEnd(); tin.focus({ preventScroll: true }); });
 let newTimer = null;
 $('#btnNew').addEventListener('click', e => {
+  if (RACE.active) { emitSys('Finish or leave the race first (use <b>Leave race</b>).', 'hint'); return; }
   const b = e.currentTarget;
   if (!b.classList.contains('danger')) {
     b.classList.add('danger'); b.textContent = 'Erase progress?';
@@ -4830,6 +4901,263 @@ function boot(restored) {
   updatePrompt(); render(); save(); scrollEnd();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
+/* ============================================================
+   Race mode — online head-to-head via the room capability
+   ============================================================ */
+const RACE_SCN = [
+  { id: 'phantom',    startId: 'ph-df',      steps: 5, name: 'The Phantom Disk',            desc: 'Disk full, but du disagrees — a deleted file held open.' },
+  { id: 'inodes',     startId: 'in-df',      steps: 5, name: 'No Space, Plenty of Room',     desc: 'Writes fail at 15% full — inode exhaustion.' },
+  { id: 'compromise', startId: 'co-w',       steps: 6, name: 'Someone Else Is Root',         desc: 'Unknown login, box running hot — a live compromise.' },
+  { id: 'oom',        startId: 'oom-status', steps: 5, name: 'The Service That Keeps Dying', desc: 'An app dies with no error of its own — the OOM killer.' },
+  { id: 'ghost',      startId: 'gl-uptime',  steps: 5, name: 'The Ghost Load',               desc: 'Load sky-high, CPU idle — I/O wait on a stuck process.' }
+];
+const RACE_COLORS = ['#f2b04b', '#7fb2f5', '#78d39f', '#c79bf2', '#ff8471', '#5ad2d2', '#e68fd0', '#b9c24a'];
+function raceReset() { return { active: false, roomObj: null, code: '', name: '', color: '', scnId: null, scenario: null, startIdx: 0, endIdx: 0, total: 0, phase: 'off', ready: false, isHost: false, myPeer: '', hostPeer: '', go: 0, goLock: 0, myStart: 0, myFinishMs: null, finished: false, unsubs: [], peerCache: [], countTimer: null, boardTimer: null }; }
+let RACE = raceReset();
+let campaignS = null;
+let roomCap;
+async function getRoom() {
+  if (roomCap !== undefined) return roomCap;
+  try { roomCap = (typeof window !== 'undefined' && window.claude && window.claude.use) ? await window.claude.use('room') : null; }
+  catch (e) { roomCap = null; }
+  return roomCap;
+}
+function raceSafeName(s) { s = (s || '').trim().replace(/[^\x20-\x7e]/g, '').slice(0, 18); return s || 'Player'; }
+function raceCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+function lockTin(on) { tin.disabled = !!on; }
+const roEl = () => $('#raceOverlay');
+function showOverlay() { roEl().hidden = false; }
+function hideOverlay() { roEl().hidden = true; }
+function renderContent(html) { $('#raceContent').innerHTML = html; }
+
+async function openRace() {
+  if (RACE.active || RACE.phase === 'lobby' || RACE.phase === 'countdown') { showOverlay(); return; }
+  showOverlay();
+  renderContent('<p class="rlead">Connecting…</p>');
+  const room = await getRoom();
+  if (!room) { renderUnavailable(); return; }
+  renderSetup();
+}
+function renderUnavailable() {
+  renderContent(`<h2>Race mode</h2>
+    <p class="rlead">Online racing runs live through claude.ai, so it works in the hosted version of this game — the shareable artifact link — where two or more people can open the same page and race.</p>
+    <p class="rlead">This looks like the offline / downloaded build (standalone file, installed app, or a self-hosted copy), which has no live connection, so head-to-head racing isn't available here. Everything else plays normally.</p>
+    <div class="race-row"><button class="btn primary" id="rOk" type="button">Got it</button></div>`);
+  $('#rOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+}
+function renderSetup() {
+  let saved = ''; try { saved = localStorage.getItem('lsa-race-name') || ''; } catch (e) {}
+  renderContent(`<h2>Race another admin</h2>
+    <p class="rlead">Two or more players pick the same incident and race to resolve it first. Everyone opens this same page (share the link), then joins with a room code.</p>
+    <div class="rlabel">Your name</div>
+    <input id="rName" type="text" maxlength="18" placeholder="e.g. Sam" value="${esc(saved)}">
+    <div class="rlabel">Start or join a room</div>
+    <div class="race-row">
+      <button class="btn primary" id="rCreate" type="button">Create a room</button>
+      <span style="color:var(--muted);font-size:13px">or</span>
+      <input id="rJoin" type="text" maxlength="8" placeholder="room code" style="flex:1 1 110px;min-width:90px;text-transform:uppercase">
+      <button class="btn" id="rJoinBtn" type="button">Join</button>
+    </div>
+    <div class="race-err" id="rErr" hidden></div>
+    <div class="race-note">Online racing runs through claude.ai. Share this page's link so the other player opens the exact same artifact.</div>`);
+  const nameEl = $('#rName');
+  const go = (create) => {
+    const nm = raceSafeName(nameEl.value);
+    try { localStorage.setItem('lsa-race-name', nm); } catch (e) {}
+    const code = create ? raceCode() : ($('#rJoin').value || '').trim().toUpperCase();
+    if (!create && !/^[A-Z0-9]{3,8}$/.test(code)) { const er = $('#rErr'); er.hidden = false; er.textContent = 'Enter the room code the other player shared (letters and numbers).'; return; }
+    doJoin(code, nm, create);
+  };
+  $('#rCreate').addEventListener('click', () => go(true));
+  $('#rJoinBtn').addEventListener('click', () => go(false));
+  $('#rJoin').addEventListener('keydown', e => { if (e.key === 'Enter') go(false); });
+  nameEl.focus();
+}
+async function doJoin(code, name, isCreator) {
+  RACE.name = name; RACE.color = RACE_COLORS[Math.floor(Math.random() * RACE_COLORS.length)];
+  RACE.code = code; RACE.phase = 'lobby'; RACE.ready = false;
+  RACE.scnId = isCreator ? RACE_SCN[0].id : null;
+  renderContent('<p class="rlead">Joining room…</p>');
+  const room = await getRoom();
+  try { RACE.roomObj = await room.join('lsa-' + code.toLowerCase()); }
+  catch (e) { renderContent(`<h2>Couldn't join</h2><p class="race-err">The room is unavailable (${esc(e && e.code || 'error')}). <button class="btn" id="rBack" type="button">Back</button></p>`); const bk = $('#rBack'); if (bk) bk.addEventListener('click', renderSetup); return; }
+  RACE.unsubs.push(RACE.roomObj.onPeers(onPeersChange, () => {}));
+  racePresence();
+  renderLobby();
+}
+function racePresence() {
+  if (!RACE.roomObj) return;
+  const p = {
+    name: RACE.name, color: RACE.color,
+    scn: RACE.scnId || null,
+    phase: RACE.phase,
+    ready: RACE.ready ? true : null,
+    go: (RACE.isHost && RACE.go) ? RACE.go : null,
+    step: RACE.active ? Math.max(0, S.mission - RACE.startIdx) : 0,
+    total: RACE.total || 0,
+    finishMs: (RACE.myFinishMs != null) ? RACE.myFinishMs : null
+  };
+  RACE.roomObj.presence(p).catch(() => {});
+}
+function viewerPeers() { return RACE.peerCache.filter(p => p.kind !== 'agent'); }
+function onPeersChange(change) {
+  RACE.peerCache = change.peers;
+  const vs = viewerPeers();
+  const me = vs.find(p => p.isMe && p.sameTab);
+  if (me) RACE.myPeer = me.peer;
+  const ids = vs.map(p => p.peer).sort();
+  RACE.hostPeer = ids[0] || '';
+  RACE.isHost = !!RACE.myPeer && RACE.myPeer === RACE.hostPeer;
+  const host = vs.find(p => p.peer === RACE.hostPeer);
+  const hostScn = host && host.presence && host.presence.scn;
+  if (!RACE.isHost && hostScn) RACE.scnId = hostScn;
+  if (RACE.isHost && !RACE.scnId) { RACE.scnId = RACE_SCN[0].id; racePresence(); }
+  if (RACE.phase === 'lobby') {
+    const g = host && host.presence && host.presence.go;
+    if (g && !RACE.goLock) { RACE.goLock = g; beginCountdown(); }
+  }
+  if (RACE.phase === 'lobby') renderLobby();
+  renderBoard();
+}
+function renderLobby() {
+  const vs = viewerPeers();
+  const scn = RACE_SCN.find(s => s.id === RACE.scnId) || RACE_SCN[0];
+  let scnHTML;
+  if (RACE.isHost) {
+    scnHTML = '<div class="scenarios">' + RACE_SCN.map(s =>
+      `<button class="scn ${s.id === RACE.scnId ? 'sel' : ''}" type="button" data-scn="${s.id}"><span><span class="sn">${esc(s.name)}</span><span class="sd">${esc(s.desc)}</span></span><span class="sx">${s.steps} steps</span></button>`).join('') + '</div>';
+  } else {
+    scnHTML = `<div class="scn sel" style="cursor:default"><span><span class="sn">${esc(scn.name)}</span><span class="sd">${esc(scn.desc)}</span></span><span class="sx">${scn.steps} steps</span></div><p class="race-note" style="border:0;padding:4px 0 0">The host chooses the scenario.</p>`;
+  }
+  const others = vs.filter(p => !(p.isMe && p.sameTab));
+  const allReady = others.length >= 1 && others.every(p => p.presence && p.presence.ready);
+  const canStart = RACE.isHost && vs.length >= 2 && allReady;
+  const list = vs.map(p => {
+    const pr = p.presence || {};
+    const you = p.isMe && p.sameTab;
+    const isHost = p.peer === RACE.hostPeer;
+    const rdy = you ? RACE.ready : !!pr.ready;
+    return `<div class="lobby-p"><span class="pdot" style="background:${esc(pr.color || '#888')}"></span>${esc(pr.name || 'Player')}${you ? ' <span style="color:var(--amber);font-size:11px">(you)</span>' : ''}${isHost ? ' <span style="color:var(--muted);font-size:11px">· host</span>' : ''}<span class="pst ${rdy ? 'ready' : ''}">${isHost ? (rdy ? 'ready' : 'host') : (rdy ? 'ready ✓' : 'not ready')}</span></div>`;
+  }).join('');
+  renderContent(`<h2>Room <span class="rcode">${esc(RACE.code)}</span></h2>
+    <p class="rlead">Share this code and the page link. When everyone's in and ready, the host starts the race. First to resolve the incident wins.</p>
+    <div class="rlabel">Scenario</div>${scnHTML}
+    <div class="rlabel">Players (${vs.length})</div>
+    <div class="lobby-list">${list}</div>
+    <div class="race-row" style="margin-top:14px">
+      <button class="btn ${RACE.ready ? 'on' : ''}" id="rReady" type="button">${RACE.ready ? "I'm ready ✓" : "I'm ready"}</button>
+      ${RACE.isHost ? `<button class="btn primary" id="rStart" type="button" ${canStart ? '' : 'disabled'}>Start race</button>` : '<span style="color:var(--muted);font-size:13px">waiting for the host to start…</span>'}
+    </div>
+    <div class="race-note">${vs.length < 2 ? 'Waiting for at least one more player to join…' : (RACE.isHost ? (allReady ? 'Everyone is ready — start when you like.' : 'Waiting for all players to ready up.') : 'Tap “I’m ready”, then the host starts.')}</div>`);
+  if (RACE.isHost) document.querySelectorAll('#raceContent .scn[data-scn]').forEach(b => b.addEventListener('click', () => { RACE.scnId = b.dataset.scn; racePresence(); renderLobby(); }));
+  const rr = $('#rReady'); if (rr) rr.addEventListener('click', () => { RACE.ready = !RACE.ready; racePresence(); renderLobby(); });
+  const rs = $('#rStart'); if (rs) rs.addEventListener('click', hostStart);
+}
+function hostStart() {
+  if (!RACE.isHost) return;
+  RACE.go = Date.now(); racePresence();
+  if (!RACE.goLock) { RACE.goLock = RACE.go; beginCountdown(); }
+}
+function beginCountdown() {
+  if (RACE.phase === 'countdown' || RACE.active) return;
+  RACE.phase = 'countdown';
+  const scn = RACE_SCN.find(s => s.id === RACE.scnId) || RACE_SCN[0];
+  raceBuildSandbox(scn);
+  let n = 5; renderCountdown(n, scn);
+  RACE.countTimer = setInterval(() => { n--; if (n <= 0) { clearInterval(RACE.countTimer); RACE.countTimer = null; raceBegin(); } else renderCountdown(n, scn); }, 1000);
+}
+function renderCountdown(n, scn) {
+  renderContent(`<h2>Get ready…</h2><p class="rlead">Scenario: <b>${esc(scn.name)}</b> · ${scn.steps} steps</p><div class="count-big">${n}</div><p class="rlead" style="text-align:center">First to resolve the incident wins. Type fast.</p>`);
+}
+function raceBuildSandbox(scn) {
+  campaignS = S;
+  const startIdx = MISSIONS.findIndex(x => x.id === scn.startId);
+  S = freshState(); S.sudo = true;
+  S.mission = startIdx; S.done = MISSIONS.slice(0, startIdx).map(x => x.id); S.xp = 0;
+  RACE.scenario = scn; RACE.startIdx = startIdx; RACE.endIdx = startIdx + scn.steps - 1; RACE.total = scn.steps;
+  RACE.active = true; RACE.finished = false; RACE.myFinishMs = null;
+  document.body.classList.add('racing');
+  $('#raceBoard').hidden = false;
+  lockTin(true);
+}
+function raceBegin() {
+  RACE.phase = 'racing'; RACE.myStart = Date.now();
+  hideOverlay();
+  tout.innerHTML = '';
+  emitSys('<b>Race started.</b> Resolve the incident as fast as you can — live standings are on the left. Good luck.', 'ok');
+  startMission();
+  lockTin(false);
+  racePresence();
+  if (!RACE.boardTimer) RACE.boardTimer = setInterval(renderBoard, 1000);
+  updatePrompt(); render(); scrollEnd();
+  tin.focus({ preventScroll: true });
+}
+function raceAdvance() {
+  racePresence();
+  if (S.mission > RACE.endIdx) { raceFinish(); }
+  else { startMission(); }
+}
+function raceFinish() {
+  RACE.finished = true; RACE.phase = 'done';
+  RACE.myFinishMs = Date.now() - RACE.myStart;
+  lockTin(true); racePresence();
+  emitSys(`<b>✓ Incident resolved — your time ${fmtDur(RACE.myFinishMs)}.</b> See the final standings on the left. Use <b>Leave race</b> to return to your campaign.`, 'ok');
+  renderBoard();
+}
+function raceStandings() {
+  const ps = viewerPeers().filter(p => p.presence && p.presence.name);
+  const done = ps.filter(p => typeof (p.presence.finishMs) === 'number').sort((a, b) => a.presence.finishMs - b.presence.finishMs);
+  const live = ps.filter(p => typeof (p.presence.finishMs) !== 'number').sort((a, b) => (b.presence.step || 0) - (a.presence.step || 0));
+  return { done, live, all: done.concat(live) };
+}
+function renderBoard() {
+  const board = $('#raceBoard'); if (!board || !RACE.active) return;
+  board.hidden = false;
+  const st = raceStandings();
+  $('#rbMeta').textContent = RACE.scenario ? RACE.scenario.name : '';
+  let html = '';
+  if (st.done.length) {
+    const w = st.done[0].presence;
+    html += `<div class="race-winner">🏆 ${esc(w.name || 'Someone')} finished first</div>`;
+  }
+  let rank = 0;
+  html += st.all.map(p => {
+    const pr = p.presence || {}; const you = p.isMe && p.sameTab;
+    const isDone = typeof pr.finishMs === 'number';
+    const total = pr.total || RACE.total || 1;
+    const step = Math.min(total, pr.step || 0);
+    rank++;
+    let right;
+    if (isDone) right = `<span class="rb-time">${fmtDur(pr.finishMs)}</span>`;
+    else if (you && RACE.phase === 'racing') right = `<span class="rb-time">${fmtDur(Date.now() - RACE.myStart)}</span>`;
+    else right = `<span class="rb-time">${step}/${total}</span>`;
+    const win = isDone && rank === 1;
+    return `<div class="rb-row ${isDone ? 'done' : ''} ${win ? 'win' : ''}"><span class="rbrank">${isDone ? rank : '·'}</span><span class="rb-name" style="color:${esc(pr.color || 'inherit')}">${esc(pr.name || 'Player')}${you ? '<span class="you">you</span>' : ''}</span><span class="rb-prog"><span class="rb-bar"><i style="width:${Math.round(step / total * 100)}%;background:${esc(pr.color || 'var(--green)')}"></i></span>${right}</span></div>`;
+  }).join('');
+  $('#rbBody').innerHTML = html || '<p class="empty">Waiting for players…</p>';
+}
+function exitRace() {
+  RACE.unsubs.forEach(u => { try { u(); } catch (e) {} });
+  if (RACE.roomObj) { try { RACE.roomObj.leave(); } catch (e) {} }
+  if (RACE.countTimer) clearInterval(RACE.countTimer);
+  if (RACE.boardTimer) clearInterval(RACE.boardTimer);
+  const wasActive = RACE.active, hadCampaign = campaignS;
+  RACE = raceReset();
+  document.body.classList.remove('racing');
+  $('#raceBoard').hidden = true;
+  hideOverlay(); lockTin(false);
+  if (wasActive && hadCampaign) {
+    S = campaignS; campaignS = null; tout.innerHTML = '';
+    emitSys('Left the race — back to your campaign. Your progress was untouched.', 'hint');
+    if (S.finished) { announceMission(); } else { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); announceMission(); }
+    updatePrompt(); render(); save(); scrollEnd();
+  } else { render(); }
+  tin.focus({ preventScroll: true });
+}
+$('#btnRace').addEventListener('click', openRace);
+$('#raceClose').addEventListener('click', exitRace);
+$('#btnRaceExit').addEventListener('click', exitRace);
+
 boot(load());
 })();
 </script>
