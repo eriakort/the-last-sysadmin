@@ -3,6 +3,17 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v11 — Incident Files (Chapters 31–35)
+- Five investigation scenarios drawn from the most common senior-Linux-admin incidents: a phantom disk (deleted-but-open file held by a process), inode exhaustion (`df` fine, writes fail), a compromise with a UID-0 backdoor + cryptominer + rogue cron, the OOM killer taking down a service, and a ghost load caused by I/O wait on a stuck process.
+- Each scenario pages in an incident, asks diagnostic questions (`submit` your findings), then has you apply the fix.
+- New/extended commands: `lsof +L1` (deleted-but-held files), `df -i` & `du --inodes`, `last` / `lastb` / `w` / `who`, OOM lines in `dmesg` and the journal, `find -mtime`/`-mmin`, and `vmstat`/`iostat`/`uptime` that reflect live I/O wait.
+- 26 new tickets (183 total), two new ranks, updated finale.
+
+## v10 — Speed tracker
+- Optional per-ticket timer (opt in via the "Speed tracker" button or `tracker`).
+- Logs time and hints used per ticket; `stats` shows totals, average, fastest/slowest.
+- Made `[hidden]` self-contained so the standalone/PWA build hides UI correctly.
+
 ## v9 — Chapters 21–30 + PWA
 - Advanced chapters: regex & pipelines, DNS & networking, kernel/sysctl, shell
   customization, special permissions & ACLs, LVM & filesystems, signals & long

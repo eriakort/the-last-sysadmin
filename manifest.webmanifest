@@ -1,7 +1,7 @@
 {
   "name": "The Last Sysadmin",
   "short_name": "Last Sysadmin",
-  "description": "Learn Linux administration by fixing a broken server \u2014 30 chapters, a simulated terminal.",
+  "description": "Learn Linux administration by fixing a broken server \u2014 35 chapters, a simulated terminal.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

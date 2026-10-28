@@ -2,7 +2,7 @@
 
 A story-driven game that teaches **Linux administration** in a simulated terminal — from `whoami` to provisioning a whole service from scratch. You're the new admin at a failing freight company; the server crashed at 3am, the previous admin vanished, and you fix it one ticket at a time while uncovering what happened.
 
-**30 chapters · 157 missions · ~140 commands · one self-contained HTML file. No install, no server, no network required.**
+**35 chapters · 183 missions · ~140 commands · one self-contained HTML file. No install, no server, no network required.**
 
 > **Play it:** once GitHub Pages is enabled (see below), your link is
 > `https://<your-username>.github.io/the-last-sysadmin/`
@@ -14,6 +14,8 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 - A working simulated **bash shell**: pipes `|`, redirection `> >> < 2>`, `;` `&&` `||`, globbing `*`, quoting, command substitution `$(...)`, variables, and a small script interpreter (`if` / `for` / `while` / `test` / functions-free).
 - ~140 commands with their own `man` pages — navigation, text processing (`grep`/`sed`/`awk`), users & permissions, processes, systemd, networking, storage/LVM, containers, git, and more.
 - **Mission checks look at the server's real state**, not the exact command you typed — creative solutions count.
+- **Investigation scenarios** (Chapters 31–35): a real senior-admin incident is paged in, you're asked diagnostic questions (`submit` your findings), troubleshoot with the live tools (`df -i`, `lsof +L1`, `du --inodes`, `dmesg`, `iostat`, `w`/`last`, `awk` on `/etc/passwd`), then apply the fix.
+- **Optional Speed tracker** — opt in with `tracker on` to time each ticket and keep a performance log (`stats`).
 - A `check` command that tells you *why* a ticket hasn't advanced, plus three-step hints and a `retry` checkpoint.
 - Progress saved in your browser; works fully **offline** (installable as a PWA).
 - Light/dark aware, responsive down to phone width.
@@ -28,6 +30,7 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 | 11–15 | Shell scripting · systemd · log analysis · containers · git deploy | automation & delivery |
 | 16–20 | Incident · Performance · Accounts · Recovery · Graduation | review capstones |
 | 21–30 | Regex · DNS · Kernel · Shell · ACLs · LVM · Signals · Observability · Automation · **From Zero** | advanced + provision a service |
+| 31–35 | **Incident Files:** Phantom Disk · Inode Exhaustion · Compromise & Privesc · OOM Killer · Ghost Load (I/O wait) | real-world investigation scenarios |
 
 ## Run it
 
@@ -61,7 +64,7 @@ icon.svg / icon-*.png   app icons
 
 ## Updating
 
-Edit `index.html`, commit, push — Pages redeploys. If you change cached assets and want installed apps to refresh immediately, bump the cache name in `service-worker.js` (e.g. `last-sysadmin-v9` → `v10`).
+Edit `index.html`, commit, push — Pages redeploys. If you change cached assets and want installed apps to refresh immediately, bump the cache name in `service-worker.js` (e.g. `last-sysadmin-v11` → `v12`).
 
 ## Notes & limitations
 
