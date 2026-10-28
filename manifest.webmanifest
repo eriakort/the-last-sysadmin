@@ -1,0 +1,18 @@
+{
+  "name": "The Last Sysadmin",
+  "short_name": "Last Sysadmin",
+  "description": "Learn Linux administration by fixing a broken server \u2014 30 chapters, a simulated terminal.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f141c",
+  "theme_color": "#0f141c",
+  "categories": ["education", "games", "productivity"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
