@@ -19,8 +19,11 @@ This document describes a low-risk way to extract pure logic for testing **witho
 - `mulberry32` (seeded RNG used for generated logs)
 - `ticketId`
 - `norm` (path normalization — pass cwd and HOME)
+- `basename` / `dirname` / `parentOf`
 - `permStr` (permission string from mode)
+- `canRead` / `canWrite` / `canExec` (owner bits)
 - `human` (human-readable size)
+- `lsDate` / `fmtLogTime`
 
 These have no DOM or game-state dependencies.
 
@@ -28,10 +31,13 @@ These have no DOM or game-state dependencies.
 
 Pure functions that take a filesystem snapshot and return `{ ok, reason? }`:
 
-- `fileExists(fs, path)`
-- `fileMode(fs, path)`
-- `checkExecutable(fs, path)`
-- `checkContains(fs, path, needle)`
+- `walk` / `fileExists` / `fileMode` / `fileOwner` / `fileSize`
+- `checkExecutable`
+- `checkContains`
+- `checkMatches` (regex)
+- `checkOwner`
+- `checkIsDir`
+- `checkMinSize`
 
 Easy to unit-test. Expand with more checkers as needed.
 
@@ -50,11 +56,13 @@ When present, `node build.js` injects the contents of `src/*.js` between them. T
 
 ```bash
 node -e "
-const { pad, ticketId, norm, permStr } = require('./src/helpers');
-const { checkExecutable } = require('./src/checkers');
+const { pad, ticketId, norm, basename, canExec } = require('./src/helpers');
+const { checkExecutable, checkContains, checkIsDir } = require('./src/checkers');
 console.assert(pad(3) === '03');
 console.assert(ticketId(0) === 'INC-1025-01');
 console.assert(norm('~/foo', '/tmp', '/home/rookie') === '/home/rookie/foo');
+console.assert(basename('/a/b/c.txt') === 'c.txt');
+console.assert(canExec(0o755));
 console.log('ok');
 "
 ```
