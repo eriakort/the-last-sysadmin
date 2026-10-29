@@ -83,22 +83,21 @@ if (DEBUG) debugLog('current state', { chapter, ticket, fs: /* snapshot */ });
 postSuccessWhy('The file mode was updated so the script is executable.');
 ```
 
-## Modularization path (later, still one index.html)
+## Modularization path (still one index.html)
 
-The single-file deploy is intentional. When testing becomes painful:
+Started. See:
 
-1. Extract pure helpers (parser, checkers, path utilities) into named functions at the top of the script.
-2. Keep a tiny build step (or manual concat) that produces the final `index.html`.
-3. Unit-test the pure functions in Node or the browser without touching the UI.
+- `src/helpers.js` — pure helpers (`pad`, `esc`, `md`, `splitLines`, `mulberry32`, `ticketId`, etc.) extracted for testing.
+- `MODULARIZATION.md` — plan for further extraction, a tiny concat build step, and unit tests.
 
-No visual changes required.
+The final deployed artifact remains a single `index.html`. No visual changes.
 
 ## Suggested next improvements (non-visual)
 
 - Stronger ARIA on the terminal and briefing panel (see `a11y.patch`)
-- Optional post-ticket "why this worked" explanation (see `debug-why.patch`)
-- A small developer debug mode (e.g. `?debug=1`) that dumps current FS / mission state to the console (see `debug-why.patch`)
-- Unit-testable extraction of pure functions (parser helpers, checkers) if the file is later modularized
+- Optional post-ticket "why this worked" explanation (see `debug-why.patch` and the sketch in recent commits)
+- A small developer debug mode (e.g. `?debug=1`) that dumps current FS / mission state to the console (helpers already present)
+- Continue extracting pure functions (see `src/helpers.js` and `MODULARIZATION.md`)
 
 ## Workflow
 
