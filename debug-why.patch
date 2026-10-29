@@ -1,6 +1,6 @@
 --- a/index.html
 +++ b/index.html
-@@ -18420,6 +18420,22 @@
+@@ -18420,6 +18420,21 @@
  const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
  const KEY = 'last-sysadmin-v1';
 +const DEBUG = new URLSearchParams(location.search).has('debug');
@@ -12,7 +12,6 @@
 +}
 +function postSuccessWhy(msg) {
 +  if (!msg) return;
-+  // System message only — no new panel or visual design change
 +  const el = document.createElement('div');
 +  el.className = 'sys ok';
 +  el.innerHTML = '<b>Why it worked:</b> ' + msg;
