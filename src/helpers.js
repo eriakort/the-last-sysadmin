@@ -47,6 +47,14 @@ function norm(path, cwd, HOME) {
   return '/' + out.join('/');
 }
 
+const basename = p => p.split('/').filter(Boolean).pop() || '/';
+const dirname = p => {
+  const parts = p.split('/').filter(Boolean);
+  parts.pop();
+  return '/' + parts.join('/');
+};
+const parentOf = dirname;
+
 // Permission string (pure)
 function permStr(n) {
   const m = n.mode, b = 'rwxrwxrwx';
@@ -58,6 +66,11 @@ function permStr(n) {
   return s;
 }
 
+// Simple permission bit checks (owner bits)
+const canRead = m => !!(m & 0o400);
+const canWrite = m => !!(m & 0o200);
+const canExec = m => !!(m & 0o100);
+
 // Human-readable size (pure)
 function human(n) {
   if (n < 1024) return String(n);
@@ -66,7 +79,24 @@ function human(n) {
   return (v < 10 ? (Math.ceil(v * 10) / 10).toFixed(1) : String(Math.ceil(v))) + u[i];
 }
 
+// Date helpers (pure — pass MON array)
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function lsDate(ms) {
+  const d = new Date(ms);
+  const recent = Math.abs(Date.now() - ms) < 182 * 864e5;
+  return `${MON[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2)} ${recent ? pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) : ' ' + d.getUTCFullYear()}`;
+}
+function fmtLogTime(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
 // Export for Node testing (ignored in browser)
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { pad, esc, md, reEsc, splitLines, mulberry32, ticketId, norm, permStr, human };
+  module.exports = {
+    pad, esc, md, reEsc, splitLines, mulberry32, ticketId,
+    norm, basename, dirname, parentOf,
+    permStr, canRead, canWrite, canExec,
+    human, lsDate, fmtLogTime, MON
+  };
 }
