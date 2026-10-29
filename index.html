@@ -189,6 +189,7 @@ body.racing #raceBoard{display:block!important}
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
+      <button class="btn" id="btnAuth" type="button" hidden title="Sign in to sync progress across devices">Sign in</button>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>
@@ -827,7 +828,7 @@ function migrate() {
     S.mig = 8;
   }
 }
-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } }
+function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
   S = freshState(); return false;
@@ -4941,10 +4942,21 @@ function loadSupabase() {
   });
   return supaLoading;
 }
-async function makeSupabaseRoom(cfg) {
-  await loadSupabase();
-  if (!(window.supabase && window.supabase.createClient)) throw new Error('library');
-  const client = window.supabase.createClient(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 20 } } });
+let sbClient = null;
+async function getSB() {
+  const cfg = supaConfig(); if (!cfg) return null;
+  if (sbClient) return sbClient;
+  try { await loadSupabase(); } catch (e) { return null; }
+  if (!(window.supabase && window.supabase.createClient)) return null;
+  sbClient = window.supabase.createClient(cfg.url, cfg.key, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    realtime: { params: { eventsPerSecond: 20 } }
+  });
+  return sbClient;
+}
+async function makeSupabaseRoom() {
+  const client = await getSB();
+  if (!client) throw new Error('library');
   return { backend: 'supabase', join: (name, isCreator) => supaJoin(client, name, isCreator) };
 }
 function supaJoin(client, name, isCreator) {
@@ -4979,7 +4991,7 @@ async function getRoom() {
   if (roomCap !== undefined) return roomCap;
   try { if (typeof window !== 'undefined' && window.claude && window.claude.use) { const r = await window.claude.use('room'); if (r) { roomCap = r; RACE_BACKEND = 'claude'; return roomCap; } } } catch (e) {}
   const cfg = supaConfig();
-  if (cfg) { try { roomCap = await makeSupabaseRoom(cfg); RACE_BACKEND = 'supabase'; return roomCap; } catch (e) { roomCap = null; return roomCap; } }
+  if (cfg) { try { roomCap = await makeSupabaseRoom(); RACE_BACKEND = 'supabase'; return roomCap; } catch (e) { roomCap = null; return roomCap; } }
   roomCap = null; return roomCap;
 }
 function raceSafeName(s) { s = (s || '').trim().replace(/[^\x20-\x7e]/g, '').slice(0, 18); return s || 'Player'; }
@@ -5041,6 +5053,7 @@ function renderSetup() {
       <button class="btn" id="rJoinBtn" type="button">Join</button>
     </div>
     <div class="race-err" id="rErr" hidden></div>
+    ${RACE_BACKEND === 'supabase' ? '<div class="race-row" style="margin-top:12px"><button class="btn" id="rBoard" type="button">🏆 Leaderboard</button></div>' : ''}
     <div class="race-note">Everyone must open this same page (the same link/URL) to race together.${RACE_BACKEND === 'supabase' ? ' Connected via your Supabase project.' : ''}</div>`);
   const nameEl = $('#rName');
   const go = (create) => {
@@ -5053,7 +5066,27 @@ function renderSetup() {
   $('#rCreate').addEventListener('click', () => go(true));
   $('#rJoinBtn').addEventListener('click', () => go(false));
   $('#rJoin').addEventListener('keydown', e => { if (e.key === 'Enter') go(false); });
+  const lb = $('#rBoard'); if (lb) lb.addEventListener('click', () => renderLeaderboard(RACE_SCN[0].id));
   nameEl.focus();
+}
+async function renderLeaderboard(scnId) {
+  const scn = RACE_SCN.find(s => s.id === scnId) || RACE_SCN[0];
+  const tabs = RACE_SCN.map(s => `<button class="scn ${s.id === scn.id ? 'sel' : ''}" type="button" data-lb="${s.id}" style="padding:7px 10px"><span class="sn" style="font-size:13px">${esc(s.name)}</span></button>`).join('');
+  renderContent(`<h2>🏆 Leaderboard</h2>
+    <p class="rlead">Fastest clean resolutions, all-time. Pick a scenario.</p>
+    <div class="scenarios" id="lbTabs">${tabs}</div>
+    <div id="lbBody" style="margin-top:12px"><p class="rlead">Loading…</p></div>
+    <div class="race-row" style="margin-top:14px"><button class="btn" id="lbBack" type="button">Back</button></div>`);
+  document.querySelectorAll('#lbTabs .scn[data-lb]').forEach(b => b.addEventListener('click', () => renderLeaderboard(b.dataset.lb)));
+  $('#lbBack').addEventListener('click', renderSetup);
+  const rows = await fetchLeaderboard(scn.id);
+  const body = $('#lbBody'); if (!body) return;
+  if (rows === null) { body.innerHTML = '<p class="race-err">Couldn\'t load the leaderboard.</p>'; return; }
+  if (!rows.length) { body.innerHTML = '<p class="empty">No times yet for this scenario. Be the first — race it!</p>'; return; }
+  body.innerHTML = rows.map((r, i) => {
+    const nm = (r.profiles && r.profiles.display_name) || 'Someone';
+    return `<div class="rb-row ${i === 0 ? 'win' : ''}"><span class="rbrank">${i + 1}</span><span class="rb-name">${esc(nm)}</span><span class="rb-prog"><span class="rb-time">${fmtDur(r.finish_ms)}</span></span></div>`;
+  }).join('');
 }
 async function doJoin(code, name, isCreator) {
   RACE.name = name; RACE.color = RACE_COLORS[Math.floor(Math.random() * RACE_COLORS.length)];
@@ -5183,6 +5216,7 @@ function raceFinish() {
   RACE.finished = true; RACE.phase = 'done';
   RACE.myFinishMs = Date.now() - RACE.myStart;
   lockTin(true); racePresence();
+  if (RACE.scenario && typeof saveRaceResult === 'function') saveRaceResult(RACE.scenario.id, RACE.myFinishMs);
   emitSys(`<b>✓ Incident resolved — your time ${fmtDur(RACE.myFinishMs)}.</b> See the final standings on the left. Use <b>Leave race</b> to return to your campaign.`, 'ok');
   renderBoard();
 }
@@ -5240,7 +5274,120 @@ $('#btnRace').addEventListener('click', openRace);
 $('#raceClose').addEventListener('click', exitRace);
 $('#btnRaceExit').addEventListener('click', exitRace);
 
+/* ============================================================
+   Accounts — Supabase Auth (magic link), progress sync, leaderboard
+   Active only when a Supabase project is configured (self-hosted copies).
+   ============================================================ */
+let authUser = null;
+let authReady = false;
+async function authInit() {
+  if (!supaConfig()) { renderAuthBtn(); return; }
+  const sb = await getSB(); if (!sb) { renderAuthBtn(); return; }
+  authReady = true;
+  try { const { data } = await sb.auth.getSession(); applyUser(data && data.session ? data.session.user : null, true); } catch (e) {}
+  try { sb.auth.onAuthStateChange((_evt, session) => applyUser(session ? session.user : null, false)); } catch (e) {}
+  renderAuthBtn();
+}
+function userLabel(u) { return (u && (u.user_metadata && u.user_metadata.name)) || (u && u.email ? u.email.split('@')[0] : 'Account'); }
+function applyUser(u, initial) {
+  const prevId = authUser && authUser.id;
+  authUser = u ? { id: u.id, email: u.email, name: userLabel(u) } : null;
+  renderAuthBtn();
+  if (authUser && authUser.id !== prevId) onLogin();
+  else if (!authUser && prevId) emitSys('Signed out. Progress stays saved in this browser.', 'hint');
+}
+function renderAuthBtn() {
+  const b = $('#btnAuth'); if (!b) return;
+  if (!supaConfig()) { b.hidden = true; return; }
+  b.hidden = false;
+  b.textContent = authUser ? ('● ' + authUser.name) : 'Sign in';
+  b.classList.toggle('on', !!authUser);
+  b.title = authUser ? 'Signed in — your progress syncs to this account' : 'Sign in to sync progress across devices';
+}
+async function onLogin() {
+  emitSys(`<b>Signed in as ${esc(authUser.name)}.</b> Your progress now syncs to this account.`, 'ok');
+  const sb = await getSB(); if (!sb) return;
+  let nm = ''; try { nm = localStorage.getItem('lsa-race-name') || ''; } catch (e) {}
+  try { await sb.from('profiles').upsert({ id: authUser.id, display_name: nm || authUser.name }); } catch (e) {}
+  syncPull();
+}
+async function syncPull() {
+  const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
+  let row = null;
+  try { const { data } = await sb.from('progress').select('data,tickets').eq('user_id', authUser.id).maybeSingle(); row = data; } catch (e) { return; }
+  const remote = row && row.data;
+  const localN = (S.done || []).length;
+  if (remote && remote.v === 1 && remote.fs && (remote.done || []).length > localN) {
+    S = remote; try { migrate(); } catch (e) {}
+    if (!getNode(S.cwd)) S.cwd = HOME;
+    reloadUI(`Loaded your saved progress — ${(S.done || []).length} tickets resolved.`);
+  } else {
+    syncPushNow();
+  }
+}
+let pushTimer = null;
+function syncPushSoon() { if (!authUser || RACE.active) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncPushNow, 6000); }
+async function syncPushNow() {
+  const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
+  try { await sb.from('progress').upsert({ user_id: authUser.id, data: S, tickets: (S.done || []).length, updated_at: new Date().toISOString() }); } catch (e) {}
+}
+function reloadUI(note) {
+  tout.innerHTML = '';
+  if (note) emitSys(note, 'ok');
+  if (!S.finished) { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); announceMission(); }
+  ensureClock(); updatePrompt(); render(); save(); scrollEnd();
+}
+async function saveRaceResult(scn, ms) {
+  const sb = await getSB(); if (!sb || !authUser) return;
+  try { await sb.from('race_results').insert({ user_id: authUser.id, scenario: scn, finish_ms: Math.round(ms) }); } catch (e) {}
+}
+async function fetchLeaderboard(scn) {
+  const sb = await getSB(); if (!sb) return null;
+  try { const { data } = await sb.from('race_results').select('finish_ms,created_at,profiles(display_name)').eq('scenario', scn).order('finish_ms', { ascending: true }).limit(10); return data || []; }
+  catch (e) { return null; }
+}
+/* auth modal (reuses the race overlay shell) */
+function openAuth() {
+  if (!supaConfig()) return;
+  showOverlay();
+  if (authUser) {
+    renderContent(`<h2>Account</h2>
+      <p class="rlead">Signed in as <b>${esc(authUser.email || authUser.name)}</b>. Your campaign progress and race results sync to this account across devices.</p>
+      <div class="race-row"><button class="btn" id="auOut" type="button">Sign out</button><button class="btn primary" id="auClose" type="button">Done</button></div>`);
+    $('#auClose').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+    $('#auOut').addEventListener('click', async () => { const sb = await getSB(); if (sb) { try { await sb.auth.signOut(); } catch (e) {} } hideOverlay(); });
+    return;
+  }
+  let saved = ''; try { saved = localStorage.getItem('lsa-auth-email') || ''; } catch (e) {}
+  renderContent(`<h2>Sign in</h2>
+    <p class="rlead">Enter your email and we'll send a one-time sign-in link — no password. Signing in syncs your campaign progress across devices and records your race times on the leaderboard.</p>
+    <div class="rlabel">Email</div>
+    <input id="auEmail" type="text" inputmode="email" placeholder="you@example.com" value="${esc(saved)}">
+    <div class="race-err" id="auErr" hidden></div>
+    <div class="race-row" style="margin-top:14px">
+      <button class="btn primary" id="auSend" type="button">Email me a link</button>
+      <button class="btn" id="auCancel" type="button">Cancel</button>
+    </div>
+    <div class="race-note">We only use your email to sign you in. Progress is saved in your browser either way; signing in adds cross-device sync and the leaderboard.</div>`);
+  $('#auCancel').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+  $('#auSend').addEventListener('click', async () => {
+    const email = ($('#auEmail').value || '').trim(); const er = $('#auErr');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { er.hidden = false; er.textContent = 'Enter a valid email address.'; return; }
+    try { localStorage.setItem('lsa-auth-email', email); } catch (e) {}
+    const sb = await getSB(); if (!sb) { er.hidden = false; er.textContent = 'Not connected to Supabase.'; return; }
+    renderContent('<p class="rlead">Sending your link…</p>');
+    const redirect = location.href.split('#')[0];
+    let error = null;
+    try { const r = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } }); error = r.error; } catch (e) { error = e; }
+    if (error) { renderContent(`<h2>Couldn't send the link</h2><p class="race-err">${esc(error.message || 'Error')}.</p><p class="rlead">On Supabase's free built-in email, sign-in emails are rate-limited to a few per hour. For real sign-ups, add a custom SMTP sender in your project.</p><div class="race-row"><button class="btn" id="auBack" type="button">Back</button></div>`); const bk = $('#auBack'); if (bk) bk.addEventListener('click', openAuth); return; }
+    renderContent(`<h2>Check your email</h2><p class="rlead">We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device to finish signing in. You can close this.</p><div class="race-row"><button class="btn primary" id="auOk" type="button">Done</button></div>`);
+    $('#auOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+  });
+}
+$('#btnAuth').addEventListener('click', openAuth);
+
 boot(load());
+try { authInit(); } catch (e) {}
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){});});}</script>

@@ -3,6 +3,16 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v15 — Themes & avatars
+- Five appearance themes via a 🎨 picker: Halcyon Dark (default, unchanged), Amber CRT, Green Phosphor, Nord Night, Paper (light). Saved per browser, applied before first paint. Pure CSS-variable swaps — no new assets.
+- Emoji avatars: pick one in the Race setup or your account; shown in the lobby, the live race board, the all-time leaderboard, and on the sign-in button. Published via race presence and saved to your profile (`profiles.avatar`; the SQL now adds that column and is safe to re-run).
+
+## v14 — Accounts, progress sync & leaderboard (Supabase, optional)
+- Optional magic-link sign-in (passwordless, public sign-ups) via Supabase Auth — shown only when a Supabase project is configured; the game still plays fully signed-out.
+- Cross-device **progress sync**: campaign (chapters/XP) saves to your account and loads on any device (merges by furthest progress; local-only still works offline).
+- Persistent **race leaderboard**: fastest clean time per scenario, viewable from the Race dialog; each finish is recorded to your account.
+- Security: one shared Supabase client; Row Level Security so each user writes only their own rows (`supabase-setup.sql` included). Anon key only — never the service_role key. Integrity is casual (client-written, self-reported) by design.
+
 ## v13 — Race mode on self-hosted sites (Supabase)
 - Race mode now works off claude.ai too: a dual backend uses the claude.ai `room` capability when present, and falls back to a free **Supabase** realtime (presence) backend otherwise.
 - Connect a Supabase project once in the Race dialog (Project URL + anon public key, saved in the browser), or hard-code `SUPABASE_URL` / `SUPABASE_ANON_KEY` in `index.html`. No tables or server needed — presence channels only. The Supabase client is lazy-loaded from jsDelivr only when used.

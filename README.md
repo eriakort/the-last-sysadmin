@@ -16,10 +16,13 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 - **Mission checks look at the server's real state**, not the exact command you typed — creative solutions count.
 - **Investigation scenarios** (Chapters 31–35): a real senior-admin incident is paged in, you're asked diagnostic questions (`submit` your findings), troubleshoot with the live tools (`df -i`, `lsof +L1`, `du --inodes`, `dmesg`, `iostat`, `w`/`last`, `awk` on `/etc/passwd`), then apply the fix.
 - **Optional Speed tracker** — opt in with `tracker on` to time each ticket and keep a performance log (`stats`).
+- **Optional accounts** (self-hosted + Supabase) — passwordless magic-link sign-in for cross-device progress sync and an all-time race leaderboard. See [Accounts, progress sync & leaderboard](#accounts-progress-sync--leaderboard-optional-supabase). Entirely optional; the game plays fully signed-out.
 - **Race mode** — two or more players pick one of the incident scenarios and race live to resolve it first, with a real-time leaderboard. Works out of the box on the hosted claude.ai version; on a self-hosted copy (like this GitHub Pages site) it runs on a free **Supabase** realtime backend you connect once — see [Race mode on your own site](#race-mode-on-your-own-site-supabase).
 - A `check` command that tells you *why* a ticket hasn't advanced, plus three-step hints and a `retry` checkpoint.
 - Progress saved in your browser; works fully **offline** (installable as a PWA).
-- Light/dark aware, responsive down to phone width.
+- **Five appearance themes** (🎨 button): Halcyon Dark (default), Amber CRT, Green Phosphor, Nord Night, Paper (light). Your choice is remembered per browser.
+- **Pick an avatar** (emoji) shown in the lobby, live race board, leaderboard, and on your account.
+- Responsive down to phone width.
 
 ## Chapters
 
@@ -96,6 +99,28 @@ Live racing needs a realtime backend. On **claude.ai** that's built in and nothi
 That's it — share your page's link, have each player open it, and race. If you'd rather bake the credentials into the page instead of entering them in the dialog, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` near the top of the `<script>` in `index.html`.
 
 > The anon key is public by design. For a casual game the defaults are fine; if you want to lock usage down later, Supabase's Realtime authorization / RLS lets you restrict who may connect.
+
+## Accounts, progress sync & leaderboard (optional, Supabase)
+
+Signing in is **optional** — the game plays fully without it, saving progress in your browser. Adding login (same Supabase project as racing) gives you:
+
+- **Magic-link sign-in** (passwordless email) — public sign-ups, anyone can register.
+- **Cross-device progress sync** — your campaign (chapters/XP) follows your account.
+- **An all-time race leaderboard** — fastest clean time per scenario.
+
+**Setup:**
+
+1. In your Supabase project, open **SQL Editor → New query**, paste the contents of [`supabase-setup.sql`](supabase-setup.sql), and **Run**. This creates the `profiles`, `progress`, and `race_results` tables with Row Level Security (each user can only write their own rows).
+2. **Authentication → URL Configuration:** set **Site URL** to your deployed URL (e.g. `https://eriakort.github.io/the-last-sysadmin/`) and add it under **Redirect URLs** too. Without this, the magic-link email sends people to the wrong place.
+3. That's it — open the game, click **Sign in**, enter an email, click the link in your inbox.
+
+**Important — email sending limits:** Supabase's built-in email service is **rate-limited to a few messages per hour** and is meant for testing. For real public sign-ups, add a custom SMTP sender (Resend, SendGrid, Postmark, etc.) under **Authentication → Emails / SMTP** in Supabase. Until you do, only a handful of sign-in emails per hour will go out.
+
+**Security notes:**
+
+- The page uses only the **anon public** key (safe to expose). **Never** put the `service_role` key in the page — it bypasses all security rules.
+- Row Level Security keeps each user writing only their own data. Integrity is *casual*: because the browser writes its own rows, stats are self-reported (fine for a learning game; not suitable for grading without server-side validation).
+- Signing in stores an email address, so if strangers use your site, add a short privacy note. The game itself sends no other data anywhere.
 
 ## Notes & limitations
 
