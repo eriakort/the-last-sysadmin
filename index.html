@@ -4915,12 +4915,72 @@ const RACE_COLORS = ['#f2b04b', '#7fb2f5', '#78d39f', '#c79bf2', '#ff8471', '#5a
 function raceReset() { return { active: false, roomObj: null, code: '', name: '', color: '', scnId: null, scenario: null, startIdx: 0, endIdx: 0, total: 0, phase: 'off', ready: false, isHost: false, myPeer: '', hostPeer: '', go: 0, goLock: 0, myStart: 0, myFinishMs: null, finished: false, unsubs: [], peerCache: [], countTimer: null, boardTimer: null }; }
 let RACE = raceReset();
 let campaignS = null;
+/* Optional: hard-code a Supabase project here, or leave blank and let players
+   enter it once in the Race dialog (saved in their browser). The anon key is a
+   public client key by design. Used only when the claude.ai room backend is
+   absent (i.e. a self-hosted / GitHub Pages copy). */
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
 let roomCap;
+let RACE_BACKEND = '';
+function supaConfig() {
+  let url = SUPABASE_URL, key = SUPABASE_ANON_KEY;
+  try { url = url || localStorage.getItem('lsa-sb-url') || ''; key = key || localStorage.getItem('lsa-sb-key') || ''; } catch (e) {}
+  url = (url || '').trim(); key = (key || '').trim();
+  return (url && key) ? { url, key } : null;
+}
+let supaLoading = null;
+function loadSupabase() {
+  if (window.supabase && window.supabase.createClient) return Promise.resolve();
+  if (supaLoading) return supaLoading;
+  supaLoading = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0';
+    s.onload = res; s.onerror = () => { supaLoading = null; rej(new Error('library')); };
+    document.head.appendChild(s);
+  });
+  return supaLoading;
+}
+async function makeSupabaseRoom(cfg) {
+  await loadSupabase();
+  if (!(window.supabase && window.supabase.createClient)) throw new Error('library');
+  const client = window.supabase.createClient(cfg.url, cfg.key, { realtime: { params: { eventsPerSecond: 20 } } });
+  return { backend: 'supabase', join: (name, isCreator) => supaJoin(client, name, isCreator) };
+}
+function supaJoin(client, name, isCreator) {
+  return new Promise((resolve, reject) => {
+    const myKey = (isCreator ? '0_' : 'p_') + Math.random().toString(36).slice(2, 10);
+    let mine = {}, handlers = [], settled = false;
+    const ch = client.channel('lsa_' + name, { config: { presence: { key: myKey } } });
+    const buildPeers = () => {
+      const st = ch.presenceState() || {}; const out = [];
+      for (const k in st) { const arr = st[k] || []; const meta = arr[arr.length - 1] || {}; out.push({ peer: k, by: null, isMe: k === myKey, sameTab: k === myKey, kind: 'viewer', guest: false, presence: (meta && meta.p) || {} }); }
+      return out;
+    };
+    const fire = () => { const peers = buildPeers(); const c = { peers, joined: peers, left: [], updated: peers }; handlers.slice().forEach(h => { try { h(c); } catch (e) {} }); };
+    ch.on('presence', { event: 'sync' }, fire);
+    ch.on('presence', { event: 'join' }, fire);
+    ch.on('presence', { event: 'leave' }, fire);
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED' && !settled) {
+        settled = true;
+        ch.track({ p: mine }).then(() => resolve({
+          name,
+          presence: async (patch) => { for (const k in patch) { if (patch[k] === null) delete mine[k]; else mine[k] = patch[k]; } try { await ch.track({ p: mine }); } catch (e) {} },
+          onPeers: (h) => { handlers.push(h); setTimeout(fire, 0); return () => { handlers = handlers.filter(x => x !== h); }; },
+          peers: buildPeers,
+          leave: async () => { try { await ch.untrack(); } catch (e) {} try { client.removeChannel(ch); } catch (e) {} }
+        })).catch(() => { if (!settled) { settled = true; reject(new Error('track')); } });
+      } else if ((status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') && !settled) { settled = true; reject(new Error(status)); }
+    });
+  });
+}
 async function getRoom() {
   if (roomCap !== undefined) return roomCap;
-  try { roomCap = (typeof window !== 'undefined' && window.claude && window.claude.use) ? await window.claude.use('room') : null; }
-  catch (e) { roomCap = null; }
-  return roomCap;
+  try { if (typeof window !== 'undefined' && window.claude && window.claude.use) { const r = await window.claude.use('room'); if (r) { roomCap = r; RACE_BACKEND = 'claude'; return roomCap; } } } catch (e) {}
+  const cfg = supaConfig();
+  if (cfg) { try { roomCap = await makeSupabaseRoom(cfg); RACE_BACKEND = 'supabase'; return roomCap; } catch (e) { roomCap = null; return roomCap; } }
+  roomCap = null; return roomCap;
 }
 function raceSafeName(s) { s = (s || '').trim().replace(/[^\x20-\x7e]/g, '').slice(0, 18); return s || 'Player'; }
 function raceCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
@@ -4935,15 +4995,37 @@ async function openRace() {
   showOverlay();
   renderContent('<p class="rlead">Connecting…</p>');
   const room = await getRoom();
-  if (!room) { renderUnavailable(); return; }
-  renderSetup();
+  if (room) { renderSetup(); return; }
+  if (!supaConfig()) { renderSupabaseSetup(false); return; }
+  renderSupabaseSetup(true);
 }
-function renderUnavailable() {
-  renderContent(`<h2>Race mode</h2>
-    <p class="rlead">Online racing runs live through claude.ai, so it works in the hosted version of this game — the shareable artifact link — where two or more people can open the same page and race.</p>
-    <p class="rlead">This looks like the offline / downloaded build (standalone file, installed app, or a self-hosted copy), which has no live connection, so head-to-head racing isn't available here. Everything else plays normally.</p>
-    <div class="race-row"><button class="btn primary" id="rOk" type="button">Got it</button></div>`);
-  $('#rOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+function renderSupabaseSetup(failed) {
+  let u = '', k = '';
+  try { u = localStorage.getItem('lsa-sb-url') || ''; k = localStorage.getItem('lsa-sb-key') || ''; } catch (e) {}
+  renderContent(`<h2>Set up online racing</h2>
+    <p class="rlead">This copy of the game isn't running on claude.ai, so live racing needs a free realtime backend. Connect a <b>Supabase</b> project once and every player who opens this page can race. It's saved in your browser.</p>
+    ${failed ? '<div class="race-err">Couldn\'t connect with the saved details. Double-check the Project URL and anon key below.</div>' : ''}
+    <div class="rlabel">Supabase Project URL</div>
+    <input id="sbUrl" type="text" placeholder="https://xxxxxxxx.supabase.co" value="${esc(u)}">
+    <div class="rlabel">Supabase anon public key</div>
+    <input id="sbKey" type="text" placeholder="eyJhbGciOi… (anon public key)" value="${esc(k)}">
+    <div class="race-err" id="sbErr" hidden></div>
+    <div class="race-row" style="margin-top:14px">
+      <button class="btn primary" id="sbSave" type="button">Connect</button>
+      <button class="btn" id="sbCancel" type="button">Cancel</button>
+    </div>
+    <div class="race-note">Create a free project at supabase.com → Project Settings → Data API (or API) for the Project URL and the <b>anon public</b> key. Realtime is on by default; no tables needed. The anon key is a public client key — safe to put in a page. This is only needed on self-hosted copies; on claude.ai it just works.</div>`);
+  $('#sbCancel').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+  $('#sbSave').addEventListener('click', async () => {
+    const url = ($('#sbUrl').value || '').trim(), key = ($('#sbKey').value || '').trim();
+    const er = $('#sbErr');
+    if (!/^https:\/\/.+\.supabase\.(co|in|net)/.test(url) || key.length < 20) { er.hidden = false; er.textContent = 'Enter a valid https://… .supabase.co URL and the full anon key.'; return; }
+    try { localStorage.setItem('lsa-sb-url', url); localStorage.setItem('lsa-sb-key', key); } catch (e) {}
+    roomCap = undefined; RACE_BACKEND = '';
+    renderContent('<p class="rlead">Connecting to Supabase…</p>');
+    const room = await getRoom();
+    if (room) renderSetup(); else renderSupabaseSetup(true);
+  });
 }
 function renderSetup() {
   let saved = ''; try { saved = localStorage.getItem('lsa-race-name') || ''; } catch (e) {}
@@ -4959,7 +5041,7 @@ function renderSetup() {
       <button class="btn" id="rJoinBtn" type="button">Join</button>
     </div>
     <div class="race-err" id="rErr" hidden></div>
-    <div class="race-note">Online racing runs through claude.ai. Share this page's link so the other player opens the exact same artifact.</div>`);
+    <div class="race-note">Everyone must open this same page (the same link/URL) to race together.${RACE_BACKEND === 'supabase' ? ' Connected via your Supabase project.' : ''}</div>`);
   const nameEl = $('#rName');
   const go = (create) => {
     const nm = raceSafeName(nameEl.value);
@@ -4979,7 +5061,7 @@ async function doJoin(code, name, isCreator) {
   RACE.scnId = isCreator ? RACE_SCN[0].id : null;
   renderContent('<p class="rlead">Joining room…</p>');
   const room = await getRoom();
-  try { RACE.roomObj = await room.join('lsa-' + code.toLowerCase()); }
+  try { RACE.roomObj = await room.join('lsa-' + code.toLowerCase(), isCreator); }
   catch (e) { renderContent(`<h2>Couldn't join</h2><p class="race-err">The room is unavailable (${esc(e && e.code || 'error')}). <button class="btn" id="rBack" type="button">Back</button></p>`); const bk = $('#rBack'); if (bk) bk.addEventListener('click', renderSetup); return; }
   RACE.unsubs.push(RACE.roomObj.onPeers(onPeersChange, () => {}));
   racePresence();

@@ -16,7 +16,7 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 - **Mission checks look at the server's real state**, not the exact command you typed — creative solutions count.
 - **Investigation scenarios** (Chapters 31–35): a real senior-admin incident is paged in, you're asked diagnostic questions (`submit` your findings), troubleshoot with the live tools (`df -i`, `lsof +L1`, `du --inodes`, `dmesg`, `iostat`, `w`/`last`, `awk` on `/etc/passwd`), then apply the fix.
 - **Optional Speed tracker** — opt in with `tracker on` to time each ticket and keep a performance log (`stats`).
-- **Race mode** — two or more players pick one of the incident scenarios and race live to resolve it first, with a real-time leaderboard. (Online racing runs through the hosted claude.ai version; the offline/downloaded builds show a notice and otherwise play normally.)
+- **Race mode** — two or more players pick one of the incident scenarios and race live to resolve it first, with a real-time leaderboard. Works out of the box on the hosted claude.ai version; on a self-hosted copy (like this GitHub Pages site) it runs on a free **Supabase** realtime backend you connect once — see [Race mode on your own site](#race-mode-on-your-own-site-supabase).
 - A `check` command that tells you *why* a ticket hasn't advanced, plus three-step hints and a `retry` checkpoint.
 - Progress saved in your browser; works fully **offline** (installable as a PWA).
 - Light/dark aware, responsive down to phone width.
@@ -66,6 +66,22 @@ icon.svg / icon-*.png   app icons
 ## Updating
 
 Edit `index.html`, commit, push — Pages redeploys. If you change cached assets and want installed apps to refresh immediately, bump the cache name in `service-worker.js` (e.g. `last-sysadmin-v11` → `v12`).
+
+## Race mode on your own site (Supabase)
+
+Live racing needs a realtime backend. On **claude.ai** that's built in and nothing is required. On a **self-hosted** copy (GitHub Pages, Netlify, a file on disk, etc.) you connect a free **Supabase** project once; then anyone who opens your page can race.
+
+**One-time setup (about 2 minutes):**
+
+1. Create a free project at <https://supabase.com> (no credit card needed).
+2. In the project, open **Project Settings → Data API** (older UIs: **API**). Copy two values:
+   - the **Project URL** (e.g. `https://abcdxyz.supabase.co`)
+   - the **anon public** key (a long `eyJ…` string — this is a *public* client key, safe to use in a web page).
+3. Open your game, click **⚑ Race**, and paste both into the setup dialog → **Connect**. They're saved in your browser. Realtime is on by default and **no database tables are needed** — racing uses Supabase's presence channels only.
+
+That's it — share your page's link, have each player open it, and race. If you'd rather bake the credentials into the page instead of entering them in the dialog, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` near the top of the `<script>` in `index.html`.
+
+> The anon key is public by design. For a casual game the defaults are fine; if you want to lock usage down later, Supabase's Realtime authorization / RLS lets you restrict who may connect.
 
 ## Notes & limitations
 
