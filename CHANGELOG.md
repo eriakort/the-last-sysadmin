@@ -3,6 +3,16 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v17 — Resilience: no more soft-locks from deleted files
+- Fixed a soft-lock: deleting a file an earlier ticket set up (e.g. `/var/log/halcyon/app.log`) could permanently block a later ticket, and "Restore checkpoint" couldn't recover it (the checkpoint only captured the current ticket's starting state).
+- Added self-healing: any missing game-essential file is restored from its canonical state when you enter a ticket, when you reload a saved game, inside Restore checkpoint, and via a new `repair` command. Typing `check` on a stuck ticket now also restores a deleted file and says so.
+- Healing never overwrites your own edits (restores only missing files) and never undoes legitimate clean-up (the `/tmp` crash dumps, the PHP session flood, or the quarantined export script stay gone).
+
+## v16 — Mobile: collapsible side panel
+- On phones the Rack status (35 chapters of LEDs) collapsed the whole terminal below the fold. It now shows only the chapter you're on, with a "Show all 35 chapters" toggle to expand. Cuts ~900px of scrolling before the terminal.
+- The "Commands you've used" chip list also collapses to ~two rows on phones once it grows past ~10 commands, with a "Show all" toggle.
+- Both are mobile-only (≤860px); desktop is unchanged, and both hide during a race.
+
 ## v15 — Themes & avatars
 - Five appearance themes via a 🎨 picker: Halcyon Dark (default, unchanged), Amber CRT, Green Phosphor, Nord Night, Paper (light). Saved per browser, applied before first paint. Pure CSS-variable swaps — no new assets.
 - Emoji avatars: pick one in the Race setup or your account; shown in the lobby, the live race board, the all-time leaderboard, and on the sign-in button. Published via race presence and saved to your profile (`profiles.avatar`; the SQL now adds that column and is safe to re-run).
