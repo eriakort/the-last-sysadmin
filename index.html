@@ -179,6 +179,11 @@ body.racing #raceBoard{display:block!important}
 .avatar-opt{font-size:22px;width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:var(--raise);cursor:pointer}
 .avatar-opt:hover,.avatar-opt.sel{border-color:var(--amber)}
 
+
+/* Collapsible command chips */
+.chips-toggle{font-size:12px;margin-left:8px}
+.chips.collapsed .chip:nth-child(n+9){display:none}
+
 /* Collapsible rack — all screen sizes */
 .rack-toggle{font-size:12px;margin-left:8px}
 .leds.collapsed .grp{display:none}
@@ -245,7 +250,7 @@ body.racing #raceBoard{display:block!important}
         <button class="btn" id="btnRaceExit" type="button" style="margin-top:10px">Leave race</button>
       </div>
       <div>
-        <div class="label">Commands you've used <span>tap one to read its manual</span></div>
+        <div class="label">Commands you've used <span>tap one to read its manual</span><button class="btn chips-toggle" id="btnChipsToggle" type="button" aria-expanded="false">Show all</button></div>
         <div class="chips" id="chips"></div>
       </div>
     </aside>
@@ -295,6 +300,20 @@ function saveAvatar(a) {
   if (btn) btn.textContent = a;
 }
 let rackExpanded = false;
+
+let chipsExpanded = false;
+const CHIPS_DEFAULT = 8;
+function toggleChips() {
+  chipsExpanded = !chipsExpanded;
+  const chips = document.getElementById('chips');
+  const btn = document.getElementById('btnChipsToggle');
+  if (chips) chips.classList.toggle('collapsed', !chipsExpanded);
+  if (btn) {
+    btn.textContent = chipsExpanded ? 'Show less' : 'Show all';
+    btn.setAttribute('aria-expanded', chipsExpanded);
+  }
+}
+
 function toggleRack() {
   rackExpanded = !rackExpanded;
   const leds = document.getElementById('leds');
@@ -4867,11 +4886,15 @@ function render() {
   }
   const chips = $('#chips'); chips.innerHTML = '';
   if (!S.learned.length) chips.innerHTML = '<p class="empty">Commands appear here as you use them.</p>';
-  [...S.learned].sort().forEach(c => {
+  const sorted = [...S.learned].sort();
+  sorted.forEach(c => {
     const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = c;
     b.addEventListener('click', () => { if (MAN[c]) { submitLine('man ' + c); tin.focus({ preventScroll: true }); } });
     chips.appendChild(b);
   });
+  if (!chipsExpanded) chips.classList.add('collapsed');
+  const cbtn = document.getElementById('btnChipsToggle');
+  if (cbtn) cbtn.hidden = sorted.length <= CHIPS_DEFAULT;
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
   if (RACE.active) {
@@ -5463,6 +5486,8 @@ try { authInit(); } catch (e) {}
   document.addEventListener('click', () => picker.classList.remove('open'));
   const rt = document.getElementById('btnRackToggle');
   if (rt) rt.onclick = toggleRack;
+  const ct = document.getElementById('btnChipsToggle');
+  if (ct) ct.onclick = toggleChips;
   // Default collapsed on mobile
   rackExpanded = false;
   const ledsEl = document.getElementById('leds');
