@@ -1,0 +1,4 @@
+See the attached features-avatar-rack.patch in the repo for the full diff.
+Apply with: git apply features-avatar-rack.patch
+
+Alternatively download the ready index-with-features.html from the chat.
