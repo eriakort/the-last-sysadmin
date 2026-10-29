@@ -179,14 +179,11 @@ body.racing #raceBoard{display:block!important}
 .avatar-opt{font-size:22px;width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:var(--raise);cursor:pointer}
 .avatar-opt:hover,.avatar-opt.sel{border-color:var(--amber)}
 
-/* Collapsible rack (mobile-friendly) */
+/* Collapsible rack — all screen sizes */
 .rack-toggle{font-size:12px;margin-left:8px}
-@media (max-width:860px){
-  .leds.collapsed .grp{display:none}
-  .leds.collapsed .grp.current{display:flex}
-  .leds{max-height:none}
-  .leds.expanded{max-height:50vh;overflow:auto}
-}
+.leds.collapsed .grp{display:none}
+.leds.collapsed .grp.current{display:flex}
+.leds.expanded{max-height:50vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -5467,11 +5464,9 @@ try { authInit(); } catch (e) {}
   const rt = document.getElementById('btnRackToggle');
   if (rt) rt.onclick = toggleRack;
   // Default collapsed on mobile
-  if (window.matchMedia('(max-width:860px)').matches) {
-    rackExpanded = false;
-    const leds = document.getElementById('leds');
-    if (leds) leds.classList.add('collapsed');
-  }
+  rackExpanded = false;
+  const ledsEl = document.getElementById('leds');
+  if (ledsEl) ledsEl.classList.add('collapsed');
 })();
 
 })();
