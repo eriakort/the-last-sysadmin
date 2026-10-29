@@ -171,9 +171,25 @@ body.racing #raceBoard{display:block!important}
 .rb-row.win .rb-time{color:var(--amber);font-weight:600}
 .race-winner{font-family:var(--f-display);font-weight:700;font-size:18px;color:var(--amber);text-align:center;margin:4px 0 14px}
 @media (max-width:860px){.count-big{font-size:56px}}
+
+/* Avatar picker */
+.avatar-btn{font-size:18px;padding:4px 8px;min-width:36px}
+.avatar-picker{position:absolute;z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:none;flex-wrap:wrap;gap:6px;max-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.avatar-picker.open{display:flex}
+.avatar-opt{font-size:22px;width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:var(--raise);cursor:pointer}
+.avatar-opt:hover,.avatar-opt.sel{border-color:var(--amber)}
+
+/* Collapsible rack (mobile-friendly) */
+.rack-toggle{font-size:12px;margin-left:8px}
+@media (max-width:860px){
+  .leds.collapsed .grp{display:none}
+  .leds.collapsed .grp.current{display:flex}
+  .leds{max-height:none}
+  .leds.expanded{max-height:50vh;overflow:auto}
+}
 </style>
 </head>
-<a href="#tin" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">Skip to command input</a><body>
+<body>
 <div class="app">
   <header class="top">
     <div class="brand">
@@ -187,15 +203,18 @@ body.racing #raceBoard{display:block!important}
       <div class="stat"><span class="k">XP</span><span class="v" id="xp">0</span></div>
       <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
+      <button class="btn avatar-btn" id="btnAvatar" type="button" title="Choose avatar" aria-label="Choose avatar">👤</button>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnAuth" type="button" hidden title="Sign in to sync progress across devices">Sign in</button>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>
+<div class="avatar-picker" id="avatarPicker" role="listbox" aria-label="Avatar list"></div>
 
-  <main class="stage" role="main">
-    <aside class="panel" id="panel" aria-label="Mission briefing and objectives">
+
+  <main class="stage">
+    <aside class="panel" id="panel" aria-label="Mission briefing">
       <div id="brief">
         <div class="eyebrow" id="pChapter"></div>
         <div class="ticket" id="pTicket"></div>
@@ -210,13 +229,13 @@ body.racing #raceBoard{display:block!important}
         <div class="label">Hints <span id="hintCount"></span></div>
         <ol id="pHints"></ol>
         <div class="row">
-          <button class="btn" id="btnHint" type="button" aria-describedby="hintCount">Show hint · −25 XP</button>
-          <button class="btn" id="btnRetry" type="button" aria-label="Restore checkpoint">Restore checkpoint</button>
+          <button class="btn" id="btnHint" type="button">Show hint · −25 XP</button>
+          <button class="btn" id="btnRetry" type="button">Restore checkpoint</button>
         </div>
       </div>
       <div class="finale" id="finale" hidden></div>
       <div>
-        <div class="label">Rack status <span id="doneCount"></span></div>
+        <div class="label">Rack status <span id="doneCount"></span><button class="btn rack-toggle" id="btnRackToggle" type="button" aria-expanded="false">Show all</button></div>
         <div class="leds" id="leds"></div>
       </div>
       <div id="speed" hidden>
@@ -237,8 +256,8 @@ body.racing #raceBoard{display:block!important}
     <section class="term" aria-label="Terminal">
       <div class="term-bar"><span class="dot" aria-hidden="true"></span><span>ssh rookie@halcyon-web01</span><span class="r">10.0.4.12 · bash</span></div>
       <div class="term-body" id="tbody">
-        <div id="tout" role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
-        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command input" aria-describedby="tprompt"></div>
+        <div id="tout" role="log" aria-live="polite"></div>
+        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
       </div>
       <div class="keys" aria-label="Terminal keys">
         <button class="key" type="button" data-k="tab">Tab</button>
@@ -254,7 +273,7 @@ body.racing #raceBoard{display:block!important}
   </main>
 </div>
 
-<div id="raceOverlay" role="dialog" aria-modal="true" aria-labelledby="raceTitle" hidden>
+<div id="raceOverlay" hidden>
   <div class="race-modal" role="dialog" aria-label="Race">
     <button class="race-x" id="raceClose" type="button" aria-label="Close">×</button>
     <div id="raceContent"></div>
@@ -269,21 +288,30 @@ body.racing #raceBoard{display:block!important}
    ============================================================ */
 const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
 const KEY = 'last-sysadmin-v1';
-const DEBUG = new URLSearchParams(location.search).has('debug');
-function debugLog(label, obj) {
-  if (!DEBUG) return;
-  console.groupCollapsed('[Last Sysadmin] ' + label);
-  console.log(obj);
-  console.groupEnd();
+const AVATARS = ['👤','🧑‍💻','👩‍💻','🦊','🐧','🐢','🚀','⚡','🔧','🛡️','🎯','🌟'];
+function loadAvatar() {
+  try { return localStorage.getItem('lsa-avatar') || '👤'; } catch(e) { return '👤'; }
 }
-function postSuccessWhy(msg) {
-  if (!msg) return;
-  const el = document.createElement('div');
-  el.className = 'sys ok';
-  el.innerHTML = '<b>Why it worked:</b> ' + msg;
-  const tout = document.getElementById('tout');
-  if (tout) tout.appendChild(el);
+function saveAvatar(a) {
+  try { localStorage.setItem('lsa-avatar', a); } catch(e) {}
+  const btn = document.getElementById('btnAvatar');
+  if (btn) btn.textContent = a;
 }
+let rackExpanded = false;
+function toggleRack() {
+  rackExpanded = !rackExpanded;
+  const leds = document.getElementById('leds');
+  const btn = document.getElementById('btnRackToggle');
+  if (leds) {
+    leds.classList.toggle('collapsed', !rackExpanded);
+    leds.classList.toggle('expanded', rackExpanded);
+  }
+  if (btn) {
+    btn.textContent = rackExpanded ? 'Show current' : 'Show all';
+    btn.setAttribute('aria-expanded', rackExpanded);
+  }
+}
+
 const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KB = 1024, MB = KB * 1024, GB = MB * 1024;
@@ -4802,8 +4830,9 @@ function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
   const leds = $('#leds'); leds.innerHTML = '';
+  const curCh = MISSIONS[S.mission] ? MISSIONS[S.mission].ch : 0;
   CHAPTERS.forEach((c, ci) => {
-    const g = document.createElement('div'); g.className = 'grp';
+    const g = document.createElement('div'); g.className = 'grp' + (ci === curCh ? ' current' : '');
     g.innerHTML = `<span class="gl">CH${ci + 1}</span>`;
     MISSIONS.forEach((m, mi) => {
       if (m.ch !== ci) return;
@@ -4815,6 +4844,8 @@ function render() {
     const t = document.createElement('span'); t.className = 'gt'; t.textContent = c.topic; g.appendChild(t);
     leds.appendChild(g);
   });
+  if (!rackExpanded) leds.classList.add('collapsed');
+  else leds.classList.add('expanded');
   $('#doneCount').textContent = `${S.done.length} of ${MISSIONS.length} tickets resolved`;
   const bt = $('#btnTimer'); if (bt) bt.classList.toggle('on', !!S.tracker);
   const cs = $('#clockStat'); if (cs) cs.hidden = !(S.tracker && !S.finished);
@@ -5403,6 +5434,46 @@ $('#btnAuth').addEventListener('click', openAuth);
 
 boot(load());
 try { authInit(); } catch (e) {}
+
+// Avatar picker init
+(function initAvatar() {
+  const btn = document.getElementById('btnAvatar');
+  const picker = document.getElementById('avatarPicker');
+  if (!btn || !picker) return;
+  const cur = loadAvatar();
+  btn.textContent = cur;
+  AVATARS.forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'avatar-opt' + (a === cur ? ' sel' : '');
+    b.textContent = a;
+    b.setAttribute('aria-label', 'Avatar ' + a);
+    b.onclick = () => {
+      saveAvatar(a);
+      picker.querySelectorAll('.avatar-opt').forEach(x => x.classList.remove('sel'));
+      b.classList.add('sel');
+      picker.classList.remove('open');
+    };
+    picker.appendChild(b);
+  });
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const r = btn.getBoundingClientRect();
+    picker.style.top = (r.bottom + 6) + 'px';
+    picker.style.left = r.left + 'px';
+    picker.classList.toggle('open');
+  };
+  document.addEventListener('click', () => picker.classList.remove('open'));
+  const rt = document.getElementById('btnRackToggle');
+  if (rt) rt.onclick = toggleRack;
+  // Default collapsed on mobile
+  if (window.matchMedia('(max-width:860px)').matches) {
+    rackExpanded = false;
+    const leds = document.getElementById('leds');
+    if (leds) leds.classList.add('collapsed');
+  }
+})();
+
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('service-worker.js').catch(function(){});});}</script>
