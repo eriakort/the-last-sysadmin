@@ -1,0 +1,16 @@
+// Paste this immediately after the KEY line in index.html:
+const DEBUG = new URLSearchParams(location.search).has('debug');
+function debugLog(label, obj) {
+  if (!DEBUG) return;
+  console.groupCollapsed('[Last Sysadmin] ' + label);
+  console.log(obj);
+  console.groupEnd();
+}
+function postSuccessWhy(msg) {
+  if (!msg) return;
+  const el = document.createElement('div');
+  el.className = 'sys ok';
+  el.innerHTML = '<b>Why it worked:</b> ' + msg;
+  const tout = document.getElementById('tout');
+  if (tout) tout.appendChild(el);
+}
