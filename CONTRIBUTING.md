@@ -33,9 +33,31 @@ Thanks for helping improve the game. The entire experience lives in a single `in
 - Respect `prefers-reduced-motion`.
 - Do not alter colors, spacing, or fonts.
 
+### Ready-to-apply accessibility patch
+
+A small non-visual accessibility patch is included as `a11y.patch`. It adds:
+
+- A visually-hidden skip link to the command input
+- `role="main"` on the stage
+- Stronger ARIA on the terminal input (`aria-describedby`), hint/retry buttons, and the live log region
+- Dialog semantics on the race overlay
+
+Apply it locally:
+
+```bash
+git pull
+git apply a11y.patch
+# review the changes, then:
+git add index.html
+git commit -m "Accessibility improvements (skip link, landmarks, stronger ARIA)"
+git push
+```
+
+The patch only touches attributes and adds a hidden skip link; the visual design is unchanged.
+
 ## Suggested next improvements (non-visual)
 
-- Stronger ARIA on the terminal and briefing panel
+- Stronger ARIA on the terminal and briefing panel (see `a11y.patch`)
 - Optional post-ticket "why this worked" explanation (hidden by default)
 - A small developer debug mode (e.g. `?debug=1`) that dumps current FS / mission state to the console
 - Unit-testable extraction of pure functions (parser helpers, checkers) if the file is later modularized
