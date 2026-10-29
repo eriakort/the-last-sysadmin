@@ -1,0 +1,53 @@
+--- a/index.html
++++ b/index.html
+@@ -173,7 +173,7 @@
+ @media (max-width:860px){.count-big{font-size:56px}}
+ </style>
+ </head>
+-<body>
++<a href="#tin" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">Skip to command input</a><body>
+ <div class="app">
+   <header class="top">
+     <div class="brand">
+@@ -194,8 +194,8 @@
+     </div>
+   </header>
+ 
+-  <main class="stage">
+-    <aside class="panel" id="panel" aria-label="Mission briefing">
++  <main class="stage" role="main">
++    <aside class="panel" id="panel" aria-label="Mission briefing and objectives">
+       <div id="brief">
+         <div class="eyebrow" id="pChapter"></div>
+         <div class="ticket" id="pTicket"></div>
+@@ -210,8 +210,8 @@
+         <div class="label">Hints <span id="hintCount"></span></div>
+         <ol id="pHints"></ol>
+         <div class="row">
+-          <button class="btn" id="btnHint" type="button">Show hint · −25 XP</button>
+-          <button class="btn" id="btnRetry" type="button">Restore checkpoint</button>
++          <button class="btn" id="btnHint" type="button" aria-describedby="hintCount">Show hint · −25 XP</button>
++          <button class="btn" id="btnRetry" type="button" aria-label="Restore checkpoint">Restore checkpoint</button>
+         </div>
+       </div>
+       <div class="finale" id="finale" hidden></div>
+@@ -237,8 +237,8 @@
+     <section class="term" aria-label="Terminal">
+       <div class="term-bar"><span class="dot" aria-hidden="true"></span><span>ssh rookie@halcyon-web01</span><span class="r">10.0.4.12 · bash</span></div>
+       <div class="term-body" id="tbody">
+-        <div id="tout" role="log" aria-live="polite"></div>
+-        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
++        <div id="tout" role="log" aria-live="polite" aria-relevant="additions" aria-atomic="false"></div>
++        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command input" aria-describedby="tprompt"></div>
+       </div>
+       <div class="keys" aria-label="Terminal keys">
+         <button class="key" type="button" data-k="tab">Tab</button>
+@@ -254,7 +254,7 @@
+   </main>
+ </div>
+ 
+-<div id="raceOverlay" hidden>
++<div id="raceOverlay" role="dialog" aria-modal="true" aria-labelledby="raceTitle" hidden>
+   <div class="race-modal" role="dialog" aria-label="Race">
+     <button class="race-x" id="raceClose" type="button" aria-label="Close">×</button>
+     <div id="raceContent"></div>
