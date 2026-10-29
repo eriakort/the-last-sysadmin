@@ -4,10 +4,10 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 
 **35 chapters · 183 missions · ~140 commands · one self-contained HTML file. No install, no server, no network required.**
 
-> **Play it:** once GitHub Pages is enabled (see below), your link is
-> `https://<your-username>.github.io/the-last-sysadmin/`
+> ### ▶ [Play now](https://eriakort.github.io/the-last-sysadmin/)
+> **<https://eriakort.github.io/the-last-sysadmin/>** — live once GitHub Pages is enabled (see below).
 
-![chapters 1–30](icon.svg)
+![chapters 1–35](icon.svg)
 
 ## Features
 
@@ -49,7 +49,7 @@ This repo includes a workflow (`.github/workflows/pages.yml`) that publishes the
 
 1. Push this repo to GitHub.
 2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Push (or re-run the workflow). Your game is live at `https://<your-username>.github.io/the-last-sysadmin/`.
+3. Push (or re-run the workflow). Your game is live at `https://eriakort.github.io/the-last-sysadmin/`.
 
 After that, every `git push` updates the live site and the installed app.
 
