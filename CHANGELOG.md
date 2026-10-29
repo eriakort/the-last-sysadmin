@@ -3,6 +3,10 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v18 — One ⚙ Settings menu (discoverability)
+- Replaced the separate 🎨 theme button and the sign-in button (which was hidden until Supabase was connected) with a single always-visible **⚙ Settings** button. It opens one panel with Theme, Avatar, and Account.
+- Account section connects Supabase, signs in / out, and shows who's signed in — so sign-in and Supabase setup are no longer buried behind the Race dialog. When signed in, the button shows your avatar + name.
+
 ## v17 — Resilience: no more soft-locks from deleted files
 - Fixed a soft-lock: deleting a file an earlier ticket set up (e.g. `/var/log/halcyon/app.log`) could permanently block a later ticket, and "Restore checkpoint" couldn't recover it (the checkpoint only captured the current ticket's starting state).
 - Added self-healing: any missing game-essential file is restored from its canonical state when you enter a ticket, when you reload a saved game, inside Restore checkpoint, and via a new `repair` command. Typing `check` on a stuck ticket now also restores a deleted file and says so.

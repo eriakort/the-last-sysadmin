@@ -36,19 +36,6 @@ A story-driven game that teaches **Linux administration** in a simulated termina
 | 21–30 | Regex · DNS · Kernel · Shell · ACLs · LVM · Signals · Observability · Automation · **From Zero** | advanced + provision a service |
 | 31–35 | **Incident Files:** Phantom Disk · Inode Exhaustion · Compromise & Privesc · OOM Killer · Ghost Load (I/O wait) | real-world investigation scenarios |
 
-## Architecture (non-visual)
-
-The game is intentionally a single self-contained `index.html` for easy distribution and offline use. Internally it is organized roughly as:
-
-- **Simulated filesystem & process table** — in-memory objects that commands mutate.
-- **Shell parser / executor** — handles pipes, redirection, quoting, globbing, and a small script interpreter.
-- **Command registry** — ~140 commands, each with a handler and man page.
-- **Mission / chapter data** — objectives whose success is determined by inspecting the simulated state, not by matching the typed command.
-- **UI layer** — left briefing panel + right terminal. Progress is persisted in `localStorage`.
-- **PWA** — `manifest.webmanifest` + `service-worker.js` for offline install.
-
-When improving the code, prefer changes that keep the visual design identical. See `CONTRIBUTING.md` for guidance on adding commands or chapters.
-
 ## Run it
 
 It's a single self-contained page — pick whichever is easiest:
@@ -77,7 +64,6 @@ manifest.webmanifest    PWA metadata (name, icons, colors)
 service-worker.js       offline caching
 icon.svg / icon-*.png   app icons
 .github/workflows/      GitHub Pages deploy
-CONTRIBUTING.md         how to add content without changing the look
 ```
 
 ## Updating
@@ -128,7 +114,7 @@ This is a teaching **simulation**, not a real Linux box. Commands model the comm
 
 ## Contributing
 
-Issues and ideas welcome — new chapters, more commands, better hints. The whole game lives in `index.html`. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidance on keeping visual design unchanged.
+Issues and ideas welcome — new chapters, more commands, better hints. The whole game lives in `index.html`.
 
 ## License
 
