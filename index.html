@@ -5698,20 +5698,40 @@ async function openClassroom() {
   const enrolledHtml = d.enrolled.length
     ? d.enrolled.map(e => { const c = e.classes || {}; return `<div class="cx-item"><div><b>${esc(c.name || 'Class')}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}${e.role === 'ta' ? ' <span class="cx-badge">TA</span>' : ''}</div></div>`; }).join('')
     : '<p class="cx-dim">You haven\'t joined any classes yet.</p>';
-  let studentFeedback = '';
-  for (const e of d.enrolled) {
-    const fbs = await loadFeedback(e.class_id, authUser.id);
-    if (fbs.length) {
-      studentFeedback += `<div class="rlabel" style="margin-top:10px">${esc(e.classes?.name || 'Class')} — feedback</div>` +
-        fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('');
-    }
-  }
-  let studentAsns = '';
-  for (const e of d.enrolled) {
-    const asns = await loadAssignments(e.class_id);
-    if (asns.length) {
-      studentAsns += `<div class="rlabel" style="margin-top:10px">${esc(e.classes?.name || 'Class')} — assignments</div>` +
-        asns.map(a => `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${a.due_at ? new Date(a.due_at).toLocaleString() : 'No due date'} · ${(a.mission_ids||[]).length} missions</span></div><button class="btn sm" data-open="${esc((a.mission_ids||[])[0]||'')}">Open</button></div>`).join('');
+  let studentDash = '';
+  if (d.enrolled.length) {
+    const sb = await getSB();
+    let myAttempts = [];
+    try {
+      const { data } = await sb.from('attempts').select('mission_id, passed').eq('user_id', authUser.id);
+      myAttempts = data || [];
+    } catch (e) {}
+    const passedSet = new Set(myAttempts.filter(a => a.passed).map(a => a.mission_id));
+    studentDash = `<div class="rlabel" style="margin-top:8px">My dashboard</div>`;
+    for (const e of d.enrolled) {
+      const cname = e.classes?.name || 'Class';
+      const asns = await loadAssignments(e.class_id);
+      const fbs = await loadFeedback(e.class_id, authUser.id);
+      let asnHtml = '';
+      if (asns.length) {
+        asnHtml = asns.map(a => {
+          const mids = a.mission_ids || [];
+          const done = mids.filter(id => passedSet.has(id)).length;
+          const grade = mids.length ? Math.round(done / mids.length * 100) : 0;
+          const due = a.due_at ? new Date(a.due_at).toLocaleString() : 'No due date';
+          return `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${due} · ${done}/${mids.length} · ${grade}%</span></div><button class="btn sm" data-open="${esc(mids[0]||'')}">Open</button></div>`;
+        }).join('');
+      } else {
+        asnHtml = '<p class="cx-dim">No assignments yet.</p>';
+      }
+      let fbHtml = fbs.length
+        ? fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('')
+        : '<p class="cx-dim">No feedback yet.</p>';
+      studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
+        <div style="font-weight:600;margin-bottom:6px">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</div>
+        <div class="rlabel">Assignments</div>${asnHtml}
+        <div class="rlabel" style="margin-top:8px">Feedback</div>${fbHtml}
+      </div>`;
     }
   }
   let teach;
@@ -5823,8 +5843,7 @@ async function openClassroom() {
     <div class="race-err" id="cxErr" hidden></div>
     <div class="rlabel">Classes you're in</div>
     ${enrolledHtml}
-    ${studentAsns}
-    ${studentFeedback}
+    ${studentDash}
     ${teach}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
   $('#cxBack').addEventListener('click', openSettings);
