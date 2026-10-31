@@ -1,0 +1,145 @@
+From d8feb48ea67fcc43ede731e2dfc2cbc23c3cbafa Mon Sep 17 00:00:00 2001
+From: Eric <eriakort8@gmail.com>
+Date: Sat, 31 Oct 2026 01:16:20 +0100
+Subject: [PATCH] Ship soft-lock resilience fix in index.html (repairWorld)
+
+The v17 recovery was documented but never built into the shipped index.html.
+This adds the code: missing game-essential files are restored from canonical
+state on entering a ticket, on reload, inside Restore checkpoint, via a new
+'repair' command, and when 'check' finds something missing. Only restores
+MISSING files (edits are safe) and excludes clean-up targets (/tmp dumps,
+PHP session flood, quarantined export script). Leaves avatar/rack/chips work
+untouched. Cache bumped to v20.
+---
+ CHANGELOG.md      |  5 +++++
+ index.html        | 38 ++++++++++++++++++++++++++++++++++++--
+ service-worker.js |  2 +-
+ 3 files changed, 42 insertions(+), 3 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 90b954d..1b060a7 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,11 @@
+ All notable changes to The Last Sysadmin. The game is a single `index.html`;
+ versions below track the content added over time.
+ 
++## v20 — Resilience fix actually shipped in index.html
++- The soft-lock recovery described under v17 below is now really present in the shipped `index.html` (it had been documented and written, but a broken build step meant the code never made it into the page that was deployed).
++- What it does: deleting a file a ticket relies on (e.g. `/var/log/halcyon/app.log`) no longer permanently blocks the game. Missing game-essential files self-heal on entering a ticket, on reloading a saved game, inside Restore checkpoint, via a new `repair` command, and when you type `check` on a stuck ticket.
++- Safe: it only restores *missing* files (never overwrites your edits) and never undoes legitimate clean-up (the `/tmp` crash dumps, the PHP session flood, or the quarantined export script stay gone).
++
+ ## v18 — One ⚙ Settings menu (discoverability)
+ - Replaced the separate 🎨 theme button and the sign-in button (which was hidden until Supabase was connected) with a single always-visible **⚙ Settings** button. It opens one panel with Theme, Avatar, and Account.
+ - Account section connects Supabase, signs in / out, and shows who's signed in — so sign-in and Supabase setup are no longer buried behind the Race dialog. When signed in, the button shows your avatar + name.
+diff --git a/index.html b/index.html
+index 7c1ecd0..5877b2a 100644
+--- a/index.html
++++ b/index.html
+@@ -622,7 +622,7 @@ function jmHome() {
+     '.ssh': D({ authorized_keys: F(JM_KEYS, { owner: 'jmorrow', mode: 0o600, mtime: at(2026, 3, 2, 10, 4) }) }, { owner: 'jmorrow', mode: 0o700, mtime: at(2026, 3, 2, 10, 4) })
+   }, { owner: 'jmorrow', mode: 0o750, mtime: at(2026, 10, 21, 22, 19) });
+ }
+-const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check', 'stats', 'tracker'];
++const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check', 'stats', 'tracker', 'repair'];
+ function buildFS() {
+   const bins = {};
+   for (const c of Object.keys(CMDS).filter(c => !GAME_CMDS.includes(c))) {
+@@ -2391,6 +2391,7 @@ Game commands
+   tracker          turn the optional speed tracker on or off
+   stats            show your speed-tracker log (times per ticket)
+   retry            restore the server to the start of this ticket
++  repair           restore any game files you deleted (if you're stuck)
+   mission          show the current ticket again
+   man COMMAND      read the short manual for a command
+ 
+@@ -2403,6 +2404,12 @@ CMDS.mission = () => { announceMission(); };
+ CMDS.tracker = () => { toggleTracker(); };
+ CMDS.stats = (a, ctx) => { statsLog(ctx); return 0; };
+ CMDS.retry = () => { doRetry(); };
++CMDS.repair = (a, ctx) => {
++  const n = repairWorld();
++  if (n) { ctx.out(`Repaired: restored ${n} system file${n === 1 ? '' : 's'} the game needs (logs, configs, release files and the like) to their original state.\nYour own files, edits and progress were left untouched. If a ticket was stuck because something was missing, try the step again.\n`); render(); save(); }
++  else ctx.out('Nothing to repair — every file the game needs is present. If a ticket still will not advance, type `check`.\n');
++  return 0;
++};
+ 
+ const FLAG_DIAG = {
+   'run-script': "This ticket needs two things: <code>~/status.sh</code> must be executable (<code>chmod +x ~/status.sh</code>), and you must run it <i>in this ticket</i>. Running it is tracked per ticket, so even if you ran it earlier, run <code>./status.sh</code> again now (from your home directory, after the chmod). <code>check ~/status.sh</code> shows whether the executable bit is set.",
+@@ -2449,10 +2456,12 @@ CMDS.check = (a, ctx) => {
+   if (m.check) {
+     if (m.check()) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
+     let extra = '';
++    const fixed = repairWorld();
++    if (fixed) extra += `<br><br>&#9888; The server was missing ${fixed} file${fixed === 1 ? '' : 's'} the game needs &mdash; something got deleted earlier. I restored ${fixed === 1 ? 'it' : 'them'} to the original state, so try the step again.`;
+     if (FLAG_DIAG[m.id]) extra += '<br><br>' + FLAG_DIAG[m.id];
+     if (m.fail) { const f = m.fail(); if (f) extra += '<br><br>&#9888; ' + md(f); }
+     if (m.nudge) { const nu = m.nudge(); if (nu) extra += '<br><br>' + md(nu); }
+-    if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, and <code>hint</code> gives the next step.";
++    if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, <code>repair</code> restores any game files you may have deleted, and <code>hint</code> gives the next step.";
+     emitSys(head + extra, 'hint');
+     return 0;
+   }
+@@ -4761,6 +4770,7 @@ function startMission() {
+   S.readM = []; S.cmdsM = []; S.nudged = [];
+   const m = MISSIONS[S.mission], prev = MISSIONS[S.mission - 1];
+   if (m.onStart) m.onStart();
++  if (typeof RACE === 'undefined' || !RACE.active) repairWorld();
+   trackStart();
+   S.checkpoint = JSON.stringify(S.fs);
+   if (!prev || prev.ch !== m.ch) emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter');
+@@ -4779,9 +4789,32 @@ function showHint() {
+   emitSys(`<b>Hint ${n + 1}/${m.hints.length}:</b> ${md(m.hints[n])}`, 'hint');
+   render(); save();
+ }
++/* Recreate any MISSING game-essential files from their canonical state, so a
++   file deleted earlier can never permanently block a later ticket. Never
++   overwrites existing files (your edits are safe) and never re-adds files that
++   a clean-up ticket is meant to delete: /tmp crash dumps, the PHP session
++   flood, and the quarantined export script. */
++function repairWorld() {
++  const canon = buildFS();
++  const excluded = abs => abs === '/tmp' || abs.indexOf('/tmp/') === 0 || abs.indexOf('/var/lib/php/sessions') === 0 || abs === P.sync;
++  let n = 0;
++  const walk = (abs, cnode) => {
++    if (excluded(abs)) return;
++    const live = getNode(abs);
++    if (!live) {
++      const par = getNode(parentOf(abs));
++      if (par && par.type === 'dir') { par.children[baseName(abs)] = JSON.parse(JSON.stringify(cnode)); n++; }
++      return;
++    }
++    if (cnode.type === 'dir' && live.type === 'dir') for (const k in cnode.children) walk(abs === '/' ? '/' + k : abs + '/' + k, cnode.children[k]);
++  };
++  for (const k in canon.children) walk('/' + k, canon.children[k]);
++  return n;
++}
+ function doRetry() {
+   if (S.finished || !S.checkpoint) { emitSys('Nothing to restore.', 'hint'); return; }
+   S.fs = JSON.parse(S.checkpoint);
++  repairWorld();
+   if (!getNode(S.cwd)) S.cwd = HOME;
+   S.nudged = [];
+   emitSys('Restored the server from backup to how it was when this ticket opened.', 'hint');
+@@ -4957,6 +4990,7 @@ Last login: Thu Oct 22 17:58:03 2026 from 10.0.4.31`);
+ }
+ function boot(restored) {
+   motd(restored);
++  if (restored) { const fixed = repairWorld(); if (fixed) { S.checkpoint = JSON.stringify(S.fs); emitSys(`Restored ${fixed} game file${fixed === 1 ? '' : 's'} that had been deleted, so you can keep going.`, 'hint'); } }
+   if (restored && S.finished && S.mission < MISSIONS.length) {
+     S.finished = false;
+     emitSys(`<b>New chapter unlocked.</b> Your progress from earlier chapters is kept.`, 'ok');
+diff --git a/service-worker.js b/service-worker.js
+index 2caac58..a8f0e90 100644
+--- a/service-worker.js
++++ b/service-worker.js
+@@ -1,5 +1,5 @@
+ /* The Last Sysadmin - offline service worker */
+-const CACHE = 'last-sysadmin-v19';
++const CACHE = 'last-sysadmin-v20';
+ const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
+ self.addEventListener('install', (e) => {
+   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+-- 
+2.43.0
+
