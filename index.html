@@ -5865,18 +5865,29 @@ async function openClassroom() {
   } else {
     teach = `<div class="rlabel">Teaching?</div><p class="cx-dim" style="margin:0 0 8px">Enable teacher tools to create classes and (soon) see your students' progress.</p><button class="btn" id="cxBecome" type="button">Enable teacher tools</button>`;
   }
+  const tabs = [
+    { id: 'join', label: 'Join', html: `<div class="rlabel">Join a class</div>
+      <div class="cx-form">
+        <input id="cxCode" type="text" autocapitalize="characters" autocomplete="off" placeholder="Enter join code (e.g. 7FQ2K9)">
+        <button class="btn primary" id="cxJoin" type="button">Join</button>
+      </div>
+      <div class="rlabel" style="margin-top:12px">Classes you're in</div>
+      ${enrolledHtml}` },
+    { id: 'dash', label: 'My dashboard', html: studentDash || '<p class="cx-dim">Join a class to see your dashboard.</p>' },
+    { id: 'teach', label: 'Teach', html: teach }
+  ];
   renderContent(`<h2>Classroom</h2>
-    <div class="rlabel">Join a class</div>
-    <div class="cx-form">
-      <input id="cxCode" type="text" autocapitalize="characters" autocomplete="off" placeholder="Enter join code (e.g. 7FQ2K9)">
-      <button class="btn primary" id="cxJoin" type="button">Join</button>
+    <div id="cxTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px">
+      ${tabs.map((t,i) => `<button class="btn${i===0?' on':''}" data-cxtab="${t.id}" type="button">${t.label}</button>`).join('')}
     </div>
     <div class="race-err" id="cxErr" hidden></div>
-    <div class="rlabel">Classes you're in</div>
-    ${enrolledHtml}
-    ${studentDash}
-    ${teach}
+    ${tabs.map((t,i) => `<div id="cxt-${t.id}" ${i? 'hidden':''}>${t.html}</div>`).join('')}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
+  document.querySelectorAll('#cxTabs [data-cxtab]').forEach(btn => btn.addEventListener('click', () => {
+    const id = btn.dataset.cxtab;
+    document.querySelectorAll('#cxTabs [data-cxtab]').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('[id^="cxt-"]').forEach(p => { p.hidden = p.id !== 'cxt-' + id; });
+  }));
   $('#cxBack').addEventListener('click', openSettings);
   $('#cxJoin').addEventListener('click', cxDoJoin);
   const code = $('#cxCode'); if (code) code.addEventListener('keydown', ev => { if (ev.key === 'Enter') cxDoJoin(); });
