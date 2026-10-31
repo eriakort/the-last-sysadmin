@@ -5570,6 +5570,25 @@ async function cxLoad() {
   }
   return out;
 }
+async function loadAssignments(classId) {
+  const sb = await getSB(); if (!sb || !authUser) return [];
+  try {
+    const { data, error } = await sb.from('assignments')
+      .select('id, title, mission_ids, due_at')
+      .eq('class_id', classId)
+      .order('due_at', { ascending: true, nullsFirst: false });
+    return error ? [] : (data || []);
+  } catch (e) { return []; }
+}
+async function createAssignment(classId, title, missionIds, dueAt) {
+  const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
+  return sb.from('assignments').insert({
+    class_id: classId,
+    title: title.trim(),
+    mission_ids: missionIds,
+    due_at: dueAt || null
+  });
+}
 async function openClassroom() {
   if (!authUser) { openSettings(); return; }
   showOverlay();
@@ -5582,17 +5601,40 @@ async function openClassroom() {
   const enrolledHtml = d.enrolled.length
     ? d.enrolled.map(e => { const c = e.classes || {}; return `<div class="cx-item"><div><b>${esc(c.name || 'Class')}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}${e.role === 'ta' ? ' <span class="cx-badge">TA</span>' : ''}</div></div>`; }).join('')
     : '<p class="cx-dim">You haven\'t joined any classes yet.</p>';
+  let studentAsns = '';
+  for (const e of d.enrolled) {
+    const asns = await loadAssignments(e.class_id);
+    if (asns.length) {
+      studentAsns += `<div class="rlabel" style="margin-top:10px">${esc(e.classes?.name || 'Class')} — assignments</div>` +
+        asns.map(a => `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${a.due_at ? new Date(a.due_at).toLocaleString() : 'No due date'} · ${(a.mission_ids||[]).length} missions</span></div><button class="btn sm" data-open="${esc((a.mission_ids||[])[0]||'')}">Open</button></div>`).join('');
+    }
+  }
   let teach;
   if (d.isTeacher) {
     const ownedHtml = d.owned.length
       ? d.owned.map(c => `<div class="cx-item"><div><b>${esc(c.name)}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}</div><code class="cx-code" data-code="${esc(c.join_code)}" title="Click to copy join code">${esc(c.join_code)}</code></div>`).join('')
       : '<p class="cx-dim">No classes yet — create one below.</p>';
+    let assignHtml = '';
+    if (d.owned.length) {
+      const cid = d.owned[0].id;
+      const asns = await loadAssignments(cid);
+      assignHtml = `<div class="rlabel" style="margin-top:14px">Assignments</div>` +
+        (asns.length
+          ? asns.map(a => `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${a.due_at ? new Date(a.due_at).toLocaleString() : 'No due date'} · ${(a.mission_ids||[]).length} missions</span></div></div>`).join('')
+          : '<p class="cx-dim">No assignments yet.</p>') +
+        `<div class="cx-form" style="margin-top:8px">
+           <input id="asTitle" type="text" placeholder="Assignment title">
+           <input id="asDue" type="datetime-local">
+           <input id="asMissions" type="text" placeholder="Mission ids, comma-separated (e.g. 1-1,1-2)">
+           <button class="btn primary" id="asCreate" type="button">Assign</button>
+         </div>`;
+    }
     teach = `<div class="rlabel">Classes you teach</div>${ownedHtml}
       <div class="cx-form">
         <input id="cxName" type="text" placeholder="Class name (e.g. Linux Admin 101)">
         <input id="cxTerm" type="text" placeholder="Term (optional)">
         <button class="btn primary" id="cxCreate" type="button">Create class</button>
-      </div>`;
+      </div>${assignHtml}`;
   } else {
     teach = `<div class="rlabel">Teaching?</div><p class="cx-dim" style="margin:0 0 8px">Enable teacher tools to create classes and (soon) see your students' progress.</p><button class="btn" id="cxBecome" type="button">Enable teacher tools</button>`;
   }
@@ -5605,6 +5647,7 @@ async function openClassroom() {
     <div class="race-err" id="cxErr" hidden></div>
     <div class="rlabel">Classes you're in</div>
     ${enrolledHtml}
+    ${studentAsns}
     ${teach}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
   $('#cxBack').addEventListener('click', openSettings);
@@ -5616,6 +5659,18 @@ async function openClassroom() {
     openClassroom();
   });
   const cc = $('#cxCreate'); if (cc) cc.addEventListener('click', cxDoCreate);
+  const asBtn = $('#asCreate');
+  if (asBtn) asBtn.addEventListener('click', async () => {
+    const title = ($('#asTitle')||{}).value?.trim() || '';
+    const due = ($('#asDue')||{}).value || null;
+    const mids = (($('#asMissions')||{}).value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const er = $('#cxErr');
+    if (!title || !mids.length) { if (er) { er.hidden = false; er.textContent = 'Title and at least one mission required.'; } return; }
+    if (!d.owned.length) return;
+    const { error } = await createAssignment(d.owned[0].id, title, mids, due);
+    if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
+    openClassroom();
+  });
   document.querySelectorAll('#raceContent .cx-code[data-code]').forEach(el => el.addEventListener('click', () => {
     const t = el.dataset.code; try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (e) {}
     const old = el.textContent; el.textContent = 'copied'; setTimeout(() => { el.textContent = old; }, 900);
