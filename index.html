@@ -5912,6 +5912,22 @@ async function openClassroom() {
   } else {
     teach = `<div class="rlabel">Teaching?</div><p class="cx-dim" style="margin:0 0 8px">Enable teacher tools to create classes and (soon) see your students' progress.</p><button class="btn" id="cxBecome" type="button">Enable teacher tools</button>`;
   }
+  const qbankHtml = `<div class="rlabel">Question bank</div>
+    <p class="cx-dim" style="margin:0 0 8px">1000 Linux admin questions. Filter, select, and print.</p>
+    <div class="cx-form" style="flex-wrap:wrap;gap:6px;margin-bottom:8px">
+      <select id="qbCat" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px"><option value="">All categories</option></select>
+      <select id="qbDiff" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
+        <option value="">All levels</option>
+        <option value="intro">Intro</option>
+        <option value="intermediate">Intermediate</option>
+        <option value="advanced">Advanced</option>
+      </select>
+      <input id="qbSearch" type="text" placeholder="Search…" style="flex:1;min-width:120px">
+      <button class="btn" id="qbPrint" type="button">Print selected</button>
+      <button class="btn" id="qbPrintAns" type="button">Print with answers</button>
+    </div>
+    <div id="qbList" style="max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px;font-size:13px"></div>
+    <p class="cx-dim" id="qbCount" style="margin:6px 0 0"></p>`;
   const tabs = [
     { id: 'join', label: 'Join', html: `<div class="rlabel">Join a class</div>
       <div class="cx-form">
@@ -5921,7 +5937,8 @@ async function openClassroom() {
       <div class="rlabel" style="margin-top:12px">Classes you're in</div>
       ${enrolledHtml}` },
     { id: 'dash', label: 'My dashboard', html: studentDash || '<p class="cx-dim">Join a class to see your dashboard.</p>' },
-    { id: 'teach', label: 'Teach', html: teach }
+    { id: 'teach', label: 'Teach', html: teach },
+    { id: 'qbank', label: 'Question bank', html: qbankHtml }
   ];
   renderContent(`<h2>Classroom</h2>
     <div id="cxTabs" class="cx-tabs" role="tablist">
@@ -5948,6 +5965,42 @@ async function openClassroom() {
       <script>window.print()<\/script></body></html>`;
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
   }));
+  // Question bank
+  let qbData = null;
+  async function loadQB() {
+    if (qbData) return qbData;
+    try { const r = await fetch('questions.json'); qbData = await r.json(); } catch (e) { qbData = []; }
+    return qbData;
+  }
+  function renderQB() {
+    const list = $('#qbList'); if (!list || !qbData) return;
+    const cat = ($('#qbCat')||{}).value || '';
+    const diff = ($('#qbDiff')||{}).value || '';
+    const q = (($('#qbSearch')||{}).value || '').toLowerCase();
+    const filtered = qbData.filter(x => (!cat || x.category === cat) && (!diff || x.difficulty === diff) && (!q || x.question.toLowerCase().includes(q) || x.answer.toLowerCase().includes(q)));
+    const cats = [...new Set(qbData.map(x => x.category))].sort();
+    const sel = $('#qbCat');
+    if (sel && sel.options.length <= 1) cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+    list.innerHTML = filtered.slice(0, 200).map(x => `<label style="display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);align-items:flex-start"><input type="checkbox" data-qid="${esc(x.id)}"><span><b>${esc(x.id)}</b> <span class="cx-dim">${esc(x.category)} · ${esc(x.difficulty)}</span><br>${esc(x.question)}</span></label>`).join('') || '<p class="cx-dim" style="padding:10px">No matches.</p>';
+    const cnt = $('#qbCount'); if (cnt) cnt.textContent = filtered.length + ' questions' + (filtered.length > 200 ? ' (showing first 200)' : '');
+  }
+  function printQB(withAns) {
+    if (!qbData) return;
+    const ids = new Set([...document.querySelectorAll('#qbList input:checked')].map(i => i.dataset.qid));
+    const items = qbData.filter(x => ids.has(x.id));
+    if (!items.length) return;
+    const body = items.map((x,i) => `<div style="margin:0 0 16px"><b>${i+1}. ${x.question}</b><div style="color:#555;font-size:13px">${x.category} · ${x.difficulty}</div>${withAns ? '<div style="margin-top:4px"><i>Answer:</i> '+x.answer+'</div>' : ''}</div>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Question bank</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#111} h1{font-size:22px}</style></head><body><h1>Linux Admin Questions</h1>${body}<script>window.print()<\/script></body></html>`;
+    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+  }
+  const qbTab = document.querySelector('[data-cxtab="qbank"]');
+  if (qbTab) qbTab.addEventListener('click', async () => { await loadQB(); renderQB(); });
+  const qbCat = $('#qbCat'), qbDiff = $('#qbDiff'), qbSearch = $('#qbSearch');
+  if (qbCat) qbCat.addEventListener('change', renderQB);
+  if (qbDiff) qbDiff.addEventListener('change', renderQB);
+  if (qbSearch) qbSearch.addEventListener('input', renderQB);
+  const qbP = $('#qbPrint'); if (qbP) qbP.addEventListener('click', () => printQB(false));
+  const qbPA = $('#qbPrintAns'); if (qbPA) qbPA.addEventListener('click', () => printQB(true));
   document.querySelectorAll('#cxTabs [data-cxtab]').forEach(btn => btn.addEventListener('click', () => {
     const id = btn.dataset.cxtab;
     document.querySelectorAll('#cxTabs [data-cxtab]').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
