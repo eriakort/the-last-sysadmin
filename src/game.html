@@ -122,6 +122,10 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
 /* ---- Race mode ---- */
 body.racing #leds,body.racing #chips,body.racing #speed,body.racing #finale,body.racing .panel>div:last-child{display:none!important}
 body.racing #raceBoard{display:block!important}
+body.practicing #leds,body.practicing #chips,body.practicing #speed,body.practicing #finale{display:none!important}
+#practiceBar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:var(--amber);color:#1a1205;font-weight:600;font-size:13px}
+#practiceBar button{background:rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.25);color:inherit}
+body.practicing{padding-top:40px}
 #raceOverlay{position:fixed;inset:0;z-index:50;background:rgba(7,10,15,.82);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left)) 16px}
 .race-modal{position:relative;width:min(560px,100%);max-height:88vh;max-height:88svh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
 .race-x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:26px;line-height:1;padding:4px 8px;border-radius:6px}
@@ -913,7 +917,7 @@ function migrate() {
     S.mig = 8;
   }
 }
-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
+function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
   S = freshState(); return false;
@@ -4805,6 +4809,7 @@ function completeMission() {
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
+  if (typeof PRACTICE !== 'undefined' && PRACTICE.active) { practiceAdvance(); updatePrompt(); render(); return; }
   const next = MISSIONS[S.mission];
   if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
   if (!next) S.finished = true;
@@ -5417,6 +5422,95 @@ function exitRace() {
   tin.focus({ preventScroll: true });
 }
 $('#btnRace').addEventListener('click', openRace);
+
+/* ---------- Authored-mission playback (M10) ---------- */
+/* Turn a stored authored mission {check_type, check_arg1, check_arg2} into a
+   live check() closure over the sandbox game state. */
+function authoredCheck(m) {
+  const t = m.check_type, a1 = (m.check_arg1 || '').trim(), a2 = (m.check_arg2 || '');
+  const absPath = p => { p = (p || '').trim(); if (p.startsWith('~')) return HOME + p.slice(1); if (p.startsWith('/')) return p; return HOME + '/' + p; };
+  switch (t) {
+    case 'file_exists':
+      return () => !!getNode(absPath(a1));
+    case 'file_contains':
+      return () => { const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && String(n.content || '').includes(a2)); };
+    case 'file_matches': {
+      let re = null; try { re = new RegExp(a2); } catch (e) { re = null; }
+      return () => { if (!re) return false; const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && re.test(String(n.content || ''))); };
+    }
+    case 'command_run':
+      return () => S.cmdsM.includes(a1);
+    case 'service_state': {
+      const want = /^(active|running|start|up|on|enabled|true)/i.test(a2 || 'active');
+      return () => { const s = S.services[a1]; return !!s && (!!s.active === want); };
+    }
+    default:
+      return () => false;
+  }
+}
+let PRACTICE = { active: false };
+let practiceS = null;
+/* Play one or more authored missions in an isolated sandbox. The campaign state
+   is set aside and restored on exit, exactly like Race, so nothing a student
+   does here touches their own progress. Completing a mission records an attempt
+   (by the mission's id) so the class grade updates. */
+function playAuthored(missions, label) {
+  missions = (missions || []).filter(m => m && m.id && m.check_type);
+  if (!missions.length) { emitSys('No playable missions in this assignment yet.', 'hint'); return; }
+  if (typeof RACE !== 'undefined' && RACE.active) { emitSys('Finish or leave the race first.', 'hint'); return; }
+  if (PRACTICE.active) exitPractice(true);
+  hideOverlay();
+  practiceS = S;
+  const chIdx = CHAPTERS.length;
+  CHAPTERS.push({ label: 'PRACTICE', name: label || 'Class mission', intro: '', outro: '' });
+  const startIdx = MISSIONS.length;
+  missions.forEach(m => MISSIONS.push({
+    ch: chIdx, id: m.id, title: m.title || 'Mission',
+    story: m.story || '', objective: m.objective || 'Complete the task.',
+    hints: Array.isArray(m.hints) ? m.hints.slice(0, 3) : [],
+    check: authoredCheck(m)
+  }));
+  PRACTICE = { active: true, startIdx, endIdx: MISSIONS.length - 1, label: label || '' };
+  S = freshState(); S.sudo = true; S.mission = startIdx;
+  document.body.classList.add('practicing');
+  let bar = $('#practiceBar');
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'practiceBar';
+    bar.innerHTML = '<span id="practiceMsg"></span><button class="btn" id="practiceExit" type="button">Exit practice</button>';
+    document.body.appendChild(bar);
+    $('#practiceExit').addEventListener('click', () => exitPractice(false));
+  }
+  $('#practiceMsg').textContent = `Practice · ${label || 'class mission'} — your campaign is untouched`;
+  bar.hidden = false;
+  tout.innerHTML = '';
+  emitSys(`<b>Practice mode.</b> ${missions.length > 1 ? missions.length + ' missions' : '1 mission'} from <b>${esc(label || 'your class')}</b>. Nothing here affects your campaign. Click <b>Exit practice</b> any time.`, 'ok');
+  startMission();
+  updatePrompt(); render(); scrollEnd(); tin.focus({ preventScroll: true });
+}
+function practiceAdvance() {
+  if (S.mission > PRACTICE.endIdx) practiceFinish();
+  else startMission();
+}
+function practiceFinish() {
+  endPractice();
+  emitSys('<b>✓ Practice complete.</b> Your campaign is unchanged; your class progress is saved. Open the classroom to see your updated grade.', 'ok');
+}
+function exitPractice() {
+  endPractice();
+  emitSys('Left practice — back to your campaign.', 'hint');
+}
+function endPractice() {
+  if (!PRACTICE.active) return;
+  MISSIONS.length = PRACTICE.startIdx;   // drop the synthetic missions
+  CHAPTERS.pop();                        // drop the synthetic chapter
+  PRACTICE = { active: false };
+  if (practiceS) { S = practiceS; practiceS = null; }
+  document.body.classList.remove('practicing');
+  const bar = $('#practiceBar'); if (bar) bar.hidden = true;
+  tout.innerHTML = '';
+  if (!S.finished && MISSIONS[S.mission]) { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); announceMission(); }
+  updatePrompt(); render(); scrollEnd();
+}
 $('#raceClose').addEventListener('click', exitRace);
 $('#btnRaceExit').addEventListener('click', exitRace);
 
@@ -5722,10 +5816,18 @@ async function openClassroom() {
     } catch (e) {}
     const passedSet = new Set(myAttempts.filter(a => a.passed).map(a => a.mission_id));
     studentDash = `<div class="rlabel" style="margin-top:8px">My dashboard</div>`;
+    window._cxPlay = window._cxPlay || {};
     for (const e of d.enrolled) {
       const cname = e.classes?.name || 'Class';
       const asns = await loadAssignments(e.class_id);
       const fbs = await loadFeedback(e.class_id, authUser.id);
+      // authored missions assigned to this class, delivered via the server function
+      let classMissions = [];
+      try { const { data } = await sb.rpc('get_class_missions', { p_class_id: e.class_id }); classMissions = data || []; } catch (_) {}
+      window._cxPlay[e.class_id] = classMissions;
+      const playBtn = classMissions.length
+        ? `<button class="btn sm primary" data-playclass="${esc(e.class_id)}" data-cname="${esc(cname)}" type="button">▶ Play ${classMissions.length} custom mission${classMissions.length > 1 ? 's' : ''}</button>`
+        : '';
       let asnHtml = '';
       if (asns.length) {
         asnHtml = asns.map(a => {
@@ -5743,7 +5845,7 @@ async function openClassroom() {
         ? fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('')
         : '<p class="cx-dim">No feedback yet.</p>';
       studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
-        <div style="font-weight:600;margin-bottom:6px">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:600">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</span>${playBtn}</div>
         <div class="rlabel">Assignments</div>${asnHtml}
         <div class="rlabel" style="margin-top:8px">Feedback</div>${fbHtml}
       </div>`;
@@ -5770,7 +5872,7 @@ async function openClassroom() {
          </div>`;
       const myM = await loadMyMissions();
       assignHtml += `<div class="rlabel" style="margin-top:14px">Mission editor</div>
-        <p class="cx-dim" style="margin:0 0 6px">Author a mission. Use its id in an assignment. Playback of custom missions comes next.</p>` +
+        <p class="cx-dim" style="margin:0 0 6px">Author a mission, then use its id (or a scenario's) in an assignment. Students play it from <b>My dashboard → ▶ Play custom missions</b>. Tip: checks that need a file to already exist work best as <i>file exists</i> / <i>command was run</i> / <i>service state</i> — the sandbox starts from the standard server, so your mission can't pre-create files.</p>` +
         (myM.length ? myM.map(m => `<div class="cx-item"><div><b>${esc(m.title)}</b> <span class="cx-dim">· ${esc(m.check_type)}</span><br><code class="cx-dim">${esc(m.id)}</code></div></div>`).join('') : '<p class="cx-dim">No authored missions yet.</p>') +
         `<div class="cx-form" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
            <input id="mTitle" type="text" placeholder="Title">
@@ -5949,6 +6051,11 @@ async function openClassroom() {
       <p class="meta">${cls}<br>${new Date().toLocaleDateString()}</p></div>
       <script>window.print()<\/script></body></html>`;
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+  }));
+  // Play custom (authored) class missions in the isolated practice sandbox
+  document.querySelectorAll('[data-playclass]').forEach(btn => btn.addEventListener('click', () => {
+    const missions = (window._cxPlay || {})[btn.dataset.playclass] || [];
+    playAuthored(missions, btn.dataset.cname || 'class');
   }));
   // Question bank
   let qbData = null;

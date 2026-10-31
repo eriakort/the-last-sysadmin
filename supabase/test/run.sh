@@ -39,7 +39,7 @@ run "$REPO/supabase/m2-enrollment.sql" >/dev/null
 echo "Re-applying m2-enrollment.sql (idempotency check)..."
 run "$REPO/supabase/m2-enrollment.sql" >/dev/null 2>&1
 
-for m in m4-enroll-by-email m6-missions m7-scenarios; do
+for m in m4-enroll-by-email m6-missions m7-scenarios m10-authored-delivery; do
   echo "Applying $m.sql..."
   run "$REPO/supabase/$m.sql" >/dev/null
   echo "Re-applying $m.sql (idempotency check)..."
@@ -54,6 +54,9 @@ echo "Running join-by-code tests (M2)..."
 
 echo "Running enroll-by-email + authoring-isolation tests (M4/M6/M7)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m4-m6-m7-test.sql"
+
+echo "Running authored-mission delivery tests (M10)..."
+"${PSQL[@]}" -d "$DB" -f "$HERE/m10-delivery-test.sql"
 
 echo
 echo "Cleaning up..."

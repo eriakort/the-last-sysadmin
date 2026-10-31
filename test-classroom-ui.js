@@ -97,8 +97,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('#cxJoin');
   await page.waitForTimeout(200);
   const calls = await page.evaluate(() => window.__calls);
-  const rpc = calls.find(c => c[0] === 'rpc');
-  if (rpc && rpc[1] === 'enroll_by_code' && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
+  const rpc = calls.find(c => c[0] === 'rpc' && c[1] === 'enroll_by_code');
+  if (rpc && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
   else fail('rpc enroll_by_code not called correctly: ' + JSON.stringify(rpc));
 
   // Create class (in the Teach tab)

@@ -9,7 +9,8 @@
     "test": "node test-helpers.js",
     "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
     "smoke": "node smoke.js",
-    "test:ui": "node test-classroom-ui.js"
+    "test:ui": "node test-classroom-ui.js",
+    "test:play": "node test-authored-playback.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"

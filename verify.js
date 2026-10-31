@@ -22,6 +22,7 @@ const required = [
   ['function repairWorld', 'soft-lock resilience fix'],
   ['id="btnSettings"', 'Settings button'],
   ['function openClassroom', 'classroom UI (M2)'],
+  ['function playAuthored', 'authored-mission playback (M10)'],
   ['data-theme="amber"', 'appearance themes'],
   ['const MISSIONS', 'missions defined'],
   ['service-worker.js', 'service-worker registration'],

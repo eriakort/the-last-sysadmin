@@ -3,6 +3,14 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v25 — Custom missions are now playable (authored-mission delivery)
+- Closes the gap where teacher-authored missions and scenarios could be created but never played. Students now play them from **Classroom → My dashboard → ▶ Play custom missions**.
+- **Isolated practice sandbox:** authored missions run in a throwaway state (like Race) — a student's campaign progress is never touched. Completing one records an `attempts` row by the mission's id, so the assignment grade updates automatically. A single mission auto-finishes on solve; multi-mission runs play in sequence with an **Exit practice** button.
+- **Check engine:** the five editor check types (`file_exists`, `file_contains`, `file_matches`, `command_run`, `service_state`) are mapped to live checks against the sandbox.
+- **Delivery (`supabase/m10-authored-delivery.sql`):** `get_class_missions()` — a `SECURITY DEFINER` function that returns exactly the authored missions assigned to a class (directly or via a scenario) to its members, and nothing to outsiders. Tested in the RLS suite.
+- Editor note updated: authored checks work best as *file exists / command was run / service state*, because the sandbox starts from the standard server and a mission can't pre-create files.
+- New end-to-end test `test-authored-playback.js` (`npm run test:play`) plays an authored mission to completion and asserts the attempt is recorded. Cache bumped v24 → v25.
+
 ## v24 — Review fixes: docs, test coverage, offline cache
 - **Self-hosting docs corrected.** `supabase/README.md` and the root `README.md` now list the full migration apply order (`supabase-setup` → m1 → m2 → m4 → m6 → m7); previously only m1 was documented, so a self-hoster would have had broken join-by-code, enroll-by-email, the mission editor, and the scenario builder.
 - **Test coverage extended to M4/M6/M7.** `supabase/test/run.sh` now applies every migration and runs a new suite covering `enroll_by_email` (staff-only, student role forced, idempotent, unknown-email error) and author-isolation of `authored_missions` and `scenarios`. Full suite: M1 (30) + M2 + M4/M6/M7, all passing.

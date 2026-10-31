@@ -13,8 +13,9 @@ Run these **in order**. All are safe to re-run.
 4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
 5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
 6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
+7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
 
-Skipping any of 3–6 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+Skipping any of 3–7 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
 
 There is no server code — the game talks to Supabase directly with the anon
 key, and RLS is what keeps tenants apart.
@@ -44,6 +45,7 @@ it should and nothing it shouldn't. It covers:
 - **M1** — tenant isolation across classes, enrollments, assignments, attempts, feedback (30 checks).
 - **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
+- **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
 recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
