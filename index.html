@@ -5654,6 +5654,19 @@ async function cxLoad() {
   }
   return out;
 }
+async function loadFeedback(classId, studentId) {
+  const sb = await getSB(); if (!sb) return [];
+  try {
+    let q = sb.from('feedback').select('id, body, created_at, author_id, student_id, profiles!feedback_author_id_fkey(display_name)').eq('class_id', classId);
+    if (studentId) q = q.eq('student_id', studentId);
+    const { data, error } = await q.order('created_at', { ascending: false });
+    return error ? [] : (data || []);
+  } catch (e) { return []; }
+}
+async function addFeedback(classId, studentId, body) {
+  const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
+  return sb.from('feedback').insert({ class_id: classId, student_id: studentId, author_id: authUser.id, body: body.trim() });
+}
 async function loadAssignments(classId) {
   const sb = await getSB(); if (!sb || !authUser) return [];
   try {
@@ -5685,6 +5698,14 @@ async function openClassroom() {
   const enrolledHtml = d.enrolled.length
     ? d.enrolled.map(e => { const c = e.classes || {}; return `<div class="cx-item"><div><b>${esc(c.name || 'Class')}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}${e.role === 'ta' ? ' <span class="cx-badge">TA</span>' : ''}</div></div>`; }).join('')
     : '<p class="cx-dim">You haven\'t joined any classes yet.</p>';
+  let studentFeedback = '';
+  for (const e of d.enrolled) {
+    const fbs = await loadFeedback(e.class_id, authUser.id);
+    if (fbs.length) {
+      studentFeedback += `<div class="rlabel" style="margin-top:10px">${esc(e.classes?.name || 'Class')} — feedback</div>` +
+        fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('');
+    }
+  }
   let studentAsns = '';
   for (const e of d.enrolled) {
     const asns = await loadAssignments(e.class_id);
@@ -5749,7 +5770,14 @@ async function openClassroom() {
                 <option value="ta"${e.role==='ta'?' selected':''}>ta</option>
               </select>`;
               return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${av} ${esc(name)}</span><span>${roleSel}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span><span><button class="btn sm" data-remove="${esc(e.user_id)}" type="button">Remove</button></span></div>`;
-            }).join('') + '</div>';
+            }).join('') + '</div>
+            <div class="cx-form" style="margin-top:8px">
+              <select id="fbStudent" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
+                ${roster.map(e => `<option value="${esc(e.user_id)}">${esc(e.profiles?.display_name || e.user_id)}</option>`).join('')}
+              </select>
+              <input id="fbBody" type="text" placeholder="Leave feedback…">
+              <button class="btn primary" id="fbSend" type="button">Send feedback</button>
+            </div>`;
         } else {
           dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster</div>
             <div class="cx-form" style="margin:6px 0 10px">
@@ -5781,6 +5809,7 @@ async function openClassroom() {
     <div class="rlabel">Classes you're in</div>
     ${enrolledHtml}
     ${studentAsns}
+    ${studentFeedback}
     ${teach}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
   $('#cxBack').addEventListener('click', openSettings);
@@ -5801,6 +5830,17 @@ async function openClassroom() {
     if (!title || !mids.length) { if (er) { er.hidden = false; er.textContent = 'Title and at least one mission required.'; } return; }
     if (!d.owned.length) return;
     const { error } = await createAssignment(d.owned[0].id, title, mids, due);
+    if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
+    openClassroom();
+  });
+  const fbBtn = $('#fbSend');
+  if (fbBtn) fbBtn.addEventListener('click', async () => {
+    const sid = ($('#fbStudent')||{}).value;
+    const body = ($('#fbBody')||{}).value?.trim() || '';
+    const er = $('#cxErr');
+    if (!sid || !body) { if (er) { er.hidden = false; er.textContent = 'Pick a student and write a comment.'; } return; }
+    if (!d.owned.length) return;
+    const { error } = await addFeedback(d.owned[0].id, sid, body);
     if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
     openClassroom();
   });
