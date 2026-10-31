@@ -51,6 +51,24 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#config')).includes('r1 · router')) ok('clicking a node selects it for config');
   else fail('selecting r1 did not update the config panel');
 
+  // --- game systems: XP + progress HUD updated after two solves ---
+  const xp = await page.textContent('#xp'), prog = await page.textContent('#prog');
+  if (+xp >= 200 && prog === '2/8') ok(`XP + progress tracked (XP ${xp}, solved ${prog})`);
+  else fail(`HUD not tracking: XP ${xp}, solved ${prog}`);
+
+  // --- progress persists across reload (localStorage) ---
+  await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(400);
+  if ((await page.textContent('#prog')) === '2/8') ok('progress persists across reload');
+  else fail('progress did not persist: ' + (await page.textContent('#prog')));
+
+  // --- settings opens and a theme applies ---
+  await page.click('#btnSet'); await page.waitForTimeout(150);
+  if (await page.$('#modal .themes')) ok('settings modal opens with themes');
+  else fail('settings modal did not open');
+  await page.click('#modal .tm[data-th="paper"]'); await page.waitForTimeout(150);
+  if ((await page.getAttribute('html', 'data-theme')) === 'paper') ok('selecting a theme applies it');
+  else fail('theme not applied: ' + (await page.getAttribute('html', 'data-theme')));
+
   await browser.close();
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nUI OK.');

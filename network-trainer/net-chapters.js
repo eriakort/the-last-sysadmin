@@ -118,6 +118,46 @@ const chapters = [
     }),
     success: [{ type: 'not_reachable', a: 'guest', b: 'db' }, { type: 'reachable', a: 'staff', b: 'db' }],
     solution: [['fw', 'iptables -A INPUT -i eth0 -s 10.0.5.20 -j DROP']]
+  },
+
+  { id: 'the-mask-matters', chapter: 'Subnetting',
+    title: 'The mask matters',
+    story: 'h1 has an address and can reach some hosts, but not the server at 10.0.1.200 on the same wire. Its mask is too narrow: a /25 splits 10.0.1.0 into two halves (.0–.127 and .128–.255), so .10 and .200 end up in different networks.',
+    objective: 'Re-address h1 with the correct /24 mask so 10.0.1.200 is local again.',
+    console: 'h1',
+    hints: ['`ip addr` shows h1 is 10.0.1.10/25 — a /25, not a /24.', 'With /25, .10 is in 10.0.1.0/25 and .200 is in 10.0.1.128/25 — different networks.', 'Run `ip addr add 10.0.1.10/24 dev eth0`.'],
+    build: () => ({
+      devices: { h1: H('h1', '10.0.1.10', 25), srv: SRV('srv', '10.0.1.200', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['h1', 'ip addr add 10.0.1.10/24 dev eth0']]
+  },
+
+  { id: 'default-deny', chapter: 'Network security',
+    title: 'Allow only the web',
+    story: 'The web server should answer web requests (tcp/80) and nothing else — no SSH, no ping. Right now the firewall lets everything through.',
+    objective: 'At the firewall, allow tcp/80 to the server and block everything else inbound from the office (default-deny).',
+    console: 'fw',
+    hints: ['Rules match top-down, first match wins — put the ALLOW before the catch-all DROP.', 'First accept tcp/80, then drop everything else on eth0.', 'Run `iptables -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT`, then `iptables -A INPUT -i eth0 -j DROP`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 80: 'http', 22: 'ssh' }),
+        fw: R('fw', 'firewall', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('fw', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('fw', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'reachable', a: 'h1', b: 'web', proto: 'tcp', dport: 80 },
+      { type: 'acl_blocks', src: 'h1', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'h1', dst: '10.0.2.10', proto: 'icmp' }
+    ],
+    solution: [
+      ['fw', 'iptables -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT'],
+      ['fw', 'iptables -A INPUT -i eth0 -j DROP']
+    ]
   }
 
 ];

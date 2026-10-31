@@ -2,7 +2,7 @@
 
 A prototype of the networking/security teaching game: the **network model**, the
 **forwarding engine**, the **mission checks** (M1), the **command-line layer** (M2), the
-**mission/chapter layer** with the first six beginner missions (M3), and a playable
+**mission/chapter layer** with the eight beginner missions (M3), and a playable
 browser **UI** — topology view, config panels, terminal, and Check (M4). The engine is
 the single source of truth; the UI is just a layer that reads/writes the same model.
 
@@ -10,6 +10,11 @@ the single source of truth; the UI is just a layer that reads/writes the same mo
 
 Open **`index.html`** in a browser (self-contained, no server, no deps). Pick a
 mission, click a device to configure it or type in the terminal, then hit **Check**.
+
+**Game systems** (the sysadmin game's "feel"): saved progress (localStorage), XP
+and ranks (Cadet → Network Architect), a hints economy (each hint costs XP),
+solved-ticket marks and a **Next ticket** flow, a **⚙ Settings** panel with four
+themes, and a back-link to the Linux game. Progress persists across reloads.
 
 ## Run the tests
 
@@ -31,7 +36,7 @@ All plain Node; the UI test needs Playwright. 31 headless tests + the UI test.
 | `net-checks.js` | Pure `{ ok, reason }` checks: `reachable`, `notReachable`, `routeExists`, `subnetCorrect`, `aclBlocks`, `serviceUp`. A mission's success criteria. |
 | `net-cli.js` | **M2** — the CLI bound to a world + a current device: `ip addr`, `ip route`, `ping`, `traceroute`, `arp`, `tcpdump`, `iptables`, `nmap`, `man`, `help`. |
 | `net-mission.js` | **M3** — `evalCheck` (declarative check spec -> result) and `startMission` (build world, bind CLI, grade, explain what's unmet). |
-| `net-chapters.js` | **M3** — the first six missions as data: a starting topology + `success` checks + a reference `solution`. |
+| `net-chapters.js` | **M3** — eight missions as data: a starting topology + `success` checks + a reference `solution`. |
 | `ui.js` | **M4** — the browser UI: layered topology layout, SVG render, config panels, terminal, briefing + Check. Uses `require()` of the modules above. |
 | `build-ui.js` | **M4** — inlines the tested modules (verbatim, via a tiny `require` shim) + `ui.js` into `index.html`. Zero drift: the page runs the code the tests cover. |
 | `index.html` | **M4** — the built, self-contained, playable page. |
