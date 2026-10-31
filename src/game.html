@@ -5834,7 +5834,26 @@ async function openClassroom() {
             return { e, name, av, passed, grade, stuck, last: lastAt[e.user_id] };
           });
           window._cxRows = rows; window._cxClass = d.owned[0].name; window._cxTotal = total;
-          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          // Cohort analytics: per-mission pass rate and hint use
+          const missionStats = {};
+          (atts||[]).forEach(a => {
+            if (!assigned.size || assigned.has(a.mission_id)) {
+              const s = missionStats[a.mission_id] = missionStats[a.mission_id] || { tries: 0, passed: 0, hints: 0 };
+              s.tries++; if (a.passed) s.passed++; s.hints += (a.hints||0);
+            }
+          });
+          const hardest = Object.entries(missionStats)
+            .map(([id, s]) => ({ id, rate: s.tries ? s.passed/s.tries : 0, hints: s.hints, tries: s.tries }))
+            .sort((a,b) => a.rate - b.rate || b.hints - a.hints)
+            .slice(0, 5);
+          const analyticsHtml = hardest.length
+            ? `<div class="rlabel" style="margin-top:14px">Where the class is stuck</div>
+               <div style="font-size:13px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+               <div style="display:grid;grid-template-columns:1fr 80px 70px;gap:6px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Mission</span><span>Pass rate</span><span>Hints</span></div>` +
+               hardest.map(h => `<div style="display:grid;grid-template-columns:1fr 80px 70px;gap:6px;padding:8px 10px;border-top:1px solid var(--line)"><span><code>${esc(h.id)}</code></span><span>${Math.round(h.rate*100)}%</span><span>${h.hints}</span></div>`).join('') +
+               '</div>'
+            : '';
+          dashHtml = analyticsHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
