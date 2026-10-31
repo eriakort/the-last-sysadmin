@@ -5733,6 +5733,10 @@ async function openClassroom() {
           const byUser = {};
           (atts||[]).forEach(a => { if (a.passed) (byUser[a.user_id] = byUser[a.user_id] || new Set()).add(a.mission_id); });
           dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)}</div>
+            <div class="cx-form" style="margin:6px 0 10px">
+              <input id="addEmail" type="email" placeholder="student@example.com">
+              <button class="btn primary" id="addStudent" type="button">Add student</button>
+            </div>
             <div style="font-size:13px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
             <div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Member</span><span>Role</span><span>Passed</span><span>Grade</span><span></span></div>` +
             roster.map(e => {
@@ -5747,7 +5751,12 @@ async function openClassroom() {
               return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${av} ${esc(name)}</span><span>${roleSel}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span><span><button class="btn sm" data-remove="${esc(e.user_id)}" type="button">Remove</button></span></div>`;
             }).join('') + '</div>';
         } else {
-          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster</div><p class="cx-dim">No members yet.</p>`;
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster</div>
+            <div class="cx-form" style="margin:6px 0 10px">
+              <input id="addEmail" type="email" placeholder="student@example.com">
+              <button class="btn primary" id="addStudent" type="button">Add student</button>
+            </div>
+            <p class="cx-dim">No members yet.</p>`;
         }
       } catch (e) {
         dashHtml = `<div class="rlabel" style="margin-top:14px">Roster</div><p class="cx-dim">Could not load roster.</p>`;
@@ -5793,6 +5802,16 @@ async function openClassroom() {
     if (!d.owned.length) return;
     const { error } = await createAssignment(d.owned[0].id, title, mids, due);
     if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
+    openClassroom();
+  });
+  const addBtn = $('#addStudent');
+  if (addBtn) addBtn.addEventListener('click', async () => {
+    const email = ($('#addEmail')||{}).value?.trim() || '';
+    const er = $('#cxErr');
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (er) { er.hidden = false; er.textContent = 'Enter a valid email.'; } return; }
+    const sb = await getSB(); if (!sb || !d.owned.length) return;
+    const { data, error } = await sb.rpc('enroll_by_email', { p_class_id: d.owned[0].id, p_email: email });
+    if (error || (data && data.error)) { if (er) { er.hidden = false; er.textContent = (error && error.message) || (data && data.error) || 'Could not add'; } return; }
     openClassroom();
   });
   document.querySelectorAll('#raceContent [data-role]').forEach(sel => sel.addEventListener('change', async () => {
