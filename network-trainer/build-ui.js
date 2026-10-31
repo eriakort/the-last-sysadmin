@@ -53,6 +53,10 @@ h1{font-size:20px;margin:6px 0}
 .btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}
 .btn.sm{padding:4px 8px;font-size:12px}
 select,input{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 7px;font:inherit}
+.brandbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-4px 0 12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.brandname{font-weight:700;font-size:13px;color:var(--ink)}
+.xlink{color:var(--amber);text-decoration:none;font-size:12px;font-weight:600}
+.xlink:hover{text-decoration:underline}
 #pick{width:100%;margin-bottom:10px}
 .ifrow,.rrow,.addrow{display:flex;gap:5px;align-items:center;margin:4px 0;flex-wrap:wrap;font-family:ui-monospace,monospace;font-size:12.5px}
 .ifrow .ip{width:110px}.ifn{color:var(--amber);width:38px}

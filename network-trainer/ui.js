@@ -57,7 +57,8 @@ function renderBrief() {
   const m = RUN.mission;
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${c.chapter} — ${c.title}</option>`).join('');
   const hints = m.hints.slice(0, HINTS).map((h, i) => `<li>${esc(h)}</li>`).join('');
-  return `<select id="pick">${opts}</select>
+  return `<div class="brandbar"><span class="brandname">Networking Trainer</span><a class="xlink" href="../" title="Back to the Linux game">The Last Sysadmin ↗</a></div>
+    <select id="pick">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}</div>
     <h1>${esc(m.title)}</h1>
     <p class="story">${esc(m.story)}</p>
