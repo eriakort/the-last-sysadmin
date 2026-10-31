@@ -3,6 +3,11 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## M4 — Teacher dashboard + auto-grading
+- Classroom panel (teachers) now shows a **Roster** for the first owned class: student name/avatar, tickets passed / assigned, and grade % (passed ÷ assigned).
+- Completing a mission upserts an `attempts` row (mission_id, passed, ms, hints) so the dashboard has data.
+- Grade is formative (client-written). High-stakes grading would move the write to an Edge Function later.
+
 ## M3 — Assignments (UI applied)
 - `src/game.html` now includes assignment create/view in the Classroom panel.
 - Teachers (with teacher tools on) see a form to assign a title, due date, and comma-separated mission ids to their first owned class, and see existing assignments.
