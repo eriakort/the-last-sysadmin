@@ -100,6 +100,14 @@ Signing in is **optional** — the game plays fully without it, saving progress 
 2. **Authentication → URL Configuration:** set **Site URL** to your deployed URL (e.g. `https://eriakort.github.io/the-last-sysadmin/`) and add it under **Redirect URLs** too. Without this, the magic-link email sends people to the wrong place.
 3. That's it — open the game, click **Sign in**, enter an email, click the link in your inbox.
 
+**Classroom features (classes, join codes, assignments, rosters):** these need
+additional migrations beyond `supabase-setup.sql`. Apply the scripts in
+[`supabase/`](supabase/) **in the order given in [`supabase/README.md`](supabase/README.md)**
+— `m1-classroom.sql`, then `m2-enrollment.sql`, `m4-enroll-by-email.sql`,
+`m6-missions.sql`, `m7-scenarios.sql`. Skipping one leaves its feature broken.
+OAuth sign-in (Google / Microsoft / GitHub), if you want it, is enabled under
+**Authentication → Providers** — no SQL needed.
+
 **Important — email sending limits:** Supabase's built-in email service is **rate-limited to a few messages per hour** and is meant for testing. For real public sign-ups, add a custom SMTP sender (Resend, SendGrid, Postmark, etc.) under **Authentication → Emails / SMTP** in Supabase. Until you do, only a handful of sign-in emails per hour will go out.
 
 **Security notes:**

@@ -5,11 +5,28 @@ SQL for the accounts/classroom backend. Apply in your Supabase project via
 
 ## Apply order
 
-1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard). Ship this first (it predates the classroom work).
-2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
+Run these **in order**. All are safe to re-run.
 
-That's all M1 needs. There is no server code yet — the game talks to Supabase
-directly with the anon key, and RLS is what keeps tenants apart.
+1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard).
+2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
+3. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
+4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
+5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
+6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
+
+Skipping any of 3–6 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+
+There is no server code — the game talks to Supabase directly with the anon
+key, and RLS is what keeps tenants apart.
+
+> **OAuth sign-in** (Google / Microsoft / GitHub) is configured in the Supabase
+> dashboard (**Authentication → Providers**), not in SQL. Email + magic-link work
+> with no extra setup.
+
+> **Authoring vs. delivery:** `authored_missions` and `scenarios` are author-only
+> by design today — a teacher can create and group missions, but there is not yet
+> a path that delivers them to students to *play*. That delivery step is a planned
+> follow-up; built-in missions are fully assignable now.
 
 ## What M1 guarantees
 
@@ -20,9 +37,13 @@ directly with the anon key, and RLS is what keeps tenants apart.
 
 ## Testing the policies
 
-`test/` contains an **adversarial RLS test suite** that stands up two teachers,
-several students, and a TA, then asserts — 30 checks — that each role can read
-and write exactly what it should and nothing it shouldn't.
+`test/` contains an **adversarial RLS test suite** that stands up teachers,
+students, and a TA, then asserts that each role can read and write exactly what
+it should and nothing it shouldn't. It covers:
+
+- **M1** — tenant isolation across classes, enrollments, assignments, attempts, feedback (30 checks).
+- **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
+- **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
 recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
@@ -35,4 +56,4 @@ supabase/test/run.sh
 # ends with: ALL RLS TESTS PASSED
 ```
 
-If you change a policy in `m1-classroom.sql`, re-run this before deploying.
+If you change a policy in any migration, re-run this before deploying.

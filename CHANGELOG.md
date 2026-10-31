@@ -3,6 +3,13 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v24 — Review fixes: docs, test coverage, offline cache
+- **Self-hosting docs corrected.** `supabase/README.md` and the root `README.md` now list the full migration apply order (`supabase-setup` → m1 → m2 → m4 → m6 → m7); previously only m1 was documented, so a self-hoster would have had broken join-by-code, enroll-by-email, the mission editor, and the scenario builder.
+- **Test coverage extended to M4/M6/M7.** `supabase/test/run.sh` now applies every migration and runs a new suite covering `enroll_by_email` (staff-only, student role forced, idempotent, unknown-email error) and author-isolation of `authored_missions` and `scenarios`. Full suite: M1 (30) + M2 + M4/M6/M7, all passing.
+- **Cache version bumped to v24** so returning/installed (PWA) users pick up all of Phase 1 & 2 (it had been frozen at v23 since M2).
+- **Question bank works offline.** `questions.json` is now in the service-worker precache, so the 1,000-question bank loads in the installed/offline app.
+- *Known gap (not a regression):* authored missions and scenarios are author-only — a teacher can create and group them, but there is no path yet that delivers them to students to *play*. Tracked as a follow-up; built-in missions are fully assignable.
+
 ## M4 — Teacher dashboard + auto-grading
 - Classroom panel (teachers) now shows a **Roster** for the first owned class: student name/avatar, tickets passed / assigned, and grade % (passed ÷ assigned).
 - Completing a mission upserts an `attempts` row (mission_id, passed, ms, hints) so the dashboard has data.

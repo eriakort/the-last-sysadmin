@@ -76,16 +76,23 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   // Open classroom
   await page.click('#setClassroom');
   await page.waitForTimeout(250);
-  if (await page.$('#cxJoin')) ok('Classroom panel renders (join UI present)');
+  if (await page.$('#cxJoin')) ok('Classroom panel renders (Join tab present)');
   else fail('classroom panel did not render');
-  // teacher (stub is_teacher=true) should see create form + owned class with code
-  if (await page.$('#cxCreate')) ok('Teacher sees create-class form'); else fail('no create form for teacher');
-  const codeShown = await page.$$eval('.cx-code', els => els.map(e => e.textContent));
-  if (codeShown.includes('ABC123')) ok('Owned class shows its join code'); else fail('join code not shown: ' + JSON.stringify(codeShown));
+  // classroom is tabbed (Join / My dashboard / Teach / Question bank)
+  const tabs = await page.$$eval('#cxTabs [data-cxtab]', els => els.map(e => e.dataset.cxtab));
+  if (['join', 'teach'].every(t => tabs.includes(t))) ok('Classroom tabs present (' + tabs.join(', ') + ')');
+  else fail('expected Join/Teach tabs, got: ' + JSON.stringify(tabs));
+  // Enrolled class shows in the Join tab (textContent includes it even before switching)
   const enrolledTxt = await page.textContent('#raceContent');
   if (/Intro Linux/.test(enrolledTxt)) ok('Enrolled class listed'); else fail('enrolled class not listed');
+  // Switch to the Teach tab: teacher should see the create form + owned class code
+  await page.click('#cxTabs [data-cxtab="teach"]'); await page.waitForTimeout(150);
+  if (await page.$('#cxCreate')) ok('Teacher sees create-class form in Teach tab'); else fail('no create form in Teach tab');
+  const codeShown = await page.$$eval('.cx-code', els => els.map(e => e.textContent));
+  if (codeShown.includes('ABC123')) ok('Owned class shows its join code'); else fail('join code not shown: ' + JSON.stringify(codeShown));
 
-  // Join by code
+  // Join by code (Join tab is the default)
+  await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
   await page.fill('#cxCode', ' abc 123 ');
   await page.click('#cxJoin');
   await page.waitForTimeout(200);
@@ -94,9 +101,10 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (rpc && rpc[1] === 'enroll_by_code' && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
   else fail('rpc enroll_by_code not called correctly: ' + JSON.stringify(rpc));
 
-  // Create class
+  // Create class (in the Teach tab)
   await page.click('#btnSettings'); await page.waitForTimeout(120);
   await page.click('#setClassroom'); await page.waitForTimeout(250);
+  await page.click('#cxTabs [data-cxtab="teach"]'); await page.waitForTimeout(150);
   await page.fill('#cxName', 'New Course');
   await page.click('#cxCreate');
   await page.waitForTimeout(250);
