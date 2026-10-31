@@ -5755,8 +5755,8 @@ async function openClassroom() {
                 <option value="ta"${e.role==='ta'?' selected':''}>ta</option>
               </select>`;
               return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${av} ${esc(name)}</span><span>${roleSel}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span><span><button class="btn sm" data-remove="${esc(e.user_id)}" type="button">Remove</button></span></div>`;
-            }).join('') + '</div>
-            <div class="cx-form" style="margin-top:8px">
+            }).join('') + '</div>' +
+            `<div class="cx-form" style="margin-top:8px">
               <select id="fbStudent" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
                 ${roster.map(e => `<option value="${esc(e.user_id)}">${esc(e.profiles?.display_name || e.user_id)}</option>`).join('')}
               </select>
