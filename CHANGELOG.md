@@ -7,6 +7,18 @@ versions below track the content added over time.
 - Added an always-visible **⚙ Settings** button that opens one panel with **Themes** (Halcyon Dark default + Amber CRT, Green Phosphor, Nord Night, Paper light), **your avatar**, and **account** (connect Supabase / sign in / sign out). When signed in, the button shows your avatar + name.
 - Replaced the separate 👤 avatar button and the account button with this one entry point. Avatar selection, rack/chips toggles, and the soft-lock fix are all preserved.
 
+## v23 / M2 — Create a class, join by code (classroom UI)
+- New **Classroom** panel in ⚙ Settings (signed-in users): join a class by code, and — with teacher tools enabled — create classes and see their join codes.
+- Students enter a 6-character code to enroll. Teachers get a self-serve "Enable teacher tools" toggle, then a create-class form; each class shows a click-to-copy join code.
+- Backend: `supabase/m2-enrollment.sql` adds `enroll_by_code()`, a SECURITY DEFINER function that resolves a code to a class and enrolls the current user as a student — needed because RLS otherwise hides a class from someone who hasn't joined yet. It only ever enrolls the caller, only as a student, and is granted to signed-in users only.
+- Tested: the join-by-code path has its own suite in `supabase/test/` (valid/invalid/duplicate code, roster visibility), and `test-classroom-ui.js` drives the real UI against a stubbed client (`npm run test:ui`).
+
+## M1 — Classroom roles, schema & Row Level Security (backend only)
+- Added the teaching-platform backend: `classes`, `enrollments`, `assignments`, `attempts`, and `feedback` tables, plus a self-serve `profiles.is_teacher` flag — all under `supabase/m1-classroom.sql`. No gameplay/UI change yet; this is the foundation M2+ builds on.
+- Row Level Security on every table enforces tenant isolation: a teacher sees only their own classes and students; no teacher, TA, or student can read or write another tenant's rosters, attempts, grades, or feedback. Recursive-policy pitfalls are avoided with `SECURITY DEFINER` helper functions (`is_class_staff`, `staffs_class_of`, …).
+- Privacy split: profiles stay public handles (name + avatar, as the race leaderboard needs); enrollments/attempts/feedback are private to the student and their class staff; email never leaves `auth.users`.
+- Proven, not asserted: `supabase/test/` ships an adversarial RLS suite (30 checks, two teachers + students + a TA) that runs against a local Postgres via a thin Supabase shim and exits non-zero on any leak.
+
 ## v22 — Build pipeline (no more silent drift)
 - `index.html` and `service-worker.js` are now **generated** from sources under `src/` (`npm run build`); they are never edited by hand. This closes the gap that let the deployed page silently fall behind its sources (the bug behind v20).
 - `npm run check` runs the whole gate locally — build, unit tests, a browser-free verify (required features present + every inline `<script>` parses), and a staleness guard that fails if the committed files don't match a fresh build. A GitHub Actions workflow runs the same on every push/PR.

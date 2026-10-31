@@ -8,7 +8,8 @@
     "verify": "node verify.js",
     "test": "node test-helpers.js",
     "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
-    "smoke": "node smoke.js"
+    "smoke": "node smoke.js",
+    "test:ui": "node test-classroom-ui.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"

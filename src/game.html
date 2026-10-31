@@ -204,6 +204,12 @@ body.racing #raceBoard{display:block!important}
 .tm-sw i{position:absolute;right:4px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%}
 .tm-check{margin-left:auto;color:var(--amber)}
 .set-avgrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.cx-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--raise);margin-bottom:6px;font-size:13.5px}
+.cx-dim{color:var(--muted);font-size:12.5px}
+.cx-badge{display:inline-block;font-size:10px;letter-spacing:.08em;padding:1px 6px;border:1px solid var(--line);border-radius:999px;color:var(--muted);vertical-align:middle;margin-left:4px}
+.cx-code{font-family:var(--mono,monospace);letter-spacing:.14em;font-weight:700;color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--raise));border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer}
+.cx-form{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.cx-form input{flex:1 1 150px}
 </style>
 </head>
 <body>
@@ -5521,6 +5527,9 @@ function openSettings() {
   if (!supaConfig()) account = `<p class="rlead" style="margin:0 0 9px">Sign-in, cross-device progress sync, and the leaderboard need a free <b>Supabase</b> project. This is a self-hosted feature (not on the claude.ai version).</p><button class="btn" id="setConnect" type="button">Connect Supabase</button>`;
   else if (authUser) account = `<p class="rlead" style="margin:0 0 9px">Signed in as <b>${esc(authUser.email || authUser.name)}</b>. Your progress and race results sync to this account across devices.</p><button class="btn" id="setOut" type="button">Sign out</button>`;
   else account = `<p class="rlead" style="margin:0 0 9px">Sign in with a one-time email link (no password) to sync progress across devices and record your race times.</p><div class="race-row"><button class="btn primary" id="setSignin" type="button">Sign in</button><button class="btn" id="setReconnect" type="button">Supabase settings</button></div>`;
+  const classroom = authUser
+    ? `<div class="rlabel">Classroom</div><p class="rlead" style="margin:0 0 9px">Join a class with a code, or create one to teach.</p><button class="btn" id="setClassroom" type="button">Open classroom</button>`
+    : '';
   renderContent(`<h2>Settings</h2>
     <div class="rlabel">Theme</div>
     <div id="setThemes" style="display:flex;flex-direction:column;gap:6px">${themeRows}</div>
@@ -5528,6 +5537,7 @@ function openSettings() {
     ${avGrid}
     <div class="rlabel">Account</div>
     <div>${account}</div>
+    ${classroom}
     <div class="race-row" style="margin-top:16px"><button class="btn primary" id="setDone" type="button">Done</button></div>`);
   document.querySelectorAll('#setThemes .tm-row').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); openSettings(); }));
   document.querySelectorAll('#raceContent .avatar-opt[data-av]').forEach(bn => bn.addEventListener('click', () => { saveAvatar(bn.dataset.av); document.querySelectorAll('#raceContent .avatar-opt').forEach(x => x.classList.toggle('sel', x === bn)); }));
@@ -5536,8 +5546,105 @@ function openSettings() {
   const rec = $('#setReconnect'); if (rec) rec.addEventListener('click', () => renderSupabaseSetup(false, openSettings));
   const si = $('#setSignin'); if (si) si.addEventListener('click', openAuth);
   const out = $('#setOut'); if (out) out.addEventListener('click', async () => { const sb = await getSB(); if (sb) { try { await sb.auth.signOut(); } catch (e) {} } openSettings(); });
+  const cr = $('#setClassroom'); if (cr) cr.addEventListener('click', openClassroom);
 }
 $('#btnSettings').addEventListener('click', openSettings);
+
+/* ---------- Classroom (M2: create class + join by code + enrollment) ---------- */
+async function cxLoad() {
+  const sb = await getSB(); if (!sb || !authUser) return null;
+  const out = { isTeacher: false, enrolled: [], owned: [] };
+  try {
+    const { data: prof } = await sb.from('profiles').select('is_teacher').eq('id', authUser.id).maybeSingle();
+    out.isTeacher = !!(prof && prof.is_teacher);
+  } catch (e) {}
+  try {
+    const { data } = await sb.from('enrollments').select('role,class_id,classes(name,term,join_code)').eq('user_id', authUser.id);
+    out.enrolled = data || [];
+  } catch (e) {}
+  if (out.isTeacher) {
+    try {
+      const { data } = await sb.from('classes').select('id,name,term,join_code,created_at').eq('owner_id', authUser.id).order('created_at', { ascending: false });
+      out.owned = data || [];
+    } catch (e) {}
+  }
+  return out;
+}
+async function openClassroom() {
+  if (!authUser) { openSettings(); return; }
+  showOverlay();
+  renderContent('<h2>Classroom</h2><p class="rlead">Loading…</p>');
+  const d = await cxLoad();
+  if (!d) {
+    renderContent('<h2>Classroom</h2><p class="race-err">Couldn\'t reach your account. Try again.</p><div class="race-row"><button class="btn" id="cxBack" type="button">Back</button></div>');
+    const b = $('#cxBack'); if (b) b.addEventListener('click', openSettings); return;
+  }
+  const enrolledHtml = d.enrolled.length
+    ? d.enrolled.map(e => { const c = e.classes || {}; return `<div class="cx-item"><div><b>${esc(c.name || 'Class')}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}${e.role === 'ta' ? ' <span class="cx-badge">TA</span>' : ''}</div></div>`; }).join('')
+    : '<p class="cx-dim">You haven\'t joined any classes yet.</p>';
+  let teach;
+  if (d.isTeacher) {
+    const ownedHtml = d.owned.length
+      ? d.owned.map(c => `<div class="cx-item"><div><b>${esc(c.name)}</b>${c.term ? ` <span class="cx-dim">· ${esc(c.term)}</span>` : ''}</div><code class="cx-code" data-code="${esc(c.join_code)}" title="Click to copy join code">${esc(c.join_code)}</code></div>`).join('')
+      : '<p class="cx-dim">No classes yet — create one below.</p>';
+    teach = `<div class="rlabel">Classes you teach</div>${ownedHtml}
+      <div class="cx-form">
+        <input id="cxName" type="text" placeholder="Class name (e.g. Linux Admin 101)">
+        <input id="cxTerm" type="text" placeholder="Term (optional)">
+        <button class="btn primary" id="cxCreate" type="button">Create class</button>
+      </div>`;
+  } else {
+    teach = `<div class="rlabel">Teaching?</div><p class="cx-dim" style="margin:0 0 8px">Enable teacher tools to create classes and (soon) see your students' progress.</p><button class="btn" id="cxBecome" type="button">Enable teacher tools</button>`;
+  }
+  renderContent(`<h2>Classroom</h2>
+    <div class="rlabel">Join a class</div>
+    <div class="cx-form">
+      <input id="cxCode" type="text" autocapitalize="characters" autocomplete="off" placeholder="Enter join code (e.g. 7FQ2K9)">
+      <button class="btn primary" id="cxJoin" type="button">Join</button>
+    </div>
+    <div class="race-err" id="cxErr" hidden></div>
+    <div class="rlabel">Classes you're in</div>
+    ${enrolledHtml}
+    ${teach}
+    <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
+  $('#cxBack').addEventListener('click', openSettings);
+  $('#cxJoin').addEventListener('click', cxDoJoin);
+  const code = $('#cxCode'); if (code) code.addEventListener('keydown', ev => { if (ev.key === 'Enter') cxDoJoin(); });
+  const bc = $('#cxBecome'); if (bc) bc.addEventListener('click', async () => {
+    const sb = await getSB(); if (!sb) return;
+    try { await sb.from('profiles').update({ is_teacher: true }).eq('id', authUser.id); } catch (e) {}
+    openClassroom();
+  });
+  const cc = $('#cxCreate'); if (cc) cc.addEventListener('click', cxDoCreate);
+  document.querySelectorAll('#raceContent .cx-code[data-code]').forEach(el => el.addEventListener('click', () => {
+    const t = el.dataset.code; try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (e) {}
+    const old = el.textContent; el.textContent = 'copied'; setTimeout(() => { el.textContent = old; }, 900);
+  }));
+}
+async function cxDoJoin() {
+  const inp = $('#cxCode'), er = $('#cxErr'); if (!inp) return;
+  const code = (inp.value || '').trim();
+  if (!code) { er.hidden = false; er.textContent = 'Enter a join code.'; return; }
+  const sb = await getSB(); if (!sb) { er.hidden = false; er.textContent = 'Not connected.'; return; }
+  er.hidden = true;
+  let error = null, row = null;
+  try { const r = await sb.rpc('enroll_by_code', { code }); error = r.error; row = r.data && r.data[0]; } catch (e) { error = e; }
+  if (error) { er.hidden = false; er.textContent = String(error.message || 'Could not join').replace(/\.*$/, '') + '.'; return; }
+  hideOverlay(); tin.focus({ preventScroll: true });
+  emitSys(row && row.already_enrolled
+    ? `You're already in <b>${esc(row.cname)}</b>.`
+    : `Joined <b>${esc(row ? row.cname : 'the class')}</b>.`, 'ok');
+}
+async function cxDoCreate() {
+  const nm = ($('#cxName').value || '').trim(), term = ($('#cxTerm').value || '').trim(), er = $('#cxErr');
+  if (!nm) { er.hidden = false; er.textContent = 'Enter a class name.'; return; }
+  const sb = await getSB(); if (!sb) return;
+  let error = null, row = null;
+  try { const r = await sb.from('classes').insert({ owner_id: authUser.id, name: nm, term: term || null }).select('name,join_code').single(); error = r.error; row = r.data; } catch (e) { error = e; }
+  if (error) { er.hidden = false; er.textContent = String(error.message || 'Could not create class') + '.'; return; }
+  await openClassroom();
+  emitSys(`Created <b>${esc(row ? row.name : nm)}</b>. Share join code <code>${esc(row ? row.join_code : '')}</code> with your students.`, 'ok');
+}
 
 boot(load());
 try { authInit(); } catch (e) {}

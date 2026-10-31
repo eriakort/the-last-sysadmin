@@ -21,6 +21,7 @@ const required = [
   ['boot(load())', 'game boots'],
   ['function repairWorld', 'soft-lock resilience fix'],
   ['id="btnSettings"', 'Settings button'],
+  ['function openClassroom', 'classroom UI (M2)'],
   ['data-theme="amber"', 'appearance themes'],
   ['const MISSIONS', 'missions defined'],
   ['service-worker.js', 'service-worker registration'],
