@@ -5749,27 +5749,42 @@ async function openClassroom() {
         if (roster.length) {
           const ids = roster.map(e => e.user_id);
           const { data: atts } = await (await getSB()).from('attempts')
-            .select('user_id, mission_id, passed')
+            .select('user_id, mission_id, passed, hints, updated_at')
             .in('user_id', ids);
           const byUser = {};
-          (atts||[]).forEach(a => { if (a.passed) (byUser[a.user_id] = byUser[a.user_id] || new Set()).add(a.mission_id); });
-          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)}</div>
+          const lastAt = {};
+          const highHints = {};
+          (atts||[]).forEach(a => {
+            if (a.passed) (byUser[a.user_id] = byUser[a.user_id] || new Set()).add(a.mission_id);
+            const t = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+            if (t > (lastAt[a.user_id]||0)) lastAt[a.user_id] = t;
+            if ((a.hints||0) >= 3) highHints[a.user_id] = true;
+          });
+          const now = Date.now();
+          const rows = roster.map(e => {
+            const name = e.profiles?.display_name || 'User';
+            const av = e.profiles?.avatar || '';
+            const passed = total ? [...(byUser[e.user_id]||[])].filter(id => assigned.has(id)).length : (byUser[e.user_id]?.size||0);
+            const grade = total ? Math.round(passed / total * 100) : 0;
+            const stale = !lastAt[e.user_id] || (now - lastAt[e.user_id] > 7*864e5);
+            const stuck = highHints[e.user_id] || (stale && passed < total);
+            return { e, name, av, passed, grade, stuck, last: lastAt[e.user_id] };
+          });
+          window._cxRows = rows; window._cxClass = d.owned[0].name; window._cxTotal = total;
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
             </div>
             <div style="font-size:13px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-            <div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Member</span><span>Role</span><span>Passed</span><span>Grade</span><span></span></div>` +
-            roster.map(e => {
-              const name = e.profiles?.display_name || 'User';
-              const av = e.profiles?.avatar || '';
-              const passed = total ? [...(byUser[e.user_id]||[])].filter(id => assigned.has(id)).length : (byUser[e.user_id]?.size||0);
-              const grade = total ? Math.round(passed / total * 100) : 0;
-              const roleSel = `<select data-role="${esc(e.user_id)}" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px">
-                <option value="student"${e.role==='student'?' selected':''}>student</option>
-                <option value="ta"${e.role==='ta'?' selected':''}>ta</option>
+            <div style="display:grid;grid-template-columns:1fr 70px 90px 70px 70px 110px;gap:6px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Member</span><span>Role</span><span>Passed</span><span>Grade</span><span>Stuck</span><span></span></div>` +
+            rows.map(r => {
+              const roleSel = `<select data-role="${esc(r.e.user_id)}" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px">
+                <option value="student"${r.e.role==='student'?' selected':''}>student</option>
+                <option value="ta"${r.e.role==='ta'?' selected':''}>ta</option>
               </select>`;
-              return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${av} ${esc(name)}</span><span>${roleSel}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span><span><button class="btn sm" data-remove="${esc(e.user_id)}" type="button">Remove</button></span></div>`;
+              const flag = r.stuck ? '<span style="color:var(--red)">stuck</span>' : '<span class="cx-dim">—</span>';
+              return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${r.av} ${esc(r.name)}</span><span>${roleSel}</span><span>${r.passed}/${total||'—'}</span><span>${total?r.grade+'%':'—'}</span><span>${flag}</span><span><button class="btn sm" data-remove="${esc(r.e.user_id)}" type="button">Remove</button></span></div>`;
             }).join('') + '</div>' +
             `<div class="cx-form" style="margin-top:8px">
               <select id="fbStudent" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
@@ -5832,6 +5847,16 @@ async function openClassroom() {
     const { error } = await createAssignment(d.owned[0].id, title, mids, due);
     if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
     openClassroom();
+  });
+  const csvBtn = $('#cxCsv');
+  if (csvBtn) csvBtn.addEventListener('click', () => {
+    const rows = window._cxRows || [];
+    const total = window._cxTotal || 0;
+    const lines = [['name','role','passed','total','grade','stuck','last_active']];
+    rows.forEach(r => lines.push([r.name, r.e.role, r.passed, total, total?r.grade:'', r.stuck?'yes':'', r.last?new Date(r.last).toISOString():'']));
+    const csv = lines.map(l => l.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (window._cxClass||'class')+'-gradebook.csv'; a.click();
   });
   const fbBtn = $('#fbSend');
   if (fbBtn) fbBtn.addEventListener('click', async () => {
