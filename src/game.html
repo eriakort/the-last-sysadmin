@@ -4767,6 +4767,24 @@ function statsLog(ctx) {
   ctx.out(`Slowest       : ${fmtDur(slowest.ms)}  (${slowest.title})\n`);
   ctx.out(`Hints used    : ${hintsUsed}\n`);
 }
+async function recordAttempt(m) {
+  if (typeof RACE !== 'undefined' && RACE.active) return;
+  if (!authUser) return;
+  const sb = await getSB(); if (!sb) return;
+  const ms = (S.tracker && S.missionStart) ? (Date.now() - S.missionStart) : null;
+  const hints = (S.hints && S.hints[m.id]) || 0;
+  try {
+    await sb.from('attempts').upsert({
+      user_id: authUser.id,
+      mission_id: m.id,
+      passed: true,
+      ms: ms,
+      hints: hints,
+      attempts: 1,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id,mission_id' });
+  } catch (e) {}
+}
 function completeMission() {
   const m = MISSIONS[S.mission], gain = rewardFor(m);
   S.xp += gain; S.done.push(m.id);
@@ -4776,6 +4794,7 @@ function completeMission() {
     S.times = S.times || []; S.times.push({ ticket: ticketId(S.mission), id: m.id, ch: m.ch, title: m.title, ms, hints: hn, at: Date.now() });
     S.missionStart = null; timeStr = ` · <span class="pu">${fmtDur(ms)}</span>`;
   }
+  recordAttempt(m);
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -5629,12 +5648,48 @@ async function openClassroom() {
            <button class="btn primary" id="asCreate" type="button">Assign</button>
          </div>`;
     }
+    let dashHtml = '';
+    if (d.owned.length) {
+      const cid = d.owned[0].id;
+      const asns = await loadAssignments(cid);
+      const assigned = new Set();
+      asns.forEach(a => (a.mission_ids||[]).forEach(id => assigned.add(id)));
+      const total = assigned.size || 0;
+      try {
+        const { data: ens } = await (await getSB()).from('enrollments')
+          .select('user_id, role, profiles(display_name, avatar)')
+          .eq('class_id', cid);
+        const roster = (ens || []).filter(e => e.role === 'student');
+        if (roster.length) {
+          const ids = roster.map(e => e.user_id);
+          const { data: atts } = await (await getSB()).from('attempts')
+            .select('user_id, mission_id, passed')
+            .in('user_id', ids);
+          const byUser = {};
+          (atts||[]).forEach(a => { if (a.passed) (byUser[a.user_id] = byUser[a.user_id] || new Set()).add(a.mission_id); });
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Roster · ${esc(d.owned[0].name)}</div>
+            <div style="font-size:13px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:1fr 90px 70px;gap:8px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Student</span><span>Passed</span><span>Grade</span></div>` +
+            roster.map(e => {
+              const name = e.profiles?.display_name || 'Student';
+              const av = e.profiles?.avatar || '';
+              const passed = total ? [...(byUser[e.user_id]||[])].filter(id => assigned.has(id)).length : (byUser[e.user_id]?.size||0);
+              const grade = total ? Math.round(passed / total * 100) : 0;
+              return `<div style="display:grid;grid-template-columns:1fr 90px 70px;gap:8px;padding:8px 10px;border-top:1px solid var(--line)"><span>${av} ${esc(name)}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span></div>`;
+            }).join('') + '</div>';
+        } else {
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Roster</div><p class="cx-dim">No students yet.</p>`;
+        }
+      } catch (e) {
+        dashHtml = `<div class="rlabel" style="margin-top:14px">Roster</div><p class="cx-dim">Could not load roster.</p>`;
+      }
+    }
     teach = `<div class="rlabel">Classes you teach</div>${ownedHtml}
       <div class="cx-form">
         <input id="cxName" type="text" placeholder="Class name (e.g. Linux Admin 101)">
         <input id="cxTerm" type="text" placeholder="Term (optional)">
         <button class="btn primary" id="cxCreate" type="button">Create class</button>
-      </div>${assignHtml}`;
+      </div>${assignHtml}${dashHtml}`;
   } else {
     teach = `<div class="rlabel">Teaching?</div><p class="cx-dim" style="margin:0 0 8px">Enable teacher tools to create classes and (soon) see your students' progress.</p><button class="btn" id="cxBecome" type="button">Enable teacher tools</button>`;
   }
