@@ -53,12 +53,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
   // --- game systems: XP + progress HUD updated after two solves ---
   const xp = await page.textContent('#xp'), prog = await page.textContent('#prog');
-  if (+xp >= 200 && prog === '2/8') ok(`XP + progress tracked (XP ${xp}, solved ${prog})`);
+  if (+xp >= 200 && prog === '2/10') ok(`XP + progress tracked (XP ${xp}, solved ${prog})`);
   else fail(`HUD not tracking: XP ${xp}, solved ${prog}`);
 
   // --- progress persists across reload (localStorage) ---
   await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(400);
-  if ((await page.textContent('#prog')) === '2/8') ok('progress persists across reload');
+  if ((await page.textContent('#prog')) === '2/10') ok('progress persists across reload');
   else fail('progress did not persist: ' + (await page.textContent('#prog')));
 
   // --- settings opens and a theme applies ---
@@ -68,6 +68,20 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('#modal .tm[data-th="paper"]'); await page.waitForTimeout(150);
   if ((await page.getAttribute('html', 'data-theme')) === 'paper') ok('selecting a theme applies it');
   else fail('theme not applied: ' + (await page.getAttribute('html', 'data-theme')));
+  await page.click('#modal #closeS'); await page.waitForTimeout(100);   // close settings (reopened after theme pick)
+
+  // --- stats modal shows recorded times ---
+  await page.click('#btnStats'); await page.waitForTimeout(150);
+  const statsTxt = await page.textContent('#modal .stats').catch(() => '');
+  if (/✓/.test(statsTxt)) ok('stats modal lists solved tickets with times');
+  else fail('stats modal missing solved rows');
+  await page.click('#modal #closeS'); await page.waitForTimeout(100);
+
+  // --- terminal command history (ArrowUp recalls last command) ---
+  await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
+  await page.press('#tin', 'ArrowUp'); await page.waitForTimeout(60);
+  if ((await page.inputValue('#tin')) === 'ip addr') ok('ArrowUp recalls the previous command');
+  else fail('history not working: ' + (await page.inputValue('#tin')));
 
   await browser.close();
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }

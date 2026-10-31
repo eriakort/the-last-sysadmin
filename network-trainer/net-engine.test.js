@@ -12,6 +12,7 @@ const no = (res, label) => { if (!res || res.ok !== false) throw new Error(`${la
 
 // tiny builders
 const host = (name, ifaceIp, prefix, gw) => ({ id: name, kind: 'host', ifaces: { eth0: { ip: ip(ifaceIp), mask: prefix, up: true } }, routes: gw ? [{ dest: 0, mask: 0, via: ip(gw) }] : [] });
+const SRV = (id, a, p, gw, services) => ({ ...host(id, a, p, gw), services });
 const sw = (name, ports) => ({ id: name, kind: 'switch', ifaces: Object.fromEntries(ports.map(p => [p.name, { up: true, ...(p.vlan != null ? { vlan: p.vlan } : {}) }])) });
 const link = (a, ai, b, bi) => ({ a: [a, ai], b: [b, bi], up: true });
 
@@ -110,6 +111,28 @@ test('asymmetric ACL: request passes but the reply is dropped', () => {
   // deny inbound on the return interface so replies to h1 die
   net.devices.r1.acls = [{ dir: 'in', dev: 'eth1', action: 'deny', proto: 'icmp' }];
   no(C.reachable(net, 'h1', 'h2'), 'round trip fails on the reply');
+});
+
+/* ========== 4b. Destination-based rules (segmentation / no-pivot) ========== */
+test('a src+destination rule blocks a pivot without breaking other paths', () => {
+  // office h1 — fw — web(dmz) and fw — db(internal). web may serve the office
+  // but must not reach the internal db.
+  const net = {
+    devices: {
+      h1: host('h1', '10.0.1.10', 24, '10.0.1.1'),
+      web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+      db: host('db', '10.0.3.10', 24, '10.0.3.1'),
+      fw: { id: 'fw', kind: 'firewall', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('10.0.2.1'), mask: 24, up: true }, eth2: { ip: ip('10.0.3.1'), mask: 24, up: true } }, routes: [],
+        acls: [{ dir: 'in', dev: 'eth1', action: 'deny', src: ip('10.0.2.10'), dstnet: { net: ip('10.0.3.0'), prefix: 24 } }] },
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }]), sw3: sw('sw3', [{ name: 'p1' }, { name: 'p2' }])
+    },
+    links: [link('h1', 'eth0', 'sw1', 'p1'), link('fw', 'eth0', 'sw1', 'p2'),
+            link('web', 'eth0', 'sw2', 'p1'), link('fw', 'eth1', 'sw2', 'p2'),
+            link('db', 'eth0', 'sw3', 'p1'), link('fw', 'eth2', 'sw3', 'p2')]
+  };
+  ok(C.reachable(net, 'h1', 'web', { proto: 'tcp', dport: 80 }), 'office still reaches web');
+  no(C.reachable(net, 'web', 'db'), 'web is blocked from the internal db');
+  ok(C.reachable(net, 'h1', 'db'), 'office still reaches db directly');
 });
 
 /* ========== 5. VLAN segmentation (security) ========== */

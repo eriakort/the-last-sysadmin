@@ -81,6 +81,8 @@ function aclMatch(rule, dir, iface, pkt) {
   if (rule.proto && rule.proto !== pkt.proto) return false;
   if (rule.dport != null && rule.dport !== pkt.dport) return false;
   if (rule.src != null && rule.src !== pkt.src) return false;
+  if (rule.dst != null && rule.dst !== pkt.dst) return false;
+  if (rule.dstnet && !sameNet(pkt.dst, rule.dstnet.net, rule.dstnet.prefix)) return false;
   return true;
 }
 function aclDecision(dev, dir, iface, pkt) {

@@ -8,11 +8,14 @@ const { chapters } = require('./net-chapters');
 
 const REWARD = 100, HINT_COST = 25;
 const RANKS = [[0, 'Cadet'], [120, 'Apprentice'], [280, 'Technician'], [460, 'Engineer'], [640, 'Senior Engineer'], [820, 'Network Architect']];
-const THEMES = [['', 'Halcyon Dark'], ['amber', 'Amber CRT'], ['green', 'Green Phosphor'], ['paper', 'Paper (light)']];
+const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber', 'Amber CRT'], ['green', 'Green Phosphor'], ['paper', 'Paper (light)']];
 
 let RUN = null, SEL = null, HINTS = 0, PROG = loadProg();
+let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer
+let HIST = [], HISTI = -1;                         // terminal command history
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
 function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '' }; } catch (e) { return { done: {}, xp: 0, theme: '' }; } }
@@ -81,26 +84,37 @@ function renderConfig() {
   }
   if (d.kind === 'router' || d.kind === 'firewall') {
     h += '<div class="label2">Firewall (inbound)</div>';
-    (d.acls || []).forEach((r, i) => { h += `<div class="rrow">${r.action === 'deny' ? 'DROP' : 'ALLOW'} ${r.proto || 'all'} in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${r.dport != null ? ' dpt:' + r.dport : ''} <button class="x" data-acl="${i}">✕</button></div>`; });
+    const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
+    (d.acls || []).forEach((r, i) => { h += `<div class="rrow">${r.action === 'deny' ? 'DROP' : 'ALLOW'} ${r.proto || 'all'} in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${dstTxt(r)}${r.dport != null ? ' dpt:' + r.dport : ''} <button class="x" data-acl="${i}">✕</button></div>`; });
     const ifopts = Object.keys(d.ifaces).map(n => `<option>${n}</option>`).join('');
-    h += `<div class="addrow"><select class="aif">${ifopts}</select><select class="aproto"><option value="">any</option><option>tcp</option><option>udp</option><option>icmp</option></select><input class="adport" placeholder="dport" size="4"/><input class="asrc" placeholder="src ip" size="8"/><select class="aact"><option value="deny">DROP</option><option value="allow">ALLOW</option></select><button class="btn sm" id="addacl">Add</button></div>`;
+    h += `<div class="addrow"><select class="aif">${ifopts}</select><select class="aproto"><option value="">any</option><option>tcp</option><option>udp</option><option>icmp</option></select><input class="adport" placeholder="dport" size="4"/><input class="asrc" placeholder="src ip" size="8"/><input class="adst" placeholder="dst ip/cidr" size="10"/><select class="aact"><option value="deny">DROP</option><option value="allow">ALLOW</option></select><button class="btn sm" id="addacl">Add</button></div>`;
   }
   return h;
 }
 
 /* ---------- actions ---------- */
 function refresh() { $('#topoWrap').innerHTML = renderTopo(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
-function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, ip addr, ip route`); }
+function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, ip addr, ip route`); }
+function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
+function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
 function termClear() { $('#tout').textContent = ''; }
 function nextUnsolved() { const cur = chapters.findIndex(c => c.id === RUN.mission.id); for (let k = 1; k <= chapters.length; k++) { const i = (cur + k) % chapters.length; if (!PROG.done[chapters[i].id]) return i; } return -1; }
 function doCheck() {
   const box = $('#status'); const done = RUN.done();
   if (done) {
-    const id = RUN.mission.id; let msg = '✓ All objectives met — ticket resolved.';
-    if (!PROG.done[id]) { const reward = Math.max(25, REWARD - HINT_COST * HINTS); PROG.done[id] = { xp: reward, hints: HINTS }; PROG.xp += reward; saveProg(); updateHud(); msg = `✓ Ticket resolved — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`; $('#brief').querySelector('.eyebrow').innerHTML += ' · <span class="done">solved</span>'; }
-    const ni = nextUnsolved();
-    box.className = 'ok'; box.innerHTML = msg + (ni >= 0 ? ' <button class="btn sm" id="next">Next ticket →</button>' : ' <b>All tickets cleared!</b>');
+    const id = RUN.mission.id, ms = Date.now() - TSTART;
+    if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    let msg = '✓ All objectives met — ticket resolved.';
+    if (!PROG.done[id]) {
+      const reward = Math.max(25, REWARD - HINT_COST * HINTS);
+      PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
+      msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
+      const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
+    } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
+    const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);
+    box.className = 'ok';
+    box.innerHTML = msg + (ni >= 0 ? ' <button class="btn sm" id="next">Next ticket →</button>' : (allDone ? `<div class="finale">🎓 All ${chapters.length} tickets cleared — final rank <b>${rankFor(PROG.xp)}</b>, ${PROG.xp} XP.</div>` : ''));
     const nb = $('#next'); if (nb) nb.addEventListener('click', () => reloadMission(ni));
   } else {
     box.className = 'bad'; box.innerHTML = 'Not resolved yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
@@ -139,11 +153,30 @@ function wireConfig() {
   });
   const addrt = $('#addrt'); if (addrt) addrt.addEventListener('click', () => { const dest = $('#config .rdest').value.trim(), via = $('#config .rvia').value.trim(); if (!/^\d+\.\d+\.\d+\.\d+$/.test(via)) return; d.routes = d.routes || []; if (dest === 'default' || dest === '') d.routes.push({ dest: 0, mask: 0, via: M.ip(via) }); else { const c = M.cidr(dest); d.routes.push({ dest: c.net, mask: c.prefix, via: M.ip(via) }); } refresh(); });
   document.querySelectorAll('#config [data-rt]').forEach(b => b.addEventListener('click', () => { d.routes.splice(+b.dataset.rt, 1); refresh(); }));
-  const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
+  const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); const dv = g('.adst'); if (dv.includes('/')) rule.dstnet = M.cidr(dv); else if (/^\d+\.\d+\.\d+\.\d+$/.test(dv)) rule.dst = M.ip(dv); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
   document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
 }
 function wireTerm() {
-  $('#tin').addEventListener('keydown', e => { if (e.key !== 'Enter') return; const line = e.target.value; e.target.value = ''; if (!line.trim()) return; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); refresh(); });
+  const inp = $('#tin');
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); refresh(); return; }
+    if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
+    if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
+  });
+}
+function openStats() {
+  const rows = chapters.map(c => { const d = PROG.done[c.id]; return `<tr><td>${esc(c.title)}</td><td>${d ? '✓' : '·'}</td><td>${d && d.ms != null ? fmtTime(d.ms) : '—'}</td><td>${d ? d.hints : '—'}</td></tr>`; }).join('');
+  const times = chapters.map(c => PROG.done[c.id]).filter(d => d && d.ms != null).map(d => d.ms);
+  const solved = chapters.filter(c => PROG.done[c.id]).length;
+  const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0, fastest = times.length ? Math.min(...times) : 0;
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet"><h2>Stats</h2>
+    <p class="dim">Solved ${solved}/${chapters.length} · ${PROG.xp} XP · rank ${rankFor(PROG.xp)}${times.length ? ` · avg ${fmtTime(avg)} · fastest ${fmtTime(fastest)}` : ''}</p>
+    <table class="stats"><thead><tr><th>Ticket</th><th>Done</th><th>Time</th><th>Hints</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  $('#closeS').addEventListener('click', () => wrap.remove());
 }
 
 /* ---------- boot ---------- */
@@ -152,7 +185,8 @@ function boot() {
   document.getElementById('app').innerHTML = `
     <header id="top">
       <div class="brand">Networking Trainer <span class="dim">· networking &amp; security fundamentals</span></div>
-      <div class="hud"><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+      <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnStats" class="btn" title="Stats">📊</button>
         <button id="btnSet" class="btn" title="Settings">⚙</button>
         <a class="xlink" href="../" title="Back to the Linux game">The Last Sysadmin ↗</a></div>
     </header>
@@ -163,6 +197,7 @@ function boot() {
     </div>`;
   wireTerm();
   $('#btnSet').addEventListener('click', openSettings);
+  $('#btnStats').addEventListener('click', openStats);
   reloadMission(0);
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);

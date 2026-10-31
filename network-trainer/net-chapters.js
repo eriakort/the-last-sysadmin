@@ -158,6 +158,52 @@ const chapters = [
       ['fw', 'iptables -A INPUT -i eth0 -p tcp --dport 80 -j ACCEPT'],
       ['fw', 'iptables -A INPUT -i eth0 -j DROP']
     ]
+  },
+
+  { id: 'two-offices', chapter: 'Static routing',
+    title: 'Two branches, one core',
+    story: 'r1 is the core router at HQ. Two branch networks, 10.0.3.0/24 and 10.0.4.0/24, both sit behind r2 across the link. r2 already knows the way back to HQ; r1 knows neither branch.',
+    objective: 'Add static routes on r1 for both branch networks, so h1 can reach h3 and h4.',
+    console: 'r1',
+    hints: ['r1 reaches r2 directly over 10.0.12.0/30; r2 is 10.0.12.2.', 'You need TWO routes on r1 — one per branch network — both via 10.0.12.2.', 'Run `ip route add 10.0.3.0/24 via 10.0.12.2` and `ip route add 10.0.4.0/24 via 10.0.12.2`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'), h3: H('h3', '10.0.3.10', 24, '10.0.3.1'), h4: H('h4', '10.0.4.10', 24, '10.0.4.1'),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 30) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 30), eth1: iface('10.0.3.1', 24), eth2: iface('10.0.4.1', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }]), sw4: SW('sw4', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'),
+              L('h3', 'eth0', 'sw3', 'p1'), L('r2', 'eth1', 'sw3', 'p2'), L('h4', 'eth0', 'sw4', 'p1'), L('r2', 'eth2', 'sw4', 'p2')]
+    }),
+    success: [
+      { type: 'route_exists', dev: 'r1', cidr: '10.0.3.0/24' }, { type: 'route_exists', dev: 'r1', cidr: '10.0.4.0/24' },
+      { type: 'reachable', a: 'h1', b: 'h3' }, { type: 'reachable', a: 'h1', b: 'h4' }
+    ],
+    solution: [['r1', 'ip route add 10.0.3.0/24 via 10.0.12.2'], ['r1', 'ip route add 10.0.4.0/24 via 10.0.12.2']]
+  },
+
+  { id: 'stop-the-pivot', chapter: 'Network security',
+    title: 'Stop the pivot',
+    story: 'The web server sits in a DMZ. If it were ever compromised, an attacker could hop from it straight to the internal database. The office must still reach the web server, and the web server must still answer — but it must not be able to reach the internal 10.0.3.0/24 network.',
+    objective: 'At the firewall, block traffic from the web server (10.0.2.10) to the internal network (10.0.3.0/24), without breaking office→web.',
+    console: 'fw',
+    hints: ['Match on BOTH source and destination: from the web server, to the internal subnet.', 'The web server arrives on the DMZ interface (eth1). Block its traffic destined for 10.0.3.0/24 only.', 'Run `iptables -A INPUT -i eth1 -s 10.0.2.10 -d 10.0.3.0/24 -j DROP`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        db: H('db', '10.0.3.10', 24, '10.0.3.1'),
+        fw: R('fw', 'firewall', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24), eth2: iface('10.0.3.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }]), sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('fw', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('fw', 'eth1', 'sw2', 'p2'), L('db', 'eth0', 'sw3', 'p1'), L('fw', 'eth2', 'sw3', 'p2')]
+    }),
+    success: [
+      { type: 'reachable', a: 'h1', b: 'web', proto: 'tcp', dport: 80 },
+      { type: 'not_reachable', a: 'web', b: 'db' }
+    ],
+    solution: [['fw', 'iptables -A INPUT -i eth1 -s 10.0.2.10 -d 10.0.3.0/24 -j DROP']]
   }
 
 ];

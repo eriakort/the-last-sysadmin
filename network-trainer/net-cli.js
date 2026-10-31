@@ -125,7 +125,8 @@ const COMMANDS = {
     const dev = cli.net.devices[cli.cur]; dev.acls = dev.acls || [];
     if (a[0] === '-L' || a[0] === '--list') {
       if (!dev.acls.length) return ok('Chain INPUT (policy ACCEPT)\n  (no rules)');
-      const rows = dev.acls.map(r => `  ${r.action === 'deny' ? 'DROP' : 'ACCEPT'}  ${r.proto || 'all'}  in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${r.dport != null ? ' dpt:' + r.dport : ''}${r.any ? '  anywhere' : ''}`);
+      const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
+      const rows = dev.acls.map(r => `  ${r.action === 'deny' ? 'DROP' : 'ACCEPT'}  ${r.proto || 'all'}  in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${dstTxt(r)}${r.dport != null ? ' dpt:' + r.dport : ''}${r.any ? '  anywhere' : ''}`);
       return ok('Chain INPUT\n' + rows.join('\n'));
     }
     if (a[0] === '-A') {                                       // iptables -A INPUT -i eth0 -p tcp --dport 23 -j DROP
@@ -136,6 +137,7 @@ const COMMANDS = {
       const proto = get('-p'); if (proto) rule.proto = proto;
       const dport = get('--dport'); if (dport) rule.dport = Number(dport);
       const src = get('-s'); if (src) rule.src = M.ip(src);
+      const dst = get('-d'); if (dst) { if (dst.includes('/')) rule.dstnet = M.cidr(dst); else rule.dst = M.ip(dst); }
       const j = get('-j'); rule.action = /DROP|REJECT/i.test(j || '') ? 'deny' : 'allow';
       dev.acls.push(rule);
       return ok('');
