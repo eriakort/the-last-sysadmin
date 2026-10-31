@@ -52,11 +52,11 @@ button{font:inherit;cursor:pointer}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.on{background:color-mix(in srgb,var(--amber) 22%,var(--raise));border-color:var(--amber);color:var(--amber)}
 /* Classroom tab bar */
-.cx-tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow-x:auto}
-.cx-tabs button{font-family:var(--f-display);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 14px;margin-bottom:-1px;white-space:nowrap}
-.cx-tabs button:hover{color:var(--ink)}
-.cx-tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
-.cx-tabs button:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+.cx-tabs{display:flex;gap:6px;margin:6px 0 14px;padding:4px;background:var(--raise);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+.cx-tabs button{font-family:var(--f-display);font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;background:transparent;border:0;border-radius:7px;color:var(--muted);padding:8px 14px;white-space:nowrap;transition:background .15s,color .15s}
+.cx-tabs button:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.cx-tabs button.on{color:var(--on-amber);background:var(--amber);box-shadow:0 0 0 1px color-mix(in srgb,var(--amber) 60%,transparent),0 0 12px color-mix(in srgb,var(--amber) 35%,transparent)}
+.cx-tabs button:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
 
 .stat .v.live{color:var(--amber)}
 #speed .label{margin-bottom:8px}
