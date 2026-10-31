@@ -622,7 +622,7 @@ function jmHome() {
     '.ssh': D({ authorized_keys: F(JM_KEYS, { owner: 'jmorrow', mode: 0o600, mtime: at(2026, 3, 2, 10, 4) }) }, { owner: 'jmorrow', mode: 0o700, mtime: at(2026, 3, 2, 10, 4) })
   }, { owner: 'jmorrow', mode: 0o750, mtime: at(2026, 10, 21, 22, 19) });
 }
-const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check', 'stats', 'tracker'];
+const GAME_CMDS = ['hint', 'submit', 'retry', 'mission', 'help', 'check', 'stats', 'tracker', 'repair'];
 function buildFS() {
   const bins = {};
   for (const c of Object.keys(CMDS).filter(c => !GAME_CMDS.includes(c))) {
@@ -2391,6 +2391,7 @@ Game commands
   tracker          turn the optional speed tracker on or off
   stats            show your speed-tracker log (times per ticket)
   retry            restore the server to the start of this ticket
+  repair           restore any game files you deleted (if you're stuck)
   mission          show the current ticket again
   man COMMAND      read the short manual for a command
 
@@ -2403,6 +2404,12 @@ CMDS.mission = () => { announceMission(); };
 CMDS.tracker = () => { toggleTracker(); };
 CMDS.stats = (a, ctx) => { statsLog(ctx); return 0; };
 CMDS.retry = () => { doRetry(); };
+CMDS.repair = (a, ctx) => {
+  const n = repairWorld();
+  if (n) { ctx.out(`Repaired: restored ${n} system file${n === 1 ? '' : 's'} the game needs (logs, configs, release files and the like) to their original state.\nYour own files, edits and progress were left untouched. If a ticket was stuck because something was missing, try the step again.\n`); render(); save(); }
+  else ctx.out('Nothing to repair — every file the game needs is present. If a ticket still will not advance, type `check`.\n');
+  return 0;
+};
 
 const FLAG_DIAG = {
   'run-script': "This ticket needs two things: <code>~/status.sh</code> must be executable (<code>chmod +x ~/status.sh</code>), and you must run it <i>in this ticket</i>. Running it is tracked per ticket, so even if you ran it earlier, run <code>./status.sh</code> again now (from your home directory, after the chmod). <code>check ~/status.sh</code> shows whether the executable bit is set.",
@@ -2449,10 +2456,12 @@ CMDS.check = (a, ctx) => {
   if (m.check) {
     if (m.check()) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
     let extra = '';
+    const fixed = repairWorld();
+    if (fixed) extra += `<br><br>&#9888; The server was missing ${fixed} file${fixed === 1 ? '' : 's'} the game needs &mdash; something got deleted earlier. I restored ${fixed === 1 ? 'it' : 'them'} to the original state, so try the step again.`;
     if (FLAG_DIAG[m.id]) extra += '<br><br>' + FLAG_DIAG[m.id];
     if (m.fail) { const f = m.fail(); if (f) extra += '<br><br>&#9888; ' + md(f); }
     if (m.nudge) { const nu = m.nudge(); if (nu) extra += '<br><br>' + md(nu); }
-    if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, and <code>hint</code> gives the next step.";
+    if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, <code>repair</code> restores any game files you may have deleted, and <code>hint</code> gives the next step.";
     emitSys(head + extra, 'hint');
     return 0;
   }
@@ -4761,6 +4770,7 @@ function startMission() {
   S.readM = []; S.cmdsM = []; S.nudged = [];
   const m = MISSIONS[S.mission], prev = MISSIONS[S.mission - 1];
   if (m.onStart) m.onStart();
+  if (typeof RACE === 'undefined' || !RACE.active) repairWorld();
   trackStart();
   S.checkpoint = JSON.stringify(S.fs);
   if (!prev || prev.ch !== m.ch) emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter');
@@ -4779,9 +4789,32 @@ function showHint() {
   emitSys(`<b>Hint ${n + 1}/${m.hints.length}:</b> ${md(m.hints[n])}`, 'hint');
   render(); save();
 }
+/* Recreate any MISSING game-essential files from their canonical state, so a
+   file deleted earlier can never permanently block a later ticket. Never
+   overwrites existing files (your edits are safe) and never re-adds files that
+   a clean-up ticket is meant to delete: /tmp crash dumps, the PHP session
+   flood, and the quarantined export script. */
+function repairWorld() {
+  const canon = buildFS();
+  const excluded = abs => abs === '/tmp' || abs.indexOf('/tmp/') === 0 || abs.indexOf('/var/lib/php/sessions') === 0 || abs === P.sync;
+  let n = 0;
+  const walk = (abs, cnode) => {
+    if (excluded(abs)) return;
+    const live = getNode(abs);
+    if (!live) {
+      const par = getNode(parentOf(abs));
+      if (par && par.type === 'dir') { par.children[baseName(abs)] = JSON.parse(JSON.stringify(cnode)); n++; }
+      return;
+    }
+    if (cnode.type === 'dir' && live.type === 'dir') for (const k in cnode.children) walk(abs === '/' ? '/' + k : abs + '/' + k, cnode.children[k]);
+  };
+  for (const k in canon.children) walk('/' + k, canon.children[k]);
+  return n;
+}
 function doRetry() {
   if (S.finished || !S.checkpoint) { emitSys('Nothing to restore.', 'hint'); return; }
   S.fs = JSON.parse(S.checkpoint);
+  repairWorld();
   if (!getNode(S.cwd)) S.cwd = HOME;
   S.nudged = [];
   emitSys('Restored the server from backup to how it was when this ticket opened.', 'hint');
@@ -4957,6 +4990,7 @@ Last login: Thu Oct 22 17:58:03 2026 from 10.0.4.31`);
 }
 function boot(restored) {
   motd(restored);
+  if (restored) { const fixed = repairWorld(); if (fixed) { S.checkpoint = JSON.stringify(S.fs); emitSys(`Restored ${fixed} game file${fixed === 1 ? '' : 's'} that had been deleted, so you can keep going.`, 'hint'); } }
   if (restored && S.finished && S.mission < MISSIONS.length) {
     S.finished = false;
     emitSys(`<b>New chapter unlocked.</b> Your progress from earlier chapters is kept.`, 'ok');
