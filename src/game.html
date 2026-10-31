@@ -5709,7 +5709,7 @@ async function openClassroom() {
         const { data: ens } = await (await getSB()).from('enrollments')
           .select('user_id, role, profiles(display_name, avatar)')
           .eq('class_id', cid);
-        const roster = (ens || []).filter(e => e.role === 'student');
+        const roster = ens || [];
         if (roster.length) {
           const ids = roster.map(e => e.user_id);
           const { data: atts } = await (await getSB()).from('attempts')
@@ -5717,18 +5717,22 @@ async function openClassroom() {
             .in('user_id', ids);
           const byUser = {};
           (atts||[]).forEach(a => { if (a.passed) (byUser[a.user_id] = byUser[a.user_id] || new Set()).add(a.mission_id); });
-          dashHtml = `<div class="rlabel" style="margin-top:14px">Roster · ${esc(d.owned[0].name)}</div>
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)}</div>
             <div style="font-size:13px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-            <div style="display:grid;grid-template-columns:1fr 90px 70px;gap:8px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Student</span><span>Passed</span><span>Grade</span></div>` +
+            <div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:6px 10px;background:var(--raise);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)"><span>Member</span><span>Role</span><span>Passed</span><span>Grade</span><span></span></div>` +
             roster.map(e => {
-              const name = e.profiles?.display_name || 'Student';
+              const name = e.profiles?.display_name || 'User';
               const av = e.profiles?.avatar || '';
               const passed = total ? [...(byUser[e.user_id]||[])].filter(id => assigned.has(id)).length : (byUser[e.user_id]?.size||0);
               const grade = total ? Math.round(passed / total * 100) : 0;
-              return `<div style="display:grid;grid-template-columns:1fr 90px 70px;gap:8px;padding:8px 10px;border-top:1px solid var(--line)"><span>${av} ${esc(name)}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span></div>`;
+              const roleSel = `<select data-role="${esc(e.user_id)}" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:2px 4px">
+                <option value="student"${e.role==='student'?' selected':''}>student</option>
+                <option value="ta"${e.role==='ta'?' selected':''}>ta</option>
+              </select>`;
+              return `<div style="display:grid;grid-template-columns:1fr 70px 90px 70px 110px;gap:6px;padding:8px 10px;border-top:1px solid var(--line);align-items:center"><span>${av} ${esc(name)}</span><span>${roleSel}</span><span>${passed}/${total||'—'}</span><span>${total?grade+'%':'—'}</span><span><button class="btn sm" data-remove="${esc(e.user_id)}" type="button">Remove</button></span></div>`;
             }).join('') + '</div>';
         } else {
-          dashHtml = `<div class="rlabel" style="margin-top:14px">Roster</div><p class="cx-dim">No students yet.</p>`;
+          dashHtml = `<div class="rlabel" style="margin-top:14px">Admin · Roster</div><p class="cx-dim">No members yet.</p>`;
         }
       } catch (e) {
         dashHtml = `<div class="rlabel" style="margin-top:14px">Roster</div><p class="cx-dim">Could not load roster.</p>`;
@@ -5776,6 +5780,17 @@ async function openClassroom() {
     if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
     openClassroom();
   });
+  document.querySelectorAll('#raceContent [data-role]').forEach(sel => sel.addEventListener('change', async () => {
+    const uid = sel.dataset.role, role = sel.value;
+    const sb = await getSB(); if (!sb || !d.owned.length) return;
+    try { await sb.from('enrollments').update({ role }).eq('class_id', d.owned[0].id).eq('user_id', uid); } catch (e) {}
+  }));
+  document.querySelectorAll('#raceContent [data-remove]').forEach(btn => btn.addEventListener('click', async () => {
+    const uid = btn.dataset.remove;
+    const sb = await getSB(); if (!sb || !d.owned.length) return;
+    try { await sb.from('enrollments').delete().eq('class_id', d.owned[0].id).eq('user_id', uid); } catch (e) {}
+    openClassroom();
+  }));
   document.querySelectorAll('#raceContent .cx-code[data-code]').forEach(el => el.addEventListener('click', () => {
     const t = el.dataset.code; try { navigator.clipboard && navigator.clipboard.writeText(t); } catch (e) {}
     const old = el.textContent; el.textContent = 'copied'; setTimeout(() => { el.textContent = old; }, 900);
