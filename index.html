@@ -5667,6 +5667,17 @@ async function addFeedback(classId, studentId, body) {
   const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
   return sb.from('feedback').insert({ class_id: classId, student_id: studentId, author_id: authUser.id, body: body.trim() });
 }
+async function loadMyMissions() {
+  const sb = await getSB(); if (!sb || !authUser) return [];
+  try {
+    const { data, error } = await sb.from('authored_missions').select('id, title, check_type, created_at').eq('author_id', authUser.id).order('created_at', { ascending: false });
+    return error ? [] : (data || []);
+  } catch (e) { return []; }
+}
+async function createMission(m) {
+  const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
+  return sb.from('authored_missions').insert({ ...m, author_id: authUser.id });
+}
 async function loadAssignments(classId) {
   const sb = await getSB(); if (!sb || !authUser) return [];
   try {
@@ -5752,6 +5763,26 @@ async function openClassroom() {
            <input id="asDue" type="datetime-local">
            <input id="asMissions" type="text" placeholder="Mission ids, comma-separated (e.g. 1-1,1-2)">
            <button class="btn primary" id="asCreate" type="button">Assign</button>
+         </div>`;
+      const myM = await loadMyMissions();
+      assignHtml += `<div class="rlabel" style="margin-top:14px">Mission editor</div>
+        <p class="cx-dim" style="margin:0 0 6px">Author a mission. Use its id in an assignment. Playback of custom missions comes next.</p>` +
+        (myM.length ? myM.map(m => `<div class="cx-item"><div><b>${esc(m.title)}</b> <span class="cx-dim">· ${esc(m.check_type)}</span><br><code class="cx-dim">${esc(m.id)}</code></div></div>`).join('') : '<p class="cx-dim">No authored missions yet.</p>') +
+        `<div class="cx-form" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+           <input id="mTitle" type="text" placeholder="Title">
+           <input id="mStory" type="text" placeholder="Story">
+           <input id="mObj" type="text" placeholder="Objective">
+           <input id="mHints" type="text" placeholder="Hints, comma-separated (up to 3)">
+           <select id="mCheck" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
+             <option value="file_exists">File exists</option>
+             <option value="file_contains">File contains text</option>
+             <option value="file_matches">File matches regex</option>
+             <option value="command_run">Command was run</option>
+             <option value="service_state">Service state</option>
+           </select>
+           <input id="mArg1" type="text" placeholder="Arg 1 (path, command, or service)">
+           <input id="mArg2" type="text" placeholder="Arg 2 (text, regex, or state) — optional">
+           <button class="btn primary" id="mCreate" type="button">Save mission</button>
          </div>`;
     }
     let dashHtml = '';
@@ -5855,6 +5886,21 @@ async function openClassroom() {
     openClassroom();
   });
   const cc = $('#cxCreate'); if (cc) cc.addEventListener('click', cxDoCreate);
+  const mBtn = $('#mCreate');
+  if (mBtn) mBtn.addEventListener('click', async () => {
+    const title = ($('#mTitle')||{}).value?.trim() || '';
+    const story = ($('#mStory')||{}).value?.trim() || '';
+    const objective = ($('#mObj')||{}).value?.trim() || '';
+    const hints = (($('#mHints')||{}).value || '').split(',').map(s => s.trim()).filter(Boolean).slice(0,3);
+    const check_type = ($('#mCheck')||{}).value || 'file_exists';
+    const check_arg1 = ($('#mArg1')||{}).value?.trim() || null;
+    const check_arg2 = ($('#mArg2')||{}).value?.trim() || null;
+    const er = $('#cxErr');
+    if (!title || !objective) { if (er) { er.hidden = false; er.textContent = 'Title and objective required.'; } return; }
+    const { error } = await createMission({ title, story, objective, hints, check_type, check_arg1, check_arg2 });
+    if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
+    openClassroom();
+  });
   const asBtn = $('#asCreate');
   if (asBtn) asBtn.addEventListener('click', async () => {
     const title = ($('#asTitle')||{}).value?.trim() || '';
