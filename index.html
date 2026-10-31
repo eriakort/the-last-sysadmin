@@ -5748,7 +5748,8 @@ async function openClassroom() {
           const done = mids.filter(id => passedSet.has(id)).length;
           const grade = mids.length ? Math.round(done / mids.length * 100) : 0;
           const due = a.due_at ? new Date(a.due_at).toLocaleString() : 'No due date';
-          return `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${due} · ${done}/${mids.length} · ${grade}%</span></div><button class="btn sm" data-open="${esc(mids[0]||'')}">Open</button></div>`;
+          const cert = grade === 100 ? `<button class="btn sm" data-cert="${esc(a.title)}" data-class="${esc(cname)}" type="button">Certificate</button>` : '';
+          return `<div class="cx-item"><div><b>${esc(a.title)}</b><br><span class="cx-dim">${due} · ${done}/${mids.length} · ${grade}%</span></div><div style="display:flex;gap:6px"><button class="btn sm" data-open="${esc(mids[0]||'')}">Open</button>${cert}</div></div>`;
         }).join('');
       } else {
         asnHtml = '<p class="cx-dim">No assignments yet.</p>';
@@ -5929,6 +5930,24 @@ async function openClassroom() {
     <div class="race-err" id="cxErr" hidden></div>
     ${tabs.map((t,i) => `<div id="cxt-${t.id}" ${i? 'hidden':''}>${t.html}</div>`).join('')}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
+  document.querySelectorAll('[data-cert]').forEach(btn => btn.addEventListener('click', () => {
+    const name = authUser.name || authUser.email || 'Student';
+    const title = btn.dataset.cert;
+    const cls = btn.dataset.class;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Certificate</title>
+      <style>body{font-family:Georgia,serif;text-align:center;padding:60px;background:#f7f4ee;color:#1a1a1a}
+      .box{border:8px double #c47f12;padding:48px;max-width:700px;margin:0 auto;background:#fff}
+      h1{font-size:36px;letter-spacing:.12em;text-transform:uppercase;color:#c47f12;margin:0 0 8px}
+      .sub{letter-spacing:.2em;text-transform:uppercase;font-size:12px;color:#666}
+      .name{font-size:28px;margin:24px 0;border-bottom:1px solid #ccc;display:inline-block;padding:0 24px 4px}
+      .meta{margin-top:24px;color:#444}</style></head><body>
+      <div class="box"><div class="sub">The Last Sysadmin</div><h1>Certificate</h1>
+      <p>This certifies that</p><div class="name">${name}</div>
+      <p>has completed</p><p><b>${title}</b></p>
+      <p class="meta">${cls}<br>${new Date().toLocaleDateString()}</p></div>
+      <script>window.print()<\/script></body></html>`;
+    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+  }));
   document.querySelectorAll('#cxTabs [data-cxtab]').forEach(btn => btn.addEventListener('click', () => {
     const id = btn.dataset.cxtab;
     document.querySelectorAll('#cxTabs [data-cxtab]').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
