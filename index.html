@@ -51,6 +51,13 @@ button{font:inherit;cursor:pointer}
 .btn.danger{border-color:var(--red);color:var(--red)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.on{background:color-mix(in srgb,var(--amber) 22%,var(--raise));border-color:var(--amber);color:var(--amber)}
+/* Classroom tab bar */
+.cx-tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin:4px 0 14px;overflow-x:auto}
+.cx-tabs button{font-family:var(--f-display);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:transparent;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:8px 14px;margin-bottom:-1px;white-space:nowrap}
+.cx-tabs button:hover{color:var(--ink)}
+.cx-tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
+.cx-tabs button:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+
 .stat .v.live{color:var(--amber)}
 #speed .label{margin-bottom:8px}
 .spd-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px solid var(--line)}
@@ -5877,15 +5884,15 @@ async function openClassroom() {
     { id: 'teach', label: 'Teach', html: teach }
   ];
   renderContent(`<h2>Classroom</h2>
-    <div id="cxTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px">
-      ${tabs.map((t,i) => `<button class="btn${i===0?' on':''}" data-cxtab="${t.id}" type="button">${t.label}</button>`).join('')}
+    <div id="cxTabs" class="cx-tabs" role="tablist">
+      ${tabs.map((t,i) => `<button role="tab" aria-selected="${i===0}" class="${i===0?'on':''}" data-cxtab="${t.id}" type="button">${t.label}</button>`).join('')}
     </div>
     <div class="race-err" id="cxErr" hidden></div>
     ${tabs.map((t,i) => `<div id="cxt-${t.id}" ${i? 'hidden':''}>${t.html}</div>`).join('')}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
   document.querySelectorAll('#cxTabs [data-cxtab]').forEach(btn => btn.addEventListener('click', () => {
     const id = btn.dataset.cxtab;
-    document.querySelectorAll('#cxTabs [data-cxtab]').forEach(b => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('#cxTabs [data-cxtab]').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-selected', b === btn ? 'true' : 'false'); });
     document.querySelectorAll('[id^="cxt-"]').forEach(p => { p.hidden = p.id !== 'cxt-' + id; });
   }));
   $('#cxBack').addEventListener('click', openSettings);
