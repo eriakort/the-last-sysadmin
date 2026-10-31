@@ -1,0 +1,341 @@
+From 159296a140e7579c2eee3a02026dbf468410978c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 12:56:21 +0100
+Subject: [PATCH] Review fixes: docs apply order, M4/M6/M7 tests, cache v24,
+ offline questions
+
+Addresses gaps found reviewing the completed Phase 1 & 2:
+
+- Docs: supabase/README.md and root README.md now list the full migration
+  apply order (setup -> m1 -> m2 -> m4 -> m6 -> m7). Previously only m1 was
+  documented, so a self-hoster would have had broken join-by-code,
+  enroll-by-email, the mission editor and the scenario builder. Added an OAuth
+  provider note and an explicit note that authored missions/scenarios are
+  authoring-only (no student playback path yet).
+- Tests: run.sh now applies every migration and runs a new M4/M6/M7 suite
+  (enroll_by_email staff-only + student-role-forced + idempotent + unknown
+  email; author-isolation of authored_missions and scenarios). Full suite
+  passes: M1 (30) + M2 + M4/M6/M7.
+- service-worker: cache bumped v23 -> v24 so returning/installed users pick up
+  Phase 1 & 2; questions.json added to the precache so the 1000-question bank
+  works offline.
+- test-classroom-ui.js updated for the tabbed classroom (Join/Dashboard/Teach/
+  Question bank) so npm run test:ui passes against the current UI.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Q9A1atnfLsQUP5DWZ8rYYW
+---
+ CHANGELOG.md                    |  7 +++
+ README.md                       |  8 +++
+ service-worker.js               |  4 +-
+ src/service-worker.js           |  2 +-
+ src/version.txt                 |  2 +-
+ supabase/README.md              | 35 ++++++++++---
+ supabase/test/m4-m6-m7-test.sql | 90 +++++++++++++++++++++++++++++++++
+ supabase/test/run.sh            | 10 ++++
+ test-classroom-ui.js            | 22 +++++---
+ 9 files changed, 162 insertions(+), 18 deletions(-)
+ create mode 100644 supabase/test/m4-m6-m7-test.sql
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a6514ae..4cf53db 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,13 @@
+ All notable changes to The Last Sysadmin. The game is a single `index.html`;
+ versions below track the content added over time.
+ 
++## v24 — Review fixes: docs, test coverage, offline cache
++- **Self-hosting docs corrected.** `supabase/README.md` and the root `README.md` now list the full migration apply order (`supabase-setup` → m1 → m2 → m4 → m6 → m7); previously only m1 was documented, so a self-hoster would have had broken join-by-code, enroll-by-email, the mission editor, and the scenario builder.
++- **Test coverage extended to M4/M6/M7.** `supabase/test/run.sh` now applies every migration and runs a new suite covering `enroll_by_email` (staff-only, student role forced, idempotent, unknown-email error) and author-isolation of `authored_missions` and `scenarios`. Full suite: M1 (30) + M2 + M4/M6/M7, all passing.
++- **Cache version bumped to v24** so returning/installed (PWA) users pick up all of Phase 1 & 2 (it had been frozen at v23 since M2).
++- **Question bank works offline.** `questions.json` is now in the service-worker precache, so the 1,000-question bank loads in the installed/offline app.
++- *Known gap (not a regression):* authored missions and scenarios are author-only — a teacher can create and group them, but there is no path yet that delivers them to students to *play*. Tracked as a follow-up; built-in missions are fully assignable.
++
+ ## M4 — Teacher dashboard + auto-grading
+ - Classroom panel (teachers) now shows a **Roster** for the first owned class: student name/avatar, tickets passed / assigned, and grade % (passed ÷ assigned).
+ - Completing a mission upserts an `attempts` row (mission_id, passed, ms, hints) so the dashboard has data.
+diff --git a/README.md b/README.md
+index f7d8301..6cd7546 100644
+--- a/README.md
++++ b/README.md
+@@ -100,6 +100,14 @@ Signing in is **optional** — the game plays fully without it, saving progress
+ 2. **Authentication → URL Configuration:** set **Site URL** to your deployed URL (e.g. `https://eriakort.github.io/the-last-sysadmin/`) and add it under **Redirect URLs** too. Without this, the magic-link email sends people to the wrong place.
+ 3. That's it — open the game, click **Sign in**, enter an email, click the link in your inbox.
+ 
++**Classroom features (classes, join codes, assignments, rosters):** these need
++additional migrations beyond `supabase-setup.sql`. Apply the scripts in
++[`supabase/`](supabase/) **in the order given in [`supabase/README.md`](supabase/README.md)**
++— `m1-classroom.sql`, then `m2-enrollment.sql`, `m4-enroll-by-email.sql`,
++`m6-missions.sql`, `m7-scenarios.sql`. Skipping one leaves its feature broken.
++OAuth sign-in (Google / Microsoft / GitHub), if you want it, is enabled under
++**Authentication → Providers** — no SQL needed.
++
+ **Important — email sending limits:** Supabase's built-in email service is **rate-limited to a few messages per hour** and is meant for testing. For real public sign-ups, add a custom SMTP sender (Resend, SendGrid, Postmark, etc.) under **Authentication → Emails / SMTP** in Supabase. Until you do, only a handful of sign-in emails per hour will go out.
+ 
+ **Security notes:**
+diff --git a/service-worker.js b/service-worker.js
+index 6eb0580..3207234 100644
+--- a/service-worker.js
++++ b/service-worker.js
+@@ -1,6 +1,6 @@
+ /* The Last Sysadmin - offline service worker */
+-const CACHE = 'last-sysadmin-v23';
+-const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
++const CACHE = 'last-sysadmin-v24';
++const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
+ self.addEventListener('install', (e) => {
+   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+ });
+diff --git a/src/service-worker.js b/src/service-worker.js
+index 8caec73..f24d15d 100644
+--- a/src/service-worker.js
++++ b/src/service-worker.js
+@@ -1,6 +1,6 @@
+ /* The Last Sysadmin - offline service worker */
+ const CACHE = 'last-sysadmin-v__VERSION__';
+-const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
++const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
+ self.addEventListener('install', (e) => {
+   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+ });
+diff --git a/src/version.txt b/src/version.txt
+index b393560..cabf43b 100644
+--- a/src/version.txt
++++ b/src/version.txt
+@@ -1 +1 @@
+-23
+\ No newline at end of file
++24
+\ No newline at end of file
+diff --git a/supabase/README.md b/supabase/README.md
+index a2339c0..fa817c8 100644
+--- a/supabase/README.md
++++ b/supabase/README.md
+@@ -5,11 +5,28 @@ SQL for the accounts/classroom backend. Apply in your Supabase project via
+ 
+ ## Apply order
+ 
+-1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard). Ship this first (it predates the classroom work).
++Run these **in order**. All are safe to re-run.
++
++1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard).
+ 2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
++3. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
++4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
++5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
++6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
++
++Skipping any of 3–6 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
++
++There is no server code — the game talks to Supabase directly with the anon
++key, and RLS is what keeps tenants apart.
+ 
+-That's all M1 needs. There is no server code yet — the game talks to Supabase
+-directly with the anon key, and RLS is what keeps tenants apart.
++> **OAuth sign-in** (Google / Microsoft / GitHub) is configured in the Supabase
++> dashboard (**Authentication → Providers**), not in SQL. Email + magic-link work
++> with no extra setup.
++
++> **Authoring vs. delivery:** `authored_missions` and `scenarios` are author-only
++> by design today — a teacher can create and group missions, but there is not yet
++> a path that delivers them to students to *play*. That delivery step is a planned
++> follow-up; built-in missions are fully assignable now.
+ 
+ ## What M1 guarantees
+ 
+@@ -20,9 +37,13 @@ directly with the anon key, and RLS is what keeps tenants apart.
+ 
+ ## Testing the policies
+ 
+-`test/` contains an **adversarial RLS test suite** that stands up two teachers,
+-several students, and a TA, then asserts — 30 checks — that each role can read
+-and write exactly what it should and nothing it shouldn't.
++`test/` contains an **adversarial RLS test suite** that stands up teachers,
++students, and a TA, then asserts that each role can read and write exactly what
++it should and nothing it shouldn't. It covers:
++
++- **M1** — tenant isolation across classes, enrollments, assignments, attempts, feedback (30 checks).
++- **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
++- **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
+ 
+ It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
+ recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
+@@ -35,4 +56,4 @@ supabase/test/run.sh
+ # ends with: ALL RLS TESTS PASSED
+ ```
+ 
+-If you change a policy in `m1-classroom.sql`, re-run this before deploying.
++If you change a policy in any migration, re-run this before deploying.
+diff --git a/supabase/test/m4-m6-m7-test.sql b/supabase/test/m4-m6-m7-test.sql
+new file mode 100644
+index 0000000..0341255
+--- /dev/null
++++ b/supabase/test/m4-m6-m7-test.sql
+@@ -0,0 +1,90 @@
++-- M4 / M6 / M7 tests: enroll-by-email, and author-isolation of authored
++-- missions and scenarios. Runs after the M1/M2 suites in the same database and
++-- reuses their test.* helpers. Uses its own identities to avoid collisions.
++
++-- TE = teacher/owner, TS = target student (added by email), OU = outsider,
++-- AU = mission/scenario author, BU = another author
++\set TE 'f1111111-1111-1111-1111-111111111111'
++\set TS 'f2222222-2222-2222-2222-222222222222'
++\set OU 'f3333333-3333-3333-3333-333333333333'
++\set AU 'f4444444-4444-4444-4444-444444444444'
++\set BU 'f5555555-5555-5555-5555-555555555555'
++
++reset role;
++insert into auth.users (id, email) values
++  (:'TE','te@uni.edu'), (:'TS','target@uni.edu'), (:'OU','ou@uni.edu'),
++  (:'AU','au@uni.edu'), (:'BU','bu@uni.edu')
++on conflict do nothing;
++insert into public.profiles (id, display_name, is_teacher) values
++  (:'TE','M4 Prof', true), (:'TS','Target Student', false), (:'OU','Outsider', false),
++  (:'AU','Author One', true), (:'BU','Author Two', true)
++on conflict (id) do update set is_teacher = excluded.is_teacher;
++
++set role authenticated;
++
++-- TE creates a class
++select test.login(:'TE');
++insert into public.classes (id, owner_id, name, join_code, term)
++  values ('fc111111-1111-1111-1111-111111111111', :'TE', 'M4 Class', 'M4CODE', 'F26');
++
++\echo '--- M4: enroll_by_email ---'
++
++-- Staff enrolls a student by email -> ok, and the student appears on the roster
++select test.expect('enroll_by_email returns ok for staff',
++  (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','target@uni.edu') ? 'ok' then 1 else 0 end), 1);
++select test.expect('target is now enrolled as a student',
++  (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TS' and role='student'), 1);
++
++-- Idempotent: calling again doesn't duplicate
++select public.enroll_by_email('fc111111-1111-1111-1111-111111111111','target@uni.edu');
++select test.expect('enroll_by_email is idempotent',
++  (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TS'), 1);
++
++-- Unknown email -> error, no enrollment
++select test.expect('unknown email returns an error',
++  (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','nobody@uni.edu') ? 'error' then 1 else 0 end), 1);
++
++-- A non-staff user cannot enroll anyone into TE's class
++select test.login(:'OU');
++select test.expect('non-staff enroll_by_email is refused',
++  (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','ou@uni.edu') ? 'error' then 1 else 0 end), 1);
++reset role;
++select test.expect('non-staff call created no enrollment',
++  (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'OU'), 0);
++set role authenticated;
++
++\echo '--- M6: authored_missions are author-isolated ---'
++
++-- AU creates a mission
++select test.login(:'AU');
++insert into public.authored_missions (id, author_id, title, objective, check_type, check_arg1)
++  values ('fa111111-1111-1111-1111-111111111111', :'AU', 'Find the log', 'Locate /var/log/app.log', 'file_exists', '/var/log/app.log');
++
++select test.expect('author reads their own mission', (select count(*) from public.authored_missions), 1);
++
++-- BU cannot see AU's mission, cannot insert as AU, cannot modify AU's row
++select test.login(:'BU');
++select test.expect('another author cannot read it', (select count(*) from public.authored_missions), 0);
++select test.expect_denied('cannot insert a mission authored as someone else',
++  $q$ insert into public.authored_missions (author_id,title,objective,check_type) values ('f4444444-4444-4444-4444-444444444444','x','y','file_exists') $q$);
++update public.authored_missions set title='hacked' where id='fa111111-1111-1111-1111-111111111111'; -- 0 rows under RLS
++reset role;
++select test.expect('another author could not modify it',
++  (select count(*) from public.authored_missions where id='fa111111-1111-1111-1111-111111111111' and title='Find the log'), 1);
++set role authenticated;
++
++\echo '--- M7: scenarios are author-isolated ---'
++
++select test.login(:'AU');
++insert into public.scenarios (id, author_id, title, mission_ids)
++  values ('fb111111-1111-1111-1111-111111111111', :'AU', 'Week 1 set', array['fa111111-1111-1111-1111-111111111111']::uuid[]);
++select test.expect('author reads their own scenario', (select count(*) from public.scenarios), 1);
++
++select test.login(:'BU');
++select test.expect('another author cannot read the scenario', (select count(*) from public.scenarios), 0);
++select test.expect_denied('cannot insert a scenario authored as someone else',
++  $q$ insert into public.scenarios (author_id,title) values ('f4444444-4444-4444-4444-444444444444','x') $q$);
++
++reset role;
++\echo ''
++\echo 'ALL M4/M6/M7 TESTS PASSED'
+diff --git a/supabase/test/run.sh b/supabase/test/run.sh
+index 1c30c8a..b4a410b 100755
+--- a/supabase/test/run.sh
++++ b/supabase/test/run.sh
+@@ -39,12 +39,22 @@ run "$REPO/supabase/m2-enrollment.sql" >/dev/null
+ echo "Re-applying m2-enrollment.sql (idempotency check)..."
+ run "$REPO/supabase/m2-enrollment.sql" >/dev/null 2>&1
+ 
++for m in m4-enroll-by-email m6-missions m7-scenarios; do
++  echo "Applying $m.sql..."
++  run "$REPO/supabase/$m.sql" >/dev/null
++  echo "Re-applying $m.sql (idempotency check)..."
++  run "$REPO/supabase/$m.sql" >/dev/null 2>&1
++done
++
+ echo "Running adversarial RLS tests (M1)..."
+ "${PSQL[@]}" -d "$DB" -f "$HERE/m1-rls-test.sql"
+ 
+ echo "Running join-by-code tests (M2)..."
+ "${PSQL[@]}" -d "$DB" -f "$HERE/m2-enroll-test.sql"
+ 
++echo "Running enroll-by-email + authoring-isolation tests (M4/M6/M7)..."
++"${PSQL[@]}" -d "$DB" -f "$HERE/m4-m6-m7-test.sql"
++
+ echo
+ echo "Cleaning up..."
+ "${ADMIN[@]}" -c "drop database if exists $DB with (force);" >/dev/null
+diff --git a/test-classroom-ui.js b/test-classroom-ui.js
+index 3c3b5be..b572956 100644
+--- a/test-classroom-ui.js
++++ b/test-classroom-ui.js
+@@ -76,16 +76,23 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
+   // Open classroom
+   await page.click('#setClassroom');
+   await page.waitForTimeout(250);
+-  if (await page.$('#cxJoin')) ok('Classroom panel renders (join UI present)');
++  if (await page.$('#cxJoin')) ok('Classroom panel renders (Join tab present)');
+   else fail('classroom panel did not render');
+-  // teacher (stub is_teacher=true) should see create form + owned class with code
+-  if (await page.$('#cxCreate')) ok('Teacher sees create-class form'); else fail('no create form for teacher');
+-  const codeShown = await page.$$eval('.cx-code', els => els.map(e => e.textContent));
+-  if (codeShown.includes('ABC123')) ok('Owned class shows its join code'); else fail('join code not shown: ' + JSON.stringify(codeShown));
++  // classroom is tabbed (Join / My dashboard / Teach / Question bank)
++  const tabs = await page.$$eval('#cxTabs [data-cxtab]', els => els.map(e => e.dataset.cxtab));
++  if (['join', 'teach'].every(t => tabs.includes(t))) ok('Classroom tabs present (' + tabs.join(', ') + ')');
++  else fail('expected Join/Teach tabs, got: ' + JSON.stringify(tabs));
++  // Enrolled class shows in the Join tab (textContent includes it even before switching)
+   const enrolledTxt = await page.textContent('#raceContent');
+   if (/Intro Linux/.test(enrolledTxt)) ok('Enrolled class listed'); else fail('enrolled class not listed');
++  // Switch to the Teach tab: teacher should see the create form + owned class code
++  await page.click('#cxTabs [data-cxtab="teach"]'); await page.waitForTimeout(150);
++  if (await page.$('#cxCreate')) ok('Teacher sees create-class form in Teach tab'); else fail('no create form in Teach tab');
++  const codeShown = await page.$$eval('.cx-code', els => els.map(e => e.textContent));
++  if (codeShown.includes('ABC123')) ok('Owned class shows its join code'); else fail('join code not shown: ' + JSON.stringify(codeShown));
+ 
+-  // Join by code
++  // Join by code (Join tab is the default)
++  await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
+   await page.fill('#cxCode', ' abc 123 ');
+   await page.click('#cxJoin');
+   await page.waitForTimeout(200);
+@@ -94,9 +101,10 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
+   if (rpc && rpc[1] === 'enroll_by_code' && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
+   else fail('rpc enroll_by_code not called correctly: ' + JSON.stringify(rpc));
+ 
+-  // Create class
++  // Create class (in the Teach tab)
+   await page.click('#btnSettings'); await page.waitForTimeout(120);
+   await page.click('#setClassroom'); await page.waitForTimeout(250);
++  await page.click('#cxTabs [data-cxtab="teach"]'); await page.waitForTimeout(150);
+   await page.fill('#cxName', 'New Course');
+   await page.click('#cxCreate');
+   await page.waitForTimeout(250);
+-- 
+2.43.0
+
