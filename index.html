@@ -5674,6 +5674,17 @@ async function addFeedback(classId, studentId, body) {
   const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
   return sb.from('feedback').insert({ class_id: classId, student_id: studentId, author_id: authUser.id, body: body.trim() });
 }
+async function loadMyScenarios() {
+  const sb = await getSB(); if (!sb || !authUser) return [];
+  try {
+    const { data, error } = await sb.from('scenarios').select('id, title, mission_ids, created_at').eq('author_id', authUser.id).order('created_at', { ascending: false });
+    return error ? [] : (data || []);
+  } catch (e) { return []; }
+}
+async function createScenario(title, missionIds) {
+  const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
+  return sb.from('scenarios').insert({ title: title.trim(), mission_ids: missionIds, author_id: authUser.id });
+}
 async function loadMyMissions() {
   const sb = await getSB(); if (!sb || !authUser) return [];
   try {
@@ -5791,6 +5802,15 @@ async function openClassroom() {
            <input id="mArg2" type="text" placeholder="Arg 2 (text, regex, or state) — optional">
            <button class="btn primary" id="mCreate" type="button">Save mission</button>
          </div>`;
+      const scns = await loadMyScenarios();
+      assignHtml += `<div class="rlabel" style="margin-top:14px">Scenarios</div>
+        <p class="cx-dim" style="margin:0 0 6px">Group authored missions into a scenario, then paste its id into an assignment.</p>` +
+        (scns.length ? scns.map(s => `<div class="cx-item"><div><b>${esc(s.title)}</b> <span class="cx-dim">· ${(s.mission_ids||[]).length} missions</span><br><code class="cx-dim">${esc(s.id)}</code></div></div>`).join('') : '<p class="cx-dim">No scenarios yet.</p>') +
+        `<div class="cx-form" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+           <input id="scTitle" type="text" placeholder="Scenario title">
+           <input id="scMissions" type="text" placeholder="Mission ids, comma-separated">
+           <button class="btn primary" id="scCreate" type="button">Save scenario</button>
+         </div>`;
     }
     let dashHtml = '';
     if (d.owned.length) {
@@ -5904,6 +5924,16 @@ async function openClassroom() {
     openClassroom();
   });
   const cc = $('#cxCreate'); if (cc) cc.addEventListener('click', cxDoCreate);
+  const scBtn = $('#scCreate');
+  if (scBtn) scBtn.addEventListener('click', async () => {
+    const title = ($('#scTitle')||{}).value?.trim() || '';
+    const mids = (($('#scMissions')||{}).value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const er = $('#cxErr');
+    if (!title || !mids.length) { if (er) { er.hidden = false; er.textContent = 'Title and at least one mission id required.'; } return; }
+    const { error } = await createScenario(title, mids);
+    if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
+    openClassroom();
+  });
   const mBtn = $('#mCreate');
   if (mBtn) mBtn.addEventListener('click', async () => {
     const title = ($('#mTitle')||{}).value?.trim() || '';
