@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Networking Trainer — prototype</title><style>
+:root{--bg:#0f141c;--panel:#161d28;--raise:#1d2634;--line:#2a3545;--ink:#e6ecf5;--muted:#8da1bd;--amber:#f2b04b;--good:#7dff9e;--bad:#ff8080;--host:#3b82f6;--switch:#8b5cf6;--router:#f2b04b;--fw:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+#app{display:grid;grid-template-columns:320px 1fr 320px;gap:0;height:100vh}
+aside{background:var(--panel);overflow:auto;padding:16px;border-left:1px solid var(--line);border-right:1px solid var(--line)}
+#brief{border-left:none}
+main{display:flex;flex-direction:column;min-width:0}
+#topoWrap{flex:1;overflow:auto;padding:16px;display:flex;align-items:center;justify-content:center}
+svg#topo{max-width:100%;height:auto}
+.edge{stroke:#44506a;stroke-width:2}
+.edge.down{stroke:var(--bad);stroke-dasharray:5 4}
+.node{cursor:pointer}
+.node rect{fill:var(--raise);stroke:#3a475c;stroke-width:1.5}
+.node.sel rect{stroke:var(--amber);stroke-width:2.5}
+.node.k-host rect{stroke:var(--host)}.node.k-switch rect{stroke:var(--switch)}.node.k-router rect{stroke:var(--router)}.node.k-fw rect{stroke:var(--fw)}
+.n-id{fill:var(--ink);font-size:13px;font-weight:600}
+.n-sub{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
+#term{height:40%;min-height:180px;border-top:1px solid var(--line);background:#0b0f16;display:flex;flex-direction:column}
+#tout{flex:1;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe}
+.tline{display:flex;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--line)}
+.tline span{color:var(--amber);font-family:ui-monospace,monospace}
+#tin{flex:1;background:transparent;border:none;color:var(--ink);font:13px ui-monospace,monospace;outline:none}
+h1{font-size:20px;margin:6px 0}
+.eyebrow{color:var(--amber);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.story{color:var(--muted)}
+.label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:14px 0 4px}
+.label2{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px}
+.dim{color:var(--muted)}
+.row{display:flex;gap:8px;margin-top:12px}
+.btn{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
+.btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}
+.btn.sm{padding:4px 8px;font-size:12px}
+select,input{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 7px;font:inherit}
+#pick{width:100%;margin-bottom:10px}
+.ifrow,.rrow,.addrow{display:flex;gap:5px;align-items:center;margin:4px 0;flex-wrap:wrap;font-family:ui-monospace,monospace;font-size:12.5px}
+.ifrow .ip{width:110px}.ifn{color:var(--amber);width:38px}
+.up{display:flex;align-items:center;gap:3px;color:var(--muted);font-size:11px}
+.rrow{color:var(--ink)}
+.x{background:none;border:none;color:var(--bad);cursor:pointer;font-size:12px}
+.addrow input{flex:1;min-width:70px}
+#status{margin-top:12px;padding:10px;border-radius:8px;font-size:13px}
+#status.ok{background:rgba(125,255,158,.1);border:1px solid var(--good);color:var(--good)}
+#status.bad{background:rgba(255,128,128,.08);border:1px solid #5a3b3b;color:#ffbcbc}
+#status ul{margin:6px 0 0;padding-left:18px}
+@media(max-width:900px){#app{grid-template-columns:1fr;height:auto}aside{max-height:none}}
+</style></head>
+<body><div id="app"></div><script>
+// ---- tiny CommonJS shim ----
+var __mods = {};
+function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
+function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
+__def("./net-model", function(module, exports, require){
+// Networking Trainer — M1 engine spike.
+// Pure, headless network model + forwarding engine. No DOM, no UI.
+// IPs are stored as unsigned 32-bit integers so subnet math is bitwise.
+
+/* ---------- IP / subnet math ---------- */
+const ip = s => { const p = String(s).split('.').map(Number); return (((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0); };
+const ipStr = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+const maskOf = prefix => (prefix <= 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0);
+const networkOf = (addr, prefix) => (addr & maskOf(prefix)) >>> 0;
+const sameNet = (a, b, prefix) => networkOf(a, prefix) === networkOf(b, prefix);
+// parse "10.0.1.0/24" -> { net, prefix }
+const cidr = s => { const [a, p] = String(s).split('/'); return { net: networkOf(ip(a), Number(p)), prefix: Number(p) }; };
+
+/* ---------- topology helpers ---------- */
+// Is a device interface present and up?
+function ifaceUp(net, dev, name) {
+  const d = net.devices[dev]; const f = d && d.ifaces && d.ifaces[name];
+  return !!(f && f.up !== false);
+}
+// The interface on the other end of the link from (dev, name), if the link and both ends are up.
+function neighbor(net, dev, name) {
+  for (const l of net.links) {
+    if (l.up === false) continue;
+    const match = (l.a[0] === dev && l.a[1] === name) ? l.b
+      : (l.b[0] === dev && l.b[1] === name) ? l.a : null;
+    if (match && ifaceUp(net, dev, name) && ifaceUp(net, match[0], match[1])) return match.slice();
+  }
+  return null;
+}
+// All host/router interfaces in the same L2 broadcast domain as (startDev, startIface).
+// Switches are transparent (we expand to their other ports in the same VLAN);
+// hosts and routers are endpoints (we don't forward through them at L2).
+function l2Domain(net, startDev, startIface) {
+  const endpoints = [], seen = new Set();
+  const first = neighbor(net, startDev, startIface);
+  if (!first) return endpoints;
+  const stack = [first];
+  while (stack.length) {
+    const [d, i] = stack.pop(); const key = d + '|' + i;
+    if (seen.has(key)) continue; seen.add(key);
+    const dev = net.devices[d]; if (!dev) continue;
+    if (dev.kind === 'switch') {
+      const vlan = dev.ifaces[i] ? (dev.ifaces[i].vlan ?? null) : null;
+      for (const p in dev.ifaces) {
+        if (p === i || dev.ifaces[p].up === false) continue;
+        if ((dev.ifaces[p].vlan ?? null) !== vlan) continue;   // VLAN segmentation
+        const nb = neighbor(net, d, p); if (nb) stack.push(nb);
+      }
+    } else {
+      endpoints.push([d, i]);
+    }
+  }
+  return endpoints;
+}
+
+/* ---------- device lookups ---------- */
+const ownsIp = (dev, addr) => Object.values(dev.ifaces || {}).some(f => f.up !== false && f.ip === addr);
+function directIface(dev, addr) {                 // iface whose subnet contains addr
+  for (const name in dev.ifaces) {
+    const f = dev.ifaces[name];
+    if (f.up === false || f.ip == null) continue;
+    if (sameNet(f.ip, addr, f.mask)) return name;
+  }
+  return null;
+}
+function routeLookup(dev, addr) {                 // longest-prefix match
+  let best = null;
+  for (const r of dev.routes || []) if (sameNet(addr, r.dest, r.mask)) if (!best || r.mask > best.mask) best = r;
+  return best;
+}
+function deviceOwning(net, addr) {
+  for (const id in net.devices) if (ownsIp(net.devices[id], addr)) return id;
+  return null;
+}
+
+/* ---------- ACLs (inbound, first match wins, default allow) ---------- */
+function aclMatch(rule, dir, iface, pkt) {
+  if (rule.any) return true;
+  if (rule.dir && rule.dir !== dir) return false;
+  if (rule.dev && rule.dev !== iface) return false;
+  if (rule.proto && rule.proto !== pkt.proto) return false;
+  if (rule.dport != null && rule.dport !== pkt.dport) return false;
+  if (rule.src != null && rule.src !== pkt.src) return false;
+  return true;
+}
+function aclDecision(dev, dir, iface, pkt) {
+  for (const r of dev.acls || []) if (aclMatch(r, dir, iface, pkt)) return r.action;
+  return 'allow';
+}
+
+/* ---------- the forwarding engine ---------- */
+// Walk a packet hop by hop from srcDev toward pkt.dst. Returns
+// { ok, path:[deviceIds], reason, at? }. Every reason is a teachable failure.
+function forward(net, srcDev, pkt, opts = {}) {
+  const ttl = opts.ttl || 16, dst = pkt.dst, path = [];
+  let cur = srcDev;
+  for (let hop = 0; hop < ttl; hop++) {
+    const dev = net.devices[cur];
+    if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
+    path.push(cur);
+    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered' };
+
+    const eg = directIface(dev, dst);
+    if (eg) {                                      // destination is on a directly-connected subnet
+      const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === dst && net.devices[d].ifaces[i].up !== false);
+      if (!ep) return { ok: false, path, reason: 'no host with that address on the segment', at: cur };
+      const [dd, di] = ep;
+      if (aclDecision(net.devices[dd], 'in', di, pkt) === 'deny') return { ok: false, path: path.concat(dd), reason: 'blocked by ACL', at: dd };
+      return { ok: true, path: path.concat(dd), reason: 'delivered' };
+    }
+
+    const r = routeLookup(dev, dst);               // otherwise route it
+    if (!r) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
+    const gwIface = directIface(dev, r.via);
+    if (!gwIface) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
+    const gw = l2Domain(net, cur, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
+    if (!gw) return { ok: false, path, reason: 'gateway ' + ipStr(r.via) + ' unreachable', at: cur };
+    const [nd, ni] = gw;
+    if (aclDecision(net.devices[nd], 'in', ni, pkt) === 'deny') return { ok: false, path: path.concat(nd), reason: 'blocked by ACL', at: nd };
+    cur = nd;                                      // advance to next hop
+  }
+  return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
+}
+
+// The source address a device would use to reach dst (for reply packets).
+function sourceIpToward(net, devId, dst) {
+  const d = net.devices[devId];
+  const di = directIface(d, dst); if (di) return d.ifaces[di].ip;
+  const r = routeLookup(d, dst); if (r) { const gi = directIface(d, r.via); if (gi) return d.ifaces[gi].ip; }
+  for (const n in d.ifaces) if (d.ifaces[n].ip != null) return d.ifaces[n].ip;
+  return null;
+}
+
+// A full round trip (like ICMP echo): request must arrive AND the reply must come back.
+// Catches asymmetric ACLs / missing return routes, which pure one-way reachability misses.
+function ping(net, srcDev, dst, base = {}) {
+  const proto = base.proto || 'icmp', dport = base.dport;
+  const srcIp = sourceIpToward(net, srcDev, dst);
+  const fwd = forward(net, srcDev, { src: srcIp, dst, proto, dport });
+  if (!fwd.ok) return { ok: false, dir: 'request', reason: fwd.reason, forward: fwd };
+  const dstDev = deviceOwning(net, dst);
+  if (!dstDev) return { ok: false, dir: 'request', reason: 'no such host' };
+  const rev = forward(net, dstDev, { src: dst, dst: srcIp, proto, dport });
+  return { ok: rev.ok, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
+}
+
+module.exports = {
+  ip, ipStr, maskOf, networkOf, sameNet, cidr,
+  neighbor, l2Domain, ownsIp, directIface, routeLookup, deviceOwning,
+  aclDecision, forward, ping, sourceIpToward
+};
+
+});
+__def("./net-checks", function(module, exports, require){
+// Mission checks — pure functions of the model that return { ok, reason }.
+// These are what a mission's success criteria are built from, and what the
+// no-code mission editor would expose. Direct parallel to the sysadmin checkers.
+const M = require('./net-model');
+
+// Primary address of a device (first up interface with an IP).
+function primaryIp(dev) {
+  for (const n in dev.ifaces) { const f = dev.ifaces[n]; if (f.up !== false && f.ip != null) return f.ip; }
+  return null;
+}
+
+// Host A can reach host B (round trip), optionally for a specific proto/port.
+function reachable(net, aId, bId, base = {}) {
+  const b = net.devices[bId]; if (!b) return { ok: false, reason: `no device ${bId}` };
+  const dst = primaryIp(b); if (dst == null) return { ok: false, reason: `${bId} has no IP` };
+  const r = M.ping(net, aId, dst, base);
+  return { ok: r.ok, reason: r.ok ? `${aId} reaches ${bId}` : `${aId} cannot reach ${bId}: ${r.reason}` };
+}
+function notReachable(net, aId, bId, base = {}) {
+  const r = reachable(net, aId, bId, base);
+  return { ok: !r.ok, reason: r.ok ? `${aId} can reach ${bId} but should not` : `${aId} correctly cannot reach ${bId}` };
+}
+
+// Device has a route covering the given CIDR (e.g. "10.0.2.0/24").
+function routeExists(net, devId, cidrStr) {
+  const d = net.devices[devId]; if (!d) return { ok: false, reason: `no device ${devId}` };
+  const c = M.cidr(cidrStr);
+  const hit = (d.routes || []).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
+  return { ok: hit, reason: hit ? `${devId} has a route to ${cidrStr}` : `${devId} has no route to ${cidrStr}` };
+}
+
+// An interface has an address inside the intended CIDR.
+function subnetCorrect(net, devId, ifaceName, cidrStr) {
+  const d = net.devices[devId]; const f = d && d.ifaces[ifaceName];
+  if (!f) return { ok: false, reason: `no interface ${devId}/${ifaceName}` };
+  const c = M.cidr(cidrStr);
+  const ok = f.ip != null && f.mask === c.prefix && M.networkOf(f.ip, c.prefix) === c.net;
+  return { ok, reason: ok ? `${devId}/${ifaceName} is correctly in ${cidrStr}` : `${devId}/${ifaceName} (${f.ip == null ? 'unset' : M.ipStr(f.ip) + '/' + f.mask}) is not in ${cidrStr}` };
+}
+
+// A firewall/host blocks a specific packet from a source host to a destination IP.
+function aclBlocks(net, srcId, dstCidrOrIp, pkt) {
+  const dst = typeof dstCidrOrIp === 'number' ? dstCidrOrIp : M.ip(dstCidrOrIp);
+  const r = M.forward(net, srcId, { src: M.sourceIpToward(net, srcId, dst), dst, proto: pkt.proto, dport: pkt.dport });
+  const blocked = !r.ok && /ACL/.test(r.reason);
+  return { ok: blocked, reason: blocked ? `traffic is blocked (${r.reason} at ${r.at})` : `traffic was NOT blocked (${r.reason})` };
+}
+
+// A device is offering a service on a port.
+function serviceUp(net, devId, port) {
+  const d = net.devices[devId];
+  const ok = !!(d && d.services && d.services[port]);
+  return { ok, reason: ok ? `${devId} offers ${d.services[port]} on ${port}` : `${devId} has no service on port ${port}` };
+}
+
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp };
+
+});
+__def("./net-cli", function(module, exports, require){
+// Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
+// Headless and testable: a CLI is bound to a world (`net`) and a "current
+// device" (the console you're on). run(line) returns { out, code } and may
+// mutate the model. The terminal UI is a later layer; this is the brain.
+const M = require('./net-model');
+
+const primaryIp = dev => { for (const n in dev.ifaces) { const f = dev.ifaces[n]; if (f.up !== false && f.ip != null) return f.ip; } return null; };
+// Resolve a token to an IP int: a device id (-> its primary IP) or a dotted address.
+function resolve(net, token) {
+  if (net.devices[token]) return primaryIp(net.devices[token]);
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(token)) return M.ip(token);
+  return null;
+}
+const ok = s => ({ out: s, code: 0 });
+const err = s => ({ out: s, code: 1 });
+
+function makeCLI(net, cur) {
+  const cli = { net, cur, lastPing: null, on(id) { this.cur = id; return this; } };
+  cli.run = line => dispatch(cli, String(line).trim());
+  return cli;
+}
+
+function dispatch(cli, line) {
+  if (!line) return ok('');
+  const a = line.split(/\s+/); const cmd = a[0];
+  const H = COMMANDS[cmd];
+  if (!H) return err(`${cmd}: command not found (try 'help')`);
+  return H(cli, a.slice(1));
+}
+
+/* ---------------- commands ---------------- */
+const COMMANDS = {
+  help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>'),
+
+  man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
+
+  ip: (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    const sub = a[0];
+    if (sub === 'addr' || sub === 'a' || sub === 'address') {
+      if (a[1] === 'add') {                                   // ip addr add 10.0.1.10/24 dev eth0
+        const m = /^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/.exec(a[2] || '');
+        const di = a.indexOf('dev'); const ifn = di >= 0 ? a[di + 1] : null;
+        if (!m || !ifn) return err('usage: ip addr add <A.B.C.D>/<prefix> dev <iface>');
+        dev.ifaces[ifn] = { ...(dev.ifaces[ifn] || {}), ip: M.ip(m[1]), mask: Number(m[2]), up: true };
+        return ok('');
+      }
+      const lines = Object.entries(dev.ifaces).map(([n, f]) =>
+        `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : '(no address)'}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
+      return ok(lines.join('\n'));
+    }
+    if (sub === 'route' || sub === 'r') {
+      if (a[1] === 'add') {                                    // ip route add default via 10.0.1.1  |  ip route add 10.0.3.0/24 via 10.0.12.2
+        const vi = a.indexOf('via'); if (vi < 0) return err('usage: ip route add <default|CIDR> via <gateway>');
+        const via = M.ip(a[vi + 1]);
+        dev.routes = dev.routes || [];
+        if (a[2] === 'default') dev.routes.push({ dest: 0, mask: 0, via });
+        else { const c = M.cidr(a[2]); dev.routes.push({ dest: c.net, mask: c.prefix, via }); }
+        return ok('');
+      }
+      if (a[1] === 'del' || a[1] === 'delete') {
+        const target = a[2];
+        dev.routes = (dev.routes || []).filter(r => routeLabel(cli.net, cli.cur, r) !== target && !(target === 'default' && r.mask === 0));
+        return ok('');
+      }
+      const rs = (dev.routes || []).map(r => routeLabel(cli.net, cli.cur, r));
+      return ok(rs.length ? rs.join('\n') : '(no routes)');
+    }
+    if (sub === 'neigh' || sub === 'neighbor') return COMMANDS.arp(cli, []);
+    return err(`ip: unknown object '${sub || ''}'`);
+  },
+
+  arp: cli => {
+    const dev = cli.net.devices[cli.cur]; const seen = {};
+    for (const ifn in dev.ifaces) {
+      const f = dev.ifaces[ifn]; if (f.up === false || f.ip == null) continue;
+      for (const [d, i] of M.l2Domain(cli.net, cli.cur, ifn)) {
+        const nf = cli.net.devices[d].ifaces[i];
+        if (nf.ip != null) seen[M.ipStr(nf.ip)] = `${M.ipStr(nf.ip)} dev ${ifn} (${d})`;
+      }
+    }
+    const rows = Object.values(seen);
+    return ok(rows.length ? rows.join('\n') : '(no neighbours learned)');
+  },
+
+  ping: (cli, a) => {
+    const t = a[0]; if (!t) return err('usage: ping <host|ip>');
+    const dst = resolve(cli.net, t); if (dst == null) return err(`ping: cannot resolve ${t}`);
+    const base = {};
+    const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
+    const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
+    const r = M.ping(cli.net, cli.cur, dst, base);
+    cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
+    const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
+    if (r.ok) return ok(`PING ${t} (${M.ipStr(dst)}): reply received — reachable\npath: ${path}`);
+    return err(`PING ${t} (${M.ipStr(dst)}): ${r.reason}\npath: ${path}`);
+  },
+
+  traceroute: (cli, a) => {
+    const t = a[0]; if (!t) return err('usage: traceroute <host|ip>');
+    const dst = resolve(cli.net, t); if (dst == null) return err(`traceroute: cannot resolve ${t}`);
+    const src = M.sourceIpToward(cli.net, cli.cur, dst);
+    const f = M.forward(cli.net, cli.cur, { src, dst, proto: 'icmp' });
+    const lines = f.path.map((d, i) => {
+      const dev = cli.net.devices[d]; const inIf = M.directIface(dev, src) || Object.keys(dev.ifaces)[0];
+      const hopIp = dev.ifaces[inIf] && dev.ifaces[inIf].ip != null ? M.ipStr(dev.ifaces[inIf].ip) : '*';
+      return ` ${i + 1}  ${d}  ${hopIp}`;
+    });
+    if (!f.ok) lines.push(` *  ${f.reason}`);
+    return { out: `traceroute to ${t} (${M.ipStr(dst)})\n` + lines.join('\n'), code: f.ok ? 0 : 1 };
+  },
+
+  tcpdump: cli => {
+    const p = cli.lastPing;
+    if (!p) return ok('(no packets captured — run a ping first)');
+    const proto = p.proto.toUpperCase();
+    const svc = p.dport ? ` ${proto} ${M.ipStr(p.dst)}.${p.dport}` : ` ${proto}`;
+    const lines = [`${M.ipStr(p.src)} > ${M.ipStr(p.dst)}:${svc} request`];
+    if (p.ok) lines.push(`${M.ipStr(p.dst)} > ${M.ipStr(p.src)}:${svc} reply`);
+    else lines.push(`(no reply — delivery failed along ${p.path.join(' -> ')})`);
+    return ok(lines.map(l => 'IP ' + l).join('\n'));
+  },
+
+  iptables: (cli, a) => {
+    const dev = cli.net.devices[cli.cur]; dev.acls = dev.acls || [];
+    if (a[0] === '-L' || a[0] === '--list') {
+      if (!dev.acls.length) return ok('Chain INPUT (policy ACCEPT)\n  (no rules)');
+      const rows = dev.acls.map(r => `  ${r.action === 'deny' ? 'DROP' : 'ACCEPT'}  ${r.proto || 'all'}  in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${r.dport != null ? ' dpt:' + r.dport : ''}${r.any ? '  anywhere' : ''}`);
+      return ok('Chain INPUT\n' + rows.join('\n'));
+    }
+    if (a[0] === '-A') {                                       // iptables -A INPUT -i eth0 -p tcp --dport 23 -j DROP
+      const get = flag => { const i = a.indexOf(flag); return i >= 0 ? a[i + 1] : null; };
+      const chain = a[1];
+      if (!/^INPUT$|^IN$/i.test(chain || '')) return err('this prototype supports the INPUT chain only');
+      const rule = { dir: 'in', dev: get('-i') || undefined };
+      const proto = get('-p'); if (proto) rule.proto = proto;
+      const dport = get('--dport'); if (dport) rule.dport = Number(dport);
+      const src = get('-s'); if (src) rule.src = M.ip(src);
+      const j = get('-j'); rule.action = /DROP|REJECT/i.test(j || '') ? 'deny' : 'allow';
+      dev.acls.push(rule);
+      return ok('');
+    }
+    if (a[0] === '-F') { dev.acls = []; return ok(''); }
+    return err('usage: iptables -L | -A INPUT -i <if> [-p tcp] [--dport N] -j DROP|ACCEPT | -F');
+  },
+
+  nmap: (cli, a) => {                                          // read-only, defensive: what is this host exposing?
+    const t = a[0]; if (!t) return err('usage: nmap <host|ip>');
+    const dst = resolve(cli.net, t); if (dst == null) return err(`nmap: cannot resolve ${t}`);
+    const owner = M.deviceOwning(cli.net, dst);
+    if (!owner) return ok(`Host ${M.ipStr(dst)} seems down (no such host).`);
+    const reach = M.ping(cli.net, cli.cur, dst);
+    if (!reach.ok) return ok(`Host ${M.ipStr(dst)} is unreachable from here (${reach.reason}).`);
+    const svcs = cli.net.devices[owner].services || {};
+    const ports = Object.keys(svcs);
+    const body = ports.length ? ports.map(p => `${p}/tcp  open  ${svcs[p]}`).join('\n') : '(no open ports)';
+    return ok(`Scan report for ${t} (${M.ipStr(dst)}) — host is up\nPORT     STATE SERVICE\n${body}`);
+  }
+};
+
+function routeLabel(net, cur, r) {
+  const dev = net.devices[cur]; const di = M.directIface(dev, r.via);
+  const dest = r.mask === 0 ? 'default' : `${M.ipStr(r.dest)}/${r.mask}`;
+  return `${dest} via ${M.ipStr(r.via)}${di ? ' dev ' + di : ''}`;
+}
+
+const MAN = {
+  ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      give an interface an address\n  ip route                    show the routing table\n  ip route add default via G  set a default gateway\n  ip route add CIDR via G     add a static route',
+  ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
+  traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
+  iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic.\n  Rules match top-down, first match wins.',
+  nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
+  tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
+  arp: 'arp — show the neighbours learned on each interface (same L2 segment).'
+};
+
+module.exports = { makeCLI, resolve, primaryIp };
+
+});
+__def("./net-mission", function(module, exports, require){
+// Networking Trainer — M3: the mission layer.
+// A mission is DATA: a starting topology + a list of declarative checks. The
+// runner builds the world, binds a CLI, and grades the checks after any command.
+// Same shape as the sysadmin game's missions and its authored-mission check types,
+// so a no-code mission editor can emit these directly.
+const C = require('./net-checks');
+const { makeCLI } = require('./net-cli');
+
+// Map a declarative check spec -> a { ok, reason } result.
+function evalCheck(net, s) {
+  const opt = {}; if (s.proto) opt.proto = s.proto; if (s.dport != null) opt.dport = s.dport;
+  switch (s.type) {
+    case 'reachable':      return C.reachable(net, s.a, s.b, opt);
+    case 'not_reachable':  return C.notReachable(net, s.a, s.b, opt);
+    case 'route_exists':   return C.routeExists(net, s.dev, s.cidr);
+    case 'subnet_correct': return C.subnetCorrect(net, s.dev, s.iface, s.cidr);
+    case 'acl_blocks':     return C.aclBlocks(net, s.src, s.dst, { proto: s.proto, dport: s.dport });
+    case 'service_up':     return C.serviceUp(net, s.dev, s.port);
+    default:               return { ok: false, reason: `unknown check type: ${s.type}` };
+  }
+}
+
+// Start a mission: fresh world + a console on the starting device.
+function startMission(mission) {
+  const net = mission.build();
+  const cli = makeCLI(net, mission.console);
+  const api = {
+    net, cli, mission,
+    run: line => cli.run(line),
+    on: dev => { cli.on(dev); return api; },
+    results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
+    done: () => api.results().every(r => r.ok),
+    // The `check` command: what's still unmet and why (the teaching moment).
+    status() {
+      const unmet = api.results().filter(r => !r.ok);
+      return unmet.length
+        ? 'Not resolved yet:\n' + unmet.map(r => '  ✗ ' + r.reason).join('\n')
+        : '✓ All objectives met — ticket resolved.';
+    }
+  };
+  return api;
+}
+
+module.exports = { evalCheck, startMission };
+
+});
+__def("./net-chapters", function(module, exports, require){
+// Networking Trainer — M3: the first chapters (text-only, no UI).
+// Each mission is a starting topology (`build`) + declarative `success` checks,
+// plus a reference `solution` (console device + commands) used to prove the
+// mission is solvable and as an authoring aid. The real game never shows it.
+const M = require('./net-model');
+const { ip } = M;
+
+const H = (id, a, p, gw) => ({ id, kind: 'host', ifaces: { eth0: a ? { ip: ip(a), mask: p, up: true } : { up: true } }, routes: gw ? [{ dest: 0, mask: 0, via: ip(gw) }] : [] });
+const SRV = (id, a, p, gw, services) => ({ ...H(id, a, p, gw), services });
+const SW = (id, ports) => ({ id, kind: 'switch', ifaces: Object.fromEntries(ports.map(x => [x.n, { up: true, ...(x.v != null ? { vlan: x.v } : {}) }])) });
+const R = (id, kind, ifaces, routes, acls) => ({ id, kind, ifaces, routes: routes || [], acls: acls || [] });
+const iface = (a, p) => ({ ip: ip(a), mask: p, up: true });
+const L = (a, ai, b, bi) => ({ a: [a, ai], b: [b, bi], up: true });
+
+const chapters = [
+
+  { id: 'first-contact', chapter: 'Getting on the network',
+    title: 'First contact',
+    story: 'A new workstation h1 is plugged into the office switch but it has never been configured. The file server at 10.0.1.5 is on the same switch.',
+    objective: 'Give h1 an address in the 10.0.1.0/24 network, then confirm it can reach the server.',
+    console: 'h1',
+    hints: ['`ip addr` shows h1 has an interface but no address.', 'Pick any free address in 10.0.1.0/24, e.g. 10.0.1.10, mask /24.', 'Run `ip addr add 10.0.1.10/24 dev eth0`, then `ping srv`.'],
+    build: () => ({
+      devices: { h1: H('h1'), srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['h1', 'ip addr add 10.0.1.10/24 dev eth0']]
+  },
+
+  { id: 'wrong-subnet', chapter: 'Subnetting',
+    title: 'The typo in the address',
+    story: 'h1 was configured, but someone fat-fingered the address and now it can\'t reach the server at 10.0.1.5.',
+    objective: 'Fix h1\'s address so it is in the same 10.0.1.0/24 network as the server.',
+    console: 'h1',
+    hints: ['`ip addr` shows h1 is in the wrong network.', '10.0.9.x and 10.0.1.x are different /24 networks — they can\'t talk directly.', 'Re-address: `ip addr add 10.0.1.10/24 dev eth0`.'],
+    build: () => ({
+      devices: { h1: H('h1', '10.0.9.10', 24), srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['h1', 'ip addr add 10.0.1.10/24 dev eth0']]
+  },
+
+  { id: 'find-the-gateway', chapter: 'Routing',
+    title: 'Off the local network',
+    story: 'h1 is correctly addressed in 10.0.1.0/24 and can reach its neighbours, but it cannot reach the server h2 in 10.0.2.0/24 across the router.',
+    objective: 'Give h1 a default gateway so it can reach h2.',
+    console: 'h1',
+    hints: ['Traffic to another network must go through a router — the default gateway.', 'The router\'s address on h1\'s network is 10.0.1.1.', 'Run `ip route add default via 10.0.1.1`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24), h2: H('h2', '10.0.2.10', 24, '10.0.2.1'),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('h2', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable', a: 'h1', b: 'h2' }],
+    solution: [['h1', 'ip route add default via 10.0.1.1']]
+  },
+
+  { id: 'add-a-route', chapter: 'Static routing',
+    title: 'The missing route',
+    story: 'Two offices are joined by a link between routers r1 and r2. h1 (behind r1) cannot reach h3 (behind r2). r2 already knows the way back; r1 does not know how to reach 10.0.3.0/24.',
+    objective: 'Add a static route on r1 so h1 can reach h3.',
+    console: 'r1',
+    hints: ['r1 can reach r2 directly over 10.0.12.0/30; r2\'s address there is 10.0.12.2.', 'r1 needs to know that 10.0.3.0/24 is reachable via r2.', 'Run `ip route add 10.0.3.0/24 via 10.0.12.2`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'), h3: H('h3', '10.0.3.10', 24, '10.0.3.1'),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 30) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 30), eth1: iface('10.0.3.1', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'), L('h3', 'eth0', 'sw3', 'p1'), L('r2', 'eth1', 'sw3', 'p2')]
+    }),
+    success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.3.0/24' }, { type: 'reachable', a: 'h1', b: 'h3' }],
+    solution: [['r1', 'ip route add 10.0.3.0/24 via 10.0.12.2']]
+  },
+
+  { id: 'lock-the-door', chapter: 'Firewalls',
+    title: 'Close the telnet port',
+    story: 'The web server is reachable from the office, which is good — but telnet (tcp/23) is wide open to it, which is not. The firewall fw sits between the office (eth0) and the server.',
+    objective: 'Block inbound telnet to the server at the firewall, without breaking web (tcp/80).',
+    console: 'fw',
+    hints: ['Firewall rules match inbound on an interface; the office is on fw\'s eth0.', 'Drop tcp destined for port 23, and leave everything else alone.', 'Run `iptables -A INPUT -i eth0 -p tcp --dport 23 -j DROP`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 80: 'http', 22: 'ssh' }),
+        fw: R('fw', 'firewall', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('fw', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('fw', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'acl_blocks', src: 'h1', dst: '10.0.2.10', proto: 'tcp', dport: 23 },
+      { type: 'reachable', a: 'h1', b: 'web', proto: 'tcp', dport: 80 }
+    ],
+    solution: [['fw', 'iptables -A INPUT -i eth0 -p tcp --dport 23 -j DROP']]
+  },
+
+  { id: 'segment-the-guests', chapter: 'Network security',
+    title: 'Keep guests off the database',
+    story: 'Guest and staff machines share the office network, and right now a guest laptop (10.0.5.20) can reach the database server. It should not. Staff (10.0.5.10) must keep access.',
+    objective: 'At the firewall, stop the guest from reaching the database while leaving staff access intact.',
+    console: 'fw',
+    hints: ['You can match traffic by its source address with `-s`.', 'Block the guest\'s address inbound on the office interface (eth0); staff keeps working.', 'Run `iptables -A INPUT -i eth0 -s 10.0.5.20 -j DROP`.'],
+    build: () => ({
+      devices: {
+        staff: H('staff', '10.0.5.10', 24, '10.0.5.1'), guest: H('guest', '10.0.5.20', 24, '10.0.5.1'),
+        db: SRV('db', '10.0.6.10', 24, '10.0.6.1', { 5432: 'postgres' }),
+        fw: R('fw', 'firewall', { eth0: iface('10.0.5.1', 24), eth1: iface('10.0.6.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('staff', 'eth0', 'sw1', 'p1'), L('guest', 'eth0', 'sw1', 'p2'), L('fw', 'eth0', 'sw1', 'p3'), L('db', 'eth0', 'sw2', 'p1'), L('fw', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'not_reachable', a: 'guest', b: 'db' }, { type: 'reachable', a: 'staff', b: 'db' }],
+    solution: [['fw', 'iptables -A INPUT -i eth0 -s 10.0.5.20 -j DROP']]
+  }
+
+];
+
+module.exports = { chapters };
+
+});
+// ---- UI (runs on load) ----
+// Networking Trainer — M4 UI. Runs in the browser on top of the SAME tested
+// modules (loaded via the tiny require() shim the build injects). Renders the
+// topology, config panels, a terminal, and the mission briefing + Check.
+const M = require('./net-model');
+const { startMission } = require('./net-mission');
+const { chapters } = require('./net-chapters');
+
+let RUN = null, SEL = null, HINTS = 0;
+const $ = s => document.querySelector(s);
+
+/* ---------- layered auto-layout (left→right by hop distance) ---------- */
+function layout(net) {
+  const ids = Object.keys(net.devices), adj = {};
+  ids.forEach(i => adj[i] = new Set());
+  net.links.forEach(l => { adj[l.a[0]].add(l.b[0]); adj[l.b[0]].add(l.a[0]); });
+  const anchor = ids.find(i => net.devices[i].kind === 'host') || ids[0];
+  const layer = { [anchor]: 0 }, q = [anchor];
+  while (q.length) { const n = q.shift(); adj[n].forEach(m => { if (layer[m] == null) { layer[m] = layer[n] + 1; q.push(m); } }); }
+  ids.forEach(i => { if (layer[i] == null) layer[i] = 0; });
+  const byLayer = {}; ids.forEach(i => (byLayer[layer[i]] = byLayer[layer[i]] || []).push(i));
+  const pos = {};
+  Object.keys(byLayer).map(Number).sort((a, b) => a - b).forEach(L => {
+    byLayer[L].forEach((id, idx) => { pos[id] = [90 + L * 150, 60 + idx * 86]; });
+  });
+  return pos;
+}
+const primaryIp = dev => { for (const n in dev.ifaces) { const f = dev.ifaces[n]; if (f.up !== false && f.ip != null) return M.ipStr(f.ip); } return null; };
+const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
+
+function linkDown(net, l) {
+  if (l.up === false) return true;
+  const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; };
+  return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1]));
+}
+
+function renderTopo() {
+  const net = RUN.net, pos = layout(net);
+  const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 130;
+  const maxY = Math.max(...Object.values(pos).map(p => p[1])) + 70;
+  const cx = id => pos[id][0] + 48, cy = id => pos[id][1] + 22;
+  let s = `<svg id="topo" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-label="network topology">`;
+  for (const l of net.links) {
+    const down = linkDown(net, l);
+    s += `<line x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${down ? ' down' : ''}"/>`;
+  }
+  for (const id in net.devices) {
+    const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
+    s += `<g class="node ${KINDCLASS[d.kind]} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})">
+      <rect width="96" height="44" rx="8"/>
+      <text x="48" y="19" text-anchor="middle" class="n-id">${id}</text>
+      <text x="48" y="34" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
+  }
+  return s + '</svg>';
+}
+
+function renderBrief() {
+  const m = RUN.mission;
+  const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${c.chapter} — ${c.title}</option>`).join('');
+  const hints = m.hints.slice(0, HINTS).map((h, i) => `<li>${esc(h)}</li>`).join('');
+  return `<select id="pick">${opts}</select>
+    <div class="eyebrow">${esc(m.chapter)}</div>
+    <h1>${esc(m.title)}</h1>
+    <p class="story">${esc(m.story)}</p>
+    <div class="label">Objective</div><p>${esc(m.objective)}</p>
+    <div class="label">Hints</div><ol>${hints}</ol>
+    <div class="row"><button id="hint" class="btn">Show hint</button><button id="check" class="btn primary">Check</button></div>
+    <div id="status"></div>`;
+}
+
+function renderConfig() {
+  if (!SEL) return '<p class="dim">Click a device to configure it.</p>';
+  const d = RUN.net.devices[SEL];
+  let h = `<div class="label">${SEL} · ${d.kind}</div>`;
+  // interfaces
+  h += '<div class="label2">Interfaces</div>';
+  for (const n in d.ifaces) {
+    const f = d.ifaces[n];
+    h += `<div class="ifrow" data-if="${n}"><span class="ifn">${n}</span>
+      <input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/>
+      <span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/>
+      <label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
+  }
+  // routes
+  if (d.kind !== 'switch') {
+    h += '<div class="label2">Routes</div>';
+    (d.routes || []).forEach((r, i) => {
+      const dest = r.mask === 0 ? 'default' : M.ipStr(r.dest) + '/' + r.mask;
+      h += `<div class="rrow">${dest} via ${M.ipStr(r.via)} <button class="x" data-rt="${i}">✕</button></div>`;
+    });
+    h += `<div class="addrow"><input class="rdest" placeholder="default or 10.0.3.0/24"/><input class="rvia" placeholder="via gateway"/><button class="btn sm" id="addrt">Add route</button></div>`;
+  }
+  // firewall
+  if (d.kind === 'router' || d.kind === 'firewall') {
+    h += '<div class="label2">Firewall (inbound)</div>';
+    (d.acls || []).forEach((r, i) => {
+      h += `<div class="rrow">${r.action === 'deny' ? 'DROP' : 'ALLOW'} ${r.proto || 'all'} in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${r.dport != null ? ' dpt:' + r.dport : ''} <button class="x" data-acl="${i}">✕</button></div>`;
+    });
+    const ifopts = Object.keys(d.ifaces).map(n => `<option>${n}</option>`).join('');
+    h += `<div class="addrow"><select class="aif">${ifopts}</select>
+      <select class="aproto"><option value="">any</option><option>tcp</option><option>udp</option><option>icmp</option></select>
+      <input class="adport" placeholder="dport" size="4"/><input class="asrc" placeholder="src ip" size="8"/>
+      <select class="aact"><option value="deny">DROP</option><option value="allow">ALLOW</option></select>
+      <button class="btn sm" id="addacl">Add</button></div>`;
+  }
+  return h;
+}
+
+/* ---------- actions ---------- */
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
+function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, ip addr, ip route`); }
+
+function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
+function termClear() { $('#tout').textContent = ''; }
+
+function doCheck() {
+  const box = $('#status'); box.innerHTML = '';
+  const done = RUN.done();
+  box.className = done ? 'ok' : 'bad';
+  box.innerHTML = done
+    ? '✓ All objectives met — ticket resolved.'
+    : 'Not resolved yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
+}
+
+/* ---------- wiring ---------- */
+function wireTopo() {
+  document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => { SEL = n.dataset.dev; refresh(); }));
+}
+function wireBrief() {
+  $('#pick').addEventListener('change', e => reloadMission(+e.target.value));
+  $('#hint').addEventListener('click', () => { if (HINTS < RUN.mission.hints.length) HINTS++; $('#brief').innerHTML = renderBrief(); wireBrief(); });
+  $('#check').addEventListener('click', doCheck);
+}
+function wireConfig() {
+  if (!SEL) return;
+  const d = RUN.net.devices[SEL];
+  document.querySelectorAll('#config .ifrow').forEach(row => {
+    const n = row.dataset.if;
+    const apply = () => {
+      const ipv = row.querySelector('.ip').value.trim(), pfx = row.querySelector('.pfx').value.trim();
+      d.ifaces[n].up = row.querySelector('.upc').checked;
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ipv) && pfx) { d.ifaces[n].ip = M.ip(ipv); d.ifaces[n].mask = +pfx; }
+      else if (!ipv) { delete d.ifaces[n].ip; delete d.ifaces[n].mask; }
+      refresh();
+    };
+    row.querySelector('.ip').addEventListener('change', apply);
+    row.querySelector('.pfx').addEventListener('change', apply);
+    row.querySelector('.upc').addEventListener('change', apply);
+  });
+  const addrt = $('#addrt');
+  if (addrt) addrt.addEventListener('click', () => {
+    const dest = $('#config .rdest').value.trim(), via = $('#config .rvia').value.trim();
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(via)) return;
+    d.routes = d.routes || [];
+    if (dest === 'default' || dest === '') d.routes.push({ dest: 0, mask: 0, via: M.ip(via) });
+    else { const c = M.cidr(dest); d.routes.push({ dest: c.net, mask: c.prefix, via: M.ip(via) }); }
+    refresh();
+  });
+  document.querySelectorAll('#config [data-rt]').forEach(b => b.addEventListener('click', () => { d.routes.splice(+b.dataset.rt, 1); refresh(); }));
+  const addacl = $('#addacl');
+  if (addacl) addacl.addEventListener('click', () => {
+    const g = s => $('#config ' + s).value.trim();
+    const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') };
+    if (g('.aproto')) rule.proto = g('.aproto');
+    if (g('.adport')) rule.dport = +g('.adport');
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc'));
+    d.acls = d.acls || []; d.acls.push(rule); refresh();
+  });
+  document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
+}
+function wireTerm() {
+  $('#tin').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const line = e.target.value; e.target.value = '';
+    if (!line.trim()) return;
+    termEcho(`${SEL}:~$ ${line}`);
+    const r = RUN.cli.on(SEL).run(line);
+    if (r.out) termEcho(r.out);
+    refresh();                     // a command may have changed the model
+  });
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+/* ---------- boot ---------- */
+function boot() {
+  document.getElementById('app').innerHTML = `
+    <aside id="brief"></aside>
+    <main>
+      <div id="topoWrap"></div>
+      <div id="term"><pre id="tout"></pre><div class="tline"><span>$</span><input id="tin" autocomplete="off" placeholder="type a command — ping, ip addr, ip route add…"/></div></div>
+    </main>
+    <aside id="config"></aside>`;
+  wireTerm();
+  reloadMission(0);
+}
+if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
+
+</script></body></html>

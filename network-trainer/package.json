@@ -1,0 +1,16 @@
+{
+  "name": "network-trainer",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Networking & security fundamentals trainer — a module of the teaching platform.",
+  "scripts": {
+    "build": "node build-ui.js",
+    "test": "node net-engine.test.js && node net-cli.test.js && node net-mission.test.js",
+    "test:ui": "node build-ui.js && node test-ui.js",
+    "demo": "node net-mission-demo.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.40.0"
+  },
+  "license": "MIT"
+}

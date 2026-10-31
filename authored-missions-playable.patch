@@ -1,0 +1,787 @@
+From 9bcfd27e636e57299355cd7bdeec465149276318 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 31 Oct 2026 13:34:33 +0100
+Subject: [PATCH] Custom missions are playable: authored-mission delivery +
+ practice sandbox
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Closes the gap where teacher-authored missions/scenarios could be created but
+never played. Students play them from Classroom -> My dashboard -> Play custom
+missions.
+
+- supabase/m10-authored-delivery.sql: get_class_missions() SECURITY DEFINER
+  returns exactly the authored missions assigned to a class (directly or via a
+  scenario) to its members, nothing to outsiders. + m10-delivery-test.sql
+  (6 assertions) wired into run.sh.
+- Check engine (authoredCheck): maps the 5 editor check types (file_exists,
+  file_contains, file_matches, command_run, service_state) to live checks.
+- Practice sandbox (playAuthored/practiceFinish/exitPractice): runs authored
+  missions in a throwaway state like Race — campaign progress untouched;
+  completing one records an attempts row by mission id so the grade updates.
+  Single mission auto-finishes; sequences get an Exit practice button.
+- Student dashboard: a "Play custom missions" button per class, fed by
+  get_class_missions.
+- Editor copy updated (safe check types / no file pre-seeding).
+- test-authored-playback.js (npm run test:play): end-to-end — launches a
+  delivered mission, solves it, asserts the attempt is recorded.
+- Cache v24 -> v25.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Q9A1atnfLsQUP5DWZ8rYYW
+---
+ CHANGELOG.md                        |   8 ++
+ index.html                          | 113 +++++++++++++++++++++++++++-
+ package.json                        |   3 +-
+ service-worker.js                   |   2 +-
+ src/game.html                       | 113 +++++++++++++++++++++++++++-
+ src/version.txt                     |   2 +-
+ supabase/README.md                  |   4 +-
+ supabase/m10-authored-delivery.sql  |  54 +++++++++++++
+ supabase/test/m10-delivery-test.sql |  68 +++++++++++++++++
+ supabase/test/run.sh                |   5 +-
+ test-authored-playback.js           | 113 ++++++++++++++++++++++++++++
+ test-classroom-ui.js                |   4 +-
+ verify.js                           |   1 +
+ 13 files changed, 477 insertions(+), 13 deletions(-)
+ create mode 100644 supabase/m10-authored-delivery.sql
+ create mode 100644 supabase/test/m10-delivery-test.sql
+ create mode 100644 test-authored-playback.js
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 4cf53db..81b2668 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -3,6 +3,14 @@
+ All notable changes to The Last Sysadmin. The game is a single `index.html`;
+ versions below track the content added over time.
+ 
++## v25 — Custom missions are now playable (authored-mission delivery)
++- Closes the gap where teacher-authored missions and scenarios could be created but never played. Students now play them from **Classroom → My dashboard → ▶ Play custom missions**.
++- **Isolated practice sandbox:** authored missions run in a throwaway state (like Race) — a student's campaign progress is never touched. Completing one records an `attempts` row by the mission's id, so the assignment grade updates automatically. A single mission auto-finishes on solve; multi-mission runs play in sequence with an **Exit practice** button.
++- **Check engine:** the five editor check types (`file_exists`, `file_contains`, `file_matches`, `command_run`, `service_state`) are mapped to live checks against the sandbox.
++- **Delivery (`supabase/m10-authored-delivery.sql`):** `get_class_missions()` — a `SECURITY DEFINER` function that returns exactly the authored missions assigned to a class (directly or via a scenario) to its members, and nothing to outsiders. Tested in the RLS suite.
++- Editor note updated: authored checks work best as *file exists / command was run / service state*, because the sandbox starts from the standard server and a mission can't pre-create files.
++- New end-to-end test `test-authored-playback.js` (`npm run test:play`) plays an authored mission to completion and asserts the attempt is recorded. Cache bumped v24 → v25.
++
+ ## v24 — Review fixes: docs, test coverage, offline cache
+ - **Self-hosting docs corrected.** `supabase/README.md` and the root `README.md` now list the full migration apply order (`supabase-setup` → m1 → m2 → m4 → m6 → m7); previously only m1 was documented, so a self-hoster would have had broken join-by-code, enroll-by-email, the mission editor, and the scenario builder.
+ - **Test coverage extended to M4/M6/M7.** `supabase/test/run.sh` now applies every migration and runs a new suite covering `enroll_by_email` (staff-only, student role forced, idempotent, unknown-email error) and author-isolation of `authored_missions` and `scenarios`. Full suite: M1 (30) + M2 + M4/M6/M7, all passing.
+diff --git a/index.html b/index.html
+index 3ebf6ea..a727857 100644
+--- a/index.html
++++ b/index.html
+@@ -137,6 +137,10 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
+ /* ---- Race mode ---- */
+ body.racing #leds,body.racing #chips,body.racing #speed,body.racing #finale,body.racing .panel>div:last-child{display:none!important}
+ body.racing #raceBoard{display:block!important}
++body.practicing #leds,body.practicing #chips,body.practicing #speed,body.practicing #finale{display:none!important}
++#practiceBar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:var(--amber);color:#1a1205;font-weight:600;font-size:13px}
++#practiceBar button{background:rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.25);color:inherit}
++body.practicing{padding-top:40px}
+ #raceOverlay{position:fixed;inset:0;z-index:50;background:rgba(7,10,15,.82);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left)) 16px}
+ .race-modal{position:relative;width:min(560px,100%);max-height:88vh;max-height:88svh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+ .race-x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:26px;line-height:1;padding:4px 8px;border-radius:6px}
+@@ -928,7 +932,7 @@ function migrate() {
+     S.mig = 8;
+   }
+ }
+-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
++function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
+ function load() {
+   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
+   S = freshState(); return false;
+@@ -4820,6 +4824,7 @@ function completeMission() {
+   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
+   S.mission++;
+   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
++  if (typeof PRACTICE !== 'undefined' && PRACTICE.active) { practiceAdvance(); updatePrompt(); render(); return; }
+   const next = MISSIONS[S.mission];
+   if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
+   if (!next) S.finished = true;
+@@ -5432,6 +5437,95 @@ function exitRace() {
+   tin.focus({ preventScroll: true });
+ }
+ $('#btnRace').addEventListener('click', openRace);
++
++/* ---------- Authored-mission playback (M10) ---------- */
++/* Turn a stored authored mission {check_type, check_arg1, check_arg2} into a
++   live check() closure over the sandbox game state. */
++function authoredCheck(m) {
++  const t = m.check_type, a1 = (m.check_arg1 || '').trim(), a2 = (m.check_arg2 || '');
++  const absPath = p => { p = (p || '').trim(); if (p.startsWith('~')) return HOME + p.slice(1); if (p.startsWith('/')) return p; return HOME + '/' + p; };
++  switch (t) {
++    case 'file_exists':
++      return () => !!getNode(absPath(a1));
++    case 'file_contains':
++      return () => { const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && String(n.content || '').includes(a2)); };
++    case 'file_matches': {
++      let re = null; try { re = new RegExp(a2); } catch (e) { re = null; }
++      return () => { if (!re) return false; const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && re.test(String(n.content || ''))); };
++    }
++    case 'command_run':
++      return () => S.cmdsM.includes(a1);
++    case 'service_state': {
++      const want = /^(active|running|start|up|on|enabled|true)/i.test(a2 || 'active');
++      return () => { const s = S.services[a1]; return !!s && (!!s.active === want); };
++    }
++    default:
++      return () => false;
++  }
++}
++let PRACTICE = { active: false };
++let practiceS = null;
++/* Play one or more authored missions in an isolated sandbox. The campaign state
++   is set aside and restored on exit, exactly like Race, so nothing a student
++   does here touches their own progress. Completing a mission records an attempt
++   (by the mission's id) so the class grade updates. */
++function playAuthored(missions, label) {
++  missions = (missions || []).filter(m => m && m.id && m.check_type);
++  if (!missions.length) { emitSys('No playable missions in this assignment yet.', 'hint'); return; }
++  if (typeof RACE !== 'undefined' && RACE.active) { emitSys('Finish or leave the race first.', 'hint'); return; }
++  if (PRACTICE.active) exitPractice(true);
++  hideOverlay();
++  practiceS = S;
++  const chIdx = CHAPTERS.length;
++  CHAPTERS.push({ label: 'PRACTICE', name: label || 'Class mission', intro: '', outro: '' });
++  const startIdx = MISSIONS.length;
++  missions.forEach(m => MISSIONS.push({
++    ch: chIdx, id: m.id, title: m.title || 'Mission',
++    story: m.story || '', objective: m.objective || 'Complete the task.',
++    hints: Array.isArray(m.hints) ? m.hints.slice(0, 3) : [],
++    check: authoredCheck(m)
++  }));
++  PRACTICE = { active: true, startIdx, endIdx: MISSIONS.length - 1, label: label || '' };
++  S = freshState(); S.sudo = true; S.mission = startIdx;
++  document.body.classList.add('practicing');
++  let bar = $('#practiceBar');
++  if (!bar) {
++    bar = document.createElement('div'); bar.id = 'practiceBar';
++    bar.innerHTML = '<span id="practiceMsg"></span><button class="btn" id="practiceExit" type="button">Exit practice</button>';
++    document.body.appendChild(bar);
++    $('#practiceExit').addEventListener('click', () => exitPractice(false));
++  }
++  $('#practiceMsg').textContent = `Practice · ${label || 'class mission'} — your campaign is untouched`;
++  bar.hidden = false;
++  tout.innerHTML = '';
++  emitSys(`<b>Practice mode.</b> ${missions.length > 1 ? missions.length + ' missions' : '1 mission'} from <b>${esc(label || 'your class')}</b>. Nothing here affects your campaign. Click <b>Exit practice</b> any time.`, 'ok');
++  startMission();
++  updatePrompt(); render(); scrollEnd(); tin.focus({ preventScroll: true });
++}
++function practiceAdvance() {
++  if (S.mission > PRACTICE.endIdx) practiceFinish();
++  else startMission();
++}
++function practiceFinish() {
++  endPractice();
++  emitSys('<b>✓ Practice complete.</b> Your campaign is unchanged; your class progress is saved. Open the classroom to see your updated grade.', 'ok');
++}
++function exitPractice() {
++  endPractice();
++  emitSys('Left practice — back to your campaign.', 'hint');
++}
++function endPractice() {
++  if (!PRACTICE.active) return;
++  MISSIONS.length = PRACTICE.startIdx;   // drop the synthetic missions
++  CHAPTERS.pop();                        // drop the synthetic chapter
++  PRACTICE = { active: false };
++  if (practiceS) { S = practiceS; practiceS = null; }
++  document.body.classList.remove('practicing');
++  const bar = $('#practiceBar'); if (bar) bar.hidden = true;
++  tout.innerHTML = '';
++  if (!S.finished && MISSIONS[S.mission]) { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); announceMission(); }
++  updatePrompt(); render(); scrollEnd();
++}
+ $('#raceClose').addEventListener('click', exitRace);
+ $('#btnRaceExit').addEventListener('click', exitRace);
+ 
+@@ -5737,10 +5831,18 @@ async function openClassroom() {
+     } catch (e) {}
+     const passedSet = new Set(myAttempts.filter(a => a.passed).map(a => a.mission_id));
+     studentDash = `<div class="rlabel" style="margin-top:8px">My dashboard</div>`;
++    window._cxPlay = window._cxPlay || {};
+     for (const e of d.enrolled) {
+       const cname = e.classes?.name || 'Class';
+       const asns = await loadAssignments(e.class_id);
+       const fbs = await loadFeedback(e.class_id, authUser.id);
++      // authored missions assigned to this class, delivered via the server function
++      let classMissions = [];
++      try { const { data } = await sb.rpc('get_class_missions', { p_class_id: e.class_id }); classMissions = data || []; } catch (_) {}
++      window._cxPlay[e.class_id] = classMissions;
++      const playBtn = classMissions.length
++        ? `<button class="btn sm primary" data-playclass="${esc(e.class_id)}" data-cname="${esc(cname)}" type="button">▶ Play ${classMissions.length} custom mission${classMissions.length > 1 ? 's' : ''}</button>`
++        : '';
+       let asnHtml = '';
+       if (asns.length) {
+         asnHtml = asns.map(a => {
+@@ -5758,7 +5860,7 @@ async function openClassroom() {
+         ? fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('')
+         : '<p class="cx-dim">No feedback yet.</p>';
+       studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
+-        <div style="font-weight:600;margin-bottom:6px">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</div>
++        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:600">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</span>${playBtn}</div>
+         <div class="rlabel">Assignments</div>${asnHtml}
+         <div class="rlabel" style="margin-top:8px">Feedback</div>${fbHtml}
+       </div>`;
+@@ -5785,7 +5887,7 @@ async function openClassroom() {
+          </div>`;
+       const myM = await loadMyMissions();
+       assignHtml += `<div class="rlabel" style="margin-top:14px">Mission editor</div>
+-        <p class="cx-dim" style="margin:0 0 6px">Author a mission. Use its id in an assignment. Playback of custom missions comes next.</p>` +
++        <p class="cx-dim" style="margin:0 0 6px">Author a mission, then use its id (or a scenario's) in an assignment. Students play it from <b>My dashboard → ▶ Play custom missions</b>. Tip: checks that need a file to already exist work best as <i>file exists</i> / <i>command was run</i> / <i>service state</i> — the sandbox starts from the standard server, so your mission can't pre-create files.</p>` +
+         (myM.length ? myM.map(m => `<div class="cx-item"><div><b>${esc(m.title)}</b> <span class="cx-dim">· ${esc(m.check_type)}</span><br><code class="cx-dim">${esc(m.id)}</code></div></div>`).join('') : '<p class="cx-dim">No authored missions yet.</p>') +
+         `<div class="cx-form" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+            <input id="mTitle" type="text" placeholder="Title">
+@@ -5965,6 +6067,11 @@ async function openClassroom() {
+       <script>window.print()<\/script></body></html>`;
+     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+   }));
++  // Play custom (authored) class missions in the isolated practice sandbox
++  document.querySelectorAll('[data-playclass]').forEach(btn => btn.addEventListener('click', () => {
++    const missions = (window._cxPlay || {})[btn.dataset.playclass] || [];
++    playAuthored(missions, btn.dataset.cname || 'class');
++  }));
+   // Question bank
+   let qbData = null;
+   async function loadQB() {
+diff --git a/package.json b/package.json
+index 75a8cbe..547c613 100644
+--- a/package.json
++++ b/package.json
+@@ -9,7 +9,8 @@
+     "test": "node test-helpers.js",
+     "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
+     "smoke": "node smoke.js",
+-    "test:ui": "node test-classroom-ui.js"
++    "test:ui": "node test-classroom-ui.js",
++    "test:play": "node test-authored-playback.js"
+   },
+   "devDependencies": {
+     "playwright": "^1.40.0"
+diff --git a/service-worker.js b/service-worker.js
+index 3207234..2a8ade2 100644
+--- a/service-worker.js
++++ b/service-worker.js
+@@ -1,5 +1,5 @@
+ /* The Last Sysadmin - offline service worker */
+-const CACHE = 'last-sysadmin-v24';
++const CACHE = 'last-sysadmin-v25';
+ const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
+ self.addEventListener('install', (e) => {
+   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+diff --git a/src/game.html b/src/game.html
+index 4f1cc21..f1d4f55 100644
+--- a/src/game.html
++++ b/src/game.html
+@@ -122,6 +122,10 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
+ /* ---- Race mode ---- */
+ body.racing #leds,body.racing #chips,body.racing #speed,body.racing #finale,body.racing .panel>div:last-child{display:none!important}
+ body.racing #raceBoard{display:block!important}
++body.practicing #leds,body.practicing #chips,body.practicing #speed,body.practicing #finale{display:none!important}
++#practiceBar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:var(--amber);color:#1a1205;font-weight:600;font-size:13px}
++#practiceBar button{background:rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.25);color:inherit}
++body.practicing{padding-top:40px}
+ #raceOverlay{position:fixed;inset:0;z-index:50;background:rgba(7,10,15,.82);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left)) 16px}
+ .race-modal{position:relative;width:min(560px,100%);max-height:88vh;max-height:88svh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+ .race-x{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:26px;line-height:1;padding:4px 8px;border-radius:6px}
+@@ -913,7 +917,7 @@ function migrate() {
+     S.mig = 8;
+   }
+ }
+-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
++function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
+ function load() {
+   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
+   S = freshState(); return false;
+@@ -4805,6 +4809,7 @@ function completeMission() {
+   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
+   S.mission++;
+   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
++  if (typeof PRACTICE !== 'undefined' && PRACTICE.active) { practiceAdvance(); updatePrompt(); render(); return; }
+   const next = MISSIONS[S.mission];
+   if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
+   if (!next) S.finished = true;
+@@ -5417,6 +5422,95 @@ function exitRace() {
+   tin.focus({ preventScroll: true });
+ }
+ $('#btnRace').addEventListener('click', openRace);
++
++/* ---------- Authored-mission playback (M10) ---------- */
++/* Turn a stored authored mission {check_type, check_arg1, check_arg2} into a
++   live check() closure over the sandbox game state. */
++function authoredCheck(m) {
++  const t = m.check_type, a1 = (m.check_arg1 || '').trim(), a2 = (m.check_arg2 || '');
++  const absPath = p => { p = (p || '').trim(); if (p.startsWith('~')) return HOME + p.slice(1); if (p.startsWith('/')) return p; return HOME + '/' + p; };
++  switch (t) {
++    case 'file_exists':
++      return () => !!getNode(absPath(a1));
++    case 'file_contains':
++      return () => { const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && String(n.content || '').includes(a2)); };
++    case 'file_matches': {
++      let re = null; try { re = new RegExp(a2); } catch (e) { re = null; }
++      return () => { if (!re) return false; const n = getNode(absPath(a1)); return !!(n && n.type === 'file' && re.test(String(n.content || ''))); };
++    }
++    case 'command_run':
++      return () => S.cmdsM.includes(a1);
++    case 'service_state': {
++      const want = /^(active|running|start|up|on|enabled|true)/i.test(a2 || 'active');
++      return () => { const s = S.services[a1]; return !!s && (!!s.active === want); };
++    }
++    default:
++      return () => false;
++  }
++}
++let PRACTICE = { active: false };
++let practiceS = null;
++/* Play one or more authored missions in an isolated sandbox. The campaign state
++   is set aside and restored on exit, exactly like Race, so nothing a student
++   does here touches their own progress. Completing a mission records an attempt
++   (by the mission's id) so the class grade updates. */
++function playAuthored(missions, label) {
++  missions = (missions || []).filter(m => m && m.id && m.check_type);
++  if (!missions.length) { emitSys('No playable missions in this assignment yet.', 'hint'); return; }
++  if (typeof RACE !== 'undefined' && RACE.active) { emitSys('Finish or leave the race first.', 'hint'); return; }
++  if (PRACTICE.active) exitPractice(true);
++  hideOverlay();
++  practiceS = S;
++  const chIdx = CHAPTERS.length;
++  CHAPTERS.push({ label: 'PRACTICE', name: label || 'Class mission', intro: '', outro: '' });
++  const startIdx = MISSIONS.length;
++  missions.forEach(m => MISSIONS.push({
++    ch: chIdx, id: m.id, title: m.title || 'Mission',
++    story: m.story || '', objective: m.objective || 'Complete the task.',
++    hints: Array.isArray(m.hints) ? m.hints.slice(0, 3) : [],
++    check: authoredCheck(m)
++  }));
++  PRACTICE = { active: true, startIdx, endIdx: MISSIONS.length - 1, label: label || '' };
++  S = freshState(); S.sudo = true; S.mission = startIdx;
++  document.body.classList.add('practicing');
++  let bar = $('#practiceBar');
++  if (!bar) {
++    bar = document.createElement('div'); bar.id = 'practiceBar';
++    bar.innerHTML = '<span id="practiceMsg"></span><button class="btn" id="practiceExit" type="button">Exit practice</button>';
++    document.body.appendChild(bar);
++    $('#practiceExit').addEventListener('click', () => exitPractice(false));
++  }
++  $('#practiceMsg').textContent = `Practice · ${label || 'class mission'} — your campaign is untouched`;
++  bar.hidden = false;
++  tout.innerHTML = '';
++  emitSys(`<b>Practice mode.</b> ${missions.length > 1 ? missions.length + ' missions' : '1 mission'} from <b>${esc(label || 'your class')}</b>. Nothing here affects your campaign. Click <b>Exit practice</b> any time.`, 'ok');
++  startMission();
++  updatePrompt(); render(); scrollEnd(); tin.focus({ preventScroll: true });
++}
++function practiceAdvance() {
++  if (S.mission > PRACTICE.endIdx) practiceFinish();
++  else startMission();
++}
++function practiceFinish() {
++  endPractice();
++  emitSys('<b>✓ Practice complete.</b> Your campaign is unchanged; your class progress is saved. Open the classroom to see your updated grade.', 'ok');
++}
++function exitPractice() {
++  endPractice();
++  emitSys('Left practice — back to your campaign.', 'hint');
++}
++function endPractice() {
++  if (!PRACTICE.active) return;
++  MISSIONS.length = PRACTICE.startIdx;   // drop the synthetic missions
++  CHAPTERS.pop();                        // drop the synthetic chapter
++  PRACTICE = { active: false };
++  if (practiceS) { S = practiceS; practiceS = null; }
++  document.body.classList.remove('practicing');
++  const bar = $('#practiceBar'); if (bar) bar.hidden = true;
++  tout.innerHTML = '';
++  if (!S.finished && MISSIONS[S.mission]) { const m = MISSIONS[S.mission]; emitSys(`<span class="chap">${CHAPTERS[m.ch].label}</span>${CHAPTERS[m.ch].name}`, 'chapter'); announceMission(); }
++  updatePrompt(); render(); scrollEnd();
++}
+ $('#raceClose').addEventListener('click', exitRace);
+ $('#btnRaceExit').addEventListener('click', exitRace);
+ 
+@@ -5722,10 +5816,18 @@ async function openClassroom() {
+     } catch (e) {}
+     const passedSet = new Set(myAttempts.filter(a => a.passed).map(a => a.mission_id));
+     studentDash = `<div class="rlabel" style="margin-top:8px">My dashboard</div>`;
++    window._cxPlay = window._cxPlay || {};
+     for (const e of d.enrolled) {
+       const cname = e.classes?.name || 'Class';
+       const asns = await loadAssignments(e.class_id);
+       const fbs = await loadFeedback(e.class_id, authUser.id);
++      // authored missions assigned to this class, delivered via the server function
++      let classMissions = [];
++      try { const { data } = await sb.rpc('get_class_missions', { p_class_id: e.class_id }); classMissions = data || []; } catch (_) {}
++      window._cxPlay[e.class_id] = classMissions;
++      const playBtn = classMissions.length
++        ? `<button class="btn sm primary" data-playclass="${esc(e.class_id)}" data-cname="${esc(cname)}" type="button">▶ Play ${classMissions.length} custom mission${classMissions.length > 1 ? 's' : ''}</button>`
++        : '';
+       let asnHtml = '';
+       if (asns.length) {
+         asnHtml = asns.map(a => {
+@@ -5743,7 +5845,7 @@ async function openClassroom() {
+         ? fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('')
+         : '<p class="cx-dim">No feedback yet.</p>';
+       studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
+-        <div style="font-weight:600;margin-bottom:6px">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</div>
++        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:600">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</span>${playBtn}</div>
+         <div class="rlabel">Assignments</div>${asnHtml}
+         <div class="rlabel" style="margin-top:8px">Feedback</div>${fbHtml}
+       </div>`;
+@@ -5770,7 +5872,7 @@ async function openClassroom() {
+          </div>`;
+       const myM = await loadMyMissions();
+       assignHtml += `<div class="rlabel" style="margin-top:14px">Mission editor</div>
+-        <p class="cx-dim" style="margin:0 0 6px">Author a mission. Use its id in an assignment. Playback of custom missions comes next.</p>` +
++        <p class="cx-dim" style="margin:0 0 6px">Author a mission, then use its id (or a scenario's) in an assignment. Students play it from <b>My dashboard → ▶ Play custom missions</b>. Tip: checks that need a file to already exist work best as <i>file exists</i> / <i>command was run</i> / <i>service state</i> — the sandbox starts from the standard server, so your mission can't pre-create files.</p>` +
+         (myM.length ? myM.map(m => `<div class="cx-item"><div><b>${esc(m.title)}</b> <span class="cx-dim">· ${esc(m.check_type)}</span><br><code class="cx-dim">${esc(m.id)}</code></div></div>`).join('') : '<p class="cx-dim">No authored missions yet.</p>') +
+         `<div class="cx-form" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:6px">
+            <input id="mTitle" type="text" placeholder="Title">
+@@ -5950,6 +6052,11 @@ async function openClassroom() {
+       <script>window.print()<\/script></body></html>`;
+     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+   }));
++  // Play custom (authored) class missions in the isolated practice sandbox
++  document.querySelectorAll('[data-playclass]').forEach(btn => btn.addEventListener('click', () => {
++    const missions = (window._cxPlay || {})[btn.dataset.playclass] || [];
++    playAuthored(missions, btn.dataset.cname || 'class');
++  }));
+   // Question bank
+   let qbData = null;
+   async function loadQB() {
+diff --git a/src/version.txt b/src/version.txt
+index cabf43b..410b14d 100644
+--- a/src/version.txt
++++ b/src/version.txt
+@@ -1 +1 @@
+-24
+\ No newline at end of file
++25
+\ No newline at end of file
+diff --git a/supabase/README.md b/supabase/README.md
+index fa817c8..6a19e07 100644
+--- a/supabase/README.md
++++ b/supabase/README.md
+@@ -13,8 +13,9 @@ Run these **in order**. All are safe to re-run.
+ 4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
+ 5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
+ 6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
++7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
+ 
+-Skipping any of 3–6 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
++Skipping any of 3–7 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+ 
+ There is no server code — the game talks to Supabase directly with the anon
+ key, and RLS is what keeps tenants apart.
+@@ -44,6 +45,7 @@ it should and nothing it shouldn't. It covers:
+ - **M1** — tenant isolation across classes, enrollments, assignments, attempts, feedback (30 checks).
+ - **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
+ - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
++- **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
+ 
+ It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
+ recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
+diff --git a/supabase/m10-authored-delivery.sql b/supabase/m10-authored-delivery.sql
+new file mode 100644
+index 0000000..a9824e1
+--- /dev/null
++++ b/supabase/m10-authored-delivery.sql
+@@ -0,0 +1,54 @@
++-- M10: deliver authored missions to the students they're assigned to.
++--
++-- Run AFTER m6-missions.sql and m7-scenarios.sql. Safe to re-run.
++--
++-- Why: authored_missions / scenarios are author-only (m6/m7 RLS). A student in a
++-- class can't read them directly, so they could never *play* an authored
++-- mission. This SECURITY DEFINER function returns exactly the authored missions
++-- that are assigned in a class the caller belongs to — nothing else — so the
++-- game can load and run them. Assignment mission_ids may name an authored
++-- mission directly or a scenario (which expands to its missions); built-in
++-- mission ids (e.g. "1-1", "bearings") are ignored here.
++
++begin;
++
++create or replace function public.get_class_missions(p_class_id uuid)
++returns setof public.authored_missions
++language plpgsql
++security definer
++set search_path = public
++as $$
++declare
++  ref_ids uuid[];
++begin
++  -- caller must be a member (student, TA, or owner) of the class
++  if not public.is_class_member(p_class_id) then
++    return;
++  end if;
++
++  -- every uuid-shaped id referenced by this class's assignments
++  select coalesce(array_agg(distinct x), '{}')
++    into ref_ids
++    from (
++      select m::uuid as x
++      from public.assignments a, unnest(a.mission_ids) m
++      where a.class_id = p_class_id
++        and m ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
++    ) t;
++
++  -- authored missions referenced directly, or via a referenced scenario
++  return query
++    select am.*
++    from public.authored_missions am
++    where am.id = any(ref_ids)
++       or am.id in (
++         select unnest(s.mission_ids)
++         from public.scenarios s
++         where s.id = any(ref_ids)
++       );
++end;
++$$;
++
++grant execute on function public.get_class_missions(uuid) to authenticated;
++
++commit;
+diff --git a/supabase/test/m10-delivery-test.sql b/supabase/test/m10-delivery-test.sql
+new file mode 100644
+index 0000000..086f49b
+--- /dev/null
++++ b/supabase/test/m10-delivery-test.sql
+@@ -0,0 +1,68 @@
++-- M10 tests: get_class_missions delivers assigned authored missions to class
++-- members, directly and via scenarios, and to no one else. Runs after the other
++-- suites; reuses the test.* helpers; uses its own identities.
++
++-- GT = teacher/author, GS = enrolled student, GO = outsider
++\set GT '01111111-1111-1111-1111-111111111111'
++\set GS '02222222-2222-2222-2222-222222222222'
++\set GO '03333333-3333-3333-3333-333333333333'
++
++reset role;
++insert into auth.users (id, email) values
++  (:'GT','gt@uni.edu'), (:'GS','gs@uni.edu'), (:'GO','go@uni.edu')
++on conflict do nothing;
++insert into public.profiles (id, display_name, is_teacher) values
++  (:'GT','Deliver Prof', true), (:'GS','Deliver Student', false), (:'GO','Deliver Outsider', false)
++on conflict (id) do update set is_teacher = excluded.is_teacher;
++
++set role authenticated;
++
++-- Teacher sets up: a class, an authored mission, a scenario, two assignments
++select test.login(:'GT');
++insert into public.classes (id, owner_id, name, join_code)
++  values ('0c111111-1111-1111-1111-111111111111', :'GT', 'Delivery Class', 'DELIV1');
++insert into public.authored_missions (id, author_id, title, objective, check_type, check_arg1)
++  values ('0a111111-1111-1111-1111-111111111111', :'GT', 'Make a report', 'Create ~/report.txt', 'file_exists', '/home/rookie/report.txt'),
++         ('0a222222-2222-2222-2222-222222222222', :'GT', 'Run uptime', 'Run uptime', 'command_run', 'uptime');
++insert into public.scenarios (id, author_id, title, mission_ids)
++  values ('0b111111-1111-1111-1111-111111111111', :'GT', 'Week 1', array['0a222222-2222-2222-2222-222222222222']::uuid[]);
++-- assignment A references the authored mission directly AND a built-in id (ignored)
++insert into public.assignments (class_id, title, mission_ids)
++  values ('0c111111-1111-1111-1111-111111111111', 'A1',
++          array['0a111111-1111-1111-1111-111111111111','1-1']);
++-- assignment B references the SCENARIO (should expand to its mission)
++insert into public.assignments (class_id, title, mission_ids)
++  values ('0c111111-1111-1111-1111-111111111111', 'A2',
++          array['0b111111-1111-1111-1111-111111111111']);
++
++-- student joins the class
++select test.login(:'GS');
++insert into public.enrollments (class_id, user_id, role)
++  values ('0c111111-1111-1111-1111-111111111111', :'GS', 'student');
++
++\echo '--- M10: authored-mission delivery ---'
++
++-- The student gets BOTH missions: the direct one (A1) and the scenario one (A2)
++select test.expect('student gets both assigned authored missions',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111')), 2);
++select test.expect('delivery includes the directly-assigned mission',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111') where id='0a111111-1111-1111-1111-111111111111'), 1);
++select test.expect('delivery includes the scenario-expanded mission',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111') where id='0a222222-2222-2222-2222-222222222222'), 1);
++-- the row carries the spec the game needs to run the check
++select test.expect('delivered mission carries its check spec',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111') where check_type='file_exists' and check_arg1='/home/rookie/report.txt'), 1);
++
++-- An outsider (not a class member) gets nothing
++select test.login(:'GO');
++select test.expect('outsider gets no missions from delivery',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111')), 0);
++
++-- The teacher (owner/member) also gets them (for preview)
++select test.login(:'GT');
++select test.expect('teacher/owner also gets the delivered missions',
++  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111')), 2);
++
++reset role;
++\echo ''
++\echo 'ALL M10 TESTS PASSED'
+diff --git a/supabase/test/run.sh b/supabase/test/run.sh
+index b4a410b..0a86cda 100755
+--- a/supabase/test/run.sh
++++ b/supabase/test/run.sh
+@@ -39,7 +39,7 @@ run "$REPO/supabase/m2-enrollment.sql" >/dev/null
+ echo "Re-applying m2-enrollment.sql (idempotency check)..."
+ run "$REPO/supabase/m2-enrollment.sql" >/dev/null 2>&1
+ 
+-for m in m4-enroll-by-email m6-missions m7-scenarios; do
++for m in m4-enroll-by-email m6-missions m7-scenarios m10-authored-delivery; do
+   echo "Applying $m.sql..."
+   run "$REPO/supabase/$m.sql" >/dev/null
+   echo "Re-applying $m.sql (idempotency check)..."
+@@ -55,6 +55,9 @@ echo "Running join-by-code tests (M2)..."
+ echo "Running enroll-by-email + authoring-isolation tests (M4/M6/M7)..."
+ "${PSQL[@]}" -d "$DB" -f "$HERE/m4-m6-m7-test.sql"
+ 
++echo "Running authored-mission delivery tests (M10)..."
++"${PSQL[@]}" -d "$DB" -f "$HERE/m10-delivery-test.sql"
++
+ echo
+ echo "Cleaning up..."
+ "${ADMIN[@]}" -c "drop database if exists $DB with (force);" >/dev/null
+diff --git a/test-authored-playback.js b/test-authored-playback.js
+new file mode 100644
+index 0000000..b1c7db7
+--- /dev/null
++++ b/test-authored-playback.js
+@@ -0,0 +1,113 @@
++// End-to-end: a student opens their class, launches a delivered authored
++// mission in the practice sandbox, solves it with a real command, and an
++// attempt is recorded (so the grade would update). Drives the real game against
++// a stubbed Supabase client.
++const path = require('path');
++const { chromium } = require('playwright');
++const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
++
++(async () => {
++  const browser = await chromium.launch();
++  const page = await browser.newPage();
++  const errors = [];
++  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
++
++  await page.addInitScript(() => {
++    const calls = (window.__calls = []);
++    const user = { id: 'stu-1', email: 'student@uni.edu', user_metadata: { name: 'Sam Student' } };
++    const authoredMission = {
++      id: '0a111111-1111-1111-1111-111111111111', author_id: 't-1',
++      title: 'Check the uptime', story: 'The teacher wants you to report uptime.',
++      objective: 'Run `uptime` to see how long the box has been up.',
++      hints: ['Just type uptime.'], check_type: 'command_run',
++      check_arg1: 'uptime', check_arg2: null, created_at: '2026-01-01'
++    };
++    function qb(table) {
++      const st = { table };
++      const api = {
++        select() { return api; }, eq() { return api; }, order() { return api; },
++        maybeSingle() { if (st.table === 'profiles') return Promise.resolve({ data: { is_teacher: false }, error: null }); return Promise.resolve({ data: null, error: null }); },
++        single() { return Promise.resolve({ data: {}, error: null }); },
++        insert(p) { st.payload = p; return api; },
++        update() { return { eq() { return Promise.resolve({ error: null }); } }; },
++        upsert(p, opts) { calls.push(['upsert', st.table, p, opts]); return Promise.resolve({ error: null }); },
++        then(res) {
++          calls.push(['list', st.table]);
++          const data = st.table === 'enrollments'
++            ? [{ role: 'student', class_id: 'c1', classes: { name: 'Linux Admin 101', term: 'F26', join_code: 'ZZZ999' } }]
++            : st.table === 'attempts' ? []
++            : st.table === 'assignments' ? []
++            : st.table === 'feedback' ? []
++            : [];
++          return Promise.resolve({ data, error: null }).then(res);
++        }
++      };
++      return api;
++    }
++    window.supabase = {
++      createClient() {
++        return {
++          from: qb,
++          rpc(fn, args) {
++            calls.push(['rpc', fn, args]);
++            if (fn === 'get_class_missions') return Promise.resolve({ data: [authoredMission], error: null });
++            return Promise.resolve({ data: [], error: null });
++          },
++          auth: {
++            getSession() { return Promise.resolve({ data: { session: { user } } }); },
++            onAuthStateChange(cb) { setTimeout(() => cb('SIGNED_IN', { user }), 0); return { data: { subscription: { unsubscribe() {} } } }; },
++            signOut() { return Promise.resolve({}); }, signInWithOtp() { return Promise.resolve({ error: null }); }
++          }
++        };
++      }
++    };
++    try { localStorage.setItem('lsa-sb-url', 'https://x.supabase.co'); localStorage.setItem('lsa-sb-key', 'anon'); } catch (e) {}
++  });
++
++  const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
++  const ok = m => console.log('  ✓ ' + m);
++
++  await page.goto(INDEX, { waitUntil: 'load' });
++  await page.waitForTimeout(600);
++
++  // Open classroom -> My dashboard tab
++  await page.click('#btnSettings'); await page.waitForTimeout(150);
++  await page.click('#setClassroom'); await page.waitForTimeout(400);
++  await page.click('#cxTabs [data-cxtab="dash"]'); await page.waitForTimeout(300);
++
++  const playBtn = await page.$('[data-playclass]');
++  if (playBtn) ok('Student dashboard shows a Play-custom-missions button');
++  else fail('no Play button for delivered authored missions');
++
++  // Launch practice
++  if (playBtn) { await playBtn.click(); await page.waitForTimeout(400); }
++  if (await page.$('#practiceBar')) ok('Practice sandbox launched (practice bar visible)');
++  else fail('practice bar did not appear');
++
++  // The objective should mention uptime; solve it by running the command
++  await page.fill('#tin', 'uptime');
++  await page.press('#tin', 'Enter');
++  await page.waitForTimeout(400);
++
++  // An attempt should have been recorded for the authored mission, passed=true
++  const calls = await page.evaluate(() => window.__calls);
++  const att = calls.find(c => c[0] === 'upsert' && c[1] === 'attempts');
++  if (att && att[2] && att[2].mission_id === '0a111111-1111-1111-1111-111111111111' && att[2].passed === true)
++    ok('Completing the mission recorded an attempt (passed) for the authored mission id');
++  else fail('attempt not recorded correctly: ' + JSON.stringify(att));
++
++  // get_class_missions was actually called (delivery path exercised)
++  if (calls.find(c => c[0] === 'rpc' && c[1] === 'get_class_missions')) ok('Delivery function get_class_missions was called');
++  else fail('get_class_missions was not called');
++
++  // Solving the only mission auto-finishes practice and returns to the campaign
++  const barVisible = await page.$eval('#practiceBar', el => !el.hidden).catch(() => false);
++  if (!barVisible) ok('Practice auto-finished and returned to campaign after the last mission');
++  else fail('practice bar still showing after completing the only mission');
++  // and the campaign terminal is interactive again (campaign state restored)
++  if (await page.$('#tin')) ok('Back in the campaign terminal');
++
++  await browser.close();
++  if (errors.length) { console.error('\nAUTHORED PLAYBACK TEST FAILED (' + errors.length + ')'); process.exit(1); }
++  console.log('\nAUTHORED PLAYBACK OK.');
++})();
+diff --git a/test-classroom-ui.js b/test-classroom-ui.js
+index b572956..b7a8b3a 100644
+--- a/test-classroom-ui.js
++++ b/test-classroom-ui.js
+@@ -97,8 +97,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
+   await page.click('#cxJoin');
+   await page.waitForTimeout(200);
+   const calls = await page.evaluate(() => window.__calls);
+-  const rpc = calls.find(c => c[0] === 'rpc');
+-  if (rpc && rpc[1] === 'enroll_by_code' && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
++  const rpc = calls.find(c => c[0] === 'rpc' && c[1] === 'enroll_by_code');
++  if (rpc && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
+   else fail('rpc enroll_by_code not called correctly: ' + JSON.stringify(rpc));
+ 
+   // Create class (in the Teach tab)
+diff --git a/verify.js b/verify.js
+index d00b3f9..ad6601c 100644
+--- a/verify.js
++++ b/verify.js
+@@ -22,6 +22,7 @@ const required = [
+   ['function repairWorld', 'soft-lock resilience fix'],
+   ['id="btnSettings"', 'Settings button'],
+   ['function openClassroom', 'classroom UI (M2)'],
++  ['function playAuthored', 'authored-mission playback (M10)'],
+   ['data-theme="amber"', 'appearance themes'],
+   ['const MISSIONS', 'missions defined'],
+   ['service-worker.js', 'service-worker registration'],
+-- 
+2.43.0
+
