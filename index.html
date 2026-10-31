@@ -5499,6 +5499,11 @@ async function fetchLeaderboard(scn) {
   catch (e) { return null; }
 }
 /* auth modal (reuses the race overlay shell) */
+const OAUTH_PROVIDERS = [
+  { id: 'google', label: 'Google' },
+  { id: 'azure', label: 'Microsoft / Outlook' },
+  { id: 'github', label: 'GitHub' }
+];
 function openAuth() {
   if (!supaConfig()) return;
   showOverlay();
@@ -5511,30 +5516,75 @@ function openAuth() {
     return;
   }
   let saved = ''; try { saved = localStorage.getItem('lsa-auth-email') || ''; } catch (e) {}
+  const oauthBtns = OAUTH_PROVIDERS.map(p => `<button class="btn" data-oauth="${p.id}" type="button" style="margin:0 6px 6px 0">${p.label}</button>`).join('');
   renderContent(`<h2>Sign in</h2>
-    <p class="rlead">Enter your email and we'll send a one-time sign-in link — no password. Signing in syncs your campaign progress across devices and records your race times on the leaderboard.</p>
+    <p class="rlead">Sign in with email and password, or use a provider. Signing in syncs progress across devices.</p>
     <div class="rlabel">Email</div>
-    <input id="auEmail" type="text" inputmode="email" placeholder="you@example.com" value="${esc(saved)}">
+    <input id="auEmail" type="text" inputmode="email" placeholder="you@example.com" value="${esc(saved)}" autocomplete="email">
+    <div class="rlabel" style="margin-top:8px">Password</div>
+    <input id="auPass" type="password" placeholder="••••••••" autocomplete="current-password">
     <div class="race-err" id="auErr" hidden></div>
-    <div class="race-row" style="margin-top:14px">
-      <button class="btn primary" id="auSend" type="button">Email me a link</button>
-      <button class="btn" id="auCancel" type="button">Cancel</button>
+    <div class="race-row" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn primary" id="auSignin" type="button">Sign in</button>
+      <button class="btn" id="auSignup" type="button">Create account</button>
+      <button class="btn" id="auLink" type="button">Email me a link</button>
     </div>
-    <div class="race-note">We only use your email to sign you in. Progress is saved in your browser either way; signing in adds cross-device sync and the leaderboard.</div>`);
+    <div class="rlabel" style="margin-top:16px">Or continue with</div>
+    <div>${oauthBtns}</div>
+    <div class="race-row" style="margin-top:8px"><button class="btn" id="auCancel" type="button">Cancel</button></div>
+    <div class="race-note">Password sign-in works immediately. Magic link and OAuth need the matching providers enabled in your Supabase project (Authentication → Providers).</div>`);
   $('#auCancel').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
-  $('#auSend').addEventListener('click', async () => {
-    const email = ($('#auEmail').value || '').trim(); const er = $('#auErr');
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { er.hidden = false; er.textContent = 'Enter a valid email address.'; return; }
-    try { localStorage.setItem('lsa-auth-email', email); } catch (e) {}
-    const sb = await getSB(); if (!sb) { er.hidden = false; er.textContent = 'Not connected to Supabase.'; return; }
-    renderContent('<p class="rlead">Sending your link…</p>');
-    const redirect = location.href.split('#')[0];
-    let error = null;
-    try { const r = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } }); error = r.error; } catch (e) { error = e; }
-    if (error) { renderContent(`<h2>Couldn't send the link</h2><p class="race-err">${esc(error.message || 'Error')}.</p><p class="rlead">On Supabase's free built-in email, sign-in emails are rate-limited to a few per hour. For real sign-ups, add a custom SMTP sender in your project.</p><div class="race-row"><button class="btn" id="auBack" type="button">Back</button></div>`); const bk = $('#auBack'); if (bk) bk.addEventListener('click', openAuth); return; }
-    renderContent(`<h2>Check your email</h2><p class="rlead">We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device to finish signing in. You can close this.</p><div class="race-row"><button class="btn primary" id="auOk" type="button">Done</button></div>`);
+  document.querySelectorAll('[data-oauth]').forEach(btn => btn.addEventListener('click', () => doOAuth(btn.dataset.oauth)));
+  $('#auSignin').addEventListener('click', () => doPasswordAuth(false));
+  $('#auSignup').addEventListener('click', () => doPasswordAuth(true));
+  $('#auLink').addEventListener('click', doMagicLink);
+}
+async function doPasswordAuth(isSignup) {
+  const email = ($('#auEmail').value || '').trim();
+  const pass = $('#auPass').value || '';
+  const er = $('#auErr');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { er.hidden = false; er.textContent = 'Enter a valid email address.'; return; }
+  if (pass.length < 6) { er.hidden = false; er.textContent = 'Password must be at least 6 characters.'; return; }
+  try { localStorage.setItem('lsa-auth-email', email); } catch (e) {}
+  const sb = await getSB(); if (!sb) { er.hidden = false; er.textContent = 'Not connected to Supabase.'; return; }
+  er.hidden = true;
+  let error = null;
+  try {
+    const r = isSignup
+      ? await sb.auth.signUp({ email, password: pass, options: { emailRedirectTo: location.href.split('#')[0] } })
+      : await sb.auth.signInWithPassword({ email, password: pass });
+    error = r.error;
+  } catch (e) { error = e; }
+  if (error) { er.hidden = false; er.textContent = error.message || 'Error'; return; }
+  if (isSignup) {
+    renderContent(`<h2>Account created</h2><p class="rlead">If email confirmation is on, check <b>${esc(email)}</b> for a confirm link. Otherwise you are signed in.</p><div class="race-row"><button class="btn primary" id="auOk" type="button">Done</button></div>`);
     $('#auOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
-  });
+  } else {
+    hideOverlay();
+    tin.focus({ preventScroll: true });
+  }
+}
+async function doMagicLink() {
+  const email = ($('#auEmail').value || '').trim(); const er = $('#auErr');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { er.hidden = false; er.textContent = 'Enter a valid email address.'; return; }
+  try { localStorage.setItem('lsa-auth-email', email); } catch (e) {}
+  const sb = await getSB(); if (!sb) { er.hidden = false; er.textContent = 'Not connected to Supabase.'; return; }
+  renderContent('<p class="rlead">Sending your link…</p>');
+  const redirect = location.href.split('#')[0];
+  let error = null;
+  try { const r = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } }); error = r.error; } catch (e) { error = e; }
+  if (error) { renderContent(`<h2>Couldn't send the link</h2><p class="race-err">${esc(error.message || 'Error')}.</p><p class="rlead">On Supabase's free built-in email, sign-in emails are rate-limited to a few per hour. For real sign-ups, add a custom SMTP sender in your project.</p><div class="race-row"><button class="btn" id="auBack" type="button">Back</button></div>`); const bk = $('#auBack'); if (bk) bk.addEventListener('click', openAuth); return; }
+  renderContent(`<h2>Check your email</h2><p class="rlead">We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device to finish signing in. You can close this.</p><div class="race-row"><button class="btn primary" id="auOk" type="button">Done</button></div>`);
+  $('#auOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+}
+async function doOAuth(provider) {
+  const sb = await getSB(); if (!sb) return;
+  const redirect = location.href.split('#')[0];
+  try {
+    await sb.auth.signInWithOAuth({ provider, options: { redirectTo: redirect } });
+  } catch (e) {
+    const er = $('#auErr'); if (er) { er.hidden = false; er.textContent = e.message || 'Provider not enabled. Turn it on in Supabase → Authentication → Providers.'; }
+  }
 }
 /* ---------- appearance themes ---------- */
 const THEMES = [
