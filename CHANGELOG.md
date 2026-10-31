@@ -3,10 +3,10 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
-## M3 — Assignments (in progress)
-- Schema for assignments already exists (from M1).
-- Documented UI acceptance and wiring in `supabase/m3-assignments.md`.
-- Next: teacher create-assignment form and student view of assigned missions + due date inside the classroom panel.
+## M3 — Assignments (UI patch ready)
+- Schema already in place (M1).
+- `src/m3-assignments.patch.md` contains the exact classroom-panel changes: teacher create form (title, due date, mission ids) and student view of assignments + due date with an Open button.
+- Apply the patch to `src/game.html`, then `npm run build`.
 
 ## v21 — ⚙ Settings menu (themes + avatar + account)
 - Added an always-visible **⚙ Settings** button that opens one panel with **Themes** (Halcyon Dark default + Amber CRT, Green Phosphor, Nord Night, Paper light), **your avatar**, and **account** (connect Supabase / sign in / sign out). When signed in, the button shows your avatar + name.
