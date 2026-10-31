@@ -1,0 +1,17 @@
+{
+  "name": "the-last-sysadmin",
+  "version": "0.22.0",
+  "private": true,
+  "description": "A browser game that teaches Linux administration in a simulated terminal.",
+  "scripts": {
+    "build": "node build.js",
+    "verify": "node verify.js",
+    "test": "node test-helpers.js",
+    "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
+    "smoke": "node smoke.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.40.0"
+  },
+  "license": "MIT"
+}

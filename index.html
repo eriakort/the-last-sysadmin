@@ -189,6 +189,36 @@ body.racing #raceBoard{display:block!important}
 .leds.collapsed .grp{display:none}
 .leds.collapsed .grp.current{display:flex}
 .leds.expanded{max-height:50vh;overflow:auto}
+
+/* ---- Appearance themes ---- */
+:root[data-theme="amber"]{
+  --bg:#120d02;--panel:#1a1304;--raise:#221903;--line:#3a2c0a;--ink:#f5d79a;--muted:#b08f4e;
+  --term:#0b0800;--term-bar:#0f0b01;--term-ink:#ffcf7a;
+  --amber:#ffb224;--on-amber:#1d1508;--blue:#ffd27a;--green:#ffc24d;--red:#ff7a3c;--violet:#ffe0ad;--led-off:#2a2008;color-scheme:dark;
+}
+:root[data-theme="green"]{
+  --bg:#02100a;--panel:#04160e;--raise:#061d13;--line:#0c3a24;--ink:#8af0b0;--muted:#4e9e73;
+  --term:#010b06;--term-bar:#020f09;--term-ink:#7affa8;
+  --amber:#7dff9e;--on-amber:#06150c;--blue:#6fe0a0;--green:#7dff9e;--red:#ff8a6a;--violet:#a7ffc4;--led-off:#0c2a1b;color-scheme:dark;
+}
+:root[data-theme="nord"]{
+  --bg:#2e3440;--panel:#333b4a;--raise:#3b4252;--line:#444c5e;--ink:#eceff4;--muted:#9aa5b8;
+  --term:#242933;--term-bar:#2b313d;--term-ink:#d8dee9;
+  --amber:#ebcb8b;--on-amber:#2e3440;--blue:#88c0d0;--green:#a3be8c;--red:#bf616a;--violet:#b48ead;--led-off:#3b4252;color-scheme:dark;
+}
+:root[data-theme="paper"]{
+  --bg:#eef1f5;--panel:#ffffff;--raise:#f3f5f8;--line:#d3d9e2;--ink:#1c2430;--muted:#5c6676;
+  --term:#0f141c;--term-bar:#0d121a;--term-ink:#d5dce7;
+  --amber:#c47f12;--on-amber:#ffffff;--blue:#2f6fd0;--green:#1f9d57;--red:#d2452e;--violet:#8b55c9;--led-off:#cfd6e0;color-scheme:light;
+}
+/* ---- Settings: theme swatch rows + avatar grid ---- */
+.tm-row{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--raise);color:var(--ink);cursor:pointer;font-size:13.5px;text-align:left}
+.tm-row:hover{border-color:var(--muted)}
+.tm-row.sel{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--raise))}
+.tm-sw{width:30px;height:20px;border-radius:5px;flex:none;border:1px solid rgba(255,255,255,.14);position:relative;overflow:hidden}
+.tm-sw i{position:absolute;right:4px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%}
+.tm-check{margin-left:auto;color:var(--amber)}
+.set-avgrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 </style>
 </head>
 <body>
@@ -205,14 +235,12 @@ body.racing #raceBoard{display:block!important}
       <div class="stat"><span class="k">XP</span><span class="v" id="xp">0</span></div>
       <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
-      <button class="btn avatar-btn" id="btnAvatar" type="button" title="Choose avatar" aria-label="Choose avatar">👤</button>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
-      <button class="btn" id="btnAuth" type="button" hidden title="Sign in to sync progress across devices">Sign in</button>
+      <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>
-<div class="avatar-picker" id="avatarPicker" role="listbox" aria-label="Avatar list"></div>
 
 
   <main class="stage">
@@ -285,6 +313,7 @@ body.racing #raceBoard{display:block!important}
 <script>
 (() => {
 'use strict';
+try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
 /* ============================================================
    Constants and helpers
    ============================================================ */
@@ -296,8 +325,7 @@ function loadAvatar() {
 }
 function saveAvatar(a) {
   try { localStorage.setItem('lsa-avatar', a); } catch(e) {}
-  const btn = document.getElementById('btnAvatar');
-  if (btn) btn.textContent = a;
+  if (typeof renderAuthBtn === 'function') renderAuthBtn();
 }
 let rackExpanded = false;
 
@@ -5111,7 +5139,8 @@ async function openRace() {
   if (!supaConfig()) { renderSupabaseSetup(false); return; }
   renderSupabaseSetup(true);
 }
-function renderSupabaseSetup(failed) {
+function renderSupabaseSetup(failed, back) {
+  back = back || renderSetup;
   let u = '', k = '';
   try { u = localStorage.getItem('lsa-sb-url') || ''; k = localStorage.getItem('lsa-sb-key') || ''; } catch (e) {}
   renderContent(`<h2>Set up online racing</h2>
@@ -5136,7 +5165,7 @@ function renderSupabaseSetup(failed) {
     roomCap = undefined; RACE_BACKEND = '';
     renderContent('<p class="rlead">Connecting to Supabase…</p>');
     const room = await getRoom();
-    if (room) renderSetup(); else renderSupabaseSetup(true);
+    if (room) back(); else renderSupabaseSetup(true, back);
   });
 }
 function renderSetup() {
@@ -5397,12 +5426,10 @@ function applyUser(u, initial) {
   else if (!authUser && prevId) emitSys('Signed out. Progress stays saved in this browser.', 'hint');
 }
 function renderAuthBtn() {
-  const b = $('#btnAuth'); if (!b) return;
-  if (!supaConfig()) { b.hidden = true; return; }
-  b.hidden = false;
-  b.textContent = authUser ? ('● ' + authUser.name) : 'Sign in';
+  const b = $('#btnSettings'); if (!b) return;
+  b.textContent = authUser ? `⚙ ${loadAvatar()} ${authUser.name}` : '⚙ Settings';
   b.classList.toggle('on', !!authUser);
-  b.title = authUser ? 'Signed in — your progress syncs to this account' : 'Sign in to sync progress across devices';
+  b.title = authUser ? `Signed in as ${authUser.name} — themes, avatar, account` : 'Themes, avatar, and account';
 }
 async function onLogin() {
   emitSys(`<b>Signed in as ${esc(authUser.name)}.</b> Your progress now syncs to this account.`, 'ok');
@@ -5484,45 +5511,60 @@ function openAuth() {
     $('#auOk').addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
   });
 }
-$('#btnAuth').addEventListener('click', openAuth);
+/* ---------- appearance themes ---------- */
+const THEMES = [
+  { id: '', name: 'Halcyon Dark', bg: '#0f141c', dot: '#f2b04b' },
+  { id: 'amber', name: 'Amber CRT', bg: '#120d02', dot: '#ffb224' },
+  { id: 'green', name: 'Green Phosphor', bg: '#02100a', dot: '#7dff9e' },
+  { id: 'nord', name: 'Nord Night', bg: '#2e3440', dot: '#88c0d0' },
+  { id: 'paper', name: 'Paper (light)', bg: '#eef1f5', dot: '#c47f12' }
+];
+function currentTheme() { try { return localStorage.getItem('lsa-theme') || ''; } catch (e) { return ''; } }
+function applyTheme(id) {
+  if (id) document.documentElement.setAttribute('data-theme', id);
+  else document.documentElement.removeAttribute('data-theme');
+  try { localStorage.setItem('lsa-theme', id); } catch (e) {}
+}
+/* ---------- ⚙ Settings panel (theme + avatar + account) ---------- */
+function openSettings() {
+  showOverlay();
+  const cur = currentTheme();
+  const themeRows = THEMES.map(t => `<button class="tm-row ${t.id === cur ? 'sel' : ''}" type="button" data-th="${t.id}"><span class="tm-sw" style="background:${t.bg}"><i style="background:${t.dot}"></i></span>${esc(t.name)}${t.id === cur ? '<span class="tm-check">✓</span>' : ''}</button>`).join('');
+  const av = loadAvatar();
+  const avGrid = '<div class="set-avgrid">' + AVATARS.map(a => `<button class="avatar-opt ${a === av ? 'sel' : ''}" type="button" data-av="${a}" aria-label="Avatar ${a}">${a}</button>`).join('') + '</div>';
+  let account;
+  if (!supaConfig()) account = `<p class="rlead" style="margin:0 0 9px">Sign-in, cross-device progress sync, and the leaderboard need a free <b>Supabase</b> project. This is a self-hosted feature (not on the claude.ai version).</p><button class="btn" id="setConnect" type="button">Connect Supabase</button>`;
+  else if (authUser) account = `<p class="rlead" style="margin:0 0 9px">Signed in as <b>${esc(authUser.email || authUser.name)}</b>. Your progress and race results sync to this account across devices.</p><button class="btn" id="setOut" type="button">Sign out</button>`;
+  else account = `<p class="rlead" style="margin:0 0 9px">Sign in with a one-time email link (no password) to sync progress across devices and record your race times.</p><div class="race-row"><button class="btn primary" id="setSignin" type="button">Sign in</button><button class="btn" id="setReconnect" type="button">Supabase settings</button></div>`;
+  renderContent(`<h2>Settings</h2>
+    <div class="rlabel">Theme</div>
+    <div id="setThemes" style="display:flex;flex-direction:column;gap:6px">${themeRows}</div>
+    <div class="rlabel">Your avatar</div>
+    ${avGrid}
+    <div class="rlabel">Account</div>
+    <div>${account}</div>
+    <div class="race-row" style="margin-top:16px"><button class="btn primary" id="setDone" type="button">Done</button></div>`);
+  document.querySelectorAll('#setThemes .tm-row').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); openSettings(); }));
+  document.querySelectorAll('#raceContent .avatar-opt[data-av]').forEach(bn => bn.addEventListener('click', () => { saveAvatar(bn.dataset.av); document.querySelectorAll('#raceContent .avatar-opt').forEach(x => x.classList.toggle('sel', x === bn)); }));
+  const done = $('#setDone'); if (done) done.addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+  const conn = $('#setConnect'); if (conn) conn.addEventListener('click', () => renderSupabaseSetup(false, openSettings));
+  const rec = $('#setReconnect'); if (rec) rec.addEventListener('click', () => renderSupabaseSetup(false, openSettings));
+  const si = $('#setSignin'); if (si) si.addEventListener('click', openAuth);
+  const out = $('#setOut'); if (out) out.addEventListener('click', async () => { const sb = await getSB(); if (sb) { try { await sb.auth.signOut(); } catch (e) {} } openSettings(); });
+}
+$('#btnSettings').addEventListener('click', openSettings);
 
 boot(load());
 try { authInit(); } catch (e) {}
 
 // Avatar picker init
-(function initAvatar() {
-  const btn = document.getElementById('btnAvatar');
-  const picker = document.getElementById('avatarPicker');
-  if (!btn || !picker) return;
-  const cur = loadAvatar();
-  btn.textContent = cur;
-  AVATARS.forEach(a => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'avatar-opt' + (a === cur ? ' sel' : '');
-    b.textContent = a;
-    b.setAttribute('aria-label', 'Avatar ' + a);
-    b.onclick = () => {
-      saveAvatar(a);
-      picker.querySelectorAll('.avatar-opt').forEach(x => x.classList.remove('sel'));
-      b.classList.add('sel');
-      picker.classList.remove('open');
-    };
-    picker.appendChild(b);
-  });
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    const r = btn.getBoundingClientRect();
-    picker.style.top = (r.bottom + 6) + 'px';
-    picker.style.left = r.left + 'px';
-    picker.classList.toggle('open');
-  };
-  document.addEventListener('click', () => picker.classList.remove('open'));
+/* Wire the rack / chips toggles and default the rack collapsed.
+   (Avatar selection now lives in the ⚙ Settings panel.) */
+(function initPanels() {
   const rt = document.getElementById('btnRackToggle');
   if (rt) rt.onclick = toggleRack;
   const ct = document.getElementById('btnChipsToggle');
   if (ct) ct.onclick = toggleChips;
-  // Default collapsed on mobile
   rackExpanded = false;
   const ledsEl = document.getElementById('leds');
   if (ledsEl) ledsEl.classList.add('collapsed');

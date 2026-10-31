@@ -1,40 +1,47 @@
 #!/usr/bin/env node
-// Tiny concat build step.
-// Usage: node build.js
-// Reads index.html, injects src/*.js into a marked region, writes the result.
-// Keeps the final artifact as a single file. No visual changes.
-
+/*
+ * Build step for The Last Sysadmin.
+ *
+ * The deployed files are GENERATED — never edit index.html or service-worker.js
+ * by hand. Edit the sources under src/ and run `node build.js` (or `npm run build`).
+ *
+ *   src/shell-head.html   fixed <head> boilerplate (doctype, metas, manifest links)
+ *   src/game.html         THE game — title, CSS, <body>, and the game <script> (edit this)
+ *   src/shell-tail.html   fixed tail (service-worker registration + </body></html>)
+ *   src/service-worker.js service-worker template; __VERSION__ is filled from src/version.txt
+ *   src/version.txt       the cache version number — bump it to force clients to refresh
+ *
+ * Output: index.html, service-worker.js
+ */
 const fs = require('fs');
 const path = require('path');
 
-const INDEX = path.join(__dirname, 'index.html');
 const SRC = path.join(__dirname, 'src');
+const read = f => fs.readFileSync(path.join(SRC, f), 'utf8');
 
-const START = '/* === EXTRACTED HELPERS START === */';
-const END = '/* === EXTRACTED HELPERS END === */';
+function build() {
+  const head = read('shell-head.html');
+  const game = read('game.html');
+  const tail = read('shell-tail.html');
+  const swTemplate = read('service-worker.js');
+  const version = read('version.txt').trim();
 
-function collect() {
-  const files = fs.readdirSync(SRC).filter(f => f.endsWith('.js')).sort();
-  return files.map(f => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
+  // guards — fail loudly rather than ship something broken
+  if (!/^\d+$/.test(version)) throw new Error(`src/version.txt must be a number, got "${version}"`);
+  if (!game.includes('<div class="app">')) throw new Error('src/game.html is missing <div class="app"> — wrong source?');
+  if (!game.includes('boot(load())')) throw new Error('src/game.html is missing boot(load()) — wrong source?');
+  if (!head.includes('<link rel="manifest"')) throw new Error('src/shell-head.html is missing the manifest link');
+  if (!swTemplate.includes('__VERSION__')) throw new Error('src/service-worker.js is missing the __VERSION__ placeholder');
+
+  const indexHtml = head + game + tail;
+  const serviceWorker = swTemplate.replace(/__VERSION__/g, version);
+
+  fs.writeFileSync(path.join(__dirname, 'index.html'), indexHtml);
+  fs.writeFileSync(path.join(__dirname, 'service-worker.js'), serviceWorker);
+  console.log(`Built index.html (${indexHtml.length} bytes) and service-worker.js (cache last-sysadmin-v${version}).`);
 }
 
-function main() {
-  let html = fs.readFileSync(INDEX, 'utf8');
-  const helpers = collect();
-  const block = `${START}\n${helpers}\n${END}`;
-
-  if (html.includes(START) && html.includes(END)) {
-    html = html.replace(new RegExp(`${START}[\\s\\S]*?${END}`), block);
-  } else {
-    // First run: insert after the KEY line as a comment for now
-    // (manual placement preferred until you want full automation)
-    console.log('No markers found. Add the markers manually or run with --force later.');
-    console.log('Helpers ready in src/.');
-    return;
-  }
-
-  fs.writeFileSync(INDEX, html);
-  console.log('index.html updated with extracted helpers.');
+if (require.main === module) {
+  try { build(); } catch (e) { console.error('BUILD FAILED:', e.message); process.exit(1); }
 }
-
-if (require.main === module) main();
+module.exports = build;

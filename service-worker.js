@@ -1,5 +1,5 @@
 /* The Last Sysadmin - offline service worker */
-const CACHE = 'last-sysadmin-v20';
+const CACHE = 'last-sysadmin-v22';
 const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

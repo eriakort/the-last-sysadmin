@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests (pure helpers + mission checkers)
+        run: npm test
+
+      - name: Build index.html and service-worker.js from src/
+        run: npm run build
+
+      - name: Verify the built page (features present + scripts parse)
+        run: npm run verify
+
+      - name: Staleness guard — committed files must match a fresh build
+        run: git diff --exit-code -- index.html service-worker.js

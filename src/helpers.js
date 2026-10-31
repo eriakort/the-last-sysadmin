@@ -4,12 +4,7 @@
 
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 
-const esc = s => String(s).replace(/[&<>"]/g, c => ({
-  '&': '&',
-  '<': '<',
-  '>': '>',
-  '"': '"'
-}[c]));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const md = s => esc(s)
   .replace(/`([^`]+)`/g, '<code>$1</code>')

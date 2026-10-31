@@ -1,6 +1,14 @@
 # Contributing to The Last Sysadmin
 
-Thanks for helping improve the game. The entire experience lives in a single `index.html` so it stays easy to open and deploy.
+Thanks for helping improve the game. It ships as a single self-contained
+`index.html` (easy to open and deploy), but that file is **generated** — you
+edit the sources under `src/` and run the build. Never edit `index.html` or
+`service-worker.js` by hand; CI will reject it.
+
+> **Start here:** `src/game.html` is the game — title, CSS, body, and the game
+> `<script>`. Edit that. Then `npm run check` and commit `src/**` together with
+> the regenerated `index.html` / `service-worker.js`. See `MODULARIZATION.md`
+> for the full layout and the release checklist.
 
 ## Design rule
 
@@ -8,7 +16,7 @@ Thanks for helping improve the game. The entire experience lives in a single `in
 
 ## Adding a new command
 
-1. Find the command registry (search for existing command definitions near the shell engine).
+1. In `src/game.html`, find the command registry (search for existing command definitions near the shell engine).
 2. Add a new entry with:
    - Name and aliases
    - Handler that mutates the simulated filesystem / process state when appropriate
@@ -18,7 +26,7 @@ Thanks for helping improve the game. The entire experience lives in a single `in
 
 ## Adding a chapter or ticket
 
-1. Locate the chapter / ticket data structures.
+1. In `src/game.html`, locate the chapter / ticket data structures.
 2. Add the new ticket with:
    - Title, story, objective
    - Hint steps (three is the usual pattern)
@@ -101,10 +109,15 @@ The final deployed artifact remains a single `index.html`. No visual changes.
 
 ## Workflow
 
-1. Edit `index.html` (or supporting files).
-2. Test locally: open the file or run `python3 -m http.server`.
-3. Commit and push — GitHub Pages deploys automatically.
-4. If you change cached assets, bump the cache name in `service-worker.js`.
+1. Edit the sources under `src/` (`src/game.html` for the game itself).
+2. `npm run build`, then test locally: open `index.html` or run `python3 -m http.server`.
+3. `npm run check` (build + unit tests + verify + staleness guard) must pass.
+4. To force returning players to refresh, bump `src/version.txt` before building.
+5. Commit `src/**` together with the regenerated `index.html` / `service-worker.js`, then push — GitHub Pages deploys automatically and CI verifies the build.
+
+> The older `a11y.patch` / `debug-why.patch` files above predate this pipeline;
+> apply such changes to `src/game.html` and rebuild rather than patching the
+> generated `index.html`.
 
 ## Questions?
 

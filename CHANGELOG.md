@@ -3,6 +3,15 @@
 All notable changes to The Last Sysadmin. The game is a single `index.html`;
 versions below track the content added over time.
 
+## v21 — ⚙ Settings menu (themes + avatar + account)
+- Added an always-visible **⚙ Settings** button that opens one panel with **Themes** (Halcyon Dark default + Amber CRT, Green Phosphor, Nord Night, Paper light), **your avatar**, and **account** (connect Supabase / sign in / sign out). When signed in, the button shows your avatar + name.
+- Replaced the separate 👤 avatar button and the account button with this one entry point. Avatar selection, rack/chips toggles, and the soft-lock fix are all preserved.
+
+## v22 — Build pipeline (no more silent drift)
+- `index.html` and `service-worker.js` are now **generated** from sources under `src/` (`npm run build`); they are never edited by hand. This closes the gap that let the deployed page silently fall behind its sources (the bug behind v20).
+- `npm run check` runs the whole gate locally — build, unit tests, a browser-free verify (required features present + every inline `<script>` parses), and a staleness guard that fails if the committed files don't match a fresh build. A GitHub Actions workflow runs the same on every push/PR.
+- Added unit tests for the pure helpers and mission checkers (`src/helpers.js`, `src/checkers.js`); fixed an escaping bug in the extracted `helpers.js` module (the shipped game was already correct). No gameplay or visual changes.
+
 ## v20 — Resilience fix actually shipped in index.html
 - The soft-lock recovery described under v17 below is now really present in the shipped `index.html` (it had been documented and written, but a broken build step meant the code never made it into the page that was deployed).
 - What it does: deleting a file a ticket relies on (e.g. `/var/log/halcyon/app.log`) no longer permanently blocks the game. Missing game-essential files self-heal on entering a ticket, on reloading a saved game, inside Restore checkpoint, via a new `repair` command, and when you type `check` on a stuck ticket.
