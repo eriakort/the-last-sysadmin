@@ -1,129 +1,140 @@
-# The Last Sysadmin
+# Networking Trainer — M1 engine + M2 CLI + M3 missions + M4 UI
 
-A story-driven game that teaches **Linux administration** in a simulated terminal — from `whoami` to provisioning a whole service from scratch. You're the new admin at a failing freight company; the server crashed at 3am, the previous admin vanished, and you fix it one ticket at a time while uncovering what happened.
+A prototype of the networking/security teaching game: the **network model**, the
+**forwarding engine**, the **mission checks** (M1), the **command-line layer** (M2), the
+**mission/chapter layer** with the ten beginner missions (M3), and a playable
+browser **UI** — topology view, config panels, terminal, and Check (M4). The engine is
+the single source of truth; the UI is just a layer that reads/writes the same model.
 
-**35 chapters · 183 missions · ~140 commands · one self-contained HTML file. No install, no server, no network required.**
+## Play it
 
-> ### ▶ [Play now](https://eriakort.github.io/the-last-sysadmin/)
-> **<https://eriakort.github.io/the-last-sysadmin/>** — live once GitHub Pages is enabled (see below).
+Open **`index.html`** in a browser (self-contained, no server, no deps). Pick a
+mission, click a device to configure it or type in the terminal, then hit **Check**.
 
-![chapters 1–35](icon.svg)
+**Game systems** (the sysadmin game's "feel"): saved progress (localStorage), XP
+and ranks (Cadet → Network Architect), a hints economy (each hint costs XP), a
+**per-ticket timer** and a **📊 Stats** view (per-ticket times/hints, averages,
+fastest), terminal **command history** (↑/↓), solved-ticket marks and a **Next
+ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
+distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
+persists across reloads.
 
-## Features
+**Fourteen missions** across addressing, subnetting, switching, routing, static
+routing, security, **DHCP**, **DNS/naming**, and **NAT** — including
+**destination-based firewall rules** for DMZ segmentation ("stop the pivot"), a
+**DHCP lease** that hands out address + gateway + resolver in one step
+(`dhclient`), a **name-resolution** fault where the IP works but the name doesn't
+(`dig`, `resolvectl`), and **NAT**: a **port-forward** that exposes an inside
+server on a public IP (DNAT) and a **masquerade** that shares one public address
+for a whole office (SNAT), both via `iptables -t nat`.
 
-- A working simulated **bash shell**: pipes `|`, redirection `> >> < 2>`, `;` `&&` `||`, globbing `*`, quoting, command substitution `$(...)`, variables, and a small script interpreter (`if` / `for` / `while` / `test` / functions-free).
-- ~140 commands with their own `man` pages — navigation, text processing (`grep`/`sed`/`awk`), users & permissions, processes, systemd, networking, storage/LVM, containers, git, and more.
-- **Mission checks look at the server's real state**, not the exact command you typed — creative solutions count.
-- **Investigation scenarios** (Chapters 31–35): a real senior-admin incident is paged in, you're asked diagnostic questions (`submit` your findings), troubleshoot with the live tools (`df -i`, `lsof +L1`, `du --inodes`, `dmesg`, `iostat`, `w`/`last`, `awk` on `/etc/passwd`), then apply the fix.
-- **Optional Speed tracker** — opt in with `tracker on` to time each ticket and keep a performance log (`stats`).
-- **Optional accounts** (self-hosted + Supabase) — passwordless magic-link sign-in for cross-device progress sync and an all-time race leaderboard. See [Accounts, progress sync & leaderboard](#accounts-progress-sync--leaderboard-optional-supabase). Entirely optional; the game plays fully signed-out.
-- **Race mode** — two or more players pick one of the incident scenarios and race live to resolve it first, with a real-time leaderboard. Works out of the box on the hosted claude.ai version; on a self-hosted copy (like this GitHub Pages site) it runs on a free **Supabase** realtime backend you connect once — see [Race mode on your own site](#race-mode-on-your-own-site-supabase).
-- A `check` command that tells you *why* a ticket hasn't advanced, plus three-step hints and a `retry` checkpoint.
-- Progress saved in your browser; works fully **offline** (installable as a PWA).
-- **Five appearance themes** (🎨 button): Halcyon Dark (default), Amber CRT, Green Phosphor, Nord Night, Paper (light). Your choice is remembered per browser.
-- **Pick an avatar** (emoji) shown in the lobby, live race board, leaderboard, and on your account.
-- Responsive down to phone width.
+**Incident-ticket framing.** Every mission opens as an on-call ticket: a
+reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
+open the shared drive — it worked Friday") rather than a task instruction. Before
+the fix is graded, a **diagnosis gate** makes the player locate the fault — a
+triage question answered by actually running `ping` / `traceroute` / `ip addr` /
+`nmap` first. A wrong pick is rejected with a nudge back to the tools; the right
+pick reveals *why*, then unlocks the objective and Check. This turns each mission
+from a tutorial step into on-call troubleshooting: investigate → diagnose → fix.
 
-## Chapters
+## Run the tests
 
-| # | Chapter | Topic |
-|---|---------|-------|
-| 1–3 | First Login · Clean-up Duty · Reading the Logs | navigation, files, text |
-| 4–6 | Who Still Has Access? · What Still Runs? · Closing the Door | users/permissions, processes, networking |
-| 7–10 | Room to Grow · A Backup That Restores · The Right Tools · Locking the Doors | storage, backups, packages, hardening |
-| 11–15 | Shell scripting · systemd · log analysis · containers · git deploy | automation & delivery |
-| 16–20 | Incident · Performance · Accounts · Recovery · Graduation | review capstones |
-| 21–30 | Regex · DNS · Kernel · Shell · ACLs · LVM · Signals · Observability · Automation · **From Zero** | advanced + provision a service |
-| 31–35 | **Incident Files:** Phantom Disk · Inode Exhaustion · Compromise & Privesc · OOM Killer · Ghost Load (I/O wait) | real-world investigation scenarios |
-
-## Run it
-
-It's a single self-contained page — pick whichever is easiest:
-
-- **Locally:** open `index.html` in any modern browser (double-click). Works offline.
-- **Served (enables install + offline cache):**
-  - `python3 -m http.server 8080` then open <http://localhost:8080/>
-  - or `npx serve`
-- **Install as an app (PWA):** open the served/Pages URL, then use your browser's **Install app** / **Add to Home Screen**. It launches in its own window and runs offline.
-
-## Deploy on GitHub Pages (automatic)
-
-This repo includes a workflow (`.github/workflows/pages.yml`) that publishes the site on every push to `main`.
-
-1. Push this repo to GitHub.
-2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Push (or re-run the workflow). Your game is live at `https://eriakort.github.io/the-last-sysadmin/`.
-
-After that, every `git push` updates the live site and the installed app.
-
-## Project layout
-
-```
-index.html              the entire game (self-contained)
-manifest.webmanifest    PWA metadata (name, icons, colors)
-service-worker.js       offline caching
-icon.svg / icon-*.png   app icons
-.github/workflows/      GitHub Pages deploy
+```bash
+node net-engine.test.js    # M1: engine scenario suite — 13 tests
+node net-cli.test.js       # M2: CLI suite — 10 tests
+node net-mission.test.js   # M3: every chapter is solvable — 8 tests
+node build-ui.js && node test-ui.js   # M4: build the page, then play it headlessly
+node net-mission-demo.js   # a full mission playthrough (briefing -> check -> fix)
 ```
 
-## Updating
+All plain Node; the UI test needs Playwright. 31 headless tests + the UI test.
 
-Edit `index.html`, commit, push — Pages redeploys. If you change cached assets and want installed apps to refresh immediately, bump the cache name in `service-worker.js` (e.g. `last-sysadmin-v11` → `v12`).
+## What's here
 
-## Race mode on your own site (Supabase)
+| File | What it is |
+|------|-----------|
+| `net-model.js` | IP/subnet math, the topology model, and `forward()` — the one engine every command and check is built on. Plus `ping()` (round trip, so it catches asymmetric ACLs). |
+| `net-checks.js` | Pure `{ ok, reason }` checks: `reachable`, `notReachable`, `routeExists`, `subnetCorrect`, `aclBlocks`, `serviceUp`. A mission's success criteria. |
+| `net-cli.js` | **M2** — the CLI bound to a world + a current device: `ip addr`, `ip route`, `ping`, `traceroute`, `arp`, `tcpdump`, `iptables`, `nmap`, `man`, `help`. |
+| `net-mission.js` | **M3** — `evalCheck` (declarative check spec -> result) and `startMission` (build world, bind CLI, grade, explain what's unmet). |
+| `net-chapters.js` | **M3** — ten missions as data: a starting topology + `success` checks + a reference `solution`. |
+| `ui.js` | **M4** — the browser UI: layered topology layout, SVG render, config panels, terminal, briefing + Check. Uses `require()` of the modules above. |
+| `build-ui.js` | **M4** — inlines the tested modules (verbatim, via a tiny `require` shim) + `ui.js` into `index.html`. Zero drift: the page runs the code the tests cover. |
+| `index.html` | **M4** — the built, self-contained, playable page. |
+| `net-*.test.js`, `test-ui.js` | 31 headless tests + the UI test. |
+| `net-*-demo.js` | Printed demos. |
 
-Live racing needs a realtime backend. On **claude.ai** that's built in and nothing is required. On a **self-hosted** copy (GitHub Pages, Netlify, a file on disk, etc.) you connect a free **Supabase** project once; then anyone who opens your page can race.
+## The M3 mission layer
 
-**One-time setup (about 2 minutes):**
+A mission is **data**: a `build()` that returns a starting topology, a `success` list of
+declarative checks, and (for authoring/testing) a reference `solution`. `startMission`
+builds the world, binds a CLI to the starting device, and exposes `done()` and `status()`
+— `status()` is the sysadmin game's `check` command: it names exactly which objective is
+unmet and why. Because missions are plain data in this shape, a **no-code mission editor**
+(like the sysadmin game's) can emit them directly.
 
-1. Create a free project at <https://supabase.com> (no credit card needed).
-2. In the project, open **Project Settings → Data API** (older UIs: **API**). Copy two values:
-   - the **Project URL** (e.g. `https://abcdxyz.supabase.co`)
-   - the **anon public** key (a long `eyJ…` string — this is a *public* client key, safe to use in a web page).
-3. Open your game, click **⚑ Race**, and paste both into the setup dialog → **Connect**. They're saved in your browser. Realtime is on by default and **no database tables are needed** — racing uses Supabase's presence channels only.
+The six starter missions walk the beginner arc: *First contact* (address a blank host),
+*The typo in the address* (subnetting), *Off the local network* (default gateway), *The
+missing route* (static routing), *Close the telnet port* (firewall), *Keep guests off the
+database* (segmentation / security). Every one is tested to start unsolved and be resolved
+by its solution — and a wrong move is tested **not** to pass, guarding against loose checks.
 
-That's it — share your page's link, have each player open it, and race. If you'd rather bake the credentials into the page instead of entering them in the dialog, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` near the top of the `<script>` in `index.html`.
+## The M2 CLI
 
-> The anon key is public by design. For a casual game the defaults are fine; if you want to lock usage down later, Supabase's Realtime authorization / RLS lets you restrict who may connect.
+The CLI is bound to a world and a **current device** (the console you're on), and every
+command reads or writes the same model the engine runs on — so **a mission is solvable
+two ways**: a beginner clicks in a config panel, a confident learner types `ip route add`,
+and the grader can't tell the difference (there's a test for exactly this). Supported:
 
-## Accounts, progress sync & leaderboard (optional, Supabase)
+- `ip addr` / `ip addr add <A>/<p> dev <if>` — show / set interface addresses
+- `ip route` / `ip route add default via <ip>` / `ip route add <cidr> via <ip>` — the routing table
+- `ping <host|ip>` — round-trip, reports the path and where a packet died
+- `traceroute <host|ip>` — the hops toward a target
+- `arp` / `ip neigh` — neighbours on the L2 segment
+- `tcpdump` — the packets from the last ping
+- `iptables -L | -A INPUT -i <if> [-p tcp] [--dport N] -j DROP|ACCEPT | -F` — firewall rules (a recognisable subset)
+- `nmap <host|ip>` — **read-only, defensive**: list a host's exposed services ("see your own attack surface")
+- `dig <name>` — resolve a name via this host's configured DNS server (NXDOMAIN / no-resolver failures are teachable)
+- `dhclient <if>` — request a DHCP lease: address + gateway + resolver, in one step
+- `resolvectl dns <if> <ip>` / `resolvectl status` — set / show the host's DNS resolver
+- `ping` is **name-aware**: `ping intranet.corp.local` resolves through DNS first, so "the IP works but the name doesn't" is a real, visible split
+- `man <cmd>`, `help`
 
-Signing in is **optional** — the game plays fully without it, saving progress in your browser. Adding login (same Supabase project as racing) gives you:
+The DNS model is **authoritative/static** (a resolver maps names→IPs); no recursion,
+caching, or TTLs — deliberately, since those add protocol machinery without teaching a
+beginner more than "names need a resolver, and a record."
 
-- **Magic-link sign-in** (passwordless email) — public sign-ups, anyone can register.
-- **Cross-device progress sync** — your campaign (chapters/XP) follows your account.
-- **An all-time race leaderboard** — fastest clean time per scenario.
+## What the tests prove
 
-**Setup:**
+- **Switching** — two hosts on one switch reach each other; a host in the wrong subnet doesn't.
+- **Routing** — a router joins two subnets; a host with no default gateway can't leave its own.
+- **Static routes** — two far subnets talk only when both routers have routes; removing one breaks it, and `routeExists` reports it.
+- **Firewalls** — telnet (tcp/23) blocked while web (tcp/80) and ping pass; rule **order** matters (an `allow any` shadows a later `deny`); an **asymmetric** ACL that drops the reply fails the round trip even though the request got through.
+- **VLANs** — same switch, different VLANs can't reach each other (L2 segmentation).
+- **Physical** — a downed link breaks the path.
+- **IP math** — addresses round-trip and subnet membership computes.
 
-1. In your Supabase project, open **SQL Editor → New query**, paste the contents of [`supabase-setup.sql`](supabase-setup.sql), and **Run**. This creates the `profiles`, `progress`, and `race_results` tables with Row Level Security (each user can only write their own rows).
-2. **Authentication → URL Configuration:** set **Site URL** to your deployed URL (e.g. `https://eriakort.github.io/the-last-sysadmin/`) and add it under **Redirect URLs** too. Without this, the magic-link email sends people to the wrong place.
-3. That's it — open the game, click **Sign in**, enter an email, click the link in your inbox.
+## How it works (the one idea)
 
-**Classroom features (classes, join codes, assignments, rosters):** these need
-additional migrations beyond `supabase-setup.sql`. Apply the scripts in
-[`supabase/`](supabase/) **in the order given in [`supabase/README.md`](supabase/README.md)**
-— `m1-classroom.sql`, then `m2-enrollment.sql`, `m4-enroll-by-email.sql`,
-`m6-missions.sql`, `m7-scenarios.sql`. Skipping one leaves its feature broken.
-OAuth sign-in (Google / Microsoft / GitHub), if you want it, is enabled under
-**Authentication → Providers** — no SQL needed.
+Everything is one function: `forward(net, srcDevice, packet)` walks the packet hop
+by hop — same-subnet delivery → ARP/L2 domain (switches are transparent, VLAN-aware)
+→ default gateway → inbound ACL → longest-prefix route lookup → forward — and returns
+`{ ok, path, reason }`. `ping`, `traceroute`, every check, and every security scenario
+are thin callers of it. The `reason` string ("blocked by ACL", "no route to 10.0.2.10")
+is what makes a failed attempt a teaching moment.
 
-**Important — email sending limits:** Supabase's built-in email service is **rate-limited to a few messages per hour** and is meant for testing. For real public sign-ups, add a custom SMTP sender (Resend, SendGrid, Postmark, etc.) under **Authentication → Emails / SMTP** in Supabase. Until you do, only a handful of sign-in emails per hour will go out.
+## Deliberately out of scope (for beginners)
 
-**Security notes:**
+Real TCP state machines, congestion/timing, and protocol convergence (OSPF/BGP). The
+model is L3 reachability + ACLs + a readable path — which covers the whole beginner
+roadmap. See the architecture sketch for the fidelity discussion.
 
-- The page uses only the **anon public** key (safe to expose). **Never** put the `service_role` key in the page — it bypasses all security rules.
-- Row Level Security keeps each user writing only their own data. Integrity is *casual*: because the browser writes its own rows, stats are self-reported (fine for a learning game; not suitable for grading without server-side validation).
-- Signing in stores an email address, so if strangers use your site, add a short privacy note. The game itself sends no other data anywhere.
+## Next
 
-## Notes & limitations
+M1–M4 are done: a playable prototype with engine, CLI, missions, and a UI, all tested.
+Natural next steps:
 
-This is a teaching **simulation**, not a real Linux box. Commands model the common workflows and flags well enough to learn from, but output and behavior won't always match a real system byte-for-byte (e.g. `sha256sum` uses a stand-in hash; `docker`/`git`/`lvm` are simulated against small built-in state). Always verify exact behavior on a real machine. The story, company, people, and IP addresses are fictional (IPs are from ranges reserved for documentation).
-
-## Contributing
-
-Issues and ideas welcome — new chapters, more commands, better hints. The whole game lives in `index.html`.
-
-## License
-
-[MIT](LICENSE).
+- **Polish the builder** — drag to reposition, add/remove devices and links (right now topology is given per mission and you configure it; the sketch's "build from scratch" capstone needs add/delete).
+- **DNS/DHCP** in the engine → unlocks `dig` / `dhclient` and the naming chapter.
+- **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
+- **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
