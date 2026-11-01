@@ -507,6 +507,34 @@ const chapters = [
     success: [{ type: 'reachable', a: 'hq', b: 'br' }],
     solution: [['r1', 'ip route add 10.0.8.0/24 via 10.0.13.2']]
   }
+,
+
+  { id: 'ospf-neighbor', chapter: 'OSPF',
+    title: 'Bring up the neighbor',
+    story: 'r1 and r2 share the 10.0.12.0/24 link, but neither is running OSPF. HQ cannot reach the branch at 10.0.8.10 because r1 has no route for it. Enable OSPF so they become neighbors and the branch network is learned.',
+    objective: 'Enable OSPF area 0 on the shared link (and on r2 toward the branch) so r1 learns 10.0.8.0/24 and HQ can reach br.',
+    ticket: { id: 'INC-2401', from: 'NOC', priority: 'P2', symptom: "The new branch router is cabled and addressed, but HQ still can't reach 10.0.8.10. Nobody added a static route — this was supposed to come up with OSPF." },
+    diagnose: { q: '`ospf neighbor` on r1 shows nothing, and there is no static route to 10.0.8.0/24. What is missing?', options: ['OSPF is not enabled on the shared interfaces, so no adjacency and no learned route', 'the branch server is down', 'HQ has the wrong IP'], answer: 0, because: 'The link and addresses are fine. Without OSPF on both ends of the link, there is no neighbor and nothing is advertised.' },
+    console: 'r1',
+    hints: ['`ospf neighbor` — empty means no adjacency.', 'Enable OSPF on r1 eth1 and on r2 eth0 (the shared link), area 0.', 'Also enable it on r2 eth1 so 10.0.8.0/24 is advertised. Then check `ospf neighbor`.'],
+    build: () => ({
+      devices: {
+        hq: H('hq', '10.0.1.10', 24, '10.0.1.1'),
+        br: SRV('br', '10.0.8.10', 24, '10.0.8.1', { 22: 'ssh' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 24) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 24), eth1: iface('10.0.8.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('hq', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'), L('br', 'eth0', 'sw2', 'p1'), L('r2', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'ospf_neighbor', dev: 'r1', peer: 'r2' },
+      { type: 'ospf_route', dev: 'r1', cidr: '10.0.8.0/24' },
+      { type: 'reachable', a: 'hq', b: 'br' }
+    ],
+    solution: [['r1', 'ospf eth1 area 0'], ['r2', 'ospf eth0 area 0'], ['r2', 'ospf eth1 area 0'], ['r1', 'ospf eth0 area 0']]
+  }
 
 ];
 

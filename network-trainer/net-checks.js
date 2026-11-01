@@ -63,4 +63,14 @@ function resolves(net, devId, name, expectIp) {
   return { ok, reason: ok ? `${devId} resolves ${name} to ${M.ipStr(r.ip)}` : `${devId} resolves ${name} to ${M.ipStr(r.ip)}, expected ${M.ipStr(want)}` };
 }
 
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves };
+function ospfNeighbor(net, devId, peerId) {
+  const ns = M.ospfNeighbors(net, devId);
+  const hit = ns.some(n => !peerId || n.id === peerId);
+  return { ok: hit, reason: hit ? `${devId} has OSPF neighbor ${peerId || ns.map(n=>n.id).join(',')}` : `${devId} has no OSPF neighbor${peerId ? ' ' + peerId : ''}` };
+}
+function ospfRoute(net, devId, cidrStr) {
+  const c = M.cidr(cidrStr);
+  const hit = M.ospfLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
+  return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via OSPF` : `${devId} has not learned ${cidrStr} via OSPF` };
+}
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute };

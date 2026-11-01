@@ -56,6 +56,20 @@ const COMMANDS = {
     if (cli.selected.has(id)) cli.selected.delete(id); else cli.selected.add(id);
     return ok('review: ' + (cli.selected.has(id) ? 'checked' : 'unchecked') + ' ' + id);
   },
+  ospf: (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    if (a[0] === 'neighbor' || a[0] === 'neighbors' || (a[0] === 'show' )) {
+      const ns = M.ospfNeighbors(cli.net, cli.cur);
+      if (!ns.length) return ok('OSPF neighbors: (none)');
+      return ok('OSPF neighbors:\n' + ns.map(n => `  ${n.id}  ${M.ipStr(n.ip)}  area ${n.area}  via ${n.via}`).join('\n'));
+    }
+    // ip-style: ospf <iface> area <n>
+    const ifn = a[0], area = a[2];
+    if (!ifn || a[1] !== 'area' || area == null) return err('usage: ospf <iface> area <n>   |   ospf neighbor');
+    if (!dev.ifaces[ifn]) return err('ospf: no interface ' + ifn);
+    dev.ifaces[ifn].ospf = Number(area);
+    return ok(`OSPF enabled on ${ifn} area ${area}`);
+  },
   help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),

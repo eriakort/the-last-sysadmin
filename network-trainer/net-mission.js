@@ -17,6 +17,8 @@ function evalCheck(net, s) {
     case 'acl_blocks':     return C.aclBlocks(net, s.src, s.dst, { proto: s.proto, dport: s.dport });
     case 'service_up':     return C.serviceUp(net, s.dev, s.port);
     case 'resolves':       return C.resolves(net, s.dev, s.name, s.ip);
+    case 'ospf_neighbor':  return C.ospfNeighbor(net, s.dev, s.peer);
+    case 'ospf_route':     return C.ospfRoute(net, s.dev, s.cidr);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }

@@ -72,7 +72,7 @@ function routeLookup(dev, addr) {                 // longest-prefix match
 // Lets a second, equal-length route take over when the primary gateway is down.
 function routeLookupReachable(net, devId, addr) {
   const dev = net.devices[devId];
-  const cands = (dev.routes || []).filter(r => sameNet(addr, r.dest, r.mask));
+  const cands = allRoutes(net, devId).filter(r => sameNet(addr, r.dest, r.mask));
   cands.sort((a, b) => b.mask - a.mask);
   for (const r of cands) {
     const gwIface = directIface(dev, r.via);
@@ -85,6 +85,55 @@ function routeLookupReachable(net, devId, addr) {
 function deviceOwning(net, addr) {
   for (const id in net.devices) if (ownsIp(net.devices[id], addr)) return id;
   return null;
+}
+
+
+/* ---------- OSPF (minimal: interface areas, neighbors, connected-route learning) ---------- */
+function ospfArea(dev, iface) {
+  const f = dev.ifaces[iface];
+  return f && f.ospf != null ? f.ospf : null;
+}
+function ospfNeighbors(net, devId) {
+  const dev = net.devices[devId]; if (!dev) return [];
+  const out = [];
+  for (const ifn in dev.ifaces) {
+    const area = ospfArea(dev, ifn);
+    if (area == null || dev.ifaces[ifn].up === false) continue;
+    for (const [nd, ni] of l2Domain(net, devId, ifn)) {
+      if (nd === devId) continue;
+      const peer = net.devices[nd];
+      if (ospfArea(peer, ni) !== area) continue;
+      if (peer.ifaces[ni].up === false || peer.ifaces[ni].ip == null) continue;
+      out.push({ id: nd, iface: ni, area, ip: peer.ifaces[ni].ip, via: ifn });
+    }
+  }
+  return out;
+}
+// Connected subnets a device advertises (OSPF-enabled interfaces).
+function ospfAdvertised(dev) {
+  const ads = [];
+  for (const ifn in dev.ifaces) {
+    const f = dev.ifaces[ifn];
+    if (f.ospf == null || f.up === false || f.ip == null) continue;
+    ads.push({ dest: networkOf(f.ip, f.mask), mask: f.mask, area: f.ospf });
+  }
+  return ads;
+}
+// Routes learned from OSPF neighbors: their advertised connected nets, via the neighbor.
+function ospfLearned(net, devId) {
+  const learned = [];
+  for (const n of ospfNeighbors(net, devId)) {
+    const peer = net.devices[n.id];
+    for (const ad of ospfAdvertised(peer)) {
+      if (ad.area !== n.area) continue;
+      learned.push({ dest: ad.dest, mask: ad.mask, via: n.ip, proto: 'ospf', from: n.id });
+    }
+  }
+  return learned;
+}
+function allRoutes(net, devId) {
+  const dev = net.devices[devId];
+  return (dev.routes || []).concat(ospfLearned(net, devId));
 }
 
 /* ---------- ACLs (inbound, first match wins, default allow) ---------- */
@@ -215,5 +264,6 @@ module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
+  ospfNeighbors, ospfLearned, ospfAdvertised,
   resolveName, dhclient, dhcpServerFor
 };
