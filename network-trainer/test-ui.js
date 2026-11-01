@@ -84,12 +84,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
   // --- game systems: XP + progress HUD updated after two solves ---
   const xp = await page.textContent('#xp'), prog = await page.textContent('#prog');
-  if (+xp >= 200 && prog === '2/12') ok(`XP + progress tracked (XP ${xp}, solved ${prog})`);
+  if (+xp >= 200 && /^2\/\d+$/.test(prog)) ok(`XP + progress tracked (XP ${xp}, solved ${prog})`);
   else fail(`HUD not tracking: XP ${xp}, solved ${prog}`);
 
   // --- progress persists across reload (localStorage) ---
   await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(400);
-  if ((await page.textContent('#prog')) === '2/12') ok('progress persists across reload');
+  if (/^2\/\d+$/.test(await page.textContent('#prog'))) ok('progress persists across reload');
   else fail('progress did not persist: ' + (await page.textContent('#prog')));
 
   // --- settings opens and a theme applies ---

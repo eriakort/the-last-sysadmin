@@ -106,7 +106,7 @@ select,input{background:var(--raise);border:1px solid var(--line);color:var(--in
 .xlink{color:var(--amber);text-decoration:none;font-size:12px;font-weight:600}
 .xlink:hover{text-decoration:underline}
 #modal{position:fixed;inset:0;background:rgba(5,8,12,.7);display:flex;align-items:center;justify-content:center;z-index:50}
-.sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;width:min(420px,92vw)}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;width:min(420px,92vw);max-height:85vh;overflow:auto}
 .sheet h2{margin:0 0 10px}
 .themes{display:flex;flex-direction:column;gap:6px}
 .tm{text-align:left;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;cursor:pointer;font:inherit}

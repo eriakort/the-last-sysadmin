@@ -2,7 +2,7 @@
 
 A prototype of the networking/security teaching game: the **network model**, the
 **forwarding engine**, the **mission checks** (M1), the **command-line layer** (M2), the
-**mission/chapter layer** with the ten beginner missions (M3), and a playable
+**mission/chapter layer** with the twenty-two missions (M3), and a playable
 browser **UI** — topology view, config panels, terminal, and Check (M4). The engine is
 the single source of truth; the UI is just a layer that reads/writes the same model.
 
@@ -19,12 +19,19 @@ ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
 distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
 persists across reloads.
 
-**Twelve missions** across addressing, subnetting, switching, routing, static
-routing, security, **DHCP**, and **DNS/naming** — including **destination-based
-firewall rules** for real DMZ segmentation ("stop the pivot"), a **DHCP lease**
-that hands out address + gateway + resolver in one step (`dhclient`), and a
-**name-resolution** fault where the IP works but the name doesn't (`dig`,
-`resolvectl`).
+**Twenty-two missions** across addressing, subnetting, switching, routing, static
+routing, security, **DHCP**, **DNS/naming**, **failover**, and **dynamic routing
+(OSPF & BGP)** — including **destination-based firewall rules** for DMZ
+segmentation ("stop the pivot"), a **DHCP lease** that hands out address + gateway
++ resolver in one step (`dhclient`), a **name-resolution** fault where the IP
+works but the name doesn't (`dig`, `resolvectl`), **OSPF** neighbour adjacency and
+learned routes, **BGP** sessions and network advertisements, and **failover**
+where traffic reroutes around a dead next hop.
+
+Two mission **types** go beyond the single-fault ticket: a **design-review /
+audit** ("spot the planted problems, ignore the distractors") and a **multi-fault
+incident** (two or three interacting faults to localise). An **observability
+flows panel** lets the player read the traffic to find the cause.
 
 **Incident-ticket framing.** Every mission opens as an on-call ticket: a
 reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
