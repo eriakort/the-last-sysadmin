@@ -631,7 +631,7 @@ function boot() {
   document.getElementById('app').innerHTML = `
     <header id="top">
       <div class="apphdr">
-        <div class="brand"><span class="mark"></span>THE LAST SYSADMIN</div>
+        <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
         <nav class="apptabs" role="tablist">
           <a class="apptab" href="../" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
           <a class="apptab on" href="#" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
