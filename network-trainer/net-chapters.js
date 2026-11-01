@@ -566,6 +566,50 @@ const chapters = [
       ['r2', 'bgp asn 65002'], ['r2', 'bgp neighbor 10.0.12.1 remote-as 65001'], ['r2', 'bgp network 10.0.8.0/24']
     ]
   }
+,
+
+  { id: 'expose-the-server', chapter: 'NAT',
+    title: 'Let the world in',
+    story: 'The web server web (10.0.1.10) runs fine on the inside, but customers on the internet can\'t reach it. The edge router has one public address, 203.0.113.10, facing the internet host wan; web\'s 10.x address isn\'t routable out there.',
+    objective: 'On the edge router, forward inbound web traffic (tcp/80) on the public address to the internal server.',
+    ticket: { id: 'INC-1168', from: 'Product owner', priority: 'P1', symptom: "We launched the site but customers say it just times out. Internally everyone can open it fine on 10.0.1.10. From outside — nothing. The public IP is 203.0.113.10." },
+    diagnose: { q: 'Outside hosts hit the public address but never reach the web server, whose 10.0.1.10 address has no route on the internet. What lets outside traffic in to it?', options: ['a destination-NAT (port-forward) mapping the public IP’s tcp/80 to the internal server', 'a default route on the web server', 'opening tcp/80 in the firewall'], answer: 0, because: 'A private 10.x address is unreachable from the internet. A port-forward (DNAT) on the edge rewrites inbound traffic for 203.0.113.10:80 to 10.0.1.10, so the public IP fronts the internal server.' },
+    console: 'edge',
+    hints: ['The server’s private address can’t be reached from outside directly — traffic must come in via the public IP.', 'Port-forward tcp/80 arriving on the outside interface (eth1) to the internal server.', 'Run `iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10`.'],
+    build: () => ({
+      devices: {
+        wan: H('wan', '203.0.113.9', 24),
+        web: SRV('web', '10.0.1.10', 24, '10.0.1.1', { 80: 'http' }),
+        edge: R('edge', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.10', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('web', 'eth0', 'sw1', 'p1'), L('edge', 'eth0', 'sw1', 'p2'), L('wan', 'eth0', 'sw2', 'p1'), L('edge', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'port_forward', from: 'wan', public: '203.0.113.10', dport: 80, server: 'web', proto: 'tcp' }],
+    solution: [['edge', 'iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10']]
+  }
+,
+
+  { id: 'share-one-ip', chapter: 'NAT',
+    title: 'Share one public address',
+    story: 'The office runs on private addresses (10.0.1.0/24) behind the edge router, which has a single public address, 203.0.113.10. Staff can\'t reach anything on the internet — their packets go out, but nothing comes back.',
+    objective: 'On the edge router, masquerade the office network behind the public address so staff can reach the internet host site.',
+    ticket: { id: 'INC-1177', from: 'Office manager', priority: 'P2', symptom: "Nobody in the office can get online today. It's not just one site — everything external is dead. Internal stuff works fine. We have one public IP from the ISP." },
+    diagnose: { q: 'The office PCs’ packets reach the internet server, but replies never come back. Their 10.x source addresses aren’t routable on the internet. What fixes the return path?', options: ['source-NAT (masquerade) so the office shares the edge’s public address', 'a static route to 10.0.1.0/24 on the internet server', 'a second DNS server'], answer: 0, because: 'Replies to a private 10.x source can’t be routed back from the internet. Masquerade rewrites the office’s source to the edge’s public IP; the edge tracks the flow and translates replies back to the right PC.' },
+    console: 'edge',
+    hints: ['The request reaches the server; it’s the reply that dies — the internet can’t route back to a 10.x address.', 'Masquerade traffic from the office network as it leaves the outside interface (eth1).', 'Run `iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE`.'],
+    build: () => ({
+      devices: {
+        pc: H('pc', '10.0.1.10', 24, '10.0.1.1'),
+        site: SRV('site', '203.0.113.50', 24, null, { 80: 'http' }),
+        edge: R('edge', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.10', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('pc', 'eth0', 'sw1', 'p1'), L('edge', 'eth0', 'sw1', 'p2'), L('site', 'eth0', 'sw2', 'p1'), L('edge', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable', a: 'pc', b: 'site' }],
+    solution: [['edge', 'iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE']]
+  }
 
 ];
 

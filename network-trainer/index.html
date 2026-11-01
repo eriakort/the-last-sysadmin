@@ -308,36 +308,72 @@ function aclDecision(dev, dir, iface, pkt) {
   return 'allow';
 }
 
+/* ---------- NAT (applied as a packet passes a boundary device) ---------- */
+// On arrival: forward DNAT (port-forward to an inside server) or, on a reply,
+// reverse the SNAT/DNAT recorded for this flow. `ct` is a one-flow conntrack.
+function applyNat(dev, pkt, ct, reverse) {
+  let p = pkt;
+  if (reverse) {
+    if (ct && ct.snat && p.dst === ct.snat.translated && ownsIp(dev, p.dst)) p = { ...p, dst: ct.snat.orig };
+    if (ct && ct.dnat && p.src === ct.dnat.newDst) p = { ...p, src: ct.dnat.origDst };
+    return p;
+  }
+  for (const r of dev.nat) {
+    if (r.kind === 'dnat' && dev.ifaces[r.oif] && dev.ifaces[r.oif].ip === p.dst
+        && (!r.proto || r.proto === p.proto) && r.dport === p.dport) {
+      if (ct) ct.dnat = { origDst: p.dst, newDst: r.toIp };
+      return { ...p, dst: r.toIp };
+    }
+  }
+  return p;
+}
+// On egress via the outside interface: SNAT (masquerade) an inside source.
+function applySnat(dev, pkt, eg, ct) {
+  for (const r of dev.nat) {
+    if (r.kind === 'snat' && r.oif === eg && dev.ifaces[eg] && dev.ifaces[eg].ip != null
+        && sameNet(pkt.src, r.srcNet.net, r.srcNet.prefix)) {
+      if (ct) ct.snat = { orig: pkt.src, translated: dev.ifaces[eg].ip };
+      return { ...pkt, src: dev.ifaces[eg].ip };
+    }
+  }
+  return pkt;
+}
+
 /* ---------- the forwarding engine ---------- */
 // Walk a packet hop by hop from srcDev toward pkt.dst. Returns
-// { ok, path:[deviceIds], reason, at? }. Every reason is a teachable failure.
-function forward(net, srcDev, pkt, opts = {}) {
-  const ttl = opts.ttl || 16, dst = pkt.dst, path = [];
-  let cur = srcDev;
+// { ok, path:[deviceIds], reason, at?, pkt? }. Every reason is a teachable failure.
+// Failover-aware (routeLookupReachable skips a dead next hop) and NAT-aware
+// (boundary devices rewrite the packet; opts.ct threads a one-flow conntrack so
+// ping() can reverse the translation on the reply).
+function forward(net, srcDev, pktIn, opts = {}) {
+  const ttl = opts.ttl || 16, path = [];
+  const ct = opts.ct, reverse = !!opts.reverse;
+  let pkt = { ...pktIn }, cur = srcDev;
   for (let hop = 0; hop < ttl; hop++) {
     const dev = net.devices[cur];
     if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
     path.push(cur);
-    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered' };
+    if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
+    const dst = pkt.dst;
+    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered', pkt };
 
-    const eg = directIface(dev, dst);
-    if (eg) {                                      // destination is on a directly-connected subnet
-      const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === dst && net.devices[d].ifaces[i].up !== false);
-      if (!ep) return { ok: false, path, reason: 'no host with that address on the segment', at: cur };
-      const [dd, di] = ep;
-      if (aclDecision(net.devices[dd], 'in', di, pkt) === 'deny') return { ok: false, path: path.concat(dd), reason: 'blocked by ACL', at: dd };
-      return { ok: true, path: path.concat(dd), reason: 'delivered' };
+    // choose the egress interface: directly connected, else via a (failover-aware) route
+    let eg = directIface(dev, dst), targetIp = dst, viaRoute = null;
+    if (!eg) {
+      viaRoute = routeLookupReachable(net, cur, dst);      // skip a dead next hop
+      if (!viaRoute) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
+      eg = directIface(dev, viaRoute.via);
+      if (!eg) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
+      targetIp = viaRoute.via;
     }
+    if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
 
-    const r = routeLookupReachable(net, cur, dst);  // skip a dead next hop
-    if (!r) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
-    const gwIface = directIface(dev, r.via);
-    if (!gwIface) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
-    const gw = l2Domain(net, cur, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
-    if (!gw) return { ok: false, path, reason: 'gateway ' + ipStr(r.via) + ' unreachable', at: cur };
-    const [nd, ni] = gw;
+    const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === targetIp && net.devices[d].ifaces[i].up !== false);
+    if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
+    const [nd, ni] = ep;
     if (aclDecision(net.devices[nd], 'in', ni, pkt) === 'deny') return { ok: false, path: path.concat(nd), reason: 'blocked by ACL', at: nd };
-    cur = nd;                                      // advance to next hop
+    if (!viaRoute && !net.devices[nd].nat) return { ok: true, path: path.concat(nd), reason: 'delivered', pkt };
+    cur = nd;                                      // advance (to the gateway, or into a NAT box to translate)
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
 }
@@ -406,13 +442,16 @@ function dhclient(net, hostId, ifaceName) {
 // Catches asymmetric ACLs / missing return routes, which pure one-way reachability misses.
 function ping(net, srcDev, dst, base = {}) {
   const proto = base.proto || 'icmp', dport = base.dport;
+  const ct = {};                                   // one-flow conntrack, so NAT can be reversed on the reply
   const srcIp = sourceIpToward(net, srcDev, dst);
-  const fwd = forward(net, srcDev, { src: srcIp, dst, proto, dport });
+  const fwd = forward(net, srcDev, { src: srcIp, dst, proto, dport }, { ct });
   if (!fwd.ok) return { ok: false, dir: 'request', reason: fwd.reason, forward: fwd };
-  const dstDev = deviceOwning(net, dst);
+  const arrivedDst = fwd.pkt ? fwd.pkt.dst : dst;  // after any DNAT
+  const arrivedSrc = fwd.pkt ? fwd.pkt.src : srcIp; // after any SNAT
+  const dstDev = deviceOwning(net, arrivedDst);
   if (!dstDev) return { ok: false, dir: 'request', reason: 'no such host' };
-  const rev = forward(net, dstDev, { src: dst, dst: srcIp, proto, dport });
-  return { ok: rev.ok, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
+  const rev = forward(net, dstDev, { src: arrivedDst, dst: arrivedSrc, proto, dport }, { ct, reverse: true });
+  return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
 }
 
 module.exports = {
@@ -511,7 +550,16 @@ function bgpRoute(net, devId, cidrStr) {
   const hit = M.bgpLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via BGP` : `${devId} has not learned ${cidrStr} via BGP` };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute };
+// A port-forward works: from `fromId`, traffic to `publicIp:dport` is delivered
+// to the internal `serverId` (not just to the NAT box that owns the public IP).
+function portForward(net, fromId, publicIp, dport, serverId, proto = 'tcp') {
+  const r = M.ping(net, fromId, typeof publicIp === 'number' ? publicIp : M.ip(publicIp), { proto, dport });
+  if (!r.ok) return { ok: false, reason: `${fromId} cannot reach ${typeof publicIp === 'number' ? M.ipStr(publicIp) : publicIp}:${dport}: ${r.reason}` };
+  const ok = r.to === serverId;
+  return { ok, reason: ok ? `${fromId} reaches ${serverId} via the forwarded port ${dport}` : `traffic reaches the gateway but is not forwarded to ${serverId} (lands on ${r.to})` };
+}
+
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -711,6 +759,8 @@ const COMMANDS = {
 
   iptables: (cli, a) => {
     const dev = cli.net.devices[cli.cur]; dev.acls = dev.acls || [];
+    if (a[0] === '-t' && a[1] === 'nat') return iptablesNat(cli, dev, a.slice(2));
+    if (a[0] === '-t') a = a.slice(2);                       // -t filter (the default)
     if (a[0] === '-L' || a[0] === '--list') {
       if (!dev.acls.length) return ok('Chain INPUT (policy ACCEPT)\n  (no rules)');
       const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
@@ -774,6 +824,39 @@ const COMMANDS = {
   }
 };
 
+// iptables -t nat: PREROUTING DNAT (port-forward) + POSTROUTING MASQUERADE/SNAT.
+function iptablesNat(cli, dev, a) {
+  dev.nat = dev.nat || [];
+  const get = flag => { const i = a.indexOf(flag); return i >= 0 ? a[i + 1] : null; };
+  if (a[0] === '-L' || a[0] === '--list') {
+    if (!dev.nat.length) return ok('Chain PREROUTING\n  (no rules)\nChain POSTROUTING\n  (no rules)');
+    const rows = dev.nat.map(r => r.kind === 'dnat'
+      ? `  DNAT   ${r.proto || 'all'}  in:${r.oif}${r.dport != null ? ' dpt:' + r.dport : ''}  ->  ${M.ipStr(r.toIp)}`
+      : `  MASQ   out:${r.oif}  src:${M.ipStr(r.srcNet.net)}/${r.srcNet.prefix}`);
+    return ok('Chain NAT\n' + rows.join('\n'));
+  }
+  if (a[0] === '-F') { dev.nat = []; return ok(''); }
+  if (a[0] === '-A') {
+    const chain = (a[1] || '').toUpperCase();
+    const j = (get('-j') || '').toUpperCase();
+    if (chain === 'PREROUTING' && j === 'DNAT') {            // -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10
+      const oif = get('-i'); const toArg = get('--to-destination');
+      if (!oif || !toArg) return err('usage: iptables -t nat -A PREROUTING -i <if> -p tcp --dport <N> -j DNAT --to-destination <ip>');
+      const rule = { kind: 'dnat', oif, toIp: M.ip(toArg.split(':')[0]) };
+      const proto = get('-p'); if (proto) rule.proto = proto;
+      const dport = get('--dport'); if (dport) rule.dport = Number(dport);
+      dev.nat.push(rule); return ok('');
+    }
+    if (chain === 'POSTROUTING' && (j === 'MASQUERADE' || j === 'SNAT')) {   // -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE
+      const oif = get('-o'); const s = get('-s');
+      if (!oif || !s) return err('usage: iptables -t nat -A POSTROUTING -o <if> -s <cidr> -j MASQUERADE');
+      dev.nat.push({ kind: 'snat', oif, srcNet: M.cidr(s) }); return ok('');
+    }
+    return err('nat supports: -A PREROUTING ... -j DNAT --to-destination <ip> | -A POSTROUTING -o <if> -s <cidr> -j MASQUERADE');
+  }
+  return err('usage: iptables -t nat -L | -A PREROUTING ... | -A POSTROUTING ... | -F');
+}
+
 function routeLabel(net, cur, r) {
   const dev = net.devices[cur]; const di = M.directIface(dev, r.via);
   const dest = r.mask === 0 ? 'default' : `${M.ipStr(r.dest)}/${r.mask}`;
@@ -784,7 +867,7 @@ const MAN = {
   ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      give an interface an address\n  ip route                    show the routing table\n  ip route add default via G  set a default gateway\n  ip route add CIDR via G     add a static route',
   ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
   traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
-  iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic.\n  Rules match top-down, first match wins.',
+  iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic (rules match top-down, first match wins).\n  iptables -t nat -A PREROUTING -i IF -p tcp --dport N -j DNAT --to-destination IP — port-forward inbound traffic to an inside host.\n  iptables -t nat -A POSTROUTING -o IF -s CIDR -j MASQUERADE — share the outside IP for an inside network (source NAT).\n  iptables -t nat -L — list NAT rules.',
   nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
   tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
   arp: 'arp — show the neighbours learned on each interface (same L2 segment).',
@@ -820,6 +903,7 @@ function evalCheck(net, s) {
     case 'ospf_route':     return C.ospfRoute(net, s.dev, s.cidr);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
+    case 'port_forward':   return C.portForward(net, s.from, s.public, s.dport, s.server, s.proto);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }
@@ -1456,6 +1540,50 @@ const chapters = [
       ['r1', 'bgp asn 65001'], ['r1', 'bgp neighbor 10.0.12.2 remote-as 65002'], ['r1', 'bgp network 10.0.1.0/24'],
       ['r2', 'bgp asn 65002'], ['r2', 'bgp neighbor 10.0.12.1 remote-as 65001'], ['r2', 'bgp network 10.0.8.0/24']
     ]
+  }
+,
+
+  { id: 'expose-the-server', chapter: 'NAT',
+    title: 'Let the world in',
+    story: 'The web server web (10.0.1.10) runs fine on the inside, but customers on the internet can\'t reach it. The edge router has one public address, 203.0.113.10, facing the internet host wan; web\'s 10.x address isn\'t routable out there.',
+    objective: 'On the edge router, forward inbound web traffic (tcp/80) on the public address to the internal server.',
+    ticket: { id: 'INC-1168', from: 'Product owner', priority: 'P1', symptom: "We launched the site but customers say it just times out. Internally everyone can open it fine on 10.0.1.10. From outside — nothing. The public IP is 203.0.113.10." },
+    diagnose: { q: 'Outside hosts hit the public address but never reach the web server, whose 10.0.1.10 address has no route on the internet. What lets outside traffic in to it?', options: ['a destination-NAT (port-forward) mapping the public IP’s tcp/80 to the internal server', 'a default route on the web server', 'opening tcp/80 in the firewall'], answer: 0, because: 'A private 10.x address is unreachable from the internet. A port-forward (DNAT) on the edge rewrites inbound traffic for 203.0.113.10:80 to 10.0.1.10, so the public IP fronts the internal server.' },
+    console: 'edge',
+    hints: ['The server’s private address can’t be reached from outside directly — traffic must come in via the public IP.', 'Port-forward tcp/80 arriving on the outside interface (eth1) to the internal server.', 'Run `iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10`.'],
+    build: () => ({
+      devices: {
+        wan: H('wan', '203.0.113.9', 24),
+        web: SRV('web', '10.0.1.10', 24, '10.0.1.1', { 80: 'http' }),
+        edge: R('edge', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.10', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('web', 'eth0', 'sw1', 'p1'), L('edge', 'eth0', 'sw1', 'p2'), L('wan', 'eth0', 'sw2', 'p1'), L('edge', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'port_forward', from: 'wan', public: '203.0.113.10', dport: 80, server: 'web', proto: 'tcp' }],
+    solution: [['edge', 'iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10']]
+  }
+,
+
+  { id: 'share-one-ip', chapter: 'NAT',
+    title: 'Share one public address',
+    story: 'The office runs on private addresses (10.0.1.0/24) behind the edge router, which has a single public address, 203.0.113.10. Staff can\'t reach anything on the internet — their packets go out, but nothing comes back.',
+    objective: 'On the edge router, masquerade the office network behind the public address so staff can reach the internet host site.',
+    ticket: { id: 'INC-1177', from: 'Office manager', priority: 'P2', symptom: "Nobody in the office can get online today. It's not just one site — everything external is dead. Internal stuff works fine. We have one public IP from the ISP." },
+    diagnose: { q: 'The office PCs’ packets reach the internet server, but replies never come back. Their 10.x source addresses aren’t routable on the internet. What fixes the return path?', options: ['source-NAT (masquerade) so the office shares the edge’s public address', 'a static route to 10.0.1.0/24 on the internet server', 'a second DNS server'], answer: 0, because: 'Replies to a private 10.x source can’t be routed back from the internet. Masquerade rewrites the office’s source to the edge’s public IP; the edge tracks the flow and translates replies back to the right PC.' },
+    console: 'edge',
+    hints: ['The request reaches the server; it’s the reply that dies — the internet can’t route back to a 10.x address.', 'Masquerade traffic from the office network as it leaves the outside interface (eth1).', 'Run `iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE`.'],
+    build: () => ({
+      devices: {
+        pc: H('pc', '10.0.1.10', 24, '10.0.1.1'),
+        site: SRV('site', '203.0.113.50', 24, null, { 80: 'http' }),
+        edge: R('edge', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.10', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('pc', 'eth0', 'sw1', 'p1'), L('edge', 'eth0', 'sw1', 'p2'), L('site', 'eth0', 'sw2', 'p1'), L('edge', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable', a: 'pc', b: 'site' }],
+    solution: [['edge', 'iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE']]
   }
 
 ];

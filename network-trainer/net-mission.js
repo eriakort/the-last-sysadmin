@@ -21,6 +21,7 @@ function evalCheck(net, s) {
     case 'ospf_route':     return C.ospfRoute(net, s.dev, s.cidr);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
+    case 'port_forward':   return C.portForward(net, s.from, s.public, s.dport, s.server, s.proto);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }

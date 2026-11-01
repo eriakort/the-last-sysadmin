@@ -19,14 +19,16 @@ ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
 distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
 persists across reloads.
 
-**Twenty-two missions** across addressing, subnetting, switching, routing, static
-routing, security, **DHCP**, **DNS/naming**, **failover**, and **dynamic routing
-(OSPF & BGP)** — including **destination-based firewall rules** for DMZ
+**Twenty-four missions** across addressing, subnetting, switching, routing, static
+routing, security, **DHCP**, **DNS/naming**, **NAT**, **failover**, and **dynamic
+routing (OSPF & BGP)** — including **destination-based firewall rules** for DMZ
 segmentation ("stop the pivot"), a **DHCP lease** that hands out address + gateway
 + resolver in one step (`dhclient`), a **name-resolution** fault where the IP
-works but the name doesn't (`dig`, `resolvectl`), **OSPF** neighbour adjacency and
-learned routes, **BGP** sessions and network advertisements, and **failover**
-where traffic reroutes around a dead next hop.
+works but the name doesn't (`dig`, `resolvectl`), **NAT** — a **port-forward**
+(DNAT) that exposes an inside server on a public IP and a **masquerade** (SNAT)
+that shares one public address for a whole office, both via `iptables -t nat` —
+**OSPF** neighbour adjacency and learned routes, **BGP** sessions and network
+advertisements, and **failover** where traffic reroutes around a dead next hop.
 
 Two mission **types** go beyond the single-fault ticket: a **design-review /
 audit** ("spot the planted problems, ignore the distractors") and a **multi-fault

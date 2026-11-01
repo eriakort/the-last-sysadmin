@@ -272,6 +272,29 @@ test('Failover: a dead primary next hop reroutes over an equal backup route', ()
   ok(C.reachable(mk(false), 'hq', 'br'), 'still reachable via the backup when the primary link is down');
 });
 
+/* ========== NAT: port-forward (DNAT) and masquerade (SNAT) ========== */
+const edgeNat = nat => ({ id: 'edge', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('203.0.113.10'), mask: 24, up: true } }, routes: [], acls: [], nat });
+test('DNAT port-forward exposes an inside server on the public IP', () => {
+  const mk = nat => ({ devices: {
+      wan: host('wan', '203.0.113.9', 24),
+      web: SRV('web', '10.0.1.10', 24, '10.0.1.1', { 80: 'http' }),
+      edge: edgeNat(nat),
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }]) },
+    links: [link('web', 'eth0', 'sw1', 'p1'), link('edge', 'eth0', 'sw1', 'p2'), link('wan', 'eth0', 'sw2', 'p1'), link('edge', 'eth1', 'sw2', 'p2')] });
+  no(C.portForward(mk([]), 'wan', '203.0.113.10', 80, 'web'), 'no port-forward -> reaches only the edge');
+  ok(C.portForward(mk([{ kind: 'dnat', oif: 'eth1', proto: 'tcp', dport: 80, toIp: ip('10.0.1.10') }]), 'wan', '203.0.113.10', 80, 'web'), 'DNAT reaches the inside server');
+});
+test('SNAT masquerade lets a private network reach the internet (reply returns)', () => {
+  const mk = nat => ({ devices: {
+      pc: host('pc', '10.0.1.10', 24, '10.0.1.1'),
+      site: SRV('site', '203.0.113.50', 24, null, { 80: 'http' }),
+      edge: edgeNat(nat),
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }]) },
+    links: [link('pc', 'eth0', 'sw1', 'p1'), link('edge', 'eth0', 'sw1', 'p2'), link('site', 'eth0', 'sw2', 'p1'), link('edge', 'eth1', 'sw2', 'p2')] });
+  no(C.reachable(mk([]), 'pc', 'site'), 'without NAT the reply has no route back to the private source');
+  ok(C.reachable(mk([{ kind: 'snat', oif: 'eth1', srcNet: M.cidr('10.0.1.0/24') }]), 'pc', 'site'), 'masquerade makes it round-trip');
+});
+
 /* ---------- runner ---------- */
 let failed = 0;
 for (const [name, fn] of tests) {

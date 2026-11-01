@@ -83,4 +83,13 @@ function bgpRoute(net, devId, cidrStr) {
   const hit = M.bgpLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via BGP` : `${devId} has not learned ${cidrStr} via BGP` };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute };
+// A port-forward works: from `fromId`, traffic to `publicIp:dport` is delivered
+// to the internal `serverId` (not just to the NAT box that owns the public IP).
+function portForward(net, fromId, publicIp, dport, serverId, proto = 'tcp') {
+  const r = M.ping(net, fromId, typeof publicIp === 'number' ? publicIp : M.ip(publicIp), { proto, dport });
+  if (!r.ok) return { ok: false, reason: `${fromId} cannot reach ${typeof publicIp === 'number' ? M.ipStr(publicIp) : publicIp}:${dport}: ${r.reason}` };
+  const ok = r.to === serverId;
+  return { ok, reason: ok ? `${fromId} reaches ${serverId} via the forwarded port ${dport}` : `traffic reaches the gateway but is not forwarded to ${serverId} (lands on ${r.to})` };
+}
+
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward };

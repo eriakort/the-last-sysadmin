@@ -153,6 +153,30 @@ test('an unknown name returns NXDOMAIN', () => {
   has(cli.run('dig nope.corp.local').out, 'NXDOMAIN', 'nxdomain reported');
 });
 
+test('iptables -t nat installs DNAT and MASQUERADE rules that take effect', () => {
+  const edge = { id: 'edge', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('203.0.113.10'), mask: 24, up: true } }, routes: [], acls: [] };
+  const net = {
+    devices: {
+      web: { id: 'web', kind: 'host', ifaces: { eth0: { ip: ip('10.0.1.20'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.1.1') }], services: { 80: 'http' } },
+      pc: { id: 'pc', kind: 'host', ifaces: { eth0: { ip: ip('10.0.1.10'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.1.1') }] },
+      site: { id: 'site', kind: 'host', ifaces: { eth0: { ip: ip('203.0.113.50'), mask: 24, up: true } }, routes: [], services: { 80: 'http' } },
+      wan: { id: 'wan', kind: 'host', ifaces: { eth0: { ip: ip('203.0.113.9'), mask: 24, up: true } }, routes: [] },
+      edge, sw1: sw('sw1', ['p1', 'p2', 'p3']), sw2: sw('sw2', ['p1', 'p2', 'p3'])
+    },
+    links: [link('web', 'eth0', 'sw1', 'p1'), link('pc', 'eth0', 'sw1', 'p2'), link('edge', 'eth0', 'sw1', 'p3'),
+            link('site', 'eth0', 'sw2', 'p1'), link('wan', 'eth0', 'sw2', 'p2'), link('edge', 'eth1', 'sw2', 'p3')]
+  };
+  const fw = makeCLI(net, 'edge');
+  eq(C.portForward(net, 'wan', '203.0.113.10', 80, 'web').ok, false, 'no forward yet');
+  eq(fw.run('iptables -t nat -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.20').code, 0, 'add DNAT');
+  eq(C.portForward(net, 'wan', '203.0.113.10', 80, 'web').ok, true, 'port-forward works');
+  eq(C.reachable(net, 'pc', 'site').ok, false, 'office offline before masquerade');
+  eq(fw.run('iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE').code, 0, 'add MASQUERADE');
+  eq(C.reachable(net, 'pc', 'site').ok, true, 'office online after masquerade');
+  has(fw.run('iptables -t nat -L').out, 'DNAT', 'nat list shows DNAT');
+  has(fw.run('iptables -t nat -L').out, 'MASQ', 'nat list shows masquerade');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

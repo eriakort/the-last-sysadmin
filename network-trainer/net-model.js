@@ -187,36 +187,72 @@ function aclDecision(dev, dir, iface, pkt) {
   return 'allow';
 }
 
+/* ---------- NAT (applied as a packet passes a boundary device) ---------- */
+// On arrival: forward DNAT (port-forward to an inside server) or, on a reply,
+// reverse the SNAT/DNAT recorded for this flow. `ct` is a one-flow conntrack.
+function applyNat(dev, pkt, ct, reverse) {
+  let p = pkt;
+  if (reverse) {
+    if (ct && ct.snat && p.dst === ct.snat.translated && ownsIp(dev, p.dst)) p = { ...p, dst: ct.snat.orig };
+    if (ct && ct.dnat && p.src === ct.dnat.newDst) p = { ...p, src: ct.dnat.origDst };
+    return p;
+  }
+  for (const r of dev.nat) {
+    if (r.kind === 'dnat' && dev.ifaces[r.oif] && dev.ifaces[r.oif].ip === p.dst
+        && (!r.proto || r.proto === p.proto) && r.dport === p.dport) {
+      if (ct) ct.dnat = { origDst: p.dst, newDst: r.toIp };
+      return { ...p, dst: r.toIp };
+    }
+  }
+  return p;
+}
+// On egress via the outside interface: SNAT (masquerade) an inside source.
+function applySnat(dev, pkt, eg, ct) {
+  for (const r of dev.nat) {
+    if (r.kind === 'snat' && r.oif === eg && dev.ifaces[eg] && dev.ifaces[eg].ip != null
+        && sameNet(pkt.src, r.srcNet.net, r.srcNet.prefix)) {
+      if (ct) ct.snat = { orig: pkt.src, translated: dev.ifaces[eg].ip };
+      return { ...pkt, src: dev.ifaces[eg].ip };
+    }
+  }
+  return pkt;
+}
+
 /* ---------- the forwarding engine ---------- */
 // Walk a packet hop by hop from srcDev toward pkt.dst. Returns
-// { ok, path:[deviceIds], reason, at? }. Every reason is a teachable failure.
-function forward(net, srcDev, pkt, opts = {}) {
-  const ttl = opts.ttl || 16, dst = pkt.dst, path = [];
-  let cur = srcDev;
+// { ok, path:[deviceIds], reason, at?, pkt? }. Every reason is a teachable failure.
+// Failover-aware (routeLookupReachable skips a dead next hop) and NAT-aware
+// (boundary devices rewrite the packet; opts.ct threads a one-flow conntrack so
+// ping() can reverse the translation on the reply).
+function forward(net, srcDev, pktIn, opts = {}) {
+  const ttl = opts.ttl || 16, path = [];
+  const ct = opts.ct, reverse = !!opts.reverse;
+  let pkt = { ...pktIn }, cur = srcDev;
   for (let hop = 0; hop < ttl; hop++) {
     const dev = net.devices[cur];
     if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
     path.push(cur);
-    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered' };
+    if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
+    const dst = pkt.dst;
+    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered', pkt };
 
-    const eg = directIface(dev, dst);
-    if (eg) {                                      // destination is on a directly-connected subnet
-      const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === dst && net.devices[d].ifaces[i].up !== false);
-      if (!ep) return { ok: false, path, reason: 'no host with that address on the segment', at: cur };
-      const [dd, di] = ep;
-      if (aclDecision(net.devices[dd], 'in', di, pkt) === 'deny') return { ok: false, path: path.concat(dd), reason: 'blocked by ACL', at: dd };
-      return { ok: true, path: path.concat(dd), reason: 'delivered' };
+    // choose the egress interface: directly connected, else via a (failover-aware) route
+    let eg = directIface(dev, dst), targetIp = dst, viaRoute = null;
+    if (!eg) {
+      viaRoute = routeLookupReachable(net, cur, dst);      // skip a dead next hop
+      if (!viaRoute) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
+      eg = directIface(dev, viaRoute.via);
+      if (!eg) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
+      targetIp = viaRoute.via;
     }
+    if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
 
-    const r = routeLookupReachable(net, cur, dst);  // skip a dead next hop
-    if (!r) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
-    const gwIface = directIface(dev, r.via);
-    if (!gwIface) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
-    const gw = l2Domain(net, cur, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
-    if (!gw) return { ok: false, path, reason: 'gateway ' + ipStr(r.via) + ' unreachable', at: cur };
-    const [nd, ni] = gw;
+    const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === targetIp && net.devices[d].ifaces[i].up !== false);
+    if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
+    const [nd, ni] = ep;
     if (aclDecision(net.devices[nd], 'in', ni, pkt) === 'deny') return { ok: false, path: path.concat(nd), reason: 'blocked by ACL', at: nd };
-    cur = nd;                                      // advance to next hop
+    if (!viaRoute && !net.devices[nd].nat) return { ok: true, path: path.concat(nd), reason: 'delivered', pkt };
+    cur = nd;                                      // advance (to the gateway, or into a NAT box to translate)
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
 }
@@ -285,13 +321,16 @@ function dhclient(net, hostId, ifaceName) {
 // Catches asymmetric ACLs / missing return routes, which pure one-way reachability misses.
 function ping(net, srcDev, dst, base = {}) {
   const proto = base.proto || 'icmp', dport = base.dport;
+  const ct = {};                                   // one-flow conntrack, so NAT can be reversed on the reply
   const srcIp = sourceIpToward(net, srcDev, dst);
-  const fwd = forward(net, srcDev, { src: srcIp, dst, proto, dport });
+  const fwd = forward(net, srcDev, { src: srcIp, dst, proto, dport }, { ct });
   if (!fwd.ok) return { ok: false, dir: 'request', reason: fwd.reason, forward: fwd };
-  const dstDev = deviceOwning(net, dst);
+  const arrivedDst = fwd.pkt ? fwd.pkt.dst : dst;  // after any DNAT
+  const arrivedSrc = fwd.pkt ? fwd.pkt.src : srcIp; // after any SNAT
+  const dstDev = deviceOwning(net, arrivedDst);
   if (!dstDev) return { ok: false, dir: 'request', reason: 'no such host' };
-  const rev = forward(net, dstDev, { src: dst, dst: srcIp, proto, dport });
-  return { ok: rev.ok, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
+  const rev = forward(net, dstDev, { src: arrivedDst, dst: arrivedSrc, proto, dport }, { ct, reverse: true });
+  return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
 }
 
 module.exports = {

@@ -194,6 +194,8 @@ const COMMANDS = {
 
   iptables: (cli, a) => {
     const dev = cli.net.devices[cli.cur]; dev.acls = dev.acls || [];
+    if (a[0] === '-t' && a[1] === 'nat') return iptablesNat(cli, dev, a.slice(2));
+    if (a[0] === '-t') a = a.slice(2);                       // -t filter (the default)
     if (a[0] === '-L' || a[0] === '--list') {
       if (!dev.acls.length) return ok('Chain INPUT (policy ACCEPT)\n  (no rules)');
       const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
@@ -257,6 +259,39 @@ const COMMANDS = {
   }
 };
 
+// iptables -t nat: PREROUTING DNAT (port-forward) + POSTROUTING MASQUERADE/SNAT.
+function iptablesNat(cli, dev, a) {
+  dev.nat = dev.nat || [];
+  const get = flag => { const i = a.indexOf(flag); return i >= 0 ? a[i + 1] : null; };
+  if (a[0] === '-L' || a[0] === '--list') {
+    if (!dev.nat.length) return ok('Chain PREROUTING\n  (no rules)\nChain POSTROUTING\n  (no rules)');
+    const rows = dev.nat.map(r => r.kind === 'dnat'
+      ? `  DNAT   ${r.proto || 'all'}  in:${r.oif}${r.dport != null ? ' dpt:' + r.dport : ''}  ->  ${M.ipStr(r.toIp)}`
+      : `  MASQ   out:${r.oif}  src:${M.ipStr(r.srcNet.net)}/${r.srcNet.prefix}`);
+    return ok('Chain NAT\n' + rows.join('\n'));
+  }
+  if (a[0] === '-F') { dev.nat = []; return ok(''); }
+  if (a[0] === '-A') {
+    const chain = (a[1] || '').toUpperCase();
+    const j = (get('-j') || '').toUpperCase();
+    if (chain === 'PREROUTING' && j === 'DNAT') {            // -A PREROUTING -i eth1 -p tcp --dport 80 -j DNAT --to-destination 10.0.1.10
+      const oif = get('-i'); const toArg = get('--to-destination');
+      if (!oif || !toArg) return err('usage: iptables -t nat -A PREROUTING -i <if> -p tcp --dport <N> -j DNAT --to-destination <ip>');
+      const rule = { kind: 'dnat', oif, toIp: M.ip(toArg.split(':')[0]) };
+      const proto = get('-p'); if (proto) rule.proto = proto;
+      const dport = get('--dport'); if (dport) rule.dport = Number(dport);
+      dev.nat.push(rule); return ok('');
+    }
+    if (chain === 'POSTROUTING' && (j === 'MASQUERADE' || j === 'SNAT')) {   // -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE
+      const oif = get('-o'); const s = get('-s');
+      if (!oif || !s) return err('usage: iptables -t nat -A POSTROUTING -o <if> -s <cidr> -j MASQUERADE');
+      dev.nat.push({ kind: 'snat', oif, srcNet: M.cidr(s) }); return ok('');
+    }
+    return err('nat supports: -A PREROUTING ... -j DNAT --to-destination <ip> | -A POSTROUTING -o <if> -s <cidr> -j MASQUERADE');
+  }
+  return err('usage: iptables -t nat -L | -A PREROUTING ... | -A POSTROUTING ... | -F');
+}
+
 function routeLabel(net, cur, r) {
   const dev = net.devices[cur]; const di = M.directIface(dev, r.via);
   const dest = r.mask === 0 ? 'default' : `${M.ipStr(r.dest)}/${r.mask}`;
@@ -267,7 +302,7 @@ const MAN = {
   ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      give an interface an address\n  ip route                    show the routing table\n  ip route add default via G  set a default gateway\n  ip route add CIDR via G     add a static route',
   ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
   traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
-  iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic.\n  Rules match top-down, first match wins.',
+  iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic (rules match top-down, first match wins).\n  iptables -t nat -A PREROUTING -i IF -p tcp --dport N -j DNAT --to-destination IP — port-forward inbound traffic to an inside host.\n  iptables -t nat -A POSTROUTING -o IF -s CIDR -j MASQUERADE — share the outside IP for an inside network (source NAT).\n  iptables -t nat -L — list NAT rules.',
   nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
   tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
   arp: 'arp — show the neighbours learned on each interface (same L2 segment).',
