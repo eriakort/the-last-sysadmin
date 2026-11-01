@@ -133,7 +133,41 @@ function ospfLearned(net, devId) {
 }
 function allRoutes(net, devId) {
   const dev = net.devices[devId];
-  return (dev.routes || []).concat(ospfLearned(net, devId));
+  return (dev.routes || []).concat(ospfLearned(net, devId)).concat(bgpLearned(net, devId));
+}
+
+
+/* ---------- BGP (minimal: ASN, neighbors, network statements, session + learned routes) ---------- */
+function bgpConfig(dev) { return dev.bgp || null; }
+function bgpSessions(net, devId) {
+  const dev = net.devices[devId]; const cfg = bgpConfig(dev);
+  if (!cfg || cfg.asn == null) return [];
+  const out = [];
+  for (const n of cfg.neighbors || []) {
+    const peerId = deviceOwning(net, n.ip);
+    const peer = peerId && net.devices[peerId];
+    const pc = peer && bgpConfig(peer);
+    const back = pc && (pc.neighbors || []).some(x => {
+      const mine = sourceIpToward(net, devId, n.ip);
+      return x.ip === mine;
+    });
+    const reachable = peer && ping(net, devId, n.ip).ok;
+    const up = !!(peer && pc && pc.asn === n.remoteAs && back && reachable);
+    out.push({ ip: n.ip, remoteAs: n.remoteAs, peer: peerId, up, reason: !peer ? 'no such neighbor' : !pc ? 'peer has no BGP' : pc.asn !== n.remoteAs ? 'ASN mismatch' : !back ? 'peer has no matching neighbor' : !reachable ? 'neighbor unreachable' : 'Established' });
+  }
+  return out;
+}
+function bgpLearned(net, devId) {
+  const learned = [];
+  for (const s of bgpSessions(net, devId)) {
+    if (!s.up) continue;
+    const peer = net.devices[s.peer];
+    for (const netw of (peer.bgp.networks || [])) {
+      const c = cidr(netw);
+      learned.push({ dest: c.net, mask: c.prefix, via: s.ip, proto: 'bgp', from: s.peer });
+    }
+  }
+  return learned;
 }
 
 /* ---------- ACLs (inbound, first match wins, default allow) ---------- */
@@ -265,5 +299,6 @@ module.exports = {
   neighbor, l2Domain, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
+  bgpSessions, bgpLearned,
   resolveName, dhclient, dhcpServerFor
 };

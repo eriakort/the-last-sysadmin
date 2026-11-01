@@ -535,6 +535,37 @@ const chapters = [
     ],
     solution: [['r1', 'ospf eth1 area 0'], ['r2', 'ospf eth0 area 0'], ['r2', 'ospf eth1 area 0'], ['r1', 'ospf eth0 area 0']]
   }
+,
+
+  { id: 'bgp-neighbor', chapter: 'BGP',
+    title: 'Bring up the BGP session',
+    story: 'The branch is a separate autonomous system. r1 (AS 65001) and r2 (AS 65002) can already ping each other over 10.0.12.0/24, but no BGP session exists, so HQ cannot reach 10.0.8.10.',
+    objective: 'Configure BGP on both routers, advertise the branch network, and get the session to Established so HQ can reach br.',
+    ticket: { id: 'INC-2501', from: 'NOC · peering', priority: 'P2', symptom: "The branch circuit is up — I can ping their router — but none of their networks show up here. BGP was never turned on." },
+    diagnose: { q: 'r1 can ping r2, but `bgp summary` shows no neighbors. What is missing?', options: ['a BGP session: ASN, a neighbor statement on both sides, and a network advertisement', 'the physical link', 'HQ has the wrong IP'], answer: 0, because: 'Reachability of the peer is necessary but not sufficient. BGP needs an ASN, a mutual neighbor, and something to advertise.' },
+    console: 'r1',
+    hints: ['`bgp summary` — no neighbors yet.', 'On r1: `bgp asn 65001` then `bgp neighbor 10.0.12.2 remote-as 65002`.', 'On r2: ASN 65002, neighbor 10.0.12.1 remote-as 65001, and `bgp network 10.0.8.0/24`.'],
+    build: () => ({
+      devices: {
+        hq: H('hq', '10.0.1.10', 24, '10.0.1.1'),
+        br: SRV('br', '10.0.8.10', 24, '10.0.8.1', { 22: 'ssh' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 24) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 24), eth1: iface('10.0.8.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('hq', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'), L('br', 'eth0', 'sw2', 'p1'), L('r2', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'bgp_session', dev: 'r1', peer: 'r2' },
+      { type: 'bgp_route', dev: 'r1', cidr: '10.0.8.0/24' },
+      { type: 'reachable', a: 'hq', b: 'br' }
+    ],
+    solution: [
+      ['r1', 'bgp asn 65001'], ['r1', 'bgp neighbor 10.0.12.2 remote-as 65002'], ['r1', 'bgp network 10.0.1.0/24'],
+      ['r2', 'bgp asn 65002'], ['r2', 'bgp neighbor 10.0.12.1 remote-as 65001'], ['r2', 'bgp network 10.0.8.0/24']
+    ]
+  }
 
 ];
 

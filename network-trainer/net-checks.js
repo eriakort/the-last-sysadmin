@@ -73,4 +73,14 @@ function ospfRoute(net, devId, cidrStr) {
   const hit = M.ospfLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via OSPF` : `${devId} has not learned ${cidrStr} via OSPF` };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute };
+function bgpSession(net, devId, peerId) {
+  const ss = M.bgpSessions(net, devId);
+  const hit = ss.some(s => s.up && (!peerId || s.peer === peerId));
+  return { ok: hit, reason: hit ? `${devId} has an Established BGP session${peerId ? ' with ' + peerId : ''}` : `${devId} has no Established BGP session${peerId ? ' with ' + peerId : ''}` };
+}
+function bgpRoute(net, devId, cidrStr) {
+  const c = M.cidr(cidrStr);
+  const hit = M.bgpLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
+  return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via BGP` : `${devId} has not learned ${cidrStr} via BGP` };
+}
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute };

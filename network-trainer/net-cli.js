@@ -56,6 +56,26 @@ const COMMANDS = {
     if (cli.selected.has(id)) cli.selected.delete(id); else cli.selected.add(id);
     return ok('review: ' + (cli.selected.has(id) ? 'checked' : 'unchecked') + ' ' + id);
   },
+  bgp: (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    dev.bgp = dev.bgp || { asn: null, neighbors: [], networks: [] };
+    if (a[0] === 'asn' && a[1]) { dev.bgp.asn = Number(a[1]); return ok('BGP ASN ' + a[1]); }
+    if (a[0] === 'neighbor' && a[1] && a[2] === 'remote-as') {
+      const ip = M.ip(a[1]);
+      dev.bgp.neighbors = dev.bgp.neighbors.filter(n => n.ip !== ip).concat([{ ip, remoteAs: Number(a[3]) }]);
+      return ok(`BGP neighbor ${a[1]} remote-as ${a[3]}`);
+    }
+    if (a[0] === 'network' && a[1]) {
+      if (!dev.bgp.networks.includes(a[1])) dev.bgp.networks.push(a[1]);
+      return ok('BGP network ' + a[1]);
+    }
+    if (a[0] === 'summary' || a[0] === 'neighbor' && !a[1]) {
+      const ss = M.bgpSessions(cli.net, cli.cur);
+      if (!ss.length) return ok('BGP: no neighbors configured');
+      return ok('BGP sessions:\n' + ss.map(s => `  ${M.ipStr(s.ip)}  AS${s.remoteAs}  ${s.up ? 'Established' : s.reason}`).join('\n'));
+    }
+    return err('usage: bgp asn <n> | bgp neighbor <ip> remote-as <n> | bgp network <cidr> | bgp summary');
+  },
   ospf: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     if (a[0] === 'neighbor' || a[0] === 'neighbors' || (a[0] === 'show' )) {
