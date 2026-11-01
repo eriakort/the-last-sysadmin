@@ -461,6 +461,13 @@ const COMMANDS = {
   ip: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     const sub = a[0];
+    if (sub === 'link') {                                   // ip link set eth0 up
+      const si = a.indexOf('set'); const ifn = si >= 0 ? a[si + 1] : null;
+      if (!ifn || !dev.ifaces[ifn]) return err('usage: ip link set <iface> up');
+      if ((a[si + 2] || '').toLowerCase() !== 'up') return err('usage: ip link set <iface> up');
+      dev.ifaces[ifn].up = true;
+      return ok('');
+    }
     if (sub === 'addr' || sub === 'a' || sub === 'address') {
       if (a[1] === 'add') {                                   // ip addr add 10.0.1.10/24 dev eth0
         const m = /^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/.exec(a[2] || '');
@@ -1067,6 +1074,138 @@ const chapters = [
       ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
       ['h1', 'ip route add default via 10.0.1.1'],
       ['h1', 'resolvectl dns eth0 10.0.2.53']
+    ]
+  }
+,
+
+  { id: 'link-is-down', chapter: 'Interfaces',
+    title: 'The cable is fine',
+    story: 'h1 is cabled to the switch and has the right address, but it cannot reach the server on the same switch. The interface was left administratively down after imaging.',
+    objective: 'Bring h1 eth0 up so it can reach srv.',
+    ticket: { id: 'INC-2201', from: 'Imaging desk', priority: 'P3', symptom: "New laptop, right IP, cable clicked in, and it still can't see the file server. Looks dead." },
+    diagnose: { q: '`ip addr` shows eth0 DOWN with 10.0.1.10/24. The server is on the same switch. What is actually wrong?', options: ['the interface is administratively down', 'the address is in the wrong subnet', 'the server has no IP'], answer: 0, because: 'The address is correct and the path is one switch. DOWN means the interface will not send. Bring it up.' },
+    console: 'h1',
+    hints: ['`ip addr` shows the state of eth0.', 'DOWN means it will not transmit, even with a good address.', 'Run `ip link set eth0 up`, then `ping srv`.'],
+    build: () => ({
+      devices: {
+        h1: Object.assign(H('h1', '10.0.1.10', 24), { ifaces: { eth0: { ip: ip('10.0.1.10'), mask: 24, up: false } } }),
+        srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['h1', 'ip link set eth0 up']]
+  },
+
+  { id: 'wrong-gateway', chapter: 'Routing',
+    title: 'The wrong door',
+    story: 'h1 can reach everything on its own floor, but not the app server at 10.0.2.10. Its default route points at an address that is not the router.',
+    objective: 'Replace the bad default route so h1 uses 10.0.1.1.',
+    ticket: { id: 'INC-2214', from: 'Noah · Accounts', priority: 'P2', symptom: "I can reach the printer next to me, but the app server on the other floor times out. Started after someone 'fixed' my gateway." },
+    diagnose: { q: '`ip route` shows `default via 10.0.1.99`. The real router is 10.0.1.1. Why does local work and remote fail?', options: ['the default route sends off-subnet traffic to a host that is not the router', 'the app server is down', 'h1 has no IP address'], answer: 0, because: 'Same-subnet traffic never uses the default route. Off-subnet traffic follows it — and 10.0.1.99 is not the router.' },
+    console: 'h1',
+    hints: ['`ip route` shows where the default points.', '10.0.1.99 is not r1. The router is 10.0.1.1.', 'Delete the bad default, then `ip route add default via 10.0.1.1`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.99'),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['h1', 'ip route del default'], ['h1', 'ip route add default via 10.0.1.1']]
+  },
+
+  { id: 'second-site', chapter: 'Static routing',
+    title: 'The new site',
+    story: 'A second site, 10.0.8.0/24, was added behind r2. HQ hosts can reach r2, but not the workstations at the new site. r1 is missing the route.',
+    objective: 'Add a static route on r1 for 10.0.8.0/24 via 10.0.12.2.',
+    ticket: { id: 'INC-2228', from: 'Site lead · Site B', priority: 'P1', symptom: "HQ can ping our router, but nobody can reach the new workstations. The link between the routers is up." },
+    diagnose: { q: 'From HQ, ping to r2 (10.0.12.2) works, ping to a host in 10.0.8.0/24 fails at r1. What is missing?', options: ['r1 has no route for 10.0.8.0/24', 'the new site has no switch', 'HQ hosts have no IP'], answer: 0, because: 'Reaching the far router proves the link. r1 simply does not know where 10.0.8.0/24 lives.' },
+    console: 'r1',
+    hints: ['`ip route` on r1 — is 10.0.8.0/24 listed?', 'The next hop is r2 at 10.0.12.2.', 'Run `ip route add 10.0.8.0/24 via 10.0.12.2`.'],
+    build: () => ({
+      devices: {
+        hq: H('hq', '10.0.1.10', 24, '10.0.1.1'),
+        site: SRV('site', '10.0.8.10', 24, '10.0.8.1', { 22: 'ssh' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 24) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 24), eth1: iface('10.0.8.1', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('hq', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'), L('site', 'eth0', 'sw2', 'p1'), L('r2', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.8.0/24' }, { type: 'reachable', a: 'hq', b: 'site' }],
+    solution: [['r1', 'ip route add 10.0.8.0/24 via 10.0.12.2']]
+  },
+
+  { id: 'review-exposed', chapter: 'Design review',
+    title: 'Audit the public server',
+    story: 'Security asked you to review fw in front of web. The website on tcp/80 must stay reachable from h1. Something else is wrong with the policy. Find the real problems — do not change anything yet.',
+    objective: 'Check every real policy problem. Leave the false ones unchecked.',
+    ticket: { id: 'REV-2230', from: 'Security · review request', priority: 'P2', symptom: 'Please audit the firewall in front of the public web server before we call it done.' },
+    diagnose: { q: 'A public web server should answer the web and nothing else. What is the review looking for?', options: ['extra services left reachable, and no default deny', 'the website being too slow', 'the switch having too few ports'], answer: 0, because: 'The failure mode is exposure: anything other than the intended service, plus a policy that allows by default.' },
+    console: 'h1',
+    hints: ['`nmap web` from h1 — which ports answer?', 'Telnet on 23 should not be open on a public web server.', 'A default-allow firewall is itself a finding.'],
+    review: {
+      findings: [
+        { id: 'telnet', text: 'Telnet (tcp/23) is reachable on the web server', planted: true },
+        { id: 'default-allow', text: 'The firewall has no default-deny; unmatched traffic is allowed', planted: true },
+        { id: 'web-down', text: 'The website on tcp/80 is not running', planted: false },
+        { id: 'no-ip', text: 'h1 has no IP address', planted: false }
+      ]
+    },
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 80: 'http', 23: 'telnet' }),
+        fw: R('fw', 'firewall', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('fw', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('fw', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [],
+    solution: [['h1', 'review telnet'], ['h1', 'review default-allow']]
+  },
+
+  { id: 'multi-after-move', chapter: 'Multi-fault',
+    title: 'After the move',
+    story: 'h1 was moved to the 10.0.1.0/24 floor but still has its old address and its old gateway. The app server is 10.0.2.10. Two things are wrong.',
+    objective: 'Localize both real faults, then make h1 reach srv.',
+    ticket: { id: 'INC-2241', from: 'Facilities', priority: 'P2', symptom: "Desk move this morning. The laptop can't reach the app server. Local printers on the new floor don't work either." },
+    diagnose: { q: 'Local printers on the new floor fail AND the remote app server fails. What does that combination suggest?', options: ['h1 is not even in the new subnet, so both local and remote fail', 'only the app server is down', 'DNS is the only problem'], answer: 0, because: 'If same-floor hosts also fail, the address itself is wrong. Remote failing on top of that usually means the gateway is stale too.' },
+    console: 'h1',
+    hints: ['`ip addr` — is h1 in 10.0.1.0/24?', '`ip route` — does the default point at 10.0.1.1?', 'Fix the address first, then the route.'],
+    faults: [
+      { id: 'subnet', text: 'h1 is still on its old subnet', present: true },
+      { id: 'gateway', text: 'h1 default route still points at the old gateway', present: true },
+      { id: 'srv-down', text: 'The app server is powered off', present: false },
+      { id: 'dns', text: 'DNS is the only fault', present: false }
+    ],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.9.50', 24, '10.0.9.1'),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'srv' }
+    ],
+    solution: [
+      ['h1', 'fault subnet'], ['h1', 'fault gateway'],
+      ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip route del default'],
+      ['h1', 'ip route add default via 10.0.1.1']
     ]
   }
 

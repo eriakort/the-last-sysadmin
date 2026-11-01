@@ -63,6 +63,13 @@ const COMMANDS = {
   ip: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     const sub = a[0];
+    if (sub === 'link') {                                   // ip link set eth0 up
+      const si = a.indexOf('set'); const ifn = si >= 0 ? a[si + 1] : null;
+      if (!ifn || !dev.ifaces[ifn]) return err('usage: ip link set <iface> up');
+      if ((a[si + 2] || '').toLowerCase() !== 'up') return err('usage: ip link set <iface> up');
+      dev.ifaces[ifn].up = true;
+      return ok('');
+    }
     if (sub === 'addr' || sub === 'a' || sub === 'address') {
       if (a[1] === 'add') {                                   // ip addr add 10.0.1.10/24 dev eth0
         const m = /^(\d+\.\d+\.\d+\.\d+)\/(\d+)$/.exec(a[2] || '');
