@@ -1625,7 +1625,13 @@ function renderBrief() {
 function renderConfig() {
   if (!SEL) return '<p class="dim">Click a device to configure it.</p>';
   const d = RUN.net.devices[SEL];
-  let h = `<div class="label">${SEL} · ${d.kind}</div><div class="label2">Interfaces</div>`;
+  let h = `<div class="label">${SEL} · ${d.kind}</div>`;
+  if (d.kind !== 'switch') {
+    h += `<div class="label2">Ping test</div>
+      <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button></div>
+      <div id="pingout" class="dim" style="margin:4px 0 8px;white-space:pre-wrap"></div>`;
+  }
+  h += `<div class="label2">Interfaces</div>`;
   for (const n in d.ifaces) {
     const f = d.ifaces[n];
     h += `<div class="ifrow" data-if="${n}"><span class="ifn">${n}</span><input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/><span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/><label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
@@ -1665,7 +1671,8 @@ function renderConfig() {
 }
 
 /* ---------- actions ---------- */
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
+function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
 function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!PROG.done[chapters[i].id]; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, traceroute, ip addr, nmap`); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
@@ -1728,6 +1735,15 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  const pingBtn = $('#doping');
+  if (pingBtn) pingBtn.addEventListener('click', () => {
+    const to = ($('#config .pingto')||{}).value?.trim();
+    const out = $('#pingout');
+    if (!to) { if (out) out.textContent = 'Enter a host or IP.'; return; }
+    const r = RUN.cli.on(SEL).run('ping ' + to);
+    if (out) { out.textContent = r.out || ''; out.style.color = r.code === 0 ? 'var(--good)' : 'var(--bad)'; }
+    refreshFlows();
+  });
   const oBtn = $('#ospfen');
   if (oBtn) oBtn.addEventListener('click', () => {
     const d = RUN.net.devices[SEL];
