@@ -41,6 +41,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 .name{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.07em;text-transform:uppercase;line-height:1.1}
 .sub{color:var(--muted);font-size:12.5px}
 .stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.apphdr{display:flex;align-items:center;gap:20px;min-width:0;flex-wrap:wrap}
+.apptabs{display:flex;gap:4px}
+.apptab{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:7px;color:var(--muted);font-size:13.5px;font-weight:600;text-decoration:none;border:1px solid transparent;cursor:pointer}
+.apptab:hover{color:var(--ink)}
+.apptab.on{color:var(--ink);border-color:var(--line);border-bottom:2px solid var(--amber)}
+.apptab svg{width:17px;height:17px}
 .stat{display:flex;flex-direction:column;align-items:flex-end;padding:0 12px;border-right:1px solid var(--line)}
 .stat .k{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .stat .v{font-family:var(--f-display);font-weight:600;font-size:18px;font-variant-numeric:tabular-nums;line-height:1.25}
@@ -241,12 +247,18 @@ body.practicing{padding-top:40px}
 <body>
 <div class="app">
   <header class="top">
+    <div class="apphdr">
     <div class="brand">
       <span class="mark" aria-hidden="true"></span>
       <div>
         <div class="name">The Last Sysadmin</div>
         <div class="sub">Learn Linux administration by fixing a broken server · Chapters 1–35</div>
       </div>
+    </div>
+    <nav class="apptabs" role="tablist">
+      <a class="apptab on" href="." role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+      <a class="apptab" href="network-trainer/" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
+    </nav>
     </div>
     <div class="stats">
       <div class="stat"><span class="k">XP</span><span class="v" id="xp">0</span></div>
@@ -255,7 +267,6 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
-      <a class="btn" id="btnNet" href="network-trainer/" title="Open the Networking Trainer" style="text-decoration:none;display:inline-block;cursor:pointer">⇄ Networking</a>
       <button class="btn" id="btnNew" type="button">New game</button>
     </div>
   </header>

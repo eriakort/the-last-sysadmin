@@ -24,9 +24,16 @@ const css = `
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
 #app{display:flex;flex-direction:column;height:100vh}
-#top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
-#top .brand{font-weight:700;font-size:15px}
-#top .brand .dim{font-weight:400;font-size:12px}
+#top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+.apphdr{display:flex;align-items:center;gap:22px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:.05em;font-size:14px}
+.mark{width:24px;height:18px;border:1.5px solid var(--muted);border-radius:4px;position:relative;flex:none}
+.mark::after{content:"";position:absolute;right:4px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--amber)}
+.apptabs{display:flex;gap:4px}
+.apptab{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:7px;color:var(--muted);font-size:13.5px;font-weight:600;text-decoration:none;border:1px solid transparent}
+.apptab:hover{color:var(--ink)}
+.apptab.on{color:var(--ink);border-color:var(--line);border-bottom:2px solid var(--amber)}
+.apptab svg{width:17px;height:17px}
 .hud{display:flex;align-items:center;gap:16px;font-size:12px;color:var(--muted)}
 .hud b{color:var(--ink);font-size:14px;margin-left:4px}
 #cols{display:grid;grid-template-columns:320px 1fr 320px;flex:1;min-height:0}

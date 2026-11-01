@@ -184,11 +184,16 @@ function boot() {
   applyTheme(PROG.theme);
   document.getElementById('app').innerHTML = `
     <header id="top">
-      <div class="brand">Networking Trainer <span class="dim">· networking &amp; security fundamentals</span></div>
+      <div class="apphdr">
+        <div class="brand"><span class="mark"></span>THE LAST SYSADMIN</div>
+        <nav class="apptabs" role="tablist">
+          <a class="apptab" href="../" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+          <a class="apptab on" href="#" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
+        </nav>
+      </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
         <button id="btnStats" class="btn" title="Stats">📊</button>
-        <button id="btnSet" class="btn" title="Settings">⚙</button>
-        <a class="xlink" href="../" title="Back to the Linux game">The Last Sysadmin ↗</a></div>
+        <button id="btnSet" class="btn" title="Settings">⚙</button></div>
     </header>
     <div id="cols">
       <aside id="brief"></aside>
