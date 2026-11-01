@@ -30,13 +30,25 @@ function startMission(mission) {
     run: line => cli.run(line),
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
-    done: () => api.results().every(r => r.ok) && api.reviewOk(),
+    done: () => api.results().every(r => r.ok) && api.reviewOk() && api.faultsOk(),
     // Diagnosis gate: the player must localize the fault before fixing it.
     // A mission with no `diagnose` block has no gate (ok for any index).
     requiresDiagnosis: !!mission.diagnose,
     // Design-review: planted findings the player must identify (and not the distractors).
     review: mission.review || null,
     selectedFindings: new Set(),
+    foundFaults: new Set(),
+    toggleFault(id) {
+      if (api.foundFaults.has(id)) api.foundFaults.delete(id);
+      else api.foundFaults.add(id);
+    },
+    faultsOk() {
+      const fs = mission.faults; if (!fs) return true;
+      const need = new Set(fs.filter(f => f.present).map(f => f.id));
+      if (api.foundFaults.size !== need.size) return false;
+      for (const id of need) if (!api.foundFaults.has(id)) return false;
+      return true;
+    },
     toggleFinding(id) {
       if (api.selectedFindings.has(id)) api.selectedFindings.delete(id);
       else api.selectedFindings.add(id);
@@ -58,6 +70,7 @@ function startMission(mission) {
       const unmet = api.results().filter(r => !r.ok);
       const lines = unmet.map(r => '  ✗ ' + r.reason);
       if (mission.review && !api.reviewOk()) lines.push('  ✗ design review incomplete — check every real fault, and only those');
+      if (mission.faults && !api.faultsOk()) lines.push('  ✗ localize every real fault before the ticket closes');
       return lines.length
         ? 'Not resolved yet:\n' + lines.join('\n')
         : '✓ All objectives met — ticket resolved.';
@@ -65,6 +78,7 @@ function startMission(mission) {
   };
   cli.mission = mission;
   cli.selected = api.selectedFindings;
+  cli.found = api.foundFaults;
   return api;
 }
 

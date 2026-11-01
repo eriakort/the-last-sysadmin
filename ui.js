@@ -126,6 +126,13 @@ function renderReview(m) {
     <p class="dim">Inspect the topology and the terminal. Check the statements that are true faults. Leave the distractors unchecked.</p>
     <div class="rev-list">${rows}</div>`;
 }
+function renderFaults(m) {
+  const sel = RUN.foundFaults || new Set();
+  const rows = m.faults.map(f => `<label class="rev-row"><input type="checkbox" data-fault="${esc(f.id)}"${sel.has(f.id)?' checked':''}> ${esc(f.text)}</label>`).join('');
+  return `<div class="label">Localize — check every real fault</div>
+    <p class="dim">This ticket has more than one problem. Investigate, then check each real fault. Fix them all before Check.</p>
+    <div class="rev-list">${rows}</div>`;
+}
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
@@ -133,6 +140,7 @@ function renderBrief() {
   const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
   const review = m.review ? renderReview(m) : '';
+  const faults = m.faults ? renderFaults(m) : '';
   const body = gated
     ? renderDiagnose(m)
     : `${m.diagnose ? `<div class="diag-done">✓ Diagnosed — ${esc(m.diagnose.because)}</div>` : ''}
@@ -219,6 +227,9 @@ function openSettings() {
 /* ---------- wiring ---------- */
 function wireTopo() { document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => { SEL = n.dataset.dev; refresh(); })); }
 function wireBrief() {
+  document.querySelectorAll('#brief [data-fault]').forEach(cb => cb.addEventListener('change', () => {
+    RUN.toggleFault(cb.dataset.fault);
+  }));
   document.querySelectorAll('#brief [data-fid]').forEach(cb => cb.addEventListener('change', () => {
     RUN.toggleFinding(cb.dataset.fid);
   }));

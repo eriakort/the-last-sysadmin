@@ -38,6 +38,15 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  fault: (cli, a) => {
+    const id = a[0]; if (!id) return err('usage: fault <id>');
+    const m = cli.mission; if (!m || !m.faults) return err('fault: not a multi-fault mission');
+    const f = m.faults.find(x => x.id === id);
+    if (!f) return err('fault: unknown ' + id);
+    cli.found = cli.found || new Set();
+    if (cli.found.has(id)) cli.found.delete(id); else cli.found.add(id);
+    return ok('fault: ' + (cli.found.has(id) ? 'noted' : 'cleared') + ' ' + id);
+  },
   review: (cli, a) => {
     const id = a[0]; if (!id) return err('usage: review <finding-id>');
     const m = cli.mission; if (!m || !m.review) return err('review: not a design-review mission');

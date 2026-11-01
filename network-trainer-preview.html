@@ -436,6 +436,15 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  fault: (cli, a) => {
+    const id = a[0]; if (!id) return err('usage: fault <id>');
+    const m = cli.mission; if (!m || !m.faults) return err('fault: not a multi-fault mission');
+    const f = m.faults.find(x => x.id === id);
+    if (!f) return err('fault: unknown ' + id);
+    cli.found = cli.found || new Set();
+    if (cli.found.has(id)) cli.found.delete(id); else cli.found.add(id);
+    return ok('fault: ' + (cli.found.has(id) ? 'noted' : 'cleared') + ' ' + id);
+  },
   review: (cli, a) => {
     const id = a[0]; if (!id) return err('usage: review <finding-id>');
     const m = cli.mission; if (!m || !m.review) return err('review: not a design-review mission');
@@ -660,13 +669,25 @@ function startMission(mission) {
     run: line => cli.run(line),
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
-    done: () => api.results().every(r => r.ok) && api.reviewOk(),
+    done: () => api.results().every(r => r.ok) && api.reviewOk() && api.faultsOk(),
     // Diagnosis gate: the player must localize the fault before fixing it.
     // A mission with no `diagnose` block has no gate (ok for any index).
     requiresDiagnosis: !!mission.diagnose,
     // Design-review: planted findings the player must identify (and not the distractors).
     review: mission.review || null,
     selectedFindings: new Set(),
+    foundFaults: new Set(),
+    toggleFault(id) {
+      if (api.foundFaults.has(id)) api.foundFaults.delete(id);
+      else api.foundFaults.add(id);
+    },
+    faultsOk() {
+      const fs = mission.faults; if (!fs) return true;
+      const need = new Set(fs.filter(f => f.present).map(f => f.id));
+      if (api.foundFaults.size !== need.size) return false;
+      for (const id of need) if (!api.foundFaults.has(id)) return false;
+      return true;
+    },
     toggleFinding(id) {
       if (api.selectedFindings.has(id)) api.selectedFindings.delete(id);
       else api.selectedFindings.add(id);
@@ -688,6 +709,7 @@ function startMission(mission) {
       const unmet = api.results().filter(r => !r.ok);
       const lines = unmet.map(r => '  ✗ ' + r.reason);
       if (mission.review && !api.reviewOk()) lines.push('  ✗ design review incomplete — check every real fault, and only those');
+      if (mission.faults && !api.faultsOk()) lines.push('  ✗ localize every real fault before the ticket closes');
       return lines.length
         ? 'Not resolved yet:\n' + lines.join('\n')
         : '✓ All objectives met — ticket resolved.';
@@ -695,6 +717,7 @@ function startMission(mission) {
   };
   cli.mission = mission;
   cli.selected = api.selectedFindings;
+  cli.found = api.foundFaults;
   return api;
 }
 
@@ -1005,6 +1028,47 @@ const chapters = [
     success: [],
     solution: [['h1', 'review wrong-subnet'], ['h1', 'review no-default']]
   }
+,
+
+  { id: 'multi-branch-down', chapter: 'Multi-fault',
+    title: 'Three things wrong',
+    story: 'After a move, h1 cannot reach the intranet (intranet.corp.local at 10.0.2.10). More than one thing is broken. Find each fault, then fix all of them.',
+    objective: 'Localize every real fault, then make h1 reach intranet.corp.local.',
+    ticket: { id: 'INC-2104', from: 'Facilities · after the move', priority: 'P2', symptom: "The new desk can't open the intranet. We checked the cable. Something else is wrong — maybe more than one thing." },
+    diagnose: { q: 'h1 cannot open intranet.corp.local. A single ping to the IP also fails. What does that tell you?', options: ['more than name lookup is broken — addressing or routing is also wrong', 'only DNS is down', 'the website process crashed'], answer: 0, because: 'If the IP itself is unreachable, DNS is not the only fault. Address and route have to be fixed too.' },
+    console: 'h1',
+    hints: ['`ip addr` — is h1 in 10.0.1.0/24?', '`ip route` — is there a default via 10.0.1.1?', '`resolvectl status` — is 10.0.2.53 set?'],
+    faults: [
+      { id: 'subnet', text: 'h1 is on the wrong subnet', present: true },
+      { id: 'route', text: 'h1 has no default route', present: true },
+      { id: 'dns', text: 'h1 has no DNS resolver', present: true },
+      { id: 'srv-down', text: 'The web server is powered off', present: false },
+      { id: 'acl', text: 'The router is blocking h1', present: false }
+    ],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.9.50', 24),
+        www: SRV('www', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        dns1: Object.assign(SRV('dns1', '10.0.2.53', 24, '10.0.2.1', { 53: 'dns' }),
+          { dns: { 'intranet.corp.local': ip('10.0.2.10') } }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('www', 'eth0', 'sw2', 'p1'), L('dns1', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')]
+    }),
+    success: [
+      { type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'www' },
+      { type: 'resolves', dev: 'h1', name: 'intranet.corp.local', ip: '10.0.2.10' }
+    ],
+    solution: [
+      ['h1', 'fault subnet'], ['h1', 'fault route'], ['h1', 'fault dns'],
+      ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip route add default via 10.0.1.1'],
+      ['h1', 'resolvectl dns eth0 10.0.2.53']
+    ]
+  }
 
 ];
 
@@ -1140,6 +1204,13 @@ function renderReview(m) {
     <p class="dim">Inspect the topology and the terminal. Check the statements that are true faults. Leave the distractors unchecked.</p>
     <div class="rev-list">${rows}</div>`;
 }
+function renderFaults(m) {
+  const sel = RUN.foundFaults || new Set();
+  const rows = m.faults.map(f => `<label class="rev-row"><input type="checkbox" data-fault="${esc(f.id)}"${sel.has(f.id)?' checked':''}> ${esc(f.text)}</label>`).join('');
+  return `<div class="label">Localize — check every real fault</div>
+    <p class="dim">This ticket has more than one problem. Investigate, then check each real fault. Fix them all before Check.</p>
+    <div class="rev-list">${rows}</div>`;
+}
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
@@ -1147,6 +1218,7 @@ function renderBrief() {
   const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
   const review = m.review ? renderReview(m) : '';
+  const faults = m.faults ? renderFaults(m) : '';
   const body = gated
     ? renderDiagnose(m)
     : `${m.diagnose ? `<div class="diag-done">✓ Diagnosed — ${esc(m.diagnose.because)}</div>` : ''}
@@ -1233,6 +1305,9 @@ function openSettings() {
 /* ---------- wiring ---------- */
 function wireTopo() { document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => { SEL = n.dataset.dev; refresh(); })); }
 function wireBrief() {
+  document.querySelectorAll('#brief [data-fault]').forEach(cb => cb.addEventListener('change', () => {
+    RUN.toggleFault(cb.dataset.fault);
+  }));
   document.querySelectorAll('#brief [data-fid]').forEach(cb => cb.addEventListener('change', () => {
     RUN.toggleFinding(cb.dataset.fid);
   }));

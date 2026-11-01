@@ -301,6 +301,47 @@ const chapters = [
     success: [],
     solution: [['h1', 'review wrong-subnet'], ['h1', 'review no-default']]
   }
+,
+
+  { id: 'multi-branch-down', chapter: 'Multi-fault',
+    title: 'Three things wrong',
+    story: 'After a move, h1 cannot reach the intranet (intranet.corp.local at 10.0.2.10). More than one thing is broken. Find each fault, then fix all of them.',
+    objective: 'Localize every real fault, then make h1 reach intranet.corp.local.',
+    ticket: { id: 'INC-2104', from: 'Facilities · after the move', priority: 'P2', symptom: "The new desk can't open the intranet. We checked the cable. Something else is wrong — maybe more than one thing." },
+    diagnose: { q: 'h1 cannot open intranet.corp.local. A single ping to the IP also fails. What does that tell you?', options: ['more than name lookup is broken — addressing or routing is also wrong', 'only DNS is down', 'the website process crashed'], answer: 0, because: 'If the IP itself is unreachable, DNS is not the only fault. Address and route have to be fixed too.' },
+    console: 'h1',
+    hints: ['`ip addr` — is h1 in 10.0.1.0/24?', '`ip route` — is there a default via 10.0.1.1?', '`resolvectl status` — is 10.0.2.53 set?'],
+    faults: [
+      { id: 'subnet', text: 'h1 is on the wrong subnet', present: true },
+      { id: 'route', text: 'h1 has no default route', present: true },
+      { id: 'dns', text: 'h1 has no DNS resolver', present: true },
+      { id: 'srv-down', text: 'The web server is powered off', present: false },
+      { id: 'acl', text: 'The router is blocking h1', present: false }
+    ],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.9.50', 24),
+        www: SRV('www', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        dns1: Object.assign(SRV('dns1', '10.0.2.53', 24, '10.0.2.1', { 53: 'dns' }),
+          { dns: { 'intranet.corp.local': ip('10.0.2.10') } }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('www', 'eth0', 'sw2', 'p1'), L('dns1', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')]
+    }),
+    success: [
+      { type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'www' },
+      { type: 'resolves', dev: 'h1', name: 'intranet.corp.local', ip: '10.0.2.10' }
+    ],
+    solution: [
+      ['h1', 'fault subnet'], ['h1', 'fault route'], ['h1', 'fault dns'],
+      ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip route add default via 10.0.1.1'],
+      ['h1', 'resolvectl dns eth0 10.0.2.53']
+    ]
+  }
 
 ];
 
