@@ -1636,6 +1636,13 @@ function renderConfig() {
     h += `<div class="addrow"><input class="rdest" placeholder="default or 10.0.3.0/24"/><input class="rvia" placeholder="via gateway"/><button class="btn sm" id="addrt">Add route</button></div>`;
   }
   if (d.kind === 'router') {
+    const ospfIfs = Object.entries(d.ifaces).filter(([,f]) => f.ospf != null).map(([n,f]) => `${n} area ${f.ospf}`).join(', ') || '(none)';
+    const ons = (typeof M.ospfNeighbors === 'function') ? M.ospfNeighbors(RUN.net, SEL) : [];
+    const ost = ons.map(n => `${n.id} ${M.ipStr(n.ip)} area ${n.area}`).join(' · ') || 'no neighbors';
+    const ifopts = Object.keys(d.ifaces).map(n => `<option>${n}</option>`).join('');
+    h += `<div class="label2">OSPF</div>
+      <div class="dim" style="margin-bottom:6px">Enabled: ${esc(ospfIfs)}<br>Neighbors: ${esc(ost)}</div>
+      <div class="addrow"><select class="oif">${ifopts}</select><input class="oarea" placeholder="area" value="0" size="4"/><button class="btn sm" id="ospfen">Enable</button></div>`;
     const b = d.bgp || { asn: '', neighbors: [], networks: [] };
     const neigh = (b.neighbors || []).map(n => `${M.ipStr(n.ip)} AS${n.remoteAs}`).join(', ') || '(none)';
     const nets = (b.networks || []).join(', ') || '(none)';
@@ -1721,6 +1728,14 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  const oBtn = $('#ospfen');
+  if (oBtn) oBtn.addEventListener('click', () => {
+    const d = RUN.net.devices[SEL];
+    const ifn = $('#config .oif').value, area = $('#config .oarea').value;
+    if (!ifn || !d.ifaces[ifn]) return;
+    d.ifaces[ifn].ospf = Number(area);
+    refresh();
+  });
   const bAsn = $('#bgpasn');
   if (bAsn) bAsn.addEventListener('click', () => {
     const d = RUN.net.devices[SEL]; d.bgp = d.bgp || { asn: null, neighbors: [], networks: [] };
