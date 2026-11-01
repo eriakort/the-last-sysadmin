@@ -47,7 +47,9 @@ main{display:flex;flex-direction:column;min-width:0}
 svg#topo{max-width:100%;height:auto}
 .edge{stroke:#44506a;stroke-width:2}
 .edge.down{stroke:var(--bad);stroke-dasharray:5 4}
-.node{cursor:pointer;color:var(--muted)}
+.node{cursor:grab;color:var(--muted);touch-action:none}
+.node:active{cursor:grabbing}
+.pal-hint{font-size:11px;margin-top:5px}
 .node .ico{color:var(--muted)}
 .node.k-host,.node.k-host .ico{color:var(--host)}
 .node.k-server,.node.k-server .ico{color:var(--host)}

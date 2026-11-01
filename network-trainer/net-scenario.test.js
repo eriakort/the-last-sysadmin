@@ -89,6 +89,15 @@ test('a build-from-scratch scenario is authorable, serializable, and solvable', 
   assert(run.done() === true, 'grader accepts the built network:\n' + run.status());
 });
 
+test('hand-placed node positions survive fromTopology and toMission', () => {
+  const topo = { devices: { h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } } } }, links: [], pos: { h1: [123, 45] } };
+  const start = S.fromTopology(topo);
+  assert(start.pos && start.pos.h1[0] === 123, 'fromTopology keeps positions');
+  const m = S.toMission({ title: 't', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] });
+  const net = m.build();
+  assert(net.pos && net.pos.h1[1] === 45, 'build() carries positions into the played net');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

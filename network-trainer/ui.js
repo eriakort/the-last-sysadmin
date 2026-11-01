@@ -22,6 +22,7 @@ let MODE = 'play';                                 // 'play' | 'build' (authorin
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
+let LASTPOS = {}, DRAG = null;                     // last rendered node positions + active drag
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -96,11 +97,14 @@ function renderFlows() {
 function renderTopo() {
   const net = RUN.net;
   if (!Object.keys(net.devices).length) return '<div class="canvas-empty">Empty canvas — add a device from the <b>Build</b> panel on the right.</div>';
-  const pos = layout(net);
+  const auto = layout(net);
+  const pos = {};                                    // hand-placed position wins; otherwise auto-layout
+  for (const id in net.devices) pos[id] = (net.pos && net.pos[id]) ? net.pos[id] : auto[id];
+  LASTPOS = pos;
   const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   let s = `<svg id="topo" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-label="network topology">`;
-  for (const l of net.links) s += `<line x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`;
+  for (const l of net.links) s += `<line data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`;
   for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
@@ -276,16 +280,53 @@ function openSettings() {
 }
 
 /* ---------- wiring ---------- */
-function wireTopo() {
-  document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => {
-    const id = n.dataset.dev;
-    if (WIRE) {                                        // wiring: connect the armed device to this one
-      if (WIRE !== id) { try { B.addLink(RUN.net, WIRE, id); } catch (e) { flashStatus(e.message); } }
-      WIRE = null; refresh(); return;
-    }
-    SEL = id; refresh();
-  }));
+// Map a client (screen) point into the topology SVG's own coordinate space,
+// accounting for the viewBox scaling that fits the canvas to its column.
+function svgPoint(svg, clientX, clientY) {
+  const pt = svg.createSVGPoint(); pt.x = clientX; pt.y = clientY;
+  const m = svg.getScreenCTM(); if (!m) return [clientX, clientY];
+  const p = pt.matrixTransform(m.inverse()); return [p.x, p.y];
 }
+const nodePos = id => (RUN.net.pos && RUN.net.pos[id]) || LASTPOS[id] || [90, 50];
+function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; RUN.net.pos[id] = [Math.max(4, x), Math.max(4, y)]; }
+
+function wireTopo() {
+  document.querySelectorAll('#topo .node').forEach(n => {
+    n.addEventListener('pointerdown', e => {
+      const id = n.dataset.dev;
+      if (WIRE) {                                      // wiring: connect the armed device to this one
+        if (WIRE !== id) { try { B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
+        WIRE = null; refresh(); return;
+      }
+      e.preventDefault();
+      const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
+      const cur = nodePos(id);
+      DRAG = { id, offX: px - cur[0], offY: py - cur[1], moved: false };
+      try { n.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+  });
+}
+function onDragMove(e) {
+  if (!DRAG) return;
+  const svg = $('#topo'); if (!svg) return;
+  const [px, py] = svgPoint(svg, e.clientX, e.clientY);
+  const nx = px - DRAG.offX, ny = py - DRAG.offY;
+  const prev = nodePos(DRAG.id);
+  if (!DRAG.moved && Math.hypot(nx - prev[0], ny - prev[1]) > 3) DRAG.moved = true;
+  setPos(DRAG.id, nx, ny);
+  const p = nodePos(DRAG.id), cx = p[0] + 24, cy = p[1] + 18;         // live DOM update: node + its links
+  const g = document.querySelector(`#topo .node[data-dev="${DRAG.id}"]`);
+  if (g) g.setAttribute('transform', `translate(${p[0]},${p[1]})`);
+  document.querySelectorAll(`#topo line[data-a="${DRAG.id}"]`).forEach(l => { l.setAttribute('x1', cx); l.setAttribute('y1', cy); });
+  document.querySelectorAll(`#topo line[data-b="${DRAG.id}"]`).forEach(l => { l.setAttribute('x2', cx); l.setAttribute('y2', cy); });
+}
+function onDragUp() {
+  if (!DRAG) return;
+  const d = DRAG; DRAG = null;
+  if (!d.moved) { SEL = d.id; refresh(); }            // a click, not a drag: select the device
+  else refresh();                                     // settle: re-render cleanly from the new positions
+}
+function autoArrange() { if (RUN && RUN.net) { delete RUN.net.pos; refresh(); } }
 function flashStatus(msg) { const b = $('#status'); if (b) { b.className = 'bad'; b.textContent = msg; } }
 function wireBrief() {
   if (MODE === 'build') {                              // authoring panel
@@ -326,6 +367,7 @@ function wireConfig() {
     refresh();
   });
   const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); SEL = null; WIRE = null; refresh(); } });
+  const ab = $('#arrangeBtn'); if (ab) ab.addEventListener('click', autoArrange);
   function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
     const out = $('#pingout');
@@ -417,7 +459,8 @@ function renderPalette() {
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
   return `<div class="builder"><div class="label">Build</div>
     <div class="pal-row">${add}</div>
-    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button>` : ''}${wiring}</div></div>`;
+    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button>` : ''}<button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button>${wiring}</div>
+    <div class="pal-hint dim">Drag any device to reposition it; links follow.</div></div>`;
 }
 function describeCheck(s) {
   switch (s.type) {
@@ -653,6 +696,9 @@ function boot() {
   $('#btnStats').addEventListener('click', openStats);
   $('#btnBuild').addEventListener('click', enterBuild);
   $('#btnClass').addEventListener('click', openClassroom);
+  document.addEventListener('pointermove', onDragMove);   // node dragging (attached once)
+  document.addEventListener('pointerup', onDragUp);
+  document.addEventListener('pointercancel', onDragUp);
   reloadMission(0);
   initCloud();
 }

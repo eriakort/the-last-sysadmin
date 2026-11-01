@@ -29,6 +29,7 @@ function addDevice(topo, kind, id) {
 function removeDevice(topo, id) {
   if (!topo.devices[id]) return false;
   delete topo.devices[id];
+  if (topo.pos) delete topo.pos[id];
   topo.links = topo.links.filter(l => l.a[0] !== id && l.b[0] !== id);
   return true;
 }

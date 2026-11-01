@@ -77,8 +77,13 @@ function toMission(scn) {
   };
 }
 
-// Capture the live topology from a running mission back into a scenario's start.
-function fromTopology(topo) { return { devices: clone(topo.devices), links: clone(topo.links) }; }
+// Capture the live topology from a running mission back into a scenario's start,
+// including hand-placed node positions so a saved/exported layout is preserved.
+function fromTopology(topo) {
+  const out = { devices: clone(topo.devices), links: clone(topo.links) };
+  if (topo.pos && Object.keys(topo.pos).length) out.pos = clone(topo.pos);
+  return out;
+}
 
 function toJSON(scn) { return JSON.stringify(scn, null, 2); }
 function fromJSON(text) {
