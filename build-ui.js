@@ -57,6 +57,14 @@ svg#topo{max-width:100%;height:auto}
 .node .n-sub{fill:var(--muted);font-size:10px}
 .n-id{fill:var(--ink);font-size:13px;font-weight:600}
 .n-sub{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
+#flows{flex:none;max-height:132px;overflow:auto;border-top:1px solid var(--line);background:#0c161c;font-size:12px}
+.fl-h{padding:4px 12px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-size:10px}
+.fl-empty{padding:6px 12px;color:var(--muted)}
+.fl-row{display:grid;grid-template-columns:70px 1fr 1.4fr 70px;gap:8px;padding:3px 12px;border-top:1px solid var(--line)}
+.fl-row.ok .fl-st{color:var(--good)}
+.fl-row.bad .fl-st{color:var(--bad)}
+.fl-proto{color:var(--amber);font-weight:600}
+.fl-path{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #term{height:40%;min-height:180px;border-top:1px solid var(--line);background:#0b0f16;display:flex;flex-direction:column}
 #tout{flex:1;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe}
 .tline{display:flex;gap:8px;align-items:center;padding:8px 12px;border-top:1px solid var(--line)}

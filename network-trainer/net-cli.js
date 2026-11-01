@@ -23,7 +23,7 @@ const ok = s => ({ out: s, code: 0 });
 const err = s => ({ out: s, code: 1 });
 
 function makeCLI(net, cur) {
-  const cli = { net, cur, lastPing: null, on(id) { this.cur = id; return this; } };
+  const cli = { net, cur, lastPing: null, flows: [], on(id) { this.cur = id; return this; } };
   cli.run = line => dispatch(cli, String(line).trim());
   return cli;
 }
@@ -100,6 +100,9 @@ const COMMANDS = {
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
     const r = M.ping(cli.net, cli.cur, dst, base);
     cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
+    cli.flows = cli.flows || [];
+    cli.flows.unshift({ t: Date.now(), from: cli.cur, ...cli.lastPing });
+    if (cli.flows.length > 12) cli.flows.length = 12;
     const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
     if (r.ok) return ok(`PING ${t} (${M.ipStr(dst)}): reply received — reachable\npath: ${path}`);
     return err(`PING ${t} (${M.ipStr(dst)}): ${r.reason}\npath: ${path}`);

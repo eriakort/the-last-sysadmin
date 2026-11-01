@@ -72,6 +72,17 @@ const NODE_ICONS = {
 };
 const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
 function linkDown(net, l) { if (l.up === false) return true; const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; }; return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1])); }
+function renderFlows() {
+  const flows = (RUN && RUN.cli && RUN.cli.flows) || [];
+  if (!flows.length) return '<div id="flows"><div class="fl-h">Flows</div><div class="fl-empty">No packets yet — ping or traceroute to capture evidence.</div></div>';
+  const rows = flows.slice(0, 8).map(f => {
+    const ok = f.ok ? 'ok' : 'bad';
+    const proto = (f.proto || 'icmp').toUpperCase() + (f.dport ? ':' + f.dport : '');
+    const path = (f.path || []).join(' → ');
+    return `<div class="fl-row ${ok}"><span class="fl-proto">${proto}</span><span>${M.ipStr(f.src)} → ${M.ipStr(f.dst)}</span><span class="fl-path">${path}</span><span class="fl-st">${f.ok ? 'delivered' : 'dropped'}</span></div>`;
+  }).join('');
+  return `<div id="flows"><div class="fl-h">Flows <span class="dim">${flows.length}</span></div>${rows}</div>`;
+}
 function renderTopo() {
   const net = RUN.net, pos = layout(net);
   const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
@@ -151,7 +162,7 @@ function renderConfig() {
 }
 
 /* ---------- actions ---------- */
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
 function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!PROG.done[chapters[i].id]; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, traceroute, ip addr, nmap`); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
@@ -260,7 +271,7 @@ function boot() {
     </header>
     <div id="cols">
       <aside id="brief"></aside>
-      <main><div id="topoWrap"></div><div id="term"><pre id="tout"></pre><div class="tline"><span>$</span><input id="tin" autocomplete="off" placeholder="type a command — ping, ip addr, ip route add…"/></div></div></main>
+      <main><div id="topoWrap"></div><div id="flows"></div><div id="term"><pre id="tout"></pre><div class="tline"><span>$</span><input id="tin" autocomplete="off" placeholder="type a command — ping, ip addr, ip route add…"/></div></div></main>
       <aside id="config"></aside>
     </div>`;
   wireTerm();
