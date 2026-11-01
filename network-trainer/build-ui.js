@@ -45,10 +45,16 @@ main{display:flex;flex-direction:column;min-width:0}
 svg#topo{max-width:100%;height:auto}
 .edge{stroke:#44506a;stroke-width:2}
 .edge.down{stroke:var(--bad);stroke-dasharray:5 4}
-.node{cursor:pointer}
-.node rect{fill:var(--raise);stroke:#3a475c;stroke-width:1.5}
-.node.sel rect{stroke:var(--amber);stroke-width:2.5}
-.node.k-host rect{stroke:var(--host)}.node.k-switch rect{stroke:var(--switch)}.node.k-router rect{stroke:var(--router)}.node.k-fw rect{stroke:var(--fw)}
+.node{cursor:pointer;color:var(--muted)}
+.node .ico{color:var(--muted)}
+.node.k-host,.node.k-host .ico{color:var(--host)}
+.node.k-server,.node.k-server .ico{color:var(--host)}
+.node.k-switch,.node.k-switch .ico{color:var(--switch)}
+.node.k-router,.node.k-router .ico{color:var(--router)}
+.node.k-firewall,.node.k-fw,.node.k-firewall .ico,.node.k-fw .ico{color:var(--fw)}
+.node.sel .ico{color:var(--amber);filter:drop-shadow(0 0 4px var(--amber))}
+.node .n-id{fill:var(--ink);font-size:12px;font-weight:600}
+.node .n-sub{fill:var(--muted);font-size:10px}
 .n-id{fill:var(--ink);font-size:13px;font-weight:600}
 .n-sub{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
 #term{height:40%;min-height:180px;border-top:1px solid var(--line);background:#0b0f16;display:flex;flex-direction:column}

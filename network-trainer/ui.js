@@ -35,21 +35,54 @@ function layout(net) {
   ids.forEach(i => { if (layer[i] == null) layer[i] = 0; });
   const byLayer = {}; ids.forEach(i => (byLayer[layer[i]] = byLayer[layer[i]] || []).push(i));
   const pos = {};
-  Object.keys(byLayer).map(Number).sort((a, b) => a - b).forEach(L => byLayer[L].forEach((id, idx) => { pos[id] = [90 + L * 150, 60 + idx * 86]; }));
+  Object.keys(byLayer).map(Number).sort((a, b) => a - b).forEach(L => byLayer[L].forEach((id, idx) => { pos[id] = [90 + L * 160, 50 + idx * 100]; }));
   return pos;
 }
 const primaryIp = dev => { for (const n in dev.ifaces) { const f = dev.ifaces[n]; if (f.up !== false && f.ip != null) return M.ipStr(f.ip); } return null; };
+const NODE_ICONS = {
+  host: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <rect x="6" y="2" width="36" height="22" rx="2"/>
+    <path d="M18 24v6M30 24v6M14 30h20"/>
+    <path d="M12 8h24M12 13h16" opacity=".5"/>
+  </g>`,
+  server: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <rect x="14" y="1" width="20" height="34" rx="2"/>
+    <path d="M18 7h12M18 12h12M18 17h12"/>
+    <circle cx="20" cy="26" r="1.4" fill="currentColor" stroke="none"/>
+    <circle cx="26" cy="26" r="1.4" fill="currentColor" stroke="none"/>
+  </g>`,
+  switch: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <rect x="4" y="10" width="40" height="16" rx="2"/>
+    <circle cx="12" cy="18" r="2" fill="currentColor" stroke="none"/>
+    <circle cx="20" cy="18" r="2" fill="currentColor" stroke="none"/>
+    <circle cx="28" cy="18" r="2" fill="currentColor" stroke="none"/>
+    <circle cx="36" cy="18" r="2" fill="currentColor" stroke="none"/>
+    <path d="M24 4v6M20 6l4-4 4 4M24 26v6M20 30l4 4 4-4"/>
+  </g>`,
+  router: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="24" cy="18" r="9"/>
+    <path d="M24 2v7M24 27v7M8 18h7M33 18h7"/>
+    <path d="M24 5l-3 3h6zM24 31l-3-3h6zM11 18l3-3v6zM37 18l-3-3v6z" fill="currentColor" stroke="none"/>
+  </g>`,
+  firewall: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+    <rect x="6" y="4" width="36" height="28" rx="1"/>
+    <path d="M6 13h36M6 22h36"/>
+    <path d="M16 4v9M28 13v9M18 22v10"/>
+  </g>`
+};
 const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
 function linkDown(net, l) { if (l.up === false) return true; const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; }; return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1])); }
 function renderTopo() {
   const net = RUN.net, pos = layout(net);
-  const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 130, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 70;
-  const cx = id => pos[id][0] + 48, cy = id => pos[id][1] + 22;
+  const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
+  const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   let s = `<svg id="topo" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-label="network topology">`;
   for (const l of net.links) s += `<line x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`;
   for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
-    s += `<g class="node ${KINDCLASS[d.kind]} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})"><rect width="96" height="44" rx="8"/><text x="48" y="19" text-anchor="middle" class="n-id">${id}</text><text x="48" y="34" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
+    const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
+    const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})">${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${id}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
   }
   return s + '</svg>';
 }
