@@ -45,7 +45,17 @@ scratch** to meet the spec: the same canvas, graded by the same engine. The
 scenario format and the topology-editing ops are pure, tested modules
 (`net-scenario.js`, `net-builder.js`), so the whole author → serialise → build →
 grade loop is covered headlessly, and the format is ready for the classroom
-(Supabase) assignment layer next.
+(Supabase) assignment layer.
+
+**Classroom (foundation).** The assignment layer reuses the sysadmin game's
+classroom (shared `classes` / `enrollments` / `assignments` / `attempts` tables
+and RLS). `supabase/net-scenarios.sql` adds one table (`net_scenarios`) and one
+`SECURITY DEFINER` delivery function (`get_class_net_scenarios`) mirroring
+`get_class_missions`; one assignment can reference sysadmin missions and network
+scenarios at once. `net-classroom.js` is the headless data-access layer (save /
+list / assign / deliver / record-attempt), tested against a mock Supabase client
+in `net-classroom.test.js`. Wiring this into a sign-in + classroom panel in the
+page is the next step (and verifies end-to-end against a live Supabase project).
 
 **Incident-ticket framing.** Every mission opens as an on-call ticket: a
 reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
