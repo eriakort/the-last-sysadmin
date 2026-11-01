@@ -216,6 +216,62 @@ test('DHCP with no server on the segment returns a teachable failure', () => {
   no(M.dhclient(net, 'h1', 'eth0'), 'no DHCP server -> no lease');
 });
 
+/* ========== dynamic routing + failover ========== */
+const rif = (a, p, extra) => ({ ip: ip(a), mask: p, up: true, ...(extra || {}) });
+const rtr = (id, ifaces, routes, extra) => ({ id, kind: 'router', ifaces, routes: routes || [], acls: [], ...(extra || {}) });
+
+test('OSPF: an adjacency forms only in a shared area; the branch route is learned and reachable', () => {
+  const mk = (r1area, r2area) => ({ devices: {
+      hq: host('hq', '10.0.1.10', 24, '10.0.1.1'),
+      br: SRV('br', '10.0.8.10', 24, '10.0.8.1', { 22: 'ssh' }),
+      r1: rtr('r1', { eth0: rif('10.0.1.1', 24, { ospf: r1area }), eth1: rif('10.0.12.1', 24, { ospf: r1area }) }),
+      r2: rtr('r2', { eth0: rif('10.0.12.2', 24, { ospf: r2area }), eth1: rif('10.0.8.1', 24, { ospf: r2area }) }),
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }]) },
+    links: [link('hq', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'), link('r1', 'eth1', 'r2', 'eth0'), link('br', 'eth0', 'sw2', 'p1'), link('r2', 'eth1', 'sw2', 'p2')] });
+  const net = mk(0, 0);
+  if (!M.ospfNeighbors(net, 'r1').some(n => n.id === 'r2')) throw new Error('r1 should see r2 as an OSPF neighbor in area 0');
+  ok(C.ospfRoute(net, 'r1', '10.0.8.0/24'), 'r1 learns the branch net via OSPF');
+  ok(C.reachable(net, 'hq', 'br'), 'HQ reaches the branch over the learned route');
+  const bad = mk(0, 1);                                   // area mismatch
+  if (M.ospfNeighbors(bad, 'r1').some(n => n.id === 'r2')) throw new Error('mismatched areas must NOT form an adjacency');
+  no(C.ospfRoute(bad, 'r1', '10.0.8.0/24'), 'nothing learned across mismatched areas');
+  no(C.reachable(bad, 'hq', 'br'), 'unreachable without the adjacency');
+});
+
+test('BGP: a session establishes only with matching ASNs on both ends; advertised routes are then learned', () => {
+  const mk = r1expectsAs => ({ devices: {
+      hq: host('hq', '10.0.1.10', 24, '10.0.1.1'),
+      br: SRV('br', '10.0.8.10', 24, '10.0.8.1', { 22: 'ssh' }),
+      r1: rtr('r1', { eth0: rif('10.0.1.1', 24), eth1: rif('10.0.12.1', 24) }, [], { bgp: { asn: 65001, neighbors: [{ ip: ip('10.0.12.2'), remoteAs: r1expectsAs }], networks: ['10.0.1.0/24'] } }),
+      r2: rtr('r2', { eth0: rif('10.0.12.2', 24), eth1: rif('10.0.8.1', 24) }, [], { bgp: { asn: 65002, neighbors: [{ ip: ip('10.0.12.1'), remoteAs: 65001 }], networks: ['10.0.8.0/24'] } }),
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }]) },
+    links: [link('hq', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'), link('r1', 'eth1', 'r2', 'eth0'), link('br', 'eth0', 'sw2', 'p1'), link('r2', 'eth1', 'sw2', 'p2')] });
+  const net = mk(65002);
+  ok(C.bgpSession(net, 'r1', 'r2'), 'session Established with matching ASNs');
+  ok(C.bgpRoute(net, 'r1', '10.0.8.0/24'), 'r1 learns the branch net over BGP');
+  ok(C.reachable(net, 'hq', 'br'), 'HQ reaches the branch');
+  const bad = mk(65999);                                  // r1 expects the wrong remote AS
+  no(C.bgpSession(bad, 'r1', 'r2'), 'ASN mismatch keeps the session down');
+  no(C.reachable(bad, 'hq', 'br'), 'no learned route while the session is down');
+});
+
+test('Failover: a dead primary next hop reroutes over an equal backup route', () => {
+  const mk = primaryUp => ({ devices: {
+      hq: host('hq', '10.0.1.10', 24, '10.0.1.1'),
+      br: SRV('br', '10.0.8.10', 24, '10.0.8.2', { 22: 'ssh' }),     // gateway is the backup router r3
+      r1: rtr('r1', { eth0: rif('10.0.1.1', 24), eth1: rif('10.0.12.1', 24), eth2: rif('10.0.13.1', 24) },
+        [{ dest: ip('10.0.8.0'), mask: 24, via: ip('10.0.12.2') }, { dest: ip('10.0.8.0'), mask: 24, via: ip('10.0.13.2') }]),
+      r2: rtr('r2', { eth0: rif('10.0.12.2', 24), eth1: rif('10.0.8.1', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+      r3: rtr('r3', { eth0: rif('10.0.13.2', 24), eth1: rif('10.0.8.2', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.13.1') }]),
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }, { name: 'p3' }]) },
+    links: [link('hq', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'),
+            { a: ['r1', 'eth1'], b: ['r2', 'eth0'], up: primaryUp },
+            link('r1', 'eth2', 'r3', 'eth0'),
+            link('r2', 'eth1', 'sw2', 'p1'), link('r3', 'eth1', 'sw2', 'p2'), link('br', 'eth0', 'sw2', 'p3')] });
+  ok(C.reachable(mk(true), 'hq', 'br'), 'reachable over the primary path');
+  ok(C.reachable(mk(false), 'hq', 'br'), 'still reachable via the backup when the primary link is down');
+});
+
 /* ---------- runner ---------- */
 let failed = 0;
 for (const [name, fn] of tests) {
