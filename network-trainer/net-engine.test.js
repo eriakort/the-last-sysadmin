@@ -168,6 +168,54 @@ test('IP math round-trips and subnets compute', () => {
   if (M.networkOf(M.ip('10.0.1.37'), 24) !== M.ip('10.0.1.0')) throw new Error('network addr');
 });
 
+/* ========== DNS: authoritative resolution across a router ========== */
+test('DNS resolves a name via a configured resolver, and fails without one', () => {
+  const net = {
+    devices: {
+      h1: host('h1', '10.0.1.10', 24, '10.0.1.1'),
+      www: SRV('www', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+      dns1: { ...SRV('dns1', '10.0.2.53', 24, '10.0.2.1', { 53: 'dns' }), dns: { 'intranet.corp.local': ip('10.0.2.10') } },
+      r1: { id: 'r1', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('10.0.2.1'), mask: 24, up: true } }, routes: [], acls: [] },
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }, { name: 'p3' }])
+    },
+    links: [link('h1', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'), link('www', 'eth0', 'sw2', 'p1'), link('dns1', 'eth0', 'sw2', 'p2'), link('r1', 'eth1', 'sw2', 'p3')]
+  };
+  no(M.resolveName(net, 'h1', 'intranet.corp.local'), 'no resolver -> fail');   // h1 has no resolver yet
+  no(C.resolves(net, 'h1', 'intranet.corp.local', '10.0.2.10'), 'check fails without resolver');
+  net.devices.h1.resolver = ip('10.0.2.53');                                     // point h1 at the DNS server
+  const r = M.resolveName(net, 'h1', 'intranet.corp.local');
+  ok(r, 'resolves with resolver'); if (r.ip !== ip('10.0.2.10')) throw new Error('resolved to the wrong IP');
+  no(M.resolveName(net, 'h1', 'nope.corp.local'), 'NXDOMAIN for an unknown name');
+  ok(C.resolves(net, 'h1', 'intranet.corp.local', '10.0.2.10'), 'resolves check passes');
+});
+
+/* ========== DHCP: a lease delivers address + gateway + DNS ========== */
+test('DHCP hands out an address, gateway, and resolver; a reply is reachable', () => {
+  const net = {
+    devices: {
+      h1: host('h1', '10.0.9.50', 24),                                           // stale static, wrong network
+      srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+      r1: { id: 'r1', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('10.0.2.1'), mask: 24, up: true } }, routes: [], acls: [],
+        dhcp: { iface: 'eth0', range: [ip('10.0.1.100'), ip('10.0.1.150')], prefix: 24, gw: ip('10.0.1.1'), dns: ip('10.0.2.10') } },
+      sw1: sw('sw1', [{ name: 'p1' }, { name: 'p2' }]), sw2: sw('sw2', [{ name: 'p1' }, { name: 'p2' }])
+    },
+    links: [link('h1', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'), link('srv', 'eth0', 'sw2', 'p1'), link('r1', 'eth1', 'sw2', 'p2')]
+  };
+  no(C.reachable(net, 'h1', 'srv'), 'stale static cannot reach the server');
+  const lease = M.dhclient(net, 'h1', 'eth0');
+  ok(lease, 'lease acquired');
+  if (lease.ip !== ip('10.0.1.100')) throw new Error('expected first free address .100, got ' + M.ipStr(lease.ip));
+  if (net.devices.h1.resolver !== ip('10.0.2.10')) throw new Error('DHCP did not set the resolver');
+  ok(C.reachable(net, 'h1', 'srv'), 'after the lease, the server is reachable');
+});
+test('DHCP with no server on the segment returns a teachable failure', () => {
+  const net = {
+    devices: { h1: host('h1', '10.0.9.50', 24), sw1: sw('sw1', [{ name: 'p1' }]) },
+    links: [link('h1', 'eth0', 'sw1', 'p1')]
+  };
+  no(M.dhclient(net, 'h1', 'eth0'), 'no DHCP server -> no lease');
+});
+
 /* ---------- runner ---------- */
 let failed = 0;
 for (const [name, fn] of tests) {

@@ -133,6 +133,57 @@ function sourceIpToward(net, devId, dst) {
   return null;
 }
 
+/* ---------- DNS (authoritative, static records) ---------- */
+// Resolve a name from srcDev's point of view. A device queries its configured
+// `resolver` (a DNS server IP); that server holds a `dns` zone of name -> ipInt.
+// Returns { ok, ip?, reason? } — every failure is a teachable one.
+function resolveName(net, srcDev, name) {
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return { ok: true, ip: ip(name), name };   // already an address
+  const dev = net.devices[srcDev];
+  const res = dev && dev.resolver;
+  if (res == null) return { ok: false, reason: 'no DNS resolver configured' };
+  const q = ping(net, srcDev, res, { proto: 'udp', dport: 53 });                    // can we reach the resolver?
+  if (!q.ok) return { ok: false, reason: 'cannot reach DNS server ' + ipStr(res) };
+  const serverId = deviceOwning(net, res);
+  const zone = serverId && net.devices[serverId].dns;
+  const rec = zone && zone[String(name).toLowerCase()];
+  if (rec == null) return { ok: false, reason: 'NXDOMAIN — no DNS record for ' + name };
+  return { ok: true, ip: rec, name };
+}
+
+/* ---------- DHCP (a pool on one segment hands out IP + gateway + DNS) ---------- */
+// A device advertises a pool as `dhcp: { iface, range:[lo,hi], prefix, gw, dns }`,
+// served to the L2 segment attached to that interface.
+function dhcpServerFor(net, hostId, ifaceName) {
+  for (const [d, i] of l2Domain(net, hostId, ifaceName)) {
+    const dev = net.devices[d];
+    if (dev.dhcp && dev.dhcp.iface === i) return { id: d, pool: dev.dhcp };
+  }
+  return null;
+}
+// Request a lease on hostId's interface. Mutates the host: sets the address,
+// installs the default route, records the resolver. Returns { ok, ip?, reason? }.
+function dhclient(net, hostId, ifaceName) {
+  const host = net.devices[hostId];
+  if (!host || !host.ifaces[ifaceName]) return { ok: false, reason: 'no such interface ' + ifaceName };
+  const srv = dhcpServerFor(net, hostId, ifaceName);
+  if (!srv) return { ok: false, reason: 'no DHCP server responded on the segment' };
+  const p = srv.pool;
+  let addr = null;
+  for (let a = p.range[0]; a <= p.range[1]; a++) {
+    if (a === p.gw) continue;
+    const owner = deviceOwning(net, a);
+    if (owner && owner !== hostId) continue;        // taken by someone else
+    addr = a; break;
+  }
+  if (addr == null) return { ok: false, reason: 'DHCP pool exhausted — no free address' };
+  host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: p.prefix, up: true };
+  host.routes = (host.routes || []).filter(r => r.mask !== 0);     // replace any old default
+  if (p.gw != null) host.routes.push({ dest: 0, mask: 0, via: p.gw });
+  if (p.dns != null) host.resolver = p.dns;
+  return { ok: true, ip: addr, gw: p.gw, dns: p.dns, prefix: p.prefix };
+}
+
 // A full round trip (like ICMP echo): request must arrive AND the reply must come back.
 // Catches asymmetric ACLs / missing return routes, which pure one-way reachability misses.
 function ping(net, srcDev, dst, base = {}) {
@@ -149,5 +200,6 @@ function ping(net, srcDev, dst, base = {}) {
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, ownsIp, directIface, routeLookup, deviceOwning,
-  aclDecision, forward, ping, sourceIpToward
+  aclDecision, forward, ping, sourceIpToward,
+  resolveName, dhclient, dhcpServerFor
 };

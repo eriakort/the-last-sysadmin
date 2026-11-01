@@ -11,6 +11,14 @@ function resolve(net, token) {
   if (/^\d+\.\d+\.\d+\.\d+$/.test(token)) return M.ip(token);
   return null;
 }
+// Resolve a target token to an IP, trying device id / literal first, then DNS
+// (so `ping www.corp.local` works and surfaces the real resolution failure).
+function resolveTarget(cli, token) {
+  const direct = resolve(cli.net, token);
+  if (direct != null) return { ip: direct };
+  const dns = M.resolveName(cli.net, cli.cur, token);
+  return dns.ok ? { ip: dns.ip, dns: true } : { err: dns.reason };
+}
 const ok = s => ({ out: s, code: 0 });
 const err = s => ({ out: s, code: 1 });
 
@@ -30,7 +38,7 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
-  help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>'),
+  help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -84,8 +92,9 @@ const COMMANDS = {
   },
 
   ping: (cli, a) => {
-    const t = a[0]; if (!t) return err('usage: ping <host|ip>');
-    const dst = resolve(cli.net, t); if (dst == null) return err(`ping: cannot resolve ${t}`);
+    const t = a[0]; if (!t) return err('usage: ping <host|ip|name>');
+    const rt = resolveTarget(cli, t); if (rt.err) return err(`PING ${t}: ${rt.err}`);
+    const dst = rt.ip;
     const base = {};
     const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
@@ -157,6 +166,32 @@ const COMMANDS = {
     const ports = Object.keys(svcs);
     const body = ports.length ? ports.map(p => `${p}/tcp  open  ${svcs[p]}`).join('\n') : '(no open ports)';
     return ok(`Scan report for ${t} (${M.ipStr(dst)}) — host is up\nPORT     STATE SERVICE\n${body}`);
+  },
+
+  dig: (cli, a) => {                                          // resolve a name via this host's configured DNS server
+    const name = a[0]; if (!name) return err('usage: dig <name>');
+    const r = M.resolveName(cli.net, cli.cur, name);
+    if (r.ok) return ok(`; <<>> dig ${name}\n;; ANSWER SECTION:\n${name}.\t\tIN\tA\t${M.ipStr(r.ip)}`);
+    return err(`; <<>> dig ${name}\n;; resolution failed: ${r.reason}`);
+  },
+
+  dhclient: (cli, a) => {                                     // request a DHCP lease on an interface
+    const ifn = a[0] || 'eth0';
+    const r = M.dhclient(cli.net, cli.cur, ifn);
+    if (!r.ok) return err(`dhclient ${ifn}: ${r.reason}`);
+    return ok(`dhclient ${ifn}: lease acquired\n  address ${M.ipStr(r.ip)}/${r.prefix}\n  gateway ${r.gw != null ? M.ipStr(r.gw) : '(none)'}\n  dns     ${r.dns != null ? M.ipStr(r.dns) : '(none)'}`);
+  },
+
+  resolvectl: (cli, a) => {                                   // systemd-resolved: show/set the DNS server for a link
+    const dev = cli.net.devices[cli.cur];
+    if (a[0] === 'dns' && a[1] && a[2]) {                     // resolvectl dns eth0 10.0.0.53
+      if (!dev.ifaces[a[1]]) return err(`resolvectl: no such link ${a[1]}`);
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(a[2])) return err(`resolvectl: '${a[2]}' is not an address`);
+      dev.resolver = M.ip(a[2]);
+      return ok(`Set DNS server for ${a[1]} to ${a[2]}.`);
+    }
+    if (!a[0] || a[0] === 'status') return ok(`Current DNS Server: ${dev.resolver != null ? M.ipStr(dev.resolver) : '(none)'}`);
+    return err('usage: resolvectl dns <link> <server-ip> | resolvectl status');
   }
 };
 
@@ -173,7 +208,10 @@ const MAN = {
   iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic.\n  Rules match top-down, first match wins.',
   nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
   tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
-  arp: 'arp — show the neighbours learned on each interface (same L2 segment).'
+  arp: 'arp — show the neighbours learned on each interface (same L2 segment).',
+  dig: 'dig NAME — ask this host\'s configured DNS server to resolve NAME to an address. Fails with NXDOMAIN (no record) or if no resolver is set / reachable.',
+  dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
+  resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.'
 };
 
 module.exports = { makeCLI, resolve, primaryIp };

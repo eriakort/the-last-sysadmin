@@ -109,6 +109,50 @@ test('unknown command and bad usage are reported', () => {
   has(cli.run('ip route add 10.0.3.0/24').out, 'usage', 'bad usage');
 });
 
+// A LAN with a DHCP pool on r1 (eth0) and a DNS server dns1 across the router.
+function namedWorld() {
+  const SRV = (id, a, p, gw, services) => ({ id, kind: 'host', ifaces: { eth0: { ip: ip(a), mask: p, up: true } }, routes: gw ? [{ dest: 0, mask: 0, via: ip(gw) }] : [], services });
+  return {
+    devices: {
+      h1: { id: 'h1', kind: 'host', ifaces: { eth0: { ip: ip('10.0.9.50'), mask: 24, up: true } }, routes: [] },  // stale static
+      www: SRV('www', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+      dns1: { ...SRV('dns1', '10.0.2.53', 24, '10.0.2.1', { 53: 'dns' }), dns: { 'intranet.corp.local': ip('10.0.2.10') } },
+      r1: { id: 'r1', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('10.0.2.1'), mask: 24, up: true } }, routes: [], acls: [],
+        dhcp: { iface: 'eth0', range: [ip('10.0.1.100'), ip('10.0.1.150')], prefix: 24, gw: ip('10.0.1.1'), dns: ip('10.0.2.53') } },
+      sw1: sw('sw1', ['p1', 'p2']), sw2: sw('sw2', ['p1', 'p2', 'p3'])
+    },
+    links: [link('h1', 'eth0', 'sw1', 'p1'), link('r1', 'eth0', 'sw1', 'p2'),
+            link('www', 'eth0', 'sw2', 'p1'), link('dns1', 'eth0', 'sw2', 'p2'), link('r1', 'eth1', 'sw2', 'p3')]
+  };
+}
+
+test('dhclient acquires a lease (address + gateway + DNS) and connects the host', () => {
+  const net = namedWorld(); const cli = makeCLI(net, 'h1');
+  eq(C.reachable(net, 'h1', 'www').ok, false, 'stale static is offline');
+  const out = cli.run('dhclient eth0');
+  eq(out.code, 0, 'lease ok'); has(out.out, '10.0.1.100', 'address handed out'); has(out.out, 'gateway 10.0.1.1', 'gateway handed out');
+  eq(C.reachable(net, 'h1', 'www').ok, true, 'online after the lease');
+  eq(net.devices.h1.resolver, ip('10.0.2.53'), 'resolver set from DHCP');
+});
+
+test('dig fails with no resolver, resolvectl sets one, then dig resolves', () => {
+  const net = namedWorld(); net.devices.h1.ifaces.eth0 = { ip: ip('10.0.1.10'), mask: 24, up: true }; net.devices.h1.routes = [{ dest: 0, mask: 0, via: ip('10.0.1.1') }];
+  const cli = makeCLI(net, 'h1');
+  const before = cli.run('dig intranet.corp.local');
+  eq(before.code, 1, 'dig fails'); has(before.out, 'no DNS resolver', 'reason: no resolver');
+  eq(cli.run('ping 10.0.2.10').code, 0, 'but the IP is reachable');   // the teaching split
+  eq(cli.run('resolvectl dns eth0 10.0.2.53').code, 0, 'set resolver');
+  const after = cli.run('dig intranet.corp.local');
+  eq(after.code, 0, 'dig resolves'); has(after.out, '10.0.2.10', 'answer address');
+  eq(cli.run('ping intranet.corp.local').code, 0, 'ping by name now works');
+});
+
+test('an unknown name returns NXDOMAIN', () => {
+  const net = namedWorld(); net.devices.h1.resolver = ip('10.0.2.53'); net.devices.h1.ifaces.eth0 = { ip: ip('10.0.1.10'), mask: 24, up: true }; net.devices.h1.routes = [{ dest: 0, mask: 0, via: ip('10.0.1.1') }];
+  const cli = makeCLI(net, 'h1');
+  has(cli.run('dig nope.corp.local').out, 'NXDOMAIN', 'nxdomain reported');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

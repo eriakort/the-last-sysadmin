@@ -12,6 +12,7 @@ const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber
 
 let RUN = null, SEL = null, HINTS = 0, PROG = loadProg();
 let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer
+let DIAGNOSED = false;                              // diagnosis gate cleared?
 let HIST = [], HISTI = -1;                         // terminal command history
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -55,18 +56,42 @@ function renderTopo() {
 
 /* ---------- panels ---------- */
 function updateHud() { $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+function renderTicket(m) {
+  const t = m.ticket; if (!t) return '';
+  const pc = 'tk-' + String(t.priority || '').toLowerCase();
+  return `<div class="ticket">
+    <div class="tk-top"><span class="tk-id">${esc(t.id)}</span><span class="tk-pri ${pc}">${esc(t.priority)}</span></div>
+    <div class="tk-from">${esc(t.from)}</div>
+    <div class="tk-sym">“${esc(t.symptom)}”</div>
+  </div>`;
+}
+function renderDiagnose(m) {
+  const d = m.diagnose;
+  const opts = d.options.map((o, i) => `<button class="diag-opt" data-di="${i}">${esc(o)}</button>`).join('');
+  return `<div class="label">Triage — locate the fault before you touch anything</div>
+    <p class="diag-q">${esc(d.q)}</p>
+    <div class="diag-opts">${opts}</div>
+    <div id="diagfb" class="diag-fb"></div>
+    <p class="dim diag-tip">Use the terminal (<b>ping</b>, <b>traceroute</b>, <b>ip addr</b>, <b>nmap</b>) to see what's really happening, then choose.</p>`;
+}
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
   const hints = m.hints.slice(0, HINTS).map(h => `<li>${esc(h)}</li>`).join('');
   const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
+  const gated = RUN.requiresDiagnosis && !DIAGNOSED;
+  const body = gated
+    ? renderDiagnose(m)
+    : `${m.diagnose ? `<div class="diag-done">✓ Diagnosed — ${esc(m.diagnose.because)}</div>` : ''}
+    <div class="label">Objective</div><p>${esc(m.objective)}</p>
+    <div class="label">Hints</div><ol>${hints}</ol>
+    <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>`;
   return `<select id="pick">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}${solved ? ' · <span class="done">solved</span>' : ''}</div>
     <h1>${esc(m.title)}</h1>
-    <p class="story">${esc(m.story)}</p>
-    <div class="label">Objective</div><p>${esc(m.objective)}</p>
-    <div class="label">Hints</div><ol>${hints}</ol>
-    <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>
+    ${renderTicket(m)}
+    <div class="label">What you know</div><p class="story">${esc(m.story)}</p>
+    ${body}
     <div id="status"></div>`;
 }
 function renderConfig() {
@@ -94,7 +119,7 @@ function renderConfig() {
 
 /* ---------- actions ---------- */
 function refresh() { $('#topoWrap').innerHTML = renderTopo(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
-function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, ip addr, ip route`); }
+function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!PROG.done[chapters[i].id]; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, traceroute, ip addr, nmap`); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
@@ -142,7 +167,12 @@ function wireTopo() { document.querySelectorAll('#topo .node').forEach(n => n.ad
 function wireBrief() {
   $('#pick').addEventListener('change', e => reloadMission(+e.target.value));
   const hb = $('#hint'); if (hb) hb.addEventListener('click', () => { if (HINTS < RUN.mission.hints.length) HINTS++; $('#brief').innerHTML = renderBrief(); wireBrief(); });
-  $('#check').addEventListener('click', doCheck);
+  const cb = $('#check'); if (cb) cb.addEventListener('click', doCheck);
+  document.querySelectorAll('#brief .diag-opt').forEach(b => b.addEventListener('click', () => {
+    const res = RUN.gradeDiagnosis(+b.dataset.di);
+    if (res.ok) { DIAGNOSED = true; $('#brief').innerHTML = renderBrief(); wireBrief(); }
+    else { b.classList.add('wrong'); const fb = $('#diagfb'); if (fb) { fb.className = 'diag-fb bad'; fb.textContent = "Not quite — that's not where it's failing. Investigate with the terminal tools and pick again."; } }
+  }));
 }
 function wireConfig() {
   if (!SEL) return; const d = RUN.net.devices[SEL];

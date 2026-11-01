@@ -36,6 +36,40 @@ test('a wrong address does not resolve "first contact"', () => {
   assert(s.done() === false, 'a wrong-subnet address should not pass the mission');
 });
 
+// Every mission carries a well-formed incident ticket.
+test('every mission has a complete incident ticket', () => {
+  for (const m of chapters) {
+    assert(m.ticket && m.ticket.id && m.ticket.from && m.ticket.priority && m.ticket.symptom,
+      `mission "${m.id}" is missing ticket fields`);
+    assert(/^P[123]$/.test(m.ticket.priority), `mission "${m.id}" has an odd priority: ${m.ticket.priority}`);
+  }
+});
+
+// The diagnosis grader: right index passes, every wrong index fails, and the
+// correct answer is always in range (guards against an unanswerable gate).
+test('diagnosis grader accepts the right answer and rejects wrong ones', () => {
+  for (const m of chapters) {
+    const s = startMission(m);
+    assert(s.requiresDiagnosis === true, `mission "${m.id}" should require diagnosis`);
+    const d = m.diagnose;
+    assert(d.answer >= 0 && d.answer < d.options.length, `mission "${m.id}" answer index out of range`);
+    assert(s.gradeDiagnosis(d.answer).ok === true, `mission "${m.id}" correct diagnosis should pass`);
+    for (let i = 0; i < d.options.length; i++) {
+      if (i === d.answer) continue;
+      const r = s.gradeDiagnosis(i);
+      assert(r.ok === false, `mission "${m.id}" option ${i} should NOT pass diagnosis`);
+      assert(typeof r.because === 'string' && r.because.length > 0, `mission "${m.id}" should carry an explanation`);
+    }
+  }
+});
+
+// A mission without a diagnose block has no gate (grader is permissive).
+test('a mission with no diagnose block is not gated', () => {
+  const s = startMission({ ...chapters[0], diagnose: undefined });
+  assert(s.requiresDiagnosis === false, 'no diagnose block -> no gate');
+  assert(s.gradeDiagnosis(99).ok === true, 'ungated grader accepts any index');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

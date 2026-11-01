@@ -53,4 +53,14 @@ function serviceUp(net, devId, port) {
   return { ok, reason: ok ? `${devId} offers ${d.services[port]} on ${port}` : `${devId} has no service on port ${port}` };
 }
 
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp };
+// A name resolves, from devId's point of view, to the expected address.
+function resolves(net, devId, name, expectIp) {
+  const r = M.resolveName(net, devId, name);
+  if (!r.ok) return { ok: false, reason: `${devId} cannot resolve ${name}: ${r.reason}` };
+  if (expectIp == null) return { ok: true, reason: `${devId} resolves ${name} to ${M.ipStr(r.ip)}` };
+  const want = typeof expectIp === 'number' ? expectIp : M.ip(expectIp);
+  const ok = r.ip === want;
+  return { ok, reason: ok ? `${devId} resolves ${name} to ${M.ipStr(r.ip)}` : `${devId} resolves ${name} to ${M.ipStr(r.ip)}, expected ${M.ipStr(want)}` };
+}
+
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves };

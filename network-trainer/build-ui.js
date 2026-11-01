@@ -62,6 +62,24 @@ h1{font-size:20px;margin:6px 0}
 .label{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:14px 0 4px}
 .label2{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px}
 .dim{color:var(--muted)}
+.ticket{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:8px;padding:10px 12px;margin:10px 0 4px}
+.tk-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tk-id{font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.tk-pri{font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:999px;border:1px solid var(--line)}
+.tk-pri.tk-p1{color:#fff;background:var(--bad);border-color:var(--bad)}
+.tk-pri.tk-p2{color:var(--amber);border-color:var(--amber)}
+.tk-pri.tk-p3{color:var(--muted)}
+.tk-from{font-size:11.5px;color:var(--muted);margin-top:4px}
+.tk-sym{margin-top:6px;font-size:13px;line-height:1.5;color:var(--ink);font-style:italic}
+.diag-q{font-size:13.5px;line-height:1.5;margin:4px 0 10px}
+.diag-opts{display:flex;flex-direction:column;gap:6px}
+.diag-opt{text-align:left;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 11px;cursor:pointer;font:inherit;line-height:1.4;transition:border-color .12s}
+.diag-opt:hover{border-color:var(--amber)}
+.diag-opt.wrong{border-color:var(--bad);opacity:.6}
+.diag-fb{margin-top:8px;font-size:12.5px;min-height:0}
+.diag-fb.bad{color:#ffbcbc}
+.diag-tip{font-size:11.5px;margin-top:10px}
+.diag-done{background:rgba(110,231,183,.08);border:1px solid var(--good);border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.5;color:var(--ink);margin:10px 0 4px}
 .row{display:flex;gap:8px;margin-top:12px}
 .btn{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
 .btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}

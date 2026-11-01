@@ -19,9 +19,21 @@ ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
 distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
 persists across reloads.
 
-**Ten missions** across addressing, subnetting, switching, routing, static
-routing, and security — including **destination-based firewall rules** for real
-DMZ segmentation ("stop the pivot").
+**Twelve missions** across addressing, subnetting, switching, routing, static
+routing, security, **DHCP**, and **DNS/naming** — including **destination-based
+firewall rules** for real DMZ segmentation ("stop the pivot"), a **DHCP lease**
+that hands out address + gateway + resolver in one step (`dhclient`), and a
+**name-resolution** fault where the IP works but the name doesn't (`dig`,
+`resolvectl`).
+
+**Incident-ticket framing.** Every mission opens as an on-call ticket: a
+reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
+open the shared drive — it worked Friday") rather than a task instruction. Before
+the fix is graded, a **diagnosis gate** makes the player locate the fault — a
+triage question answered by actually running `ping` / `traceroute` / `ip addr` /
+`nmap` first. A wrong pick is rejected with a nudge back to the tools; the right
+pick reveals *why*, then unlocks the objective and Check. This turns each mission
+from a tutorial step into on-call troubleshooting: investigate → diagnose → fix.
 
 ## Run the tests
 
@@ -80,10 +92,15 @@ and the grader can't tell the difference (there's a test for exactly this). Supp
 - `tcpdump` — the packets from the last ping
 - `iptables -L | -A INPUT -i <if> [-p tcp] [--dport N] -j DROP|ACCEPT | -F` — firewall rules (a recognisable subset)
 - `nmap <host|ip>` — **read-only, defensive**: list a host's exposed services ("see your own attack surface")
+- `dig <name>` — resolve a name via this host's configured DNS server (NXDOMAIN / no-resolver failures are teachable)
+- `dhclient <if>` — request a DHCP lease: address + gateway + resolver, in one step
+- `resolvectl dns <if> <ip>` / `resolvectl status` — set / show the host's DNS resolver
+- `ping` is **name-aware**: `ping intranet.corp.local` resolves through DNS first, so "the IP works but the name doesn't" is a real, visible split
 - `man <cmd>`, `help`
 
-`dig` / `dhclient` are intentionally **not** here yet — they need a DNS/DHCP model, which
-is the next small engine addition (roadmap chapter 5).
+The DNS model is **authoritative/static** (a resolver maps names→IPs); no recursion,
+caching, or TTLs — deliberately, since those add protocol machinery without teaching a
+beginner more than "names need a resolver, and a record."
 
 ## What the tests prove
 

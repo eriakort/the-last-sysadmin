@@ -16,6 +16,7 @@ function evalCheck(net, s) {
     case 'subnet_correct': return C.subnetCorrect(net, s.dev, s.iface, s.cidr);
     case 'acl_blocks':     return C.aclBlocks(net, s.src, s.dst, { proto: s.proto, dport: s.dport });
     case 'service_up':     return C.serviceUp(net, s.dev, s.port);
+    case 'resolves':       return C.resolves(net, s.dev, s.name, s.ip);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }
@@ -30,6 +31,14 @@ function startMission(mission) {
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
     done: () => api.results().every(r => r.ok),
+    // Diagnosis gate: the player must localize the fault before fixing it.
+    // A mission with no `diagnose` block has no gate (ok for any index).
+    requiresDiagnosis: !!mission.diagnose,
+    gradeDiagnosis(idx) {
+      const d = mission.diagnose;
+      if (!d) return { ok: true, because: '' };
+      return { ok: idx === d.answer, because: d.because };
+    },
     // The `check` command: what's still unmet and why (the teaching moment).
     status() {
       const unmet = api.results().filter(r => !r.ok);
