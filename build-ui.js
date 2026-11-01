@@ -87,6 +87,8 @@ h1{font-size:20px;margin:6px 0}
 .tk-sym{margin-top:6px;font-size:13px;line-height:1.5;color:var(--ink);font-style:italic}
 .diag-q{font-size:13.5px;line-height:1.5;margin:4px 0 10px}
 .diag-opts{display:flex;flex-direction:column;gap:6px}
+.rev-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.rev-row{display:flex;gap:8px;align-items:flex-start;font-size:13px}
 .diag-opt{text-align:left;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 11px;cursor:pointer;font:inherit;line-height:1.4;transition:border-color .12s}
 .diag-opt:hover{border-color:var(--amber)}
 .diag-opt.wrong{border-color:var(--bad);opacity:.6}

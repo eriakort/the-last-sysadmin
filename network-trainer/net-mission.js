@@ -30,10 +30,24 @@ function startMission(mission) {
     run: line => cli.run(line),
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
-    done: () => api.results().every(r => r.ok),
+    done: () => api.results().every(r => r.ok) && api.reviewOk(),
     // Diagnosis gate: the player must localize the fault before fixing it.
     // A mission with no `diagnose` block has no gate (ok for any index).
     requiresDiagnosis: !!mission.diagnose,
+    // Design-review: planted findings the player must identify (and not the distractors).
+    review: mission.review || null,
+    selectedFindings: new Set(),
+    toggleFinding(id) {
+      if (api.selectedFindings.has(id)) api.selectedFindings.delete(id);
+      else api.selectedFindings.add(id);
+    },
+    reviewOk() {
+      const r = mission.review; if (!r) return true;
+      const planted = new Set(r.findings.filter(f => f.planted).map(f => f.id));
+      if (api.selectedFindings.size !== planted.size) return false;
+      for (const id of planted) if (!api.selectedFindings.has(id)) return false;
+      return true;
+    },
     gradeDiagnosis(idx) {
       const d = mission.diagnose;
       if (!d) return { ok: true, because: '' };
@@ -42,11 +56,15 @@ function startMission(mission) {
     // The `check` command: what's still unmet and why (the teaching moment).
     status() {
       const unmet = api.results().filter(r => !r.ok);
-      return unmet.length
-        ? 'Not resolved yet:\n' + unmet.map(r => '  ✗ ' + r.reason).join('\n')
+      const lines = unmet.map(r => '  ✗ ' + r.reason);
+      if (mission.review && !api.reviewOk()) lines.push('  ✗ design review incomplete — check every real fault, and only those');
+      return lines.length
+        ? 'Not resolved yet:\n' + lines.join('\n')
         : '✓ All objectives met — ticket resolved.';
     }
   };
+  cli.mission = mission;
+  cli.selected = api.selectedFindings;
   return api;
 }
 

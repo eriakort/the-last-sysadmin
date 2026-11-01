@@ -38,6 +38,15 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  review: (cli, a) => {
+    const id = a[0]; if (!id) return err('usage: review <finding-id>');
+    const m = cli.mission; if (!m || !m.review) return err('review: not a design-review mission');
+    const f = m.review.findings.find(x => x.id === id);
+    if (!f) return err('review: unknown finding ' + id);
+    cli.selected = cli.selected || new Set();
+    if (cli.selected.has(id)) cli.selected.delete(id); else cli.selected.add(id);
+    return ok('review: ' + (cli.selected.has(id) ? 'checked' : 'unchecked') + ' ' + id);
+  },
   help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),

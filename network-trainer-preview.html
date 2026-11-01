@@ -68,6 +68,8 @@ h1{font-size:20px;margin:6px 0}
 .tk-sym{margin-top:6px;font-size:13px;line-height:1.5;color:var(--ink);font-style:italic}
 .diag-q{font-size:13.5px;line-height:1.5;margin:4px 0 10px}
 .diag-opts{display:flex;flex-direction:column;gap:6px}
+.rev-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.rev-row{display:flex;gap:8px;align-items:flex-start;font-size:13px}
 .diag-opt{text-align:left;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 11px;cursor:pointer;font:inherit;line-height:1.4;transition:border-color .12s}
 .diag-opt:hover{border-color:var(--amber)}
 .diag-opt.wrong{border-color:var(--bad);opacity:.6}
@@ -434,6 +436,15 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  review: (cli, a) => {
+    const id = a[0]; if (!id) return err('usage: review <finding-id>');
+    const m = cli.mission; if (!m || !m.review) return err('review: not a design-review mission');
+    const f = m.review.findings.find(x => x.id === id);
+    if (!f) return err('review: unknown finding ' + id);
+    cli.selected = cli.selected || new Set();
+    if (cli.selected.has(id)) cli.selected.delete(id); else cli.selected.add(id);
+    return ok('review: ' + (cli.selected.has(id) ? 'checked' : 'unchecked') + ' ' + id);
+  },
   help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add <A>/<p> dev <if> | ip route | ip route add [default|<cidr>] via <ip>\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
@@ -649,10 +660,24 @@ function startMission(mission) {
     run: line => cli.run(line),
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
-    done: () => api.results().every(r => r.ok),
+    done: () => api.results().every(r => r.ok) && api.reviewOk(),
     // Diagnosis gate: the player must localize the fault before fixing it.
     // A mission with no `diagnose` block has no gate (ok for any index).
     requiresDiagnosis: !!mission.diagnose,
+    // Design-review: planted findings the player must identify (and not the distractors).
+    review: mission.review || null,
+    selectedFindings: new Set(),
+    toggleFinding(id) {
+      if (api.selectedFindings.has(id)) api.selectedFindings.delete(id);
+      else api.selectedFindings.add(id);
+    },
+    reviewOk() {
+      const r = mission.review; if (!r) return true;
+      const planted = new Set(r.findings.filter(f => f.planted).map(f => f.id));
+      if (api.selectedFindings.size !== planted.size) return false;
+      for (const id of planted) if (!api.selectedFindings.has(id)) return false;
+      return true;
+    },
     gradeDiagnosis(idx) {
       const d = mission.diagnose;
       if (!d) return { ok: true, because: '' };
@@ -661,11 +686,15 @@ function startMission(mission) {
     // The `check` command: what's still unmet and why (the teaching moment).
     status() {
       const unmet = api.results().filter(r => !r.ok);
-      return unmet.length
-        ? 'Not resolved yet:\n' + unmet.map(r => '  ✗ ' + r.reason).join('\n')
+      const lines = unmet.map(r => '  ✗ ' + r.reason);
+      if (mission.review && !api.reviewOk()) lines.push('  ✗ design review incomplete — check every real fault, and only those');
+      return lines.length
+        ? 'Not resolved yet:\n' + lines.join('\n')
         : '✓ All objectives met — ticket resolved.';
     }
   };
+  cli.mission = mission;
+  cli.selected = api.selectedFindings;
   return api;
 }
 
@@ -944,6 +973,37 @@ const chapters = [
     }),
     success: [{ type: 'resolves', dev: 'h1', name: 'intranet.corp.local', ip: '10.0.2.10' }],
     solution: [['h1', 'resolvectl dns eth0 10.0.2.53']]
+  },
+
+  { id: 'review-branch', chapter: 'Design review',
+    title: 'Audit the branch office',
+    story: 'A junior handed you this branch network and said it was done. h1 should reach the file server srv at 10.0.2.10. It does not. Find every real problem — do not fix them yet.',
+    objective: 'Check every statement that is a real fault. Leave the false ones unchecked, then Check.',
+    ticket: { id: 'REV-2001', from: 'You · design review', priority: 'P3', symptom: 'Junior says the branch is ready. h1 cannot reach srv. Audit before you change anything.' },
+    diagnose: { q: 'h1 cannot reach srv on another subnet. What is the first thing a design review should establish?', options: ['whether h1 is even in the right network and has a path off it', 'whether the server process is listening', 'whether the switches have enough ports'], answer: 0, because: 'Reachability off-subnet needs a correct address and a route. Confirm those before blaming the server or the switch.' },
+    console: 'h1',
+    hints: ['`ip addr` on h1 — is it in 10.0.1.0/24 with the router?', '`ip route` — is there a default route?', 'srv is 10.0.2.10; the path is h1 → sw1 → r1 → sw2 → srv.'],
+    review: {
+      findings: [
+        { id: 'wrong-subnet', text: 'h1 is addressed in the wrong subnet (not 10.0.1.0/24)', planted: true },
+        { id: 'no-default', text: 'h1 has no default route, so it cannot reach other networks', planted: true },
+        { id: 'srv-down', text: 'The file server srv has no IP address', planted: false },
+        { id: 'sw-off', text: 'Switch sw1 is powered off', planted: false },
+        { id: 'acl', text: 'Router r1 is dropping traffic from h1', planted: false }
+      ]
+    },
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.9.50', 24),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [],
+    solution: [['h1', 'review wrong-subnet'], ['h1', 'review no-default']]
   }
 
 ];
@@ -1072,15 +1132,25 @@ function renderDiagnose(m) {
     <div id="diagfb" class="diag-fb"></div>
     <p class="dim diag-tip">Use the terminal (<b>ping</b>, <b>traceroute</b>, <b>ip addr</b>, <b>nmap</b>) to see what's really happening, then choose.</p>`;
 }
+function renderReview(m) {
+  const r = m.review;
+  const sel = RUN.selectedFindings || new Set();
+  const rows = r.findings.map(f => `<label class="rev-row"><input type="checkbox" data-fid="${esc(f.id)}"${sel.has(f.id)?' checked':''}> ${esc(f.text)}</label>`).join('');
+  return `<div class="label">Design review — check every real problem</div>
+    <p class="dim">Inspect the topology and the terminal. Check the statements that are true faults. Leave the distractors unchecked.</p>
+    <div class="rev-list">${rows}</div>`;
+}
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
   const hints = m.hints.slice(0, HINTS).map(h => `<li>${esc(h)}</li>`).join('');
   const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
+  const review = m.review ? renderReview(m) : '';
   const body = gated
     ? renderDiagnose(m)
     : `${m.diagnose ? `<div class="diag-done">✓ Diagnosed — ${esc(m.diagnose.because)}</div>` : ''}
+    ${review}
     <div class="label">Objective</div><p>${esc(m.objective)}</p>
     <div class="label">Hints</div><ol>${hints}</ol>
     <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>`;
@@ -1163,6 +1233,9 @@ function openSettings() {
 /* ---------- wiring ---------- */
 function wireTopo() { document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => { SEL = n.dataset.dev; refresh(); })); }
 function wireBrief() {
+  document.querySelectorAll('#brief [data-fid]').forEach(cb => cb.addEventListener('change', () => {
+    RUN.toggleFinding(cb.dataset.fid);
+  }));
   $('#pick').addEventListener('change', e => reloadMission(+e.target.value));
   const hb = $('#hint'); if (hb) hb.addEventListener('click', () => { if (HINTS < RUN.mission.hints.length) HINTS++; $('#brief').innerHTML = renderBrief(); wireBrief(); });
   const cb = $('#check'); if (cb) cb.addEventListener('click', doCheck);

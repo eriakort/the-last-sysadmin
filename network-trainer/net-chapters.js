@@ -269,6 +269,37 @@ const chapters = [
     }),
     success: [{ type: 'resolves', dev: 'h1', name: 'intranet.corp.local', ip: '10.0.2.10' }],
     solution: [['h1', 'resolvectl dns eth0 10.0.2.53']]
+  },
+
+  { id: 'review-branch', chapter: 'Design review',
+    title: 'Audit the branch office',
+    story: 'A junior handed you this branch network and said it was done. h1 should reach the file server srv at 10.0.2.10. It does not. Find every real problem — do not fix them yet.',
+    objective: 'Check every statement that is a real fault. Leave the false ones unchecked, then Check.',
+    ticket: { id: 'REV-2001', from: 'You · design review', priority: 'P3', symptom: 'Junior says the branch is ready. h1 cannot reach srv. Audit before you change anything.' },
+    diagnose: { q: 'h1 cannot reach srv on another subnet. What is the first thing a design review should establish?', options: ['whether h1 is even in the right network and has a path off it', 'whether the server process is listening', 'whether the switches have enough ports'], answer: 0, because: 'Reachability off-subnet needs a correct address and a route. Confirm those before blaming the server or the switch.' },
+    console: 'h1',
+    hints: ['`ip addr` on h1 — is it in 10.0.1.0/24 with the router?', '`ip route` — is there a default route?', 'srv is 10.0.2.10; the path is h1 → sw1 → r1 → sw2 → srv.'],
+    review: {
+      findings: [
+        { id: 'wrong-subnet', text: 'h1 is addressed in the wrong subnet (not 10.0.1.0/24)', planted: true },
+        { id: 'no-default', text: 'h1 has no default route, so it cannot reach other networks', planted: true },
+        { id: 'srv-down', text: 'The file server srv has no IP address', planted: false },
+        { id: 'sw-off', text: 'Switch sw1 is powered off', planted: false },
+        { id: 'acl', text: 'Router r1 is dropping traffic from h1', planted: false }
+      ]
+    },
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.9.50', 24),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [],
+    solution: [['h1', 'review wrong-subnet'], ['h1', 'review no-default']]
   }
 
 ];
