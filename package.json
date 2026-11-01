@@ -1,13 +1,18 @@
 {
-  "name": "network-trainer",
-  "version": "0.10.0",
+  "name": "the-last-sysadmin",
+  "version": "0.27.0",
   "private": true,
-  "description": "Networking & security fundamentals trainer — a module of the teaching platform.",
+  "description": "A browser game that teaches Linux administration in a simulated terminal.",
   "scripts": {
-    "build": "node build-ui.js",
-    "test": "node net-engine.test.js && node net-cli.test.js && node net-mission.test.js",
-    "test:ui": "node build-ui.js && node test-ui.js",
-    "demo": "node net-mission-demo.js"
+    "build": "node build.js",
+    "verify": "node verify.js",
+    "test": "node test-helpers.js",
+    "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
+    "smoke": "node smoke.js",
+    "test:ui": "node test-classroom-ui.js",
+    "test:play": "node test-authored-playback.js",
+    "build:net": "node network-trainer/build-ui.js",
+    "test:net": "node network-trainer/net-engine.test.js && node network-trainer/net-cli.test.js && node network-trainer/net-mission.test.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"
