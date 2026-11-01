@@ -5,6 +5,9 @@
 const M = require('./net-model');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
+const { makeCLI } = require('./net-cli');
+const B = require('./net-builder');
+const S = require('./net-scenario');
 
 const REWARD = 100, HINT_COST = 25;
 const RANKS = [[0, 'Cadet'], [120, 'Apprentice'], [280, 'Technician'], [460, 'Engineer'], [640, 'Senior Engineer'], [820, 'Network Architect']];
@@ -14,6 +17,11 @@ let RUN = null, SEL = null, HINTS = 0, PROG = loadProg();
 let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer
 let DIAGNOSED = false;                              // diagnosis gate cleared?
 let HIST = [], HISTI = -1;                         // terminal command history
+let MODE = 'play';                                 // 'play' | 'build' (authoring)
+let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
+let WIRE = null;                                   // first endpoint picked while wiring a link
+// Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
+function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -84,7 +92,9 @@ function renderFlows() {
   return `<div id="flows"><div class="fl-h">Flows <span class="dim">${flows.length}</span></div>${rows}</div>`;
 }
 function renderTopo() {
-  const net = RUN.net, pos = layout(net);
+  const net = RUN.net;
+  if (!Object.keys(net.devices).length) return '<div class="canvas-empty">Empty canvas — add a device from the <b>Build</b> panel on the right.</div>';
+  const pos = layout(net);
   const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   let s = `<svg id="topo" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-label="network topology">`;
@@ -93,7 +103,7 @@ function renderTopo() {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
-    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})">${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${id}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="70" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${id}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
   }
   return s + '</svg>';
 }
@@ -157,9 +167,10 @@ function renderBrief() {
     <div id="status"></div>`;
 }
 function renderConfig() {
-  if (!SEL) return '<p class="dim">Click a device to configure it.</p>';
+  const pal = renderPalette();
+  if (!SEL || !RUN.net.devices[SEL]) return pal + '<p class="dim">Click a device to configure it.</p>';
   const d = RUN.net.devices[SEL];
-  let h = `<div class="label">${SEL} · ${d.kind}</div>`;
+  let h = pal + `<div class="label">${SEL} · ${d.kind}</div>`;
   if (d.kind !== 'switch') {
     h += `<div class="label2">Reachability</div>
       <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button><button class="btn sm" id="dotrace">Traceroute</button></div>
@@ -207,7 +218,8 @@ function renderConfig() {
 /* ---------- actions ---------- */
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
-function reloadMission(i) { RUN = startMission(chapters[i]); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!PROG.done[chapters[i].id]; HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL}. Try: ping, traceroute, ip addr, nmap`); }
+function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
+function reloadMission(i) { MODE = 'play'; runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
@@ -215,6 +227,12 @@ function termClear() { $('#tout').textContent = ''; }
 function nextUnsolved() { const cur = chapters.findIndex(c => c.id === RUN.mission.id); for (let k = 1; k <= chapters.length; k++) { const i = (cur + k) % chapters.length; if (!PROG.done[chapters[i].id]) return i; } return -1; }
 function doCheck() {
   const box = $('#status'); const done = RUN.done();
+  if (RUN.mission.authored) {                         // authored scenario: no XP / progress, just pass/fail
+    box.className = done ? 'ok' : 'bad';
+    box.innerHTML = done ? '✓ Scenario complete — the network meets every objective.'
+      : 'Not there yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
+    return;
+  }
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
@@ -251,8 +269,31 @@ function openSettings() {
 }
 
 /* ---------- wiring ---------- */
-function wireTopo() { document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => { SEL = n.dataset.dev; refresh(); })); }
+function wireTopo() {
+  document.querySelectorAll('#topo .node').forEach(n => n.addEventListener('click', () => {
+    const id = n.dataset.dev;
+    if (WIRE) {                                        // wiring: connect the armed device to this one
+      if (WIRE !== id) { try { B.addLink(RUN.net, WIRE, id); } catch (e) { flashStatus(e.message); } }
+      WIRE = null; refresh(); return;
+    }
+    SEL = id; refresh();
+  }));
+}
+function flashStatus(msg) { const b = $('#status'); if (b) { b.className = 'bad'; b.textContent = msg; } }
 function wireBrief() {
+  if (MODE === 'build') {                              // authoring panel
+    renderCheckArgs();
+    $('#chkType').addEventListener('change', renderCheckArgs);
+    $('#addChk').addEventListener('click', addCheckFromForm);
+    document.querySelectorAll('#brief [data-delchk]').forEach(b => b.addEventListener('click', () => { AUTHOR.success.splice(+b.dataset.delchk, 1); $('#brief').innerHTML = renderAuthor(); wireBrief(); }));
+    $('#aTitle').addEventListener('input', e => { AUTHOR.title = e.target.value; });
+    $('#aObj').addEventListener('input', e => { AUTHOR.objective = e.target.value; });
+    $('#exportScn').addEventListener('click', exportScenario);
+    $('#importScn').addEventListener('change', e => { if (e.target.files[0]) importScenario(e.target.files[0]); });
+    $('#playScn').addEventListener('click', playAuthored);
+    $('#exitBuild').addEventListener('click', exitBuild);
+    return;
+  }
   document.querySelectorAll('#brief [data-fault]').forEach(cb => cb.addEventListener('change', () => {
     RUN.toggleFault(cb.dataset.fault);
   }));
@@ -269,6 +310,14 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
+    const id = B.addDevice(RUN.net, b.dataset.add); SEL = id; WIRE = null; refresh();
+  }));
+  const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
+    if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
+    refresh();
+  });
+  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); SEL = null; WIRE = null; refresh(); } });
   function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
     const out = $('#pingout');
@@ -315,7 +364,13 @@ function wireConfig() {
   if (!SEL) return; const d = RUN.net.devices[SEL];
   document.querySelectorAll('#config .ifrow').forEach(row => {
     const n = row.dataset.if;
-    const apply = () => { const ipv = row.querySelector('.ip').value.trim(), pfx = row.querySelector('.pfx').value.trim(); d.ifaces[n].up = row.querySelector('.upc').checked; if (/^\d+\.\d+\.\d+\.\d+$/.test(ipv) && pfx) { d.ifaces[n].ip = M.ip(ipv); d.ifaces[n].mask = +pfx; } else if (!ipv) { delete d.ifaces[n].ip; delete d.ifaces[n].mask; } refresh(); };
+    const apply = () => {
+      const ipv = row.querySelector('.ip').value.trim(), pfx = row.querySelector('.pfx').value.trim();
+      d.ifaces[n].up = row.querySelector('.upc').checked;
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ipv) && pfx) { d.ifaces[n].ip = M.ip(ipv); d.ifaces[n].mask = +pfx; refresh(); }
+      else if (!ipv) { delete d.ifaces[n].ip; delete d.ifaces[n].mask; refresh(); }
+      // partial entry (address without a prefix yet): keep what's typed, don't re-render and wipe it
+    };
     row.querySelector('.ip').addEventListener('change', apply); row.querySelector('.pfx').addEventListener('change', apply); row.querySelector('.upc').addEventListener('change', apply);
   });
   const addrt = $('#addrt'); if (addrt) addrt.addEventListener('click', () => { const dest = $('#config .rdest').value.trim(), via = $('#config .rvia').value.trim(); if (!/^\d+\.\d+\.\d+\.\d+$/.test(via)) return; d.routes = d.routes || []; if (dest === 'default' || dest === '') d.routes.push({ dest: 0, mask: 0, via: M.ip(via) }); else { const c = M.cidr(dest); d.routes.push({ dest: c.net, mask: c.prefix, via: M.ip(via) }); } refresh(); });
@@ -346,6 +401,112 @@ function openStats() {
   $('#closeS').addEventListener('click', () => wrap.remove());
 }
 
+/* ---------- build mode: scenario authoring + design canvas ---------- */
+const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
+function renderPalette() {
+  if (!canBuild()) return '';
+  const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
+  const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
+  return `<div class="builder"><div class="label">Build</div>
+    <div class="pal-row">${add}</div>
+    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button>` : ''}${wiring}</div></div>`;
+}
+function describeCheck(s) {
+  switch (s.type) {
+    case 'reachable': return `${s.a} can reach ${s.b}`;
+    case 'not_reachable': return `${s.a} must NOT reach ${s.b}`;
+    case 'subnet_correct': return `${s.dev}/${s.iface} in ${s.cidr}`;
+    case 'route_exists': return `${s.dev} has a route to ${s.cidr}`;
+    case 'acl_blocks': return `${s.src} blocked from ${s.dst}`;
+    case 'service_up': return `${s.dev} serves port ${s.port}`;
+    case 'resolves': return `${s.dev} resolves ${s.name}`;
+    case 'ospf_neighbor': return `${s.dev} OSPF-neighbors ${s.peer}`;
+    case 'ospf_route': return `${s.dev} learns ${s.cidr} (OSPF)`;
+    case 'bgp_session': return `${s.dev} BGP session with ${s.peer}`;
+    case 'bgp_route': return `${s.dev} learns ${s.cidr} (BGP)`;
+    case 'port_forward': return `${s.from} reaches ${s.server} via ${s.public}:${s.dport}`;
+    default: return s.type;
+  }
+}
+function renderAuthor() {
+  const a = AUTHOR;
+  const checkRows = a.success.length
+    ? a.success.map((s, i) => `<div class="rrow">${esc(describeCheck(s))} <button class="x" data-delchk="${i}">✕</button></div>`).join('')
+    : '<p class="dim">No objectives yet — add at least one.</p>';
+  const typeOpts = Object.keys(S.CHECKS).map(t => `<option value="${t}">${t}</option>`).join('');
+  return `<div class="eyebrow">Author · design a scenario</div>
+    <h1>Build a scenario</h1>
+    <p class="dim">Place the devices the student starts with and address what they're given. Then set the objectives they must build toward. ▶ Play to test it yourself.</p>
+    <div class="label">Title</div><input id="aTitle" class="wide" value="${esc(a.title)}"/>
+    <div class="label">Objective / brief</div><textarea id="aObj" class="wide" rows="2" placeholder="What the student must achieve">${esc(a.objective)}</textarea>
+    <div class="label">Objectives (success checks)</div>
+    <div class="rev-list">${checkRows}</div>
+    <div class="addrow"><select id="chkType">${typeOpts}</select></div>
+    <div class="addrow" id="chkArgs"></div>
+    <div class="addrow"><button class="btn sm" id="addChk">＋ Add objective</button></div>
+    <div class="row"><button class="btn" id="exportScn">⬇ Export</button>
+      <label class="btn" style="cursor:pointer">⬆ Import<input id="importScn" type="file" accept="application/json,.json" style="display:none"></label>
+      <button class="btn primary" id="playScn">▶ Play / test</button></div>
+    <div class="row"><button class="btn" id="exitBuild">← Exit build</button></div>
+    <div id="status"></div>`;
+}
+function renderCheckArgs() {
+  const sel = $('#chkType'); if (!sel) return;
+  const fields = S.CHECKS[sel.value] || [];
+  $('#chkArgs').innerHTML = fields.map(f => `<input class="chkarg" data-arg="${f}" placeholder="${f}" size="9"/>`).join('');
+}
+function addCheckFromForm() {
+  const type = $('#chkType').value; const s = { type };
+  document.querySelectorAll('#chkArgs .chkarg').forEach(inp => { const v = inp.value.trim(); if (v) s[inp.dataset.arg] = /^\d+$/.test(v) ? Number(v) : v; });
+  const missing = (S.CHECKS[type] || []).filter(f => s[f] == null);
+  if (missing.length) { flashStatus('Missing: ' + missing.join(', ')); return; }
+  AUTHOR.success.push(s); $('#brief').innerHTML = renderAuthor(); wireBrief();
+}
+function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { authored: true, mode: 'build' }, done: () => false, results: () => [] }; }
+function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
+function enterBuild() {
+  MODE = 'build'; WIRE = null; SEL = null; HINTS = 0; stopTimer();
+  AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
+  RUN = builderRun(B.blank());
+  renderAll();
+  termClear(); termEcho('— Build mode. Add devices, 🔗 Wire them, set addresses, then add objectives. ▶ Play to test.');
+}
+function exitBuild() { reloadMission(0); }
+function currentScenario() {
+  return {
+    id: 'authored-' + (AUTHOR.title || 'untitled').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    title: AUTHOR.title, mode: 'build', objective: AUTHOR.objective, hints: AUTHOR.hints, ticket: AUTHOR.ticket,
+    start: S.fromTopology(RUN.net), success: AUTHOR.success
+  };
+}
+function showErrors(errs, verb) { const b = $('#status'); b.className = 'bad'; b.innerHTML = `Fix before ${verb}:<ul>` + errs.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>'; }
+function exportScenario() {
+  const scn = currentScenario(); const v = S.validate(scn);
+  if (!v.ok) return showErrors(v.errors, 'export');
+  const blob = new Blob([S.toJSON(scn)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = scn.id + '.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  const b = $('#status'); b.className = 'ok'; b.textContent = 'Exported ' + scn.id + '.json';
+}
+function importScenario(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const scn = S.fromJSON(reader.result);
+      MODE = 'build'; WIRE = null; SEL = null;
+      AUTHOR = { title: scn.title, objective: scn.objective || '', ticket: scn.ticket || null, hints: scn.hints || [], success: scn.success || [] };
+      RUN = builderRun(S.clone(scn.start || { devices: {}, links: [] }));
+      renderAll();
+    } catch (e) { flashStatus('Import failed: ' + e.message); }
+  };
+  reader.readAsText(file);
+}
+function playAuthored() {
+  const scn = currentScenario(); const v = S.validate(scn);
+  if (!v.ok) return showErrors(v.errors, 'playing');
+  MODE = 'play'; WIRE = null; runMission(S.toMission(scn));
+}
+
 /* ---------- boot ---------- */
 function boot() {
   applyTheme(PROG.theme);
@@ -359,6 +520,7 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnStats" class="btn" title="Stats">📊</button>
         <button id="btnSet" class="btn" title="Settings">⚙</button></div>
     </header>
@@ -370,6 +532,7 @@ function boot() {
   wireTerm();
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
+  $('#btnBuild').addEventListener('click', enterBuild);
   reloadMission(0);
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
-const MODULES = ['net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js'];
+const MODULES = ['net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js'];
 const wrap = f => `__def(${JSON.stringify('./' + f.replace(/\.js$/, ''))}, function(module, exports, require){\n${read(f)}\n});`;
 
 const bundle = `
@@ -96,6 +96,13 @@ h1{font-size:20px;margin:6px 0}
 .diag-fb.bad{color:#ffbcbc}
 .diag-tip{font-size:11.5px;margin-top:10px}
 .diag-done{background:rgba(110,231,183,.08);border:1px solid var(--good);border-radius:8px;padding:8px 10px;font-size:12.5px;line-height:1.5;color:var(--ink);margin:10px 0 4px}
+.builder{border:1px solid var(--amber);border-radius:8px;padding:8px 10px;margin:0 0 12px;background:rgba(34,211,238,.04)}
+.pal-row{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0;align-items:center}
+.btn.pal{background:var(--raise)}
+.wire-on{font-size:11.5px;color:var(--amber)}
+.wide{width:100%;box-sizing:border-box;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 8px;font:inherit;margin-top:2px}
+textarea.wide{resize:vertical;font-family:inherit}
+.canvas-empty{padding:48px 16px;text-align:center;color:var(--muted);font-size:13px}
 .row{display:flex;gap:8px;margin-top:12px}
 .btn{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
 .btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}

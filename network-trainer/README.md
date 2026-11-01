@@ -35,6 +35,18 @@ audit** ("spot the planted problems, ignore the distractors") and a **multi-faul
 incident** (two or three interacting faults to localise). An **observability
 flows panel** lets the player read the traffic to find the cause.
 
+**Scenario builder (🛠 Build).** A design-mode canvas for authoring. Place
+devices from a palette (host, server, switch, router, firewall), wire them,
+address them, and set the **objectives** the student must satisfy (any of the
+success-check types). **Export** a scenario to a shareable JSON file and
+**Import** one back — the groundwork for a teacher authoring and assigning
+scenarios. The student opens an assigned scenario and **builds the network from
+scratch** to meet the spec: the same canvas, graded by the same engine. The
+scenario format and the topology-editing ops are pure, tested modules
+(`net-scenario.js`, `net-builder.js`), so the whole author → serialise → build →
+grade loop is covered headlessly, and the format is ready for the classroom
+(Supabase) assignment layer next.
+
 **Incident-ticket framing.** Every mission opens as an on-call ticket: a
 reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
 open the shared drive — it worked Friday") rather than a task instruction. Before
