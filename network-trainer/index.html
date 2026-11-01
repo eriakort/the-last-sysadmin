@@ -1635,6 +1635,18 @@ function renderConfig() {
     (d.routes || []).forEach((r, i) => { const dest = r.mask === 0 ? 'default' : M.ipStr(r.dest) + '/' + r.mask; h += `<div class="rrow">${dest} via ${M.ipStr(r.via)} <button class="x" data-rt="${i}">✕</button></div>`; });
     h += `<div class="addrow"><input class="rdest" placeholder="default or 10.0.3.0/24"/><input class="rvia" placeholder="via gateway"/><button class="btn sm" id="addrt">Add route</button></div>`;
   }
+  if (d.kind === 'router') {
+    const b = d.bgp || { asn: '', neighbors: [], networks: [] };
+    const neigh = (b.neighbors || []).map(n => `${M.ipStr(n.ip)} AS${n.remoteAs}`).join(', ') || '(none)';
+    const nets = (b.networks || []).join(', ') || '(none)';
+    const sess = (typeof M.bgpSessions === 'function') ? M.bgpSessions(RUN.net, SEL) : [];
+    const st = sess.map(s => `${M.ipStr(s.ip)} ${s.up ? 'Established' : s.reason}`).join(' · ') || 'no session';
+    h += `<div class="label2">BGP</div>
+      <div class="dim" style="margin-bottom:6px">Neighbors: ${esc(neigh)}<br>Networks: ${esc(nets)}<br>Session: ${esc(st)}</div>
+      <div class="addrow"><input class="basn" placeholder="local ASN" value="${b.asn != null ? b.asn : ''}" size="6"/><button class="btn sm" id="bgpasn">Set ASN</button></div>
+      <div class="addrow"><input class="bnip" placeholder="neighbor ip" size="10"/><input class="bnas" placeholder="remote AS" size="6"/><button class="btn sm" id="bgpnei">Add neighbor</button></div>
+      <div class="addrow"><input class="bnet" placeholder="10.0.8.0/24" size="12"/><button class="btn sm" id="bgpnet">Advertise</button></div>`;
+  }
   if (d.kind === 'router' || d.kind === 'firewall') {
     h += '<div class="label2">Firewall (inbound)</div>';
     const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
@@ -1709,6 +1721,29 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  const bAsn = $('#bgpasn');
+  if (bAsn) bAsn.addEventListener('click', () => {
+    const d = RUN.net.devices[SEL]; d.bgp = d.bgp || { asn: null, neighbors: [], networks: [] };
+    d.bgp.asn = Number($('#config .basn').value);
+    refresh();
+  });
+  const bNei = $('#bgpnei');
+  if (bNei) bNei.addEventListener('click', () => {
+    const d = RUN.net.devices[SEL]; d.bgp = d.bgp || { asn: null, neighbors: [], networks: [] };
+    const ip = $('#config .bnip').value.trim(), as = $('#config .bnas').value.trim();
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip) || !as) return;
+    const n = M.ip(ip);
+    d.bgp.neighbors = (d.bgp.neighbors || []).filter(x => x.ip !== n).concat([{ ip: n, remoteAs: Number(as) }]);
+    refresh();
+  });
+  const bNet = $('#bgpnet');
+  if (bNet) bNet.addEventListener('click', () => {
+    const d = RUN.net.devices[SEL]; d.bgp = d.bgp || { asn: null, neighbors: [], networks: [] };
+    const c = $('#config .bnet').value.trim();
+    if (!c) return;
+    if (!(d.bgp.networks || []).includes(c)) d.bgp.networks.push(c);
+    refresh();
+  });
   if (!SEL) return; const d = RUN.net.devices[SEL];
   document.querySelectorAll('#config .ifrow').forEach(row => {
     const n = row.dataset.if;
