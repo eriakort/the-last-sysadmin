@@ -474,6 +474,39 @@ const chapters = [
       ['h1', 'ip route add default via 10.0.1.1']
     ]
   }
+,
+
+  { id: 'link-died', chapter: 'Redundancy',
+    title: 'The primary link died',
+    story: 'The link between r1 and r2 is down. HQ can no longer reach the branch at 10.0.8.10. A backup path exists through r3, but r1 has no route for it yet.',
+    objective: 'Send 10.0.8.0/24 via the backup router r3 (10.0.13.2) so HQ can reach the branch again.',
+    ticket: { id: 'INC-2301', from: 'NOC · link alarm', priority: 'P1', symptom: "Primary circuit to the branch is dark. Users at HQ can't reach 10.0.8.10. The backup router is up — we just aren't using it." },
+    diagnose: { q: 'Ping from HQ to the branch fails, and the direct link r1–r2 is down. The backup router r3 is reachable. What has to change?', options: ['r1 needs a route for the branch via the backup next hop', 'the branch server lost its IP', 'HQ has no address'], answer: 0, because: 'The primary next hop is dead. A second path exists; r1 must be told to use it.' },
+    console: 'r1',
+    hints: ['The r1–r2 link is down. Do not try to bring it up.', '`ip route` on r1 — is there a path via 10.0.13.2?', 'Run `ip route add 10.0.8.0/24 via 10.0.13.2`.'],
+    build: () => ({
+      devices: {
+        hq: H('hq', '10.0.1.10', 24, '10.0.1.1'),
+        br: SRV('br', '10.0.8.10', 24, '10.0.8.2', { 22: 'ssh' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 24), eth2: iface('10.0.13.1', 24) },
+          [{ dest: ip('10.0.8.0'), mask: 24, via: ip('10.0.12.2') }]),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 24), eth1: iface('10.0.8.1', 24) },
+          [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+        r3: R('r3', 'router', { eth0: iface('10.0.13.2', 24), eth1: iface('10.0.8.2', 24) },
+          [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.13.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [
+        L('hq', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        { a: ['r1', 'eth1'], b: ['r2', 'eth0'], up: false },
+        L('r1', 'eth2', 'r3', 'eth0'),
+        L('r2', 'eth1', 'sw2', 'p1'), L('r3', 'eth1', 'sw2', 'p2'), L('br', 'eth0', 'sw2', 'p3')
+      ]
+    }),
+    success: [{ type: 'reachable', a: 'hq', b: 'br' }],
+    solution: [['r1', 'ip route add 10.0.8.0/24 via 10.0.13.2']]
+  }
 
 ];
 

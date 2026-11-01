@@ -68,6 +68,20 @@ function routeLookup(dev, addr) {                 // longest-prefix match
   for (const r of dev.routes || []) if (sameNet(addr, r.dest, r.mask)) if (!best || r.mask > best.mask) best = r;
   return best;
 }
+// Like routeLookup, but skip a next hop that is not reachable on a connected subnet.
+// Lets a second, equal-length route take over when the primary gateway is down.
+function routeLookupReachable(net, devId, addr) {
+  const dev = net.devices[devId];
+  const cands = (dev.routes || []).filter(r => sameNet(addr, r.dest, r.mask));
+  cands.sort((a, b) => b.mask - a.mask);
+  for (const r of cands) {
+    const gwIface = directIface(dev, r.via);
+    if (!gwIface) continue;
+    const gw = l2Domain(net, devId, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
+    if (gw) return r;
+  }
+  return null;
+}
 function deviceOwning(net, addr) {
   for (const id in net.devices) if (ownsIp(net.devices[id], addr)) return id;
   return null;
@@ -111,7 +125,7 @@ function forward(net, srcDev, pkt, opts = {}) {
       return { ok: true, path: path.concat(dd), reason: 'delivered' };
     }
 
-    const r = routeLookup(dev, dst);               // otherwise route it
+    const r = routeLookupReachable(net, cur, dst);  // skip a dead next hop
     if (!r) return { ok: false, path, reason: 'no route to ' + ipStr(dst), at: cur };
     const gwIface = directIface(dev, r.via);
     if (!gwIface) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
@@ -199,7 +213,7 @@ function ping(net, srcDev, dst, base = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, ownsIp, directIface, routeLookup, deviceOwning,
+  neighbor, l2Domain, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   resolveName, dhclient, dhcpServerFor
 };
