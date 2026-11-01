@@ -161,8 +161,8 @@ function renderConfig() {
   const d = RUN.net.devices[SEL];
   let h = `<div class="label">${SEL} · ${d.kind}</div>`;
   if (d.kind !== 'switch') {
-    h += `<div class="label2">Ping test</div>
-      <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button></div>
+    h += `<div class="label2">Reachability</div>
+      <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button><button class="btn sm" id="dotrace">Traceroute</button></div>
       <div id="pingout" class="dim" style="margin:4px 0 8px;white-space:pre-wrap"></div>`;
   }
   h += `<div class="label2">Interfaces</div>`;
@@ -269,15 +269,18 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
-  const pingBtn = $('#doping');
-  if (pingBtn) pingBtn.addEventListener('click', () => {
+  function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
     const out = $('#pingout');
     if (!to) { if (out) out.textContent = 'Enter a host or IP.'; return; }
-    const r = RUN.cli.on(SEL).run('ping ' + to);
+    const r = RUN.cli.on(SEL).run(cmd + ' ' + to);
     if (out) { out.textContent = r.out || ''; out.style.color = r.code === 0 ? 'var(--good)' : 'var(--bad)'; }
     refreshFlows();
-  });
+  }
+  const pingBtn = $('#doping');
+  if (pingBtn) pingBtn.addEventListener('click', () => runProbe('ping'));
+  const traceBtn = $('#dotrace');
+  if (traceBtn) traceBtn.addEventListener('click', () => runProbe('traceroute'));
   const oBtn = $('#ospfen');
   if (oBtn) oBtn.addEventListener('click', () => {
     const d = RUN.net.devices[SEL];
