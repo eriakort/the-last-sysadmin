@@ -84,6 +84,9 @@ h1{font-size:20px;margin:6px 0}
 .wide{width:100%;box-sizing:border-box;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 8px;font:inherit;margin-top:2px}
 textarea.wide{resize:vertical;font-family:inherit}
 .canvas-empty{padding:48px 16px;text-align:center;color:var(--muted);font-size:13px}
+.cx-body{max-height:60vh;overflow:auto}
+.rlabel{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:12px 0 6px}
+.cx-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;margin:4px 0;font-size:13px}
 .row{display:flex;gap:8px;margin-top:12px}
 .btn{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
 .btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}
@@ -1780,6 +1783,68 @@ function fromJSON(text) {
 module.exports = { CHECKS, validate, toMission, fromTopology, toJSON, fromJSON, clone };
 
 });
+__def("./net-classroom", function(module, exports, require){
+// Classroom data-access layer for the network trainer. A thin, headless wrapper
+// over a Supabase client (`sb`) — no DOM, so it's tested against a mock client.
+// It mirrors the sysadmin game's classroom calls and reuses the shared tables
+// (classes, enrollments, assignments, attempts); the only network-specific
+// pieces are net_scenarios and the get_class_net_scenarios delivery RPC.
+//
+// Attempt ids are namespaced `net:<scenarioId>` so network attempts never
+// collide with sysadmin mission ids in the shared `attempts` table.
+
+const ATTEMPT_PREFIX = 'net:';
+
+// Save (insert or update) an authored scenario. `scenario.dbId` means update.
+function saveScenario(sb, authorId, scenario) {
+  const title = scenario.title || 'Untitled scenario';
+  if (scenario.dbId) {
+    return sb.from('net_scenarios').update({ title, data: scenario, updated_at: new Date().toISOString() }).eq('id', scenario.dbId).select();
+  }
+  return sb.from('net_scenarios').insert({ author_id: authorId, title, data: scenario }).select();
+}
+
+// List the signed-in author's own scenarios (metadata only).
+function myScenarios(sb, authorId) {
+  return sb.from('net_scenarios').select('id, title, created_at').eq('author_id', authorId).order('created_at', { ascending: false });
+}
+
+// Load one scenario's full data (author only; students use assignedScenarios).
+function loadScenario(sb, id) {
+  return sb.from('net_scenarios').select('id, title, data').eq('id', id).maybeSingle();
+}
+
+// Assign scenarios to a class (reuses the shared assignments table).
+function assignScenarios(sb, classId, title, scenarioIds, dueAt) {
+  return sb.from('assignments').insert({ class_id: classId, title, mission_ids: scenarioIds, due_at: dueAt || null });
+}
+
+// The scenarios a member of this class has been assigned (SECURITY DEFINER RPC).
+function assignedScenarios(sb, classId) {
+  return sb.rpc('get_class_net_scenarios', { p_class_id: classId });
+}
+
+// Record (upsert) a student's attempt at a scenario.
+function recordAttempt(sb, userId, scenarioId, res) {
+  res = res || {};
+  return sb.from('attempts').upsert({
+    user_id: userId,
+    mission_id: ATTEMPT_PREFIX + scenarioId,
+    passed: !!res.passed,
+    ms: res.ms != null ? res.ms : null,
+    hints: res.hints || 0,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'user_id,mission_id' });
+}
+
+// A student's own attempts across network scenarios (for marking solved).
+function myAttempts(sb, userId) {
+  return sb.from('attempts').select('mission_id, passed').eq('user_id', userId).like('mission_id', ATTEMPT_PREFIX + '%');
+}
+
+module.exports = { ATTEMPT_PREFIX, saveScenario, myScenarios, loadScenario, assignScenarios, assignedScenarios, recordAttempt, myAttempts };
+
+});
 // ---- UI (runs on load) ----
 // Networking Trainer — UI. Runs in the browser on top of the SAME tested modules
 // (loaded via the require() shim the build injects). Topology + config panels +
@@ -1791,6 +1856,7 @@ const { chapters } = require('./net-chapters');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
 const S = require('./net-scenario');
+const NC = require('./net-classroom');
 
 const REWARD = 100, HINT_COST = 25;
 const RANKS = [[0, 'Cadet'], [120, 'Apprentice'], [280, 'Technician'], [460, 'Engineer'], [640, 'Senior Engineer'], [820, 'Network Architect']];
@@ -1803,6 +1869,7 @@ let HIST = [], HISTI = -1;                         // terminal command history
 let MODE = 'play';                                 // 'play' | 'build' (authoring)
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
+let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -2002,7 +2069,7 @@ function renderConfig() {
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
 function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
-function reloadMission(i) { MODE = 'play'; runMission(chapters[i], chapters[i].id); }
+function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
@@ -2014,6 +2081,11 @@ function doCheck() {
     box.className = done ? 'ok' : 'bad';
     box.innerHTML = done ? '✓ Scenario complete — the network meets every objective.'
       : 'Not there yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
+    if (done && AUTHUSER && PLAYING_DBID) {           // an assigned scenario: record the attempt for the teacher
+      const dbid = PLAYING_DBID, ms = Date.now() - TSTART;
+      getSB().then(sb => { if (sb) NC.recordAttempt(sb, AUTHUSER.id, dbid, { passed: true, ms, hints: HINTS }); });
+      box.innerHTML += ' <span class="dim">· attempt recorded</span>';
+    }
     return;
   }
   if (done) {
@@ -2075,6 +2147,7 @@ function wireBrief() {
     $('#importScn').addEventListener('change', e => { if (e.target.files[0]) importScenario(e.target.files[0]); });
     $('#playScn').addEventListener('click', playAuthored);
     $('#exitBuild').addEventListener('click', exitBuild);
+    const sl = $('#saveLib'); if (sl) sl.addEventListener('click', saveToLibrary);
     return;
   }
   document.querySelectorAll('#brief [data-fault]').forEach(cb => cb.addEventListener('change', () => {
@@ -2230,7 +2303,7 @@ function renderAuthor() {
     <div class="row"><button class="btn" id="exportScn">⬇ Export</button>
       <label class="btn" style="cursor:pointer">⬆ Import<input id="importScn" type="file" accept="application/json,.json" style="display:none"></label>
       <button class="btn primary" id="playScn">▶ Play / test</button></div>
-    <div class="row"><button class="btn" id="exitBuild">← Exit build</button></div>
+    <div class="row"><button class="btn" id="exitBuild">← Exit build</button>${AUTHUSER ? '<button class="btn" id="saveLib">💾 Save to class</button>' : ''}</div>
     <div id="status"></div>`;
 }
 function renderCheckArgs() {
@@ -2248,7 +2321,7 @@ function addCheckFromForm() {
 function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { authored: true, mode: 'build' }, done: () => false, results: () => [] }; }
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild() {
-  MODE = 'build'; WIRE = null; SEL = null; HINTS = 0; stopTimer();
+  MODE = 'build'; WIRE = null; SEL = null; HINTS = 0; PLAYING_DBID = null; stopTimer();
   AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
   RUN = builderRun(B.blank());
   renderAll();
@@ -2290,6 +2363,116 @@ function playAuthored() {
   MODE = 'play'; WIRE = null; runMission(S.toMission(scn));
 }
 
+/* ---------- cloud / classroom (shared Supabase project with the Linux game) ---------- */
+function sbConfig() { try { return { url: localStorage.getItem('lsa-sb-url') || '', key: localStorage.getItem('lsa-sb-key') || '' }; } catch (e) { return { url: '', key: '' }; } }
+function loadSupabaseLib() {
+  if (window.supabase && window.supabase.createClient) return Promise.resolve();
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+}
+async function getSB() {
+  if (SB) return SB;
+  const cfg = sbConfig(); if (!cfg.url || !cfg.key) return null;
+  try { await loadSupabaseLib(); } catch (e) { return null; }
+  if (!(window.supabase && window.supabase.createClient)) return null;
+  SB = window.supabase.createClient(cfg.url, cfg.key);
+  return SB;
+}
+async function initCloud() {
+  const sb = await getSB(); if (!sb) return;
+  try { const { data } = await sb.auth.getSession(); AUTHUSER = data && data.session ? data.session.user : null; } catch (e) {}
+  try { sb.auth.onAuthStateChange((_e, session) => { AUTHUSER = session ? session.user : null; updateClassBtn(); }); } catch (e) {}
+  updateClassBtn();
+}
+function updateClassBtn() { const b = $('#btnClass'); if (b) b.classList.toggle('on', !!AUTHUSER); }
+function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+function modalShell(title) {
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet"><h2>${esc(title)}</h2><div class="cx-body"></div><div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  return wrap;
+}
+function saveToLibrary() {
+  const scn = currentScenario(); const v = S.validate(scn);
+  if (!v.ok) return showErrors(v.errors, 'saving');
+  getSB().then(sb => {
+    if (!sb || !AUTHUSER) { flashStatus('Open 🎓 Class and sign in first.'); return; }
+    NC.saveScenario(sb, AUTHUSER.id, scn).then(() => { const b = $('#status'); if (b) { b.className = 'ok'; b.textContent = 'Saved to your class library.'; } })
+      .catch(e => flashStatus('Save failed: ' + (e && e.message)));
+  });
+}
+async function openClassroom() {
+  const wrap = modalShell('Classroom'); const body = wrap.querySelector('.cx-body');
+  body.innerHTML = '<p class="dim">Connecting…</p>';
+  const sb = await getSB();
+  if (!sb) {
+    body.innerHTML = `<p class="dim">Connect your class account — the same Supabase project the Linux Sysadmin game uses.</p>
+      <div class="addrow"><input id="cfgUrl" class="wide" placeholder="https://xxxx.supabase.co"/></div>
+      <div class="addrow"><input id="cfgKey" class="wide" placeholder="anon public key"/></div>
+      <div class="addrow"><button class="btn sm" id="cfgSave">Save & connect</button></div><div id="cfgOut" class="dim"></div>`;
+    body.querySelector('#cfgSave').addEventListener('click', () => {
+      const u = body.querySelector('#cfgUrl').value.trim(), k = body.querySelector('#cfgKey').value.trim();
+      if (!u || !k) return;
+      try { localStorage.setItem('lsa-sb-url', u); localStorage.setItem('lsa-sb-key', k); } catch (e) {}
+      SB = null; closeModal(); openClassroom();
+    });
+    return;
+  }
+  if (!AUTHUSER) {
+    body.innerHTML = `<p class="dim">Sign in to see your classes. We'll email you a magic link.</p>
+      <div class="addrow"><input id="siEmail" class="wide" placeholder="you@school.edu"/></div>
+      <div class="addrow"><button class="btn sm" id="siSend">Send magic link</button></div><div id="siOut" class="dim"></div>
+      <p class="dim" style="margin-top:8px">Already signed in on the Linux Sysadmin game? Reload — the session is shared.</p>`;
+    body.querySelector('#siSend').addEventListener('click', async () => {
+      const email = body.querySelector('#siEmail').value.trim(); const out = body.querySelector('#siOut');
+      if (!email) return; out.textContent = 'Sending…';
+      try { const r = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.href.split('#')[0] } }); out.textContent = r.error ? ('Error: ' + r.error.message) : '✓ Check your email for the link.'; }
+      catch (e) { out.textContent = 'Error: ' + (e && e.message); }
+    });
+    return;
+  }
+  renderClassroom(sb, body);
+}
+async function renderClassroom(sb, body) {
+  body.innerHTML = '<p class="dim">Loading your classes…</p>';
+  let isTeacher = false, enrolled = [], owned = [];
+  try { const { data } = await sb.from('profiles').select('is_teacher').eq('id', AUTHUSER.id).maybeSingle(); isTeacher = !!(data && data.is_teacher); } catch (e) {}
+  try { const { data } = await sb.from('enrollments').select('class_id, classes(name)').eq('user_id', AUTHUSER.id); enrolled = data || []; } catch (e) {}
+  try { const { data } = await sb.from('classes').select('id, name').eq('owner_id', AUTHUSER.id); owned = data || []; } catch (e) {}
+  let student = '';
+  for (const e of enrolled) {
+    let scns = []; try { const { data } = await NC.assignedScenarios(sb, e.class_id); scns = data || []; } catch (_) {}
+    const cname = (e.classes && e.classes.name) || 'Class';
+    student += `<div class="rlabel">${esc(cname)}</div>` + (scns.length
+      ? scns.map(s => `<div class="cx-item"><span>${esc(s.title)}</span><button class="btn sm playScn" data-id="${esc(s.id)}" data-scn='${esc(JSON.stringify(s.data))}'>▶ Play</button></div>`).join('')
+      : '<p class="dim">No network scenarios assigned yet.</p>');
+  }
+  let teacher = '';
+  if (isTeacher) {
+    let mine = []; try { const { data } = await NC.myScenarios(sb, AUTHUSER.id); mine = data || []; } catch (_) {}
+    const scnOpts = mine.map(s => `<option value="${s.id}">${esc(s.title)}</option>`).join('') || '<option value="">(save a scenario first)</option>';
+    const clsOpts = owned.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option value="">(no classes — create one in the Linux game)</option>';
+    teacher = `<div class="rlabel" style="margin-top:12px">Teach — assign a scenario</div>
+      <div class="addrow"><select id="asgScn" class="wide">${scnOpts}</select></div>
+      <div class="addrow"><select id="asgCls">${clsOpts}</select><input id="asgTitle" placeholder="assignment title" size="12"/><button class="btn sm" id="doAssign">Assign</button></div>
+      <div id="asgOut" class="dim"></div>`;
+  }
+  body.innerHTML = (student || '') + (teacher || '') + (!enrolled.length && !isTeacher ? '<p class="dim">Join a class in the Linux Sysadmin game, then return here for assigned scenarios.</p>' : '');
+  body.querySelectorAll('.playScn').forEach(b => b.addEventListener('click', () => {
+    try { const scn = JSON.parse(b.dataset.scn); closeModal(); MODE = 'play'; PLAYING_DBID = b.dataset.id || null; runMission(S.toMission(scn)); } catch (e) { flashStatus('Could not open scenario.'); }
+  }));
+  const asg = body.querySelector('#doAssign');
+  if (asg) asg.addEventListener('click', async () => {
+    const scnId = body.querySelector('#asgScn').value, clsId = body.querySelector('#asgCls').value;
+    const title = body.querySelector('#asgTitle').value.trim() || 'Network scenario';
+    const out = body.querySelector('#asgOut');
+    if (!scnId || !clsId) { out.textContent = 'Pick a scenario and a class.'; return; }
+    try { await NC.assignScenarios(sb, clsId, title, [scnId], null); out.textContent = '✓ Assigned to the class.'; }
+    catch (e) { out.textContent = 'Assign failed: ' + (e && e.message); }
+  });
+}
+
 /* ---------- boot ---------- */
 function boot() {
   applyTheme(PROG.theme);
@@ -2304,6 +2487,7 @@ function boot() {
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
+        <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" title="Stats">📊</button>
         <button id="btnSet" class="btn" title="Settings">⚙</button></div>
     </header>
@@ -2316,7 +2500,9 @@ function boot() {
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
   $('#btnBuild').addEventListener('click', enterBuild);
+  $('#btnClass').addEventListener('click', openClassroom);
   reloadMission(0);
+  initCloud();
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
 

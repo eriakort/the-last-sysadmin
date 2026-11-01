@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
-const MODULES = ['net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js'];
+const MODULES = ['net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js', 'net-classroom.js'];
 const wrap = f => `__def(${JSON.stringify('./' + f.replace(/\.js$/, ''))}, function(module, exports, require){\n${read(f)}\n});`;
 
 const bundle = `
@@ -103,6 +103,9 @@ h1{font-size:20px;margin:6px 0}
 .wide{width:100%;box-sizing:border-box;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 8px;font:inherit;margin-top:2px}
 textarea.wide{resize:vertical;font-family:inherit}
 .canvas-empty{padding:48px 16px;text-align:center;color:var(--muted);font-size:13px}
+.cx-body{max-height:60vh;overflow:auto}
+.rlabel{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:12px 0 6px}
+.cx-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;margin:4px 0;font-size:13px}
 .row{display:flex;gap:8px;margin-top:12px}
 .btn{background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 12px;cursor:pointer;font:inherit}
 .btn.primary{background:var(--amber);color:#1a1205;border-color:var(--amber);font-weight:600}

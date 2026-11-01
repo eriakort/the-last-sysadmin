@@ -47,15 +47,20 @@ scenario format and the topology-editing ops are pure, tested modules
 grade loop is covered headlessly, and the format is ready for the classroom
 (Supabase) assignment layer.
 
-**Classroom (foundation).** The assignment layer reuses the sysadmin game's
-classroom (shared `classes` / `enrollments` / `assignments` / `attempts` tables
-and RLS). `supabase/net-scenarios.sql` adds one table (`net_scenarios`) and one
-`SECURITY DEFINER` delivery function (`get_class_net_scenarios`) mirroring
-`get_class_missions`; one assignment can reference sysadmin missions and network
-scenarios at once. `net-classroom.js` is the headless data-access layer (save /
-list / assign / deliver / record-attempt), tested against a mock Supabase client
-in `net-classroom.test.js`. Wiring this into a sign-in + classroom panel in the
-page is the next step (and verifies end-to-end against a live Supabase project).
+**Classroom (🎓 Class).** A teacher authors a scenario in Build mode, **💾 Saves
+it to their class library**, and **assigns** it to a class; an enrolled student
+opens 🎓 Class, sees the assigned scenarios, **plays** them (building from
+scratch), and completion **records an attempt** for the teacher. It reuses the
+sysadmin game's classroom — the shared `classes` / `enrollments` / `assignments`
+/ `attempts` tables and RLS, the same Supabase project, and (same origin) the
+same sign-in session. `supabase/net-scenarios.sql` adds one table
+(`net_scenarios`) and one `SECURITY DEFINER` delivery function
+(`get_class_net_scenarios`) mirroring `get_class_missions`; one assignment can
+reference sysadmin missions and network scenarios at once, and network attempts
+are namespaced `net:<id>`. `net-classroom.js` is the headless data-access layer,
+tested against a mock Supabase client (`net-classroom.test.js`); the full
+teacher-assign → student-play → attempt-recorded loop is covered in
+`test-classroom-cloud-ui.js` against a stubbed client.
 
 **Incident-ticket framing.** Every mission opens as an on-call ticket: a
 reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
