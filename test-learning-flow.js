@@ -676,6 +676,47 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     "awk '{print $7}' /var/log/halcyon/access.log | grep -v '/export/customers.csv' | sort | uniq -c | sort -rn | head"
   ], '/api/shipments', 'Correct. Field 7 contains the requested path');
 
+  // Finish Chapter 12 log analysis and rotation before entering the container chapter.
+  await run("awk '{print $1}' /var/log/halcyon/access.log | sort -u | wc -l");
+  await run('submit 7');
+  if ((await page.textContent('#pTitle')) !== 'Stop the logs eating the disk') fail('did not reach logrotate configuration mission');
+  await run("printf '/var/log/halcyon/*.log {\\n    daily\\n    rotate 7\\n    missingok\\n    notifempty\\n}\\n' | sudo tee /etc/logrotate.d/halcyon");
+  await run('check');
+  if ((await page.textContent('#pTitle')) !== 'Rotate them now') fail('logrotate configuration mission did not complete');
+  await run('sudo logrotate -f /etc/logrotate.d/halcyon');
+  await run('check');
+  if ((await page.textContent('#pTitle')) !== 'The new release is an image') fail('did not reach Chapter 13 container missions');
+
+  await checkLearningStages('The new release is an image', 'id', ['docker images', 'TAG', 'image', 'container']);
+  await run('docker images');
+  await run('submit 2.4.0');
+  if ((await page.textContent('#pTitle')) !== 'The new release is an image') fail('image tag answer bypassed mastery');
+  await page.click('[data-learning-choice="tag"]');
+  if (!(await page.textContent('#learningFeedback')).includes('Correct. The TAG column')) fail('image tag mastery feedback missing');
+  await run('submit 2.4.0');
+  if ((await page.textContent('#pTitle')) !== 'Start the container') fail('image inventory + mastery did not complete mission');
+
+  await checkLearningStages('Start the container', 'publish', ['-d', '--name', '-p', '8080:8080']);
+  await proveMission('Start the container', 'Check what is running', 'detached', [
+    'docker run -d --name halcyon-web -p 8080:8080 halcyon/web:2.4.0'
+  ], 'Correct. -d runs the container detached');
+
+  await checkLearningStages('Check what is running', 'container', ['docker ps', 'PORTS', 'before the arrow']);
+  await proveAnswerMission('Check what is running', 'Read its logs', 'host', [
+    'docker ps'
+  ], '8080', 'Correct. The host-side port is the number before the arrow');
+
+  await checkLearningStages('Read its logs', 'images', ['docker logs', 'standard output', 'docker logs -f']);
+  await proveMission('Read its logs', 'Retire the old container', 'logs', [
+    'docker logs halcyon-web'
+  ], 'Correct. docker logs displays the container');
+
+  await checkLearningStages('Retire the old container', 'image', ['docker stop', 'docker rm', 'docker ps -a']);
+  await proveMission('Retire the old container', 'What changed?', 'stop', [
+    'docker stop halcyon-web-old',
+    'docker rm halcyon-web-old'
+  ], 'Correct. Stop the container first');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
