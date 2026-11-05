@@ -4062,6 +4062,18 @@ const MISSIONS = [
     hints: ['Use `apt install PACKAGE` to install software; it needs root privileges.', 'The exact package name is fail2ban. Use `-y` to accept the confirmation prompt.', 'Run `sudo apt install -y fail2ban`.'],
     check: () => !!S.packages.installed.fail2ban },
   { ch: 8, id: 'f2b-enable', title: 'Start it, and keep it started',
+    learning: {
+      concept: 'Linux services are managed by systemd. A service can be installed but stopped, or running now but not configured to start after a reboot. systemctl start SERVICE starts it for this session; systemctl enable SERVICE configures automatic startup at boot. The combined enable --now option does both immediately.',
+      example: 'sudo systemctl enable --now fail2ban\nsystemctl status fail2ban',
+      practice: 'Break down the command: sudo supplies administrator privileges, systemctl manages services, enable configures startup at boot, --now also starts the service immediately, and fail2ban is the service name. The status command lets you verify its current state.',
+      investigate: 'The fail2ban package is installed, but the incident response is not active until its service is running and survives a reboot. Enable and start it together, then inspect its status. Do not confuse an installed package with an active service.',
+      review: 'Use systemctl start SERVICE to start a service now, and systemctl enable SERVICE to start it automatically at boot. Use systemctl enable --now SERVICE to do both. Check the result with systemctl status SERVICE.',
+      question: 'What does systemctl enable --now fail2ban do?',
+      choices: [{ value: 'start', label: 'Starts fail2ban only until the next reboot' }, { value: 'enable', label: 'Configures boot startup but leaves it stopped now' }, { value: 'both', label: 'Starts fail2ban now and enables it at boot' }],
+      answer: 'both',
+      correctFeedback: 'Correct. --now starts the service immediately, while enable configures it to start automatically at boot.',
+      incorrectFeedback: 'Not quite. The combined command handles both the current session and future boots.'
+    },
     story: "Installing a service does not always start it, and does not always set it to run at boot. Do both, the way you enabled halcyon in Chapter 5: `enable --now` enables it *and* starts it in one step.",
     objective: 'Enable and start the `fail2ban` service so it runs now and on every boot.',
     hints: ['`systemctl enable --now SERVICE` enables and starts it together (needs root).', 'Check afterwards with `systemctl status fail2ban`.', 'Run `sudo systemctl enable --now fail2ban`.'],
