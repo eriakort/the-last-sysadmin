@@ -2536,7 +2536,14 @@ CMDS.submit = (a, ctx) => {
   if (!m.answer) { ctx.out("This ticket closes on its own once the server is in the right state, so there is nothing to submit. Type `check` to see what it is waiting for.\n"); return 1; }
   const ans = a.join(' ').trim();
   if (!ans) { ctx.err('submit: type your answer after the word submit, for example: submit 42\n'); return 1; }
-  if (m.answer(ans)) { pendingComplete = true; return 0; }
+  if (m.answer(ans)) {
+    if (m.learning && !learningMasteryPassed) {
+      emitSys('That answer is right, but first complete the understanding check in the Chapter learning guide on the left. Then submit your answer again.', 'hint');
+      return 0;
+    }
+    pendingComplete = true;
+    return 0;
+  }
   emitSys(`✗ "${esc(ans)}" isn't it. Check your output again, or type <code>hint</code>.`, 'warn');
   return 1;
 };
@@ -3760,6 +3767,18 @@ const MISSIONS = [
     answer: a => a.includes(LAST_TIME) },
 
   { ch: 2, id: 'errors', title: 'Count the errors',
+    learning: {
+      concept: 'Log files are ordinary text, but they can be long. grep searches each line for a pattern and prints the lines that match. The -c option counts matching lines instead. By default, grep is case-sensitive, so ERROR and error are different patterns.',
+      example: 'grep ERROR /var/log/halcyon/app.log\ngrep -c ERROR /var/log/halcyon/app.log  →  a line count',
+      practice: 'Search the application log for ERROR, then use grep -c to count the matching lines. Submit the number shown by the terminal.',
+      investigate: 'Priya needs a reliable count of application errors from the night of the crash. There are too many log entries to inspect one by one. Filter for the exact ERROR label and count matching lines before you report the result.',
+      review: 'grep PATTERN FILE prints matching lines. grep -c PATTERN FILE prints the number of matching lines. Matching is case-sensitive unless you ask grep to ignore case.',
+      question: 'What does the -c option make grep display?',
+      choices: [{ value: 'count', label: 'The number of matching lines' }, { value: 'context', label: 'The lines before and after each match' }, { value: 'recursive', label: 'A search through every subdirectory' }],
+      answer: 'count',
+      correctFeedback: 'Correct. grep -c counts lines that match the pattern; it does not print the matching log entries.',
+      incorrectFeedback: 'Not quite. Think about the word “count”: this option reports how many lines matched.'
+    },
     story: "Time to understand what happened. Reading 150 log lines by eye is slow. `grep` prints only the lines you care about.",
     objective: 'How many lines in app.log are ERROR lines? Answer with `submit NUMBER`.',
     hints: ['`grep WORD FILE` prints the lines that contain WORD. Matching is case-sensitive.', '`grep -c` counts matching lines. Or send grep\'s output through a pipe into `wc -l`.', `Run \`grep -c ERROR /var/log/halcyon/app.log\`, then submit the number (it is ${ERR_COUNT}).`],
