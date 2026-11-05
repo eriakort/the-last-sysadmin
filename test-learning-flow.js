@@ -348,7 +348,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     if (aptInstallGuide.includes(stage)) ok('Chapter 10 package-install learning stage present: ' + stage);
     else fail('Chapter 10 package-install learning stage missing: ' + stage);
   }
-  if (aptInstallGuide.includes('apt install') && aptInstallGuide.includes('sudo') && aptInstallGuide.toLowerCase().includes('starting the service')) ok('Chapter 10 distinguishes package installation from service startup');
+  if (aptInstallGuide.includes('apt install') && aptInstallGuide.includes('sudo') && aptInstallGuide.toLowerCase().includes('not the same as starting it')) ok('Chapter 10 distinguishes package installation from service startup');
   else fail('Chapter 10 installation explanation is incomplete');
 
   await page.click('[data-learning-choice="start"]');
