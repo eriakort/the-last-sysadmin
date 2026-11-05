@@ -155,8 +155,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('incorrect Chapter 4 mastery answer was not rejected');
   await run('grep -c \'/bin/bash$\' /etc/passwd');
   const bashCount = await page.$eval('#tout', el => {
-    const lines = el.innerText.trim().split(/\\r?\\n/);
-    return lines.reverse().find(line => /^\\d+$/.test(line.trim()))?.trim() || '';
+    const lines = el.innerText.trim().split(/\r?\n/);
+    return lines.reverse().find(line => /^\d+$/.test(line.trim()))?.trim() || '';
   });
   if (bashCount !== '4') fail('Chapter 4 grep count should identify four interactive-shell accounts, got ' + bashCount);
   await run('submit ' + bashCount);
