@@ -571,7 +571,68 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Script the backup') ok('execute permission + direct script run + mastery complete the mission');
   else fail('script-execution mission did not advance after objective and mastery');
 
-    await browser.close();
+    
+  // Medium batch: scripting and systemd unit authoring (five missions).
+  const checkLearningStages = async (title, wrong, markers) => {
+    if ((await page.textContent('#pTitle')) !== title) fail('expected mission: ' + title);
+    const text = await page.textContent('#learningPath').catch(() => '');
+    for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+      if (text.includes(stage)) ok(title + ' learning stage present: ' + stage);
+      else fail(title + ' learning stage missing: ' + stage);
+    }
+    for (const marker of markers) {
+      if (text.includes(marker)) ok(title + ' explains ' + marker);
+      else fail(title + ' explanation missing ' + marker);
+    }
+    await page.click('[data-learning-choice="' + wrong + '"]');
+    if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok(title + ' rejects incorrect mastery answer');
+    else fail(title + ' accepted an incorrect mastery answer');
+  };
+  const proveMission = async (title, nextTitle, correct, commands, feedback) => {
+    for (const command of commands) await run(command);
+    await run('check');
+    if ((await page.textContent('#pTitle')) === title) ok(title + ' objective cannot bypass mastery');
+    else fail(title + ' advanced before mastery was proven');
+    await page.click('[data-learning-choice="' + correct + '"]');
+    if ((await page.textContent('#learningFeedback')).includes(feedback)) ok(title + ' correct mastery answer explains the concept');
+    else fail(title + ' correct mastery feedback missing');
+    await run('check');
+    if ((await page.textContent('#pTitle')) === nextTitle) ok(title + ' objective + mastery complete the mission');
+    else fail(title + ' did not advance to ' + nextTitle);
+  };
+
+  await checkLearningStages('Script the backup', 'spaces', ['DEST', 'SRC', 'no spaces around']);
+  await proveMission('Script the backup', 'Loop over the releases', 'equals', [
+    "printf '#!/bin/bash\\nDEST=/mnt/backups/nightly.tar.gz\\nSRC=/srv/halcyon/releases/v2.3.1/config\\ntar -czf \\"$DEST\\" \\"$SRC\\"\\necho \\"backed up to $DEST\\"\\n' > ~/backup.sh",
+    'cat ~/backup.sh',
+    'sudo bash ~/backup.sh'
+  ], 'Correct. Bash assignments use NAME=value');
+
+  await checkLearningStages('Loop over the releases', 'end', ['for loop', 'wildcard', 'done']);
+  await proveMission('Loop over the releases', 'Add a safety check', 'done', [
+    "printf '#!/bin/bash\\nfor d in /srv/halcyon/releases/*; do\\n  echo \\"release: $d\\"\\ndone\\n' > ~/releases.sh",
+    'cat ~/releases.sh',
+    'bash ~/releases.sh'
+  ], 'Correct. done marks the end');
+
+  await checkLearningStages('Add a safety check', 'file', ['$1', '[ -d', 'if', 'else', 'fi']);
+  await proveMission('Add a safety check', 'Write a service unit', 'directory', [
+    "printf '#!/bin/bash\\nif [ -d \\"$1\\" ]; then\\n  echo \\"target ok: $1\\"\\nelse\\n  echo \\"missing: $1\\"\\nfi\\n' > ~/check.sh",
+    'cat ~/check.sh',
+    'bash ~/check.sh /srv/halcyon'
+  ], 'Correct. -d tests whether the path');
+
+  await checkLearningStages('Write a service unit', 'oncalendar', ['[Service]', 'Type=oneshot', 'ExecStart']);
+  await proveMission('Write a service unit', 'Write a timer unit', 'execstart', [
+    "printf '[Unit]\\nDescription=Halcyon nightly backup\\n[Service]\\nType=oneshot\\nExecStart=/home/rookie/backup.sh\\n' | sudo tee /etc/systemd/system/halcyon-backup.service"
+  ], 'Correct. ExecStart identifies the executable command');
+
+  await checkLearningStages('Write a timer unit', 'execstart', ['[Timer]', 'OnCalendar=daily', 'Persistent=true', 'WantedBy=timers.target']);
+  await proveMission('Write a timer unit', 'Tell systemd to look', 'oncalendar', [
+    "printf '[Unit]\\nDescription=Run Halcyon backup daily\\n[Timer]\\nOnCalendar=daily\\nPersistent=true\\n[Install]\\nWantedBy=timers.target\\n' | sudo tee /etc/systemd/system/halcyon-backup.timer"
+  ], 'Correct. OnCalendar defines when the timer');
+
+  await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
 })();
