@@ -634,7 +634,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
   // Medium batch 2: finish systemd timer migration and introduce access-log analysis.
-  await checkLearningStages('Tell systemd to look', 'restart', ['daemon-reload', 'in-memory', 'does not start']);
+  await checkLearningStages('Tell systemd to look', 'restart', ['daemon-reload', 'manager state', 'does not start']);
   await proveMission('Tell systemd to look', 'Start the timer', 'reload', [
     'sudo systemctl daemon-reload',
     'systemctl list-timers'
