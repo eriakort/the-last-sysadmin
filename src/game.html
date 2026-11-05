@@ -4030,7 +4030,7 @@ const MISSIONS = [
   { ch: 8, id: 'apt-search', title: 'Find the tool',
     learning: {
       concept: 'Package managers use a package index to find software. The apt search command looks through package names and descriptions for a word or phrase. It is a read-only search: it does not install, remove or upgrade anything, and it does not need sudo. Search results can include several related packages, so read the description to identify the tool you need.',
-      example: 'apt search fail2ban\\napt show fail2ban',
+      example: 'apt search fail2ban\napt show fail2ban',
       practice: 'Search is like looking up a product in a catalogue. The search term can match a package name or words in its description. apt show then gives details about one package, including its description, version and dependencies. Neither command changes installed software.',
       investigate: 'The incident plan names fail2ban, but before installing it you must confirm that the package exists in the refreshed catalogue and understand what it does. Search for fail2ban and inspect the matching result.',
       review: 'Use apt search WORD to find packages by name or description. It is safe to run without sudo because it only reads the local package index. Use apt show PACKAGE for details; use apt install only when you are ready to add software.',
