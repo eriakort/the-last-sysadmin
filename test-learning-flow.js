@@ -477,6 +477,28 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Apply the changes') ok('SSH password-authentication setting + mastery check complete the mission');
   else fail('SSH password-authentication mission did not advance after objective and mastery');
 
+  const sshRestartGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (sshRestartGuide.includes(stage)) ok('Chapter 13 SSH restart learning stage present: ' + stage);
+    else fail('Chapter 13 SSH restart learning stage missing: ' + stage);
+  }
+  if (sshRestartGuide.includes('systemctl restart ssh') && sshRestartGuide.includes('systemctl status ssh') && sshRestartGuide.includes('active')) ok('SSH guide explains restart and service verification');
+  else fail('SSH restart learning explanation is incomplete');
+
+  await page.click('[data-learning-choice="status"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect SSH restart mastery answer is rejected');
+  else fail('incorrect SSH restart mastery answer was not rejected');
+  await run('sudo systemctl restart ssh');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Apply the changes') ok('SSH restart objective cannot bypass the mastery gate');
+  else fail('SSH restart mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="restart"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. Restarting ssh')) ok('correct SSH restart mastery answer explains configuration application');
+  else fail('correct SSH restart mastery answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Leave a handover note') ok('SSH restart + mastery check complete the mission');
+  else fail('SSH restart mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
