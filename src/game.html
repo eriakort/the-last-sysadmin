@@ -4183,6 +4183,18 @@ const MISSIONS = [
     check: () => { const n = getNode(HOME + '/incident/HANDOVER.md'); return !!n && n.type === 'file' && n.content.trim().length > 15; } },
 
   { ch: 10, id: 'first-script', title: 'Your first script',
+    learning: {
+      concept: 'A shell script is a text file containing commands that Bash can run in sequence. The first line, called the shebang, starts with #! and names the interpreter: #!/bin/bash tells the system to run the file with Bash. Each command goes on its own line. The echo command prints a status message.',
+      example: 'printf \'#!/bin/bash\\necho "halcyon-web01 status check"\\n\' > ~/status.sh\ncat ~/status.sh',
+      practice: 'Create ~/status.sh with exactly two lines: first #!/bin/bash, then an echo command that prints a short status message. Use cat to inspect the saved file and check the first line before moving on.',
+      investigate: 'The operations team repeats a basic server status message during each shift. Create a small reusable script at ~/status.sh. It must identify Bash as its interpreter and print a useful status line; do not run it yet.',
+      review: 'A script is a file of commands. The shebang (#!/bin/bash) selects Bash, and echo prints text. Use printf with newline characters to create multiple lines, then cat to verify the file contents.',
+      question: 'What is the purpose of the first line #!/bin/bash in a shell script?',
+      choices: [{ value: 'interpreter', label: 'Select Bash as the interpreter' }, { value: 'execute', label: 'Grant permission to execute the file' }, { value: 'comment', label: 'Print a comment to the terminal' }],
+      answer: 'interpreter',
+      correctFeedback: 'Correct. The shebang tells the system to use Bash to interpret the script.',
+      incorrectFeedback: 'Not quite. The shebang selects the interpreter. Execute permission is a separate file permission added with chmod +x.'
+    },
     story: "You keep typing the same commands. A script is just a text file of commands with `#!/bin/bash` on the first line (the 'shebang', which says how to run it). Write one.",
     objective: 'Create `~/status.sh` whose first line is `#!/bin/bash` and which echoes a status line.',
     hints: ['`printf` writes exact text to a file. `\\n` is a newline. For example: `printf \'line one\\nline two\\n\' > file`.', 'You want two lines: `#!/bin/bash` then an `echo` line.', 'Run: `printf \'#!/bin/bash\\necho "halcyon-web01 status check"\\n\' > ~/status.sh`, then `cat ~/status.sh`.'],
