@@ -499,6 +499,31 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Leave a handover note') ok('SSH restart + mastery check complete the mission');
   else fail('SSH restart mission did not advance after objective and mastery');
 
+  const handoverGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (handoverGuide.includes(stage)) ok('Chapter 13 handover learning stage present: ' + stage);
+    else fail('Chapter 13 handover learning stage missing: ' + stage);
+  }
+  if (handoverGuide.includes('HANDOVER.md') && handoverGuide.includes('>>') && handoverGuide.includes('credentials')) ok('handover guide covers file redirection, useful records and secret handling');
+  else fail('handover learning explanation is incomplete');
+
+  await page.click('[data-learning-choice="replace"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect handover mastery answer is rejected');
+  else fail('incorrect handover mastery answer was not rejected');
+  await run('echo "# Handover - SSH hardened; service active after restart." > ~/incident/HANDOVER.md');
+  await run('cat ~/incident/HANDOVER.md');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Leave a handover note') ok('handover note cannot bypass the mastery gate');
+  else fail('handover mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="append"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. >> appends text')) ok('correct handover mastery answer explains append redirection');
+  else fail('correct handover mastery answer did not show its explanation');
+  await run('echo "PermitRootLogin no; PasswordAuthentication no; SSH verified active." >> ~/incident/HANDOVER.md');
+  await run('cat ~/incident/HANDOVER.md');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Your first script') ok('handover note + mastery check complete Chapter 13');
+  else fail('handover mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
