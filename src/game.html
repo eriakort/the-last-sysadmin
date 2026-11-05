@@ -2514,14 +2514,14 @@ CMDS.check = (a, ctx) => {
     return 0;
   }
   if (m.check) {
-    if (m.check()) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
+    if (m.check() && (!m.learning || learningMasteryPassed)) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
     let extra = '';
     const fixed = repairWorld();
     if (fixed) extra += `<br><br>&#9888; The server was missing ${fixed} file${fixed === 1 ? '' : 's'} the game needs &mdash; something got deleted earlier. I restored ${fixed === 1 ? 'it' : 'them'} to the original state, so try the step again.`;
     if (FLAG_DIAG[m.id]) extra += '<br><br>' + FLAG_DIAG[m.id];
     if (m.fail) { const f = m.fail(); if (f) extra += '<br><br>&#9888; ' + md(f); }
     if (m.nudge) { const nu = m.nudge(); if (nu) extra += '<br><br>' + md(nu); }
-    if (m.learning && !firstLoginMasteryPassed) extra += '<br><br>Complete the understanding check in the Chapter learning guide on the left, then run <code>check</code> again.';
+    if (m.learning && !learningMasteryPassed) extra += '<br><br>Complete the understanding check in the Chapter learning guide on the left, then run <code>check</code> again.';
     if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, <code>repair</code> restores any game files you may have deleted, and <code>hint</code> gives the next step.";
     emitSys(head + extra, 'hint');
     return 0;
@@ -3684,7 +3684,7 @@ const fileContent = p => { const n = getNode(p); return n && n.type === 'file' ?
 const anyFileWith = content => { let found = false; walkAll('/', S.fs, (p, n) => { if (n.type === 'file' && n.content === content) found = true; }); return found; };
 const coresLeft = () => { let c = 0; walkAll('/tmp', getNode('/tmp'), (p, n) => { if (n.type === 'file' && p.endsWith('.core')) c++; }); return c; };
 
-let firstLoginMasteryPassed = false;
+let learningMasteryPassed = false;
 const MISSIONS = [
   { ch: 0, id: 'bearings', title: 'Get your bearings',
     learning: {
@@ -3700,7 +3700,7 @@ const MISSIONS = [
     story: "08:52, your first morning at Halcyon Freight. The web server crashed overnight, and Dana, the admin who ran it, left on Thursday without a word. Priya, the CTO, hands you a login. \"Before you touch anything,\" she says, \"find out where you are.\"",
     objective: 'Run `whoami` to see which user you are, and `pwd` to see which directory you are in.',
     hints: ['Type a command at the prompt and press Enter.', '`whoami` prints your user name. `pwd` means "print working directory".', 'Type `whoami`, press Enter, then type `pwd` and press Enter.'],
-    check: () => S.cmdsM.includes('whoami') && S.cmdsM.includes('pwd') && firstLoginMasteryPassed },
+    check: () => S.cmdsM.includes('whoami') && S.cmdsM.includes('pwd') && learningMasteryPassed },
   { ch: 0, id: 'handover', title: 'The handover note',
     story: "Priya says Dana left a note for whoever came next, somewhere in your home directory. A plain `ls` doesn't show it.",
     objective: 'Find the hidden file in your home directory and read it.',
@@ -3719,6 +3719,17 @@ const MISSIONS = [
     nudge: () => S.readM.includes(P.oldconf) && !S.readM.includes(P.conf) ? "That's the config for v2.2.0, an older release. The file `CURRENT` says which one is live." : null },
 
   { ch: 1, id: 'workspace', title: 'Make a workspace',
+    learning: {
+      concept: 'A directory is a container for files and other directories. A path tells Linux where to find it: ~ means your home directory, / starts at the filesystem root, and a relative path starts from your current directory.',
+      example: 'mkdir -p ~/incident/logs ~/incident/notes\nls ~/incident',
+      practice: 'Create the two folders in the objective from the terminal. Then list ~/incident to confirm both folders exist.',
+      investigate: 'You are collecting evidence from a server incident. Keep logs separate from your written notes so you can find each kind of evidence quickly and avoid mixing files together.',
+      review: 'mkdir creates directories. The -p option creates missing parent directories as needed and does not fail just because a directory already exists. ~ expands to your home directory.',
+      question: 'What does the -p option do when you run mkdir -p ~/incident/logs?',
+      choices: [{ value: 'parents', label: 'Creates missing parent directories along the path' }, { value: 'private', label: 'Makes the new directory private' }, { value: 'print', label: 'Prints every directory name without creating it' }],
+      answer: 'parents',
+      correctFeedback: 'Correct. mkdir -p creates any missing parent directories, so ~/incident is created before ~/incident/logs if needed. It also avoids an error when a directory already exists.'
+    },
     story: "app.conf confirms two problems: the workers dump crash files into /tmp, and a script nobody recognizes is wired into the public export folder. Before you change anything, make a place to keep evidence.",
     objective: 'Create a folder `~/incident` with two folders inside it: `logs` and `notes`.',
     hints: ['`mkdir NAME` makes a directory. `~` is short for your home directory.', '`mkdir -p` creates any missing parent folders, and it accepts several paths at once.', 'Run `mkdir -p ~/incident/logs ~/incident/notes`.'],
@@ -4773,7 +4784,7 @@ function afterCommand() {
   if (pendingComplete) { pendingComplete = false; completeMission(); return; }
   if (m.fail) { const f = m.fail(); if (f && !S.nudged.includes('F:' + f)) { S.nudged.push('F:' + f); emitSys('⚠ ' + md(f), 'warn'); } }
   if (m.nudge) { const n = m.nudge(); if (n && !S.nudged.includes(n)) { S.nudged.push(n); emitSys(md(n), 'nudge'); } }
-  if (m.check && m.check()) completeMission();
+  if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
 const rewardFor = m => Math.max(25, 100 - 25 * (S.hints[m.id] || 0));
 function fmtDur(ms) {
@@ -4859,7 +4870,7 @@ function completeMission() {
 }
 const ticketId = i => `INC-1025-${pad(i + 1)}`;
 function startMission() {
-  firstLoginMasteryPassed = false;
+  learningMasteryPassed = false;
   S.readM = []; S.cmdsM = []; S.nudged = [];
   const m = MISSIONS[S.mission], prev = MISSIONS[S.mission - 1];
   if (m.onStart) m.onStart();
@@ -5057,7 +5068,7 @@ function render() {
       '<div class="learning-card"><b>Investigate</b><p>' + m.learning.investigate + '</p></div></div>' +
       '<div class="learning-card"><b>Practise</b><p>' + m.learning.practice + '</p></div>' +
       '<div class="learning-question"><b>Prove your understanding</b><p>' + m.learning.question + '</p><div class="learning-choices">' + choices + '</div>' +
-      '<div class="learning-feedback" id="learningFeedback" role="status" aria-live="polite">' + (firstLoginMasteryPassed ? 'Correct — you can now complete the mission.' : 'Choose an answer to check your understanding.') + '</div></div>' +
+      '<div class="learning-feedback" id="learningFeedback" role="status" aria-live="polite">' + (learningMasteryPassed ? 'Correct — you can now complete the mission.' : 'Choose an answer to check your understanding.') + '</div></div>' +
       '<div class="learning-card"><b>Review</b><p>' + m.learning.review + '</p></div>';
     guide.querySelectorAll('[data-learning-choice]').forEach(button => button.addEventListener('click', () => {
       const correct = button.dataset.learningChoice === m.learning.answer;
@@ -5065,10 +5076,10 @@ function render() {
         choice.classList.toggle('correct', correct && choice === button);
         choice.classList.toggle('wrong', !correct && choice === button);
       });
-      firstLoginMasteryPassed = correct;
+      learningMasteryPassed = correct;
       const feedback = $('#learningFeedback');
       feedback.className = 'learning-feedback ' + (correct ? 'ok' : 'bad');
-      feedback.textContent = correct ? 'Correct. pwd prints the absolute path of your current working directory. Run check in the terminal when you have also used whoami and pwd.' : 'Not quite. Which command prints the directory path, rather than your username or the directory contents?';
+      feedback.textContent = correct ? (m.learning.correctFeedback || 'Correct. You can now complete the mission objective in the terminal.') : (m.learning.incorrectFeedback || 'Not quite. Re-read the explanation and try again.');
     }));
   }
   $('#pChapter').textContent = `${CHAPTERS[m.ch].label} · ${CHAPTERS[m.ch].name}`;
