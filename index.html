@@ -4146,6 +4146,18 @@ const MISSIONS = [
     hints: ['The file has a commented line `#PermitRootLogin prohibit-password`. You need an active line reading `PermitRootLogin no`.', 'The file is owned by root, so edit it with sudo. `sed -i` edits a file in place.', "Run: `sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config`, then `grep PermitRootLogin /etc/ssh/sshd_config`."],
     check: () => /^PermitRootLogin\s+no\b/m.test((getNode('/etc/ssh/sshd_config') || {}).content || '') },
   { ch: 9, id: 'ssh-pw', title: 'Keys only, no passwords',
+    learning: {
+      concept: 'SSH can authenticate users with passwords or public-key cryptography. PasswordAuthentication controls whether the SSH server accepts password-based logins. Setting PasswordAuthentication no disables that method; it does not disable SSH itself or remove authorised public keys. Keep a tested key-based route for named administrators before applying this change.',
+      example: 'sudo grep -n PasswordAuthentication /etc/ssh/sshd_config\nsudo sed -i \'s/^#PasswordAuthentication.*/PasswordAuthentication no/\' /etc/ssh/sshd_config\ngrep PasswordAuthentication /etc/ssh/sshd_config',
+      practice: 'Inspect the current setting and distinguish an active directive from a commented example. Edit the root-owned configuration with sudo, set PasswordAuthentication to no, and read the file again to verify the saved value.',
+      investigate: 'Automated attempts are targeting Halcyon SSH accounts. The previous ticket disabled direct root login. Now disable password authentication while preserving key-based access for named administrators. Do not restart ssh yet; the next ticket applies both configuration changes.',
+      review: 'PasswordAuthentication yes allows password-based SSH authentication. PasswordAuthentication no turns that method off, but SSH remains available to users with authorised keys. Verify the active line in /etc/ssh/sshd_config and apply the changes in the next step.',
+      question: 'Which setting disables password-based SSH logins without disabling key-based authentication?',
+      choices: [{ value: 'yes', label: 'yes · allow password authentication' }, { value: 'no', label: 'no · disable password authentication' }, { value: 'root', label: 'root · disable the root account' }],
+      answer: 'no',
+      correctFeedback: 'Correct. PasswordAuthentication no disables password-based SSH logins while allowing authorised public-key authentication.',
+      incorrectFeedback: 'Not quite. yes permits password authentication. root is an account name, not an authentication setting. no disables password-based SSH authentication.'
+    },
     story: "Second: turn off password logins entirely, so only holders of an authorised key can get in. Passwords can be guessed; keys effectively cannot. The setting is `PasswordAuthentication`.",
     objective: 'Set `PasswordAuthentication no` in `/etc/ssh/sshd_config`.',
     hints: ['The file has `#PasswordAuthentication yes`. You want an active `PasswordAuthentication no`.', 'Edit with sudo, the same way as the last ticket.', "Run: `sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config`."],
