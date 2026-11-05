@@ -387,6 +387,28 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Confirm the version') ok('service objective + mastery check complete the mission');
   else fail('service mission did not advance after objective and mastery');
 
+  const versionGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (versionGuide.includes(stage)) ok('Chapter 11 package-version learning stage present: ' + stage);
+    else fail('Chapter 11 package-version learning stage missing: ' + stage);
+  }
+  if (versionGuide.includes('dpkg -l') && versionGuide.includes('Version column') && versionGuide.includes('apt search')) ok('Chapter 11 distinguishes installed package records from available package searches');
+  else fail('Chapter 11 package-version explanation is incomplete');
+
+  await page.click('[data-learning-choice="status"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect package-version mastery answer is rejected');
+  else fail('incorrect package-version mastery answer was not rejected');
+  await run('dpkg -l fail2ban');
+  await run('submit 1.0.2-3');
+  if ((await page.textContent('#pTitle')) === 'Confirm the version') ok('package-version answer cannot bypass the mastery gate');
+  else fail('package-version ticket advanced before mastery was proven');
+  await page.click('[data-learning-choice="version"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. Read the Version column')) ok('correct package-version mastery answer identifies the Version column');
+  else fail('correct package-version answer did not show its explanation');
+  await run('submit 1.0.2-3');
+  if ((await page.textContent('#pTitle')) === 'Audit the open ports') ok('package-version answer + mastery check complete the mission');
+  else fail('package-version mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
