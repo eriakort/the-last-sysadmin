@@ -409,6 +409,29 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Audit the open ports') ok('package-version answer + mastery check complete the mission');
   else fail('package-version mission did not advance after objective and mastery');
 
+
+  const auditGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (auditGuide.includes(stage)) ok('Chapter 12 port-audit learning stage present: ' + stage);
+    else fail('Chapter 12 port-audit learning stage missing: ' + stage);
+  }
+  if (auditGuide.includes('ss -tlnp') && auditGuide.includes('LISTEN') && auditGuide.includes('127.0.0.1')) ok('Chapter 12 explains listening sockets, process ownership and loopback exposure');
+  else fail('Chapter 12 port-audit explanation is incomplete');
+
+  await page.click('[data-learning-choice="all"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect port-audit mastery answer is rejected');
+  else fail('incorrect port-audit mastery answer was not rejected');
+  await run('sudo ss -tlnp');
+  await run('submit 3');
+  if ((await page.textContent('#pTitle')) === 'Audit the open ports') ok('port count cannot bypass the mastery gate');
+  else fail('port-audit ticket advanced before mastery was proven');
+  await page.click('[data-learning-choice="listening"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. -l selects listening sockets')) ok('correct port-audit mastery answer explains the listening flag');
+  else fail('correct port-audit answer did not show its explanation');
+  await run('submit 3');
+  if ((await page.textContent('#pTitle')) === 'No root login over SSH') ok('port inventory + mastery check complete the mission');
+  else fail('port-audit mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');

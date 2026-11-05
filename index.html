@@ -269,7 +269,7 @@ body.practicing{padding-top:40px}
       <span class="mark" aria-hidden="true"></span>
       <div>
         <div class="name">The Last Sysadmin</div>
-        <div class="sub">Learn Linux administration</div>
+        <div class="sub">Learn Linux administration by fixing a broken server · Chapters 1–35</div>
       </div>
     </div>
     <nav class="apptabs" role="tablist">
@@ -4112,6 +4112,18 @@ const MISSIONS = [
     answer: a => a.trim() === '1.0.2-3' },
 
   { ch: 9, id: 'audit', title: 'Audit the open ports',
+    learning: {
+      concept: 'A listening socket is a network endpoint waiting for incoming connections. The ss command displays socket information. With ss -tlnp, -t selects TCP sockets, -l shows only listening sockets, -n keeps addresses and ports numeric, and -p shows the owning process when permissions allow it. A listening port is an entry point to investigate, but its exposure depends on the address it is bound to: 0.0.0.0 listens on all IPv4 interfaces, while 127.0.0.1 is loopback-only.',
+      example: 'sudo ss -tlnp\n# Read the State, Local Address:Port and Process columns\n# Count rows whose State is LISTEN',
+      practice: 'Run sudo ss -tlnp. Ignore the header and count only rows in the LISTEN state. Read the Local Address:Port column to identify each port, and the Process column to see which service owns it.',
+      investigate: 'Prepare a reliable inventory before hardening SSH. The server has three listening TCP ports: 22 for SSH, 8080 for the Halcyon application, and 5432 for PostgreSQL bound to loopback. Do not treat the loopback-only database port as externally reachable.',
+      review: 'Use sudo ss -tlnp to list listening TCP sockets with numeric ports and owning processes. Count LISTEN rows, then inspect each local address: 0.0.0.0 means all IPv4 interfaces; 127.0.0.1 means the service is reachable only from the local machine.',
+      question: 'Which ss option limits the output to sockets that are waiting for incoming connections?',
+      choices: [{ value: 'all', label: '-a · all sockets' }, { value: 'listening', label: '-l · listening sockets' }, { value: 'numeric', label: '-n · numeric addresses' }],
+      answer: 'listening',
+      correctFeedback: 'Correct. -l selects listening sockets, so you can focus on services waiting for incoming connections.',
+      incorrectFeedback: 'Not quite. -a includes all socket states, and -n controls numeric formatting. -l is the option that selects listening sockets.'
+    },
     story: "Final chapter: lock the doors and write it all down. Start with a clean look at what is listening. Anything open is a way in, so you want to know every one.",
     objective: 'List the listening TCP ports with their processes. How many TCP ports is the server listening on? Answer with `submit NUMBER`.',
     hints: ['`sudo ss -tlnp` lists listening TCP sockets with the owning process.', 'Count the LISTEN lines (ignore the header).', 'There are three: 22 (ssh), 8080 (halcyon) and 5432 (postgres, loopback only). Run `submit 3`.'],
