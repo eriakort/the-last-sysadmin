@@ -3806,6 +3806,18 @@ const MISSIONS = [
     check: () => S.readM.includes(P.draft) },
 
   { ch: 3, id: 'shells', title: 'Who can log in?',
+    learning: {
+      concept: 'Linux keeps basic account information in /etc/passwd. Each account is one line with seven colon-separated fields: username, a password placeholder, user ID, group ID, description, home directory, and login shell. The final field matters here: /bin/bash allows an interactive shell, while /usr/sbin/nologin prevents interactive login. Password hashes are stored separately in /etc/shadow.',
+      example: 'cat /etc/passwd\ngrep -c \'/bin/bash$\' /etc/passwd  →  4 accounts',
+      practice: 'Inspect /etc/passwd, identify the final field on each line, then count accounts whose login shell is /bin/bash. Submit the number shown by the terminal.',
+      investigate: 'The incident evidence points to an old contractor account. Before changing access, Priya asks you to establish which accounts can open an interactive shell. Compare the shell field rather than assuming every account is a person who can log in.',
+      review: 'The seventh /etc/passwd field is the login shell. /bin/bash is interactive; /usr/sbin/nologin blocks interactive login. grep -c counts matching lines, and the $ anchor matches only at the end of a line.',
+      question: 'Which field in /etc/passwd tells you the account\'s login shell?',
+      choices: [{ value: 'password', label: 'The second field' }, { value: 'home', label: 'The sixth field' }, { value: 'shell', label: 'The seventh (last) field' }],
+      answer: 'shell',
+      correctFeedback: 'Correct. The seventh field names the login shell, so /bin/bash and /usr/sbin/nologin have different login behaviour.',
+      incorrectFeedback: 'Not quite. The home directory is near the end, but one more colon-separated field follows it: the login shell.'
+    },
     story: "Priya read your evidence and went pale. \"Before I call legal, tell me who can actually log in to this box.\" Every account is one line in /etc/passwd, and the last field is its login shell. `/usr/sbin/nologin` means no interactive login.",
     objective: 'How many accounts in /etc/passwd have /bin/bash as their shell? Answer with `submit NUMBER`.',
     hints: ['Each line of /etc/passwd is `name:x:uid:gid:description:home:shell`. Start with `cat /etc/passwd`.', '`grep -c` counts matching lines. In a pattern, `$` means end of line, so `bash$` only matches bash at the very end.', `Run \`grep -c '/bin/bash$' /etc/passwd\`, then \`submit ${BASH_COUNT}\`.`],
