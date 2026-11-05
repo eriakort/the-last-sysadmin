@@ -87,7 +87,41 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Preserve the log') ok('Chapter 2 objective + mastery check complete the mission');
   else fail('Chapter 2 mission did not advance after objective and mastery');
 
+  // Finish the remaining Chapter 2 tickets and enter Chapter 3.
+  await run('cp /var/log/halcyon/app.log ~/incident/logs/');
+  await run("find /tmp -name '*.core' -delete");
+  await run('mkdir ~/incident/quarantine');
+  await run('mv /srv/halcyon/export/sync_out.sh ~/incident/quarantine/');
+  await run('tail -n 1 /var/log/halcyon/app.log');
+  await run('submit 03:47:12');
+  if ((await page.textContent('#pTitle')) === 'Count the errors') ok('Chapter 3 starts with Count the errors');
+  else fail('did not reach the first Chapter 3 mission');
 
+  const ch3Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch3Guide.includes(stage)) ok('Chapter 3 learning stage present: ' + stage);
+    else fail('Chapter 3 learning stage missing: ' + stage);
+  }
+
+  await page.click('[data-learning-choice="context"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 3 mastery answer is rejected');
+  else fail('incorrect Chapter 3 mastery answer was not rejected');
+  await run('grep -c ERROR /var/log/halcyon/app.log');
+  const errorCount = await page.$eval('#tout', el => {
+    const lines = el.innerText.trim().split(/\\r?\\n/);
+    return lines.reverse().find(line => /^\\d+$/.test(line.trim()))?.trim() || '';
+  });
+  if (!errorCount) fail('grep -c output did not expose the error count');
+  await run('submit ' + errorCount);
+  if ((await page.textContent('#pTitle')) === 'Count the errors') ok('correct terminal answer cannot bypass the Chapter 3 mastery gate');
+  else fail('Chapter 3 answer ticket advanced before mastery was proven');
+
+  await page.click('[data-learning-choice="count"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. grep -c')) ok('correct Chapter 3 mastery answer explains line counting');
+  else fail('correct Chapter 3 answer did not show its explanation');
+  await run('submit ' + errorCount);
+  if ((await page.textContent('#pTitle')) === 'Who is hitting us?') ok('Chapter 3 answer + mastery check complete the mission');
+  else fail('Chapter 3 mission did not advance after answer and mastery');
 
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
