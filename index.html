@@ -3949,6 +3949,18 @@ const MISSIONS = [
     check: () => S.firewall.active && S.firewall.rules.some(r => r.action === 'deny' && r.from === BAD_IP) },
 
   { ch: 6, id: 'disks', title: 'The new disk',
+    learning: {
+      concept: 'Linux represents storage devices as block devices. A whole disk (such as /dev/vdb) can contain one or more partitions (such as /dev/vdb1). A partition is a section of a disk that can be formatted and mounted separately. lsblk displays this storage tree: NAME identifies each device, SIZE shows its capacity, TYPE distinguishes disk from part, and MOUNTPOINTS shows where a filesystem is attached. An empty mountpoint means the partition is not currently mounted.',
+      example: 'lsblk\nNAME   SIZE TYPE MOUNTPOINTS\nvda     40G disk\n├─vda1  39G part /\n└─vda2   1G part /boot\nvdb     20G disk\n└─vdb1  20G part',
+      practice: 'Run lsblk and read the indented device tree. Find the partition whose MOUNTPOINTS column is empty, then submit its name without /dev/.',
+      investigate: 'Priya attached a second disk after the root filesystem ran out of space. The original disk is vda and already holds the operating system. Identify the new disk and its unmounted partition before creating a mountpoint or changing any storage.',
+      review: 'lsblk lists block devices in a tree. TYPE=disk is a whole device; TYPE=part is a partition inside a disk. The new device is vdb and its partition is vdb1. Its empty MOUNTPOINTS column means it is not attached to the directory tree yet.',
+      question: 'In lsblk output, what does TYPE=part tell you?',
+      choices: [{ value: 'disk', label: 'It is a whole physical or virtual disk' }, { value: 'partition', label: 'It is a partition on a disk' }, { value: 'mountpoint', label: 'It is a directory where storage is attached' }],
+      answer: 'partition',
+      correctFeedback: 'Correct. TYPE=part marks a partition, such as vdb1. The parent vdb is the whole disk; a mountpoint is a directory shown in the MOUNTPOINTS column.',
+      incorrectFeedback: 'Not quite. TYPE describes what kind of block device the row represents: the whole disk or a section of that disk.'
+    },
     story: "The crash in Chapter 2 started with a full root disk. Priya has had a second disk attached so backups and logs have somewhere to live. First, see what block devices this machine has. `lsblk` lists the disks and their partitions.",
     objective: 'Run `lsblk`. Which partition on the new disk has no mountpoint yet? Answer with `submit NAME`.',
     hints: ['`lsblk` shows disks (TYPE disk) with their partitions (TYPE part) indented underneath.', 'vda is the original disk (its partitions are mounted at / and /boot). vdb is the new one.', 'vdb has one partition, vdb1, with an empty MOUNTPOINTS column. Run `submit vdb1`.'],

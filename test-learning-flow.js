@@ -216,6 +216,48 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Who is connected now?') ok('Chapter 5 answer + mastery check complete the mission');
   else fail('Chapter 5 mission did not advance after answer and mastery');
 
+  // Complete the remaining Chapter 5 incident-response tickets and enter Chapter 6.
+  await run('ss -tn');
+  await run('submit 203.0.113.77');
+  if ((await page.textContent('#pTitle')) === 'Is the app healthy?') ok('Chapter 5 identifies the active outside connection');
+  else fail('Chapter 5 connection investigation did not complete');
+  await run('curl -I http://localhost:8080');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === "The server's own address") ok('Chapter 5 confirms the app is healthy');
+  else fail('Chapter 5 health check did not complete');
+  await run('ip addr');
+  await run('submit 10.0.4.12');
+  if ((await page.textContent('#pTitle')) === 'Block the intruder') ok('Chapter 5 identifies the server network address');
+  else fail('Chapter 5 address investigation did not complete');
+  await run('sudo ufw deny from 203.0.113.77');
+  if ((await page.textContent('#pTitle')) === 'Turn the firewall on') ok('Chapter 5 adds the deny rule');
+  else fail('Chapter 5 firewall rule was not accepted');
+  await run('sudo ufw enable');
+  await run('sudo ufw status');
+  if ((await page.textContent('#pTitle')) === 'The new disk') ok('Chapter 6 starts after the firewall is enabled');
+
+  const ch6Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch6Guide.includes(stage)) ok('Chapter 6 learning stage present: ' + stage);
+    else fail('Chapter 6 learning stage missing: ' + stage);
+  }
+  if (ch6Guide.includes('TYPE=part') && ch6Guide.includes('MOUNTPOINTS') && ch6Guide.includes('vdb1')) ok('Chapter 6 explains disks, partitions and mountpoints');
+  else fail('Chapter 6 storage explanation is incomplete');
+
+  await page.click('[data-learning-choice="disk"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 6 mastery answer is rejected');
+  else fail('incorrect Chapter 6 mastery answer was not rejected');
+  await run('lsblk');
+  await run('submit vdb1');
+  if ((await page.textContent('#pTitle')) === 'The new disk') ok('Chapter 6 terminal answer cannot bypass the mastery gate');
+  else fail('Chapter 6 answer ticket advanced before mastery was proven');
+  await page.click('[data-learning-choice="partition"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. TYPE=part')) ok('correct Chapter 6 mastery answer explains partition types');
+  else fail('correct Chapter 6 answer did not show its explanation');
+  await run('submit vdb1');
+  if ((await page.textContent('#pTitle')) === 'Make a mountpoint') ok('Chapter 6 answer + mastery check complete the mission');
+  else fail('Chapter 6 mission did not advance after answer and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
