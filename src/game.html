@@ -4593,7 +4593,6 @@ const MISSIONS = [
         "Oct 28 02:58:04 halcyon-web01 systemd[1]: halcyon.service: Failed with result 'exit-code'."
       ];
     },
-  { ch: 15, id: 'inc-status', title: 'The pager goes off',
     learning: {
       concept: 'A service can be installed and enabled at boot yet still be stopped right now. systemctl status reports the current state. Read the Active line before changing anything: it tells you whether the process is running.',
       example: 'systemctl status halcyon\nActive: inactive (dead)',
@@ -4610,7 +4609,6 @@ const MISSIONS = [
     objective: 'Check the `halcyon` service. What does the Active line report? Answer with `submit WORD`.',
     hints: ['`systemctl status halcyon` shows an Active line.', 'Read the first word after "Active:".', 'Run `systemctl status halcyon`. It is `inactive` (the process died).'],
     answer: a => /inactive|failed|dead/i.test(a.trim()) },
-  { ch: 15, id: 'inc-journal', title: 'Why did it die?',
   { ch: 15, id: 'inc-journal', title: 'Why did it die?',
     learning: {
       concept: 'The system journal collects messages from systemd and services. Filtering with journalctl -u limits the output to one unit, making the failure easier to find. Look for the FATAL message rather than guessing from the symptom.',
@@ -4629,7 +4627,6 @@ const MISSIONS = [
     hints: ['`journalctl -u halcyon` shows the service log. Look for the line marked FATAL.', 'The error names a setting under [workers].', 'Run `journalctl -u halcyon`. It complains that `count` must be >= 1.'],
     answer: a => /count|workers/i.test(a.trim()) },
   { ch: 15, id: 'inc-grep', title: 'Confirm it in the config',
-  { ch: 15, id: 'inc-grep', title: 'Confirm it in the config',
     learning: {
       concept: 'A log message gives you a hypothesis; inspecting the live configuration verifies it. grep prints matching lines from a file, so you can check the exact value without opening or changing the file.',
       example: 'grep count /srv/halcyon/releases/v2.4.0/config/app.conf\ncount = 0',
@@ -4646,7 +4643,6 @@ const MISSIONS = [
     objective: 'Find the `count` line in `/srv/halcyon/releases/v2.4.0/config/app.conf`. What value is it set to? Answer with `submit NUMBER`.',
     hints: ['`grep count FILE` prints the matching line.', 'The file is /srv/halcyon/releases/v2.4.0/config/app.conf.', 'Run `grep count /srv/halcyon/releases/v2.4.0/config/app.conf`. It is 0 — that is the bug.'],
     answer: a => a.trim() === '0' },
-  { ch: 15, id: 'inc-fix', title: 'Fix the config',
   { ch: 15, id: 'inc-fix', title: 'Fix the config',
     learning: {
       concept: 'sed can transform matching text. With -i it edits the file in place; without -i it prints the transformed text and leaves the original unchanged. Make the smallest targeted correction, then verify the result.',
@@ -4665,7 +4661,6 @@ const MISSIONS = [
     hints: ['`sed -i \'s/OLD/NEW/\' FILE` edits a file in place.', 'The line reads `count = 0`; you want `count = 4`.', "Run `sed -i 's/count = 0/count = 4/' /srv/halcyon/releases/v2.4.0/config/app.conf`, then grep it again to check."],
     check: () => { const cf = getNode('/srv/halcyon/releases/v2.4.0/config/app.conf'); return !!cf && /count\s*=\s*[1-9]/.test(cf.content); } },
   { ch: 15, id: 'inc-restart', title: 'Bring it back',
-  { ch: 15, id: 'inc-restart', title: 'Bring it back',
     learning: {
       concept: 'A corrected configuration does not change an already-running process. Restarting the service makes it read the updated file and launch again. Verify the resulting state instead of assuming the restart worked.',
       example: 'sudo systemctl restart halcyon\nsystemctl is-active halcyon\nactive',
@@ -4682,7 +4677,6 @@ const MISSIONS = [
     objective: 'Restart the `halcyon` service and confirm it is active again.',
     hints: ['`sudo systemctl restart halcyon` restarts it.', 'Check with `systemctl is-active halcyon` — it should say `active`.', 'Run `sudo systemctl restart halcyon`, then `systemctl is-active halcyon`.'],
     check: () => S.services.halcyon.active && !!(S.restarted && S.restarted.halcyon) },
-  { ch: 15, id: 'inc-listen', title: 'Confirm it is serving',
   { ch: 15, id: 'inc-listen', title: 'Confirm it is serving',
     learning: {
       concept: 'A service can be active without successfully listening on the expected network port. ss -tlnp lists listening TCP sockets and their owning processes, so it verifies that the application is ready to accept connections.',
