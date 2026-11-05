@@ -547,6 +547,30 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Make it executable') ok('first script + mastery check complete the mission');
   else fail('first-script mission did not advance after objective and mastery');
 
+  const executeGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (executeGuide.includes(stage)) ok('script-execution learning stage present: ' + stage);
+    else fail('script-execution learning stage missing: ' + stage);
+  }
+  if (executeGuide.includes('chmod +x') && executeGuide.includes('./status.sh') && executeGuide.includes('execute permission')) ok('script-execution guide explains permission bits and direct execution');
+  else fail('script-execution learning explanation is incomplete');
+
+  await page.click('[data-learning-choice="chown"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect script-execution mastery answer is rejected');
+  else fail('incorrect script-execution mastery answer was not rejected');
+  await run('ls -l ~/status.sh');
+  await run('chmod +x ~/status.sh');
+  await run('cd ~');
+  await run('./status.sh');
+  if ((await page.textContent('#pTitle')) === 'Make it executable') ok('script execution cannot bypass the mastery gate');
+  else fail('script-execution mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="chmod"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. chmod +x adds execute permission')) ok('correct script-execution mastery answer explains chmod');
+  else fail('correct script-execution mastery answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Script the backup') ok('execute permission + direct script run + mastery complete the mission');
+  else fail('script-execution mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
