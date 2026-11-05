@@ -603,21 +603,21 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
   await checkLearningStages('Script the backup', 'spaces', ['DEST', 'SRC', 'no spaces around']);
   await proveMission('Script the backup', 'Loop over the releases', 'equals', [
-    "printf '#!/bin/bash\\nDEST=/mnt/backups/nightly.tar.gz\\nSRC=/srv/halcyon/releases/v2.3.1/config\\ntar -czf \\"$DEST\\" \\"$SRC\\"\\necho \\"backed up to $DEST\\"\\n' > ~/backup.sh",
+    "printf '#!/bin/bash\\nDEST=/mnt/backups/nightly.tar.gz\\nSRC=/srv/halcyon/releases/v2.3.1/config\\ntar -czf \"$DEST\" \"$SRC\"\\necho \"backed up to $DEST\"\\n' > ~/backup.sh",
     'cat ~/backup.sh',
     'sudo bash ~/backup.sh'
   ], 'Correct. Bash assignments use NAME=value');
 
   await checkLearningStages('Loop over the releases', 'end', ['for loop', 'wildcard', 'done']);
   await proveMission('Loop over the releases', 'Add a safety check', 'done', [
-    "printf '#!/bin/bash\\nfor d in /srv/halcyon/releases/*; do\\n  echo \\"release: $d\\"\\ndone\\n' > ~/releases.sh",
+    "printf '#!/bin/bash\\nfor d in /srv/halcyon/releases/*; do\\n  echo \"release: $d\"\\ndone\\n' > ~/releases.sh",
     'cat ~/releases.sh',
     'bash ~/releases.sh'
   ], 'Correct. done marks the end');
 
   await checkLearningStages('Add a safety check', 'file', ['$1', '[ -d', 'if', 'else', 'fi']);
   await proveMission('Add a safety check', 'Write a service unit', 'directory', [
-    "printf '#!/bin/bash\\nif [ -d \\"$1\\" ]; then\\n  echo \\"target ok: $1\\"\\nelse\\n  echo \\"missing: $1\\"\\nfi\\n' > ~/check.sh",
+    "printf '#!/bin/bash\\nif [ -d \"$1\" ]; then\\n  echo \"target ok: $1\"\\nelse\\n  echo \"missing: $1\"\\nfi\\n' > ~/check.sh",
     'cat ~/check.sh',
     'bash ~/check.sh /srv/halcyon'
   ], 'Correct. -d tests whether the path');
