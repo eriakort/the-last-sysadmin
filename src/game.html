@@ -4200,6 +4200,18 @@ const MISSIONS = [
     hints: ['`printf` writes exact text to a file. `\\n` is a newline. For example: `printf \'line one\\nline two\\n\' > file`.', 'You want two lines: `#!/bin/bash` then an `echo` line.', 'Run: `printf \'#!/bin/bash\\necho "halcyon-web01 status check"\\n\' > ~/status.sh`, then `cat ~/status.sh`.'],
     check: () => { const n = getNode(HOME + '/status.sh'); return !!n && n.type === 'file' && /^#!/.test(n.content) && /\becho\b/.test(n.content); } },
   { ch: 10, id: 'run-script', title: 'Make it executable',
+    learning: {
+      concept: 'Linux separates a file’s contents from its permissions. A script can contain valid Bash commands but still cannot be launched directly until its execute bit is set. chmod changes permissions; +x adds execute permission without removing the existing read and write permissions. Running ./status.sh asks the current shell to execute that file from the current directory.',
+      example: 'ls -l ~/status.sh\nchmod +x ~/status.sh\ncd ~\n./status.sh',
+      practice: 'Inspect the permissions on ~/status.sh, add execute permission with chmod +x, then move to your home directory and run ./status.sh. Read the status line it prints.',
+      investigate: 'The operations team has the script, but the handover says it cannot be launched directly. Make the smallest permission change needed to run it. Do not rewrite the script or grant every user extra permissions.',
+      review: 'chmod +x FILE adds the execute bit while preserving the other permission bits. ./FILE runs a file from the current directory; the ./ makes the path explicit. A shebang such as #!/bin/bash identifies the interpreter, while execute permission allows direct launching.',
+      question: 'Which command adds execute permission to ~/status.sh?',
+      choices: [{ value: 'chmod', label: 'chmod +x ~/status.sh' }, { value: 'chown', label: 'chown +x ~/status.sh' }, { value: 'bash', label: 'bash +x ~/status.sh' }],
+      answer: 'chmod',
+      correctFeedback: 'Correct. chmod +x adds execute permission. It does not change the script contents or its owner.',
+      incorrectFeedback: 'Not quite. chmod changes file permissions. The +x mode adds the execute bit; chown changes ownership and bash runs a script through the interpreter.'
+    },
     onStart: () => { S.lastScriptOut = ''; S.lastScriptRun = ''; },
     story: "A file is not a program until it is allowed to run. Give it execute permission, then run it as `./status.sh` (the `./` means 'in this directory').",
     objective: 'Make `~/status.sh` executable and run it.',
