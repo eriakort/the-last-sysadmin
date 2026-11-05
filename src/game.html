@@ -4148,6 +4148,18 @@ const MISSIONS = [
     hints: ['The file has `#PasswordAuthentication yes`. You want an active `PasswordAuthentication no`.', 'Edit with sudo, the same way as the last ticket.', "Run: `sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config`."],
     check: () => /^PasswordAuthentication\s+no\b/m.test((getNode('/etc/ssh/sshd_config') || {}).content || '') },
   { ch: 9, id: 'ssh-restart', title: 'Apply the changes',
+    learning: {
+      concept: 'Editing /etc/ssh/sshd_config changes the file on disk, but the running SSH daemon keeps using its current configuration until it re-reads the file. A service restart stops and starts the service so it loads the updated settings. Restarting SSH does not disable the service; it applies the new rules to future connections. Keep your current session open while confirming the service returns to active.',
+      example: 'sudo systemctl restart ssh\nsystemctl status ssh',
+      practice: 'Use sudo because restarting a system service requires administrative privileges. Run the restart command, then inspect the service status. Look for an active/running state rather than assuming the command succeeded.',
+      investigate: 'You have now set PermitRootLogin no and PasswordAuthentication no. Apply both SSH hardening settings by restarting the ssh service. The simulator keeps your current session available; confirm ssh is active again before closing the incident.',
+      review: 'Configuration edits take effect when sshd reads them. Restart ssh with sudo systemctl restart ssh, then verify it with systemctl status ssh. A successful hardening change should leave the service active while enforcing the new settings for future connections.',
+      question: 'Which command restarts the SSH service so it reads the updated configuration?',
+      choices: [{ value: 'status', label: 'systemctl status ssh · inspect status' }, { value: 'restart', label: 'sudo systemctl restart ssh · restart service' }, { value: 'disable', label: 'sudo systemctl disable ssh · stop boot startup' }],
+      answer: 'restart',
+      correctFeedback: 'Correct. Restarting ssh makes the daemon read the updated configuration. Verify that the service returns to active.',
+      incorrectFeedback: 'Not quite. status only inspects the service, and disable changes boot startup behaviour. restart applies the updated SSH configuration.'
+    },
     story: "Editing the config file changes nothing until sshd re-reads it. Restart the service to apply both settings. (Your own session stays up; sshd only applies the new rules to new connections.)",
     objective: 'Restart the `ssh` service.',
     hints: ['`systemctl restart ssh` reloads the service with its new config. It needs root.', 'Confirm it came back with `systemctl status ssh`.', 'Run `sudo systemctl restart ssh`.'],
