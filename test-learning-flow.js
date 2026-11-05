@@ -169,7 +169,52 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Lock your evidence') ok('Chapter 4 answer + mastery check complete the mission');
   else fail('Chapter 4 mission did not advance after answer and mastery');
 
-  await browser.close();
+
+  // Finish Chapter 4 access-control tickets and enter Chapter 5.
+  await run('chmod 700 ~/incident');
+  await run('sudo grep \'Accepted.*jmorrow\' /var/log/auth.log');
+  await run('submit 198.51.100.200');
+  await run('sudo grep dana /var/log/auth.log');
+  await run('submit 22:16:40');
+  await run('sudo chmod a-x ~/incident/quarantine/sync_out.sh');
+  await run('sudo chown root:root ~/incident/quarantine/sync_out.sh');
+  await run('sudo gpasswd -d jmorrow sudo');
+  await run('sudo usermod -s /usr/sbin/nologin jmorrow');
+  if ((await page.textContent('#pTitle')) === 'Survey the machine') ok('Chapter 5 starts after the Chapter 4 access lockdown');
+  else fail('did not reach the first Chapter 5 mission');
+
+  const ch5Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch5Guide.includes(stage)) ok('Chapter 5 learning stage present: ' + stage);
+    else fail('Chapter 5 learning stage missing: ' + stage);
+  }
+  if (ch5Guide.includes('listening sockets') && ch5Guide.includes('0.0.0.0:8080')) ok('Chapter 5 explains socket states, ss flags and the exposed app port');
+  else fail('Chapter 5 socket explanation is incomplete');
+
+  await page.click('[data-learning-choice="numeric"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 5 mastery answer is rejected');
+  else fail('incorrect Chapter 5 mastery answer was not rejected');
+  await run('ps aux');
+  await run('submit 2447');
+  await run('sudo kill 2447');
+  await run('sudo systemctl enable halcyon');
+  await run('sudo crontab -l -u halcyon');
+  await run('submit /srv/halcyon/export/sync_out.sh');
+  await run('sudo crontab -r -u halcyon');
+  if ((await page.textContent('#pTitle')) === 'What ports are open?') ok('Chapter 5 reaches the listening-ports mission');
+  else fail('Chapter 5 did not reach the listening-ports mission');
+  await run('ss -tln');
+  await run('submit 8080');
+  if ((await page.textContent('#pTitle')) === 'What ports are open?') ok('correct Chapter 5 terminal answer cannot bypass the mastery gate');
+  else fail('Chapter 5 answer ticket advanced before mastery was proven');
+  await page.click('[data-learning-choice="listening"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. -l means listening')) ok('correct Chapter 5 mastery answer explains the listening flag');
+  else fail('correct Chapter 5 answer did not show its explanation');
+  await run('submit 8080');
+  if ((await page.textContent('#pTitle')) === 'Who is connected now?') ok('Chapter 5 answer + mastery check complete the mission');
+  else fail('Chapter 5 mission did not advance after answer and mastery');
+
+    await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
 })();
