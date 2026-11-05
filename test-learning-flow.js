@@ -188,7 +188,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     if (ch5Guide.includes(stage)) ok('Chapter 5 learning stage present: ' + stage);
     else fail('Chapter 5 learning stage missing: ' + stage);
   }
-  if (ch5Guide.includes('listening sockets') && ch5Guide.includes('0.0.0.0:8080')) ok('Chapter 5 explains socket states, ss flags and the exposed app port');
+  if (ch5Guide.includes('listening TCP sockets') && ch5Guide.includes('0.0.0.0:8080')) ok('Chapter 5 explains socket states, ss flags and the exposed app port');
   else fail('Chapter 5 socket explanation is incomplete');
 
   await page.click('[data-learning-choice="numeric"]');
