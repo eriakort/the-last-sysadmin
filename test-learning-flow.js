@@ -717,6 +717,38 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'docker rm halcyon-web-old'
   ], 'Correct. Stop the container first');
 
+  // Chapter 14: review, record and deploy the release change.
+  await checkLearningStages('What changed?', 'commit', ['git status', 'staged', 'unstaged', 'untracked']);
+  await proveAnswerMission('What changed?', 'The history', 'branch', [
+    'cd ~/halcyon-app',
+    'git status'
+  ], 'main', 'Correct. The first line says On branch');
+
+  await checkLearningStages('The history', 'status', ['git log', '--oneline', 'newest first']);
+  await proveAnswerMission('The history', 'Review the change', 'oneline', [
+    'git log --oneline'
+  ], '3', 'Correct. --oneline condenses each commit');
+
+  await checkLearningStages('Review the change', 'status', ['git diff', 'unstaged', 'removed', 'added']);
+  await proveMission('Review the change', 'Commit the change', 'diff', [
+    'git diff'
+  ], 'Correct. git diff shows the line-by-line changes');
+
+  await checkLearningStages('Commit the change', 'diff', ['git add -A', 'git commit -m', 'staged', 'snapshot']);
+  await proveMission('Commit the change', 'Cut over to 2.4.0', 'commit', [
+    'git add -A',
+    'git commit -m "Raise worker count for 2.4.0"',
+    'git log --oneline'
+  ], 'Correct. git commit -m records the staged snapshot');
+
+  await checkLearningStages('Cut over to 2.4.0', 'log', ['CURRENT', 'restart', 'release pointer', 'v2.4.0']);
+  await proveMission('Cut over to 2.4.0', 'The pager goes off', 'restart', [
+    'echo v2.4.0 > /srv/halcyon/CURRENT',
+    'sudo systemctl restart halcyon',
+    'cat /srv/halcyon/CURRENT',
+    'systemctl status halcyon'
+  ], 'Correct. Restarting Halcyon makes the service load the release');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
