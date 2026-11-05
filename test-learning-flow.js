@@ -108,8 +108,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('incorrect Chapter 3 mastery answer was not rejected');
   await run('grep -c ERROR /var/log/halcyon/app.log');
   const errorCount = await page.$eval('#tout', el => {
-    const lines = el.innerText.trim().split(/\\r?\\n/);
-    return lines.reverse().find(line => /^\\d+$/.test(line.trim()))?.trim() || '';
+    const lines = el.innerText.trim().split(/\r?\n/);
+    return lines.reverse().find(line => /^\d+$/.test(line.trim()))?.trim() || '';
   });
   if (!errorCount) fail('grep -c output did not expose the error count');
   await run('submit ' + errorCount);
