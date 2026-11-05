@@ -4165,9 +4165,21 @@ const MISSIONS = [
     hints: ['`systemctl restart ssh` reloads the service with its new config. It needs root.', 'Confirm it came back with `systemctl status ssh`.', 'Run `sudo systemctl restart ssh`.'],
     check: () => !!(S.restarted && S.restarted.ssh) && S.services.ssh.active },
   { ch: 9, id: 'handover', title: 'Leave a handover note',
+    learning: {
+      concept: 'A handover note lets the next administrator continue safely without repeating the investigation. Save it as a plain-text file in the incident folder. The shell redirection operator > creates a file or replaces its contents; >> appends text without deleting what is already there. Include the changes made, verification, and useful evidence locations, but never write passwords or private keys into a handover.',
+      example: 'echo "# Handover" > ~/incident/HANDOVER.md\necho "SSH: root login disabled; password authentication disabled." >> ~/incident/HANDOVER.md\necho "Verified: ssh service active after restart." >> ~/incident/HANDOVER.md\ncat ~/incident/HANDOVER.md',
+      practice: 'Create the note with >, add a second line with >>, then use cat to review the saved contents. Check that the note is in ~/incident and that it describes the changes and service verification clearly.',
+      investigate: 'The SSH hardening work is complete. Leave the next administrator a concise record: PermitRootLogin no, PasswordAuthentication no, and ssh restarted and active. Keep the note in ~/incident/HANDOVER.md and do not include credentials.',
+      review: 'Use > to create or replace a file and >> to append. A useful handover records what changed, what you verified, and where evidence is stored. Keep secrets out of operational notes.',
+      question: 'Which redirection operator adds text to the end of a file without replacing its existing contents?',
+      choices: [{ value: 'replace', label: '> · create or replace contents' }, { value: 'append', label: '>> · append to existing contents' }, { value: 'pipe', label: '| · send output to another command' }],
+      answer: 'append',
+      correctFeedback: 'Correct. >> appends text to the end of a file and preserves what is already there.',
+      incorrectFeedback: 'Not quite. > creates or replaces file contents. >> appends text and preserves the existing contents.'
+    },
     story: "Dana left a note for whoever came next: you. Close the loop. Write a short handover for the admin after you, saying what you changed, and save it in your incident folder.",
     objective: 'Write a few lines of notes to `~/incident/HANDOVER.md`.',
-    hints: ['`>` sends text into a file. `echo \"line\" > file` starts it; `echo \"line\" >> file` adds more lines.', 'Anything reasonable counts, as long as the file has some content. For example: `echo \"# Handover\" > ~/incident/HANDOVER.md`.', 'Run `echo \"# Handover - incident closed, see notes/\" > ~/incident/HANDOVER.md`, then add more with `>>` if you like.'],
+    hints: ['`>` sends text into a file. `echo "line" > file` starts it; `echo "line" >> file` adds more lines.', 'Anything reasonable counts, as long as the file has some content. For example: `echo "# Handover" > ~/incident/HANDOVER.md`.', 'Run `echo "# Handover - incident closed, see notes/" > ~/incident/HANDOVER.md`, then add more with `>>` if you like.'],
     check: () => { const n = getNode(HOME + '/incident/HANDOVER.md'); return !!n && n.type === 'file' && n.content.trim().length > 15; } },
 
   { ch: 10, id: 'first-script', title: 'Your first script',
