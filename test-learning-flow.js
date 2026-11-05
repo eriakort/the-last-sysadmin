@@ -524,6 +524,29 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Your first script') ok('handover note + mastery check complete Chapter 13');
   else fail('handover mission did not advance after objective and mastery');
 
+  const firstScriptGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (firstScriptGuide.includes(stage)) ok('first-script learning stage present: ' + stage);
+    else fail('first-script learning stage missing: ' + stage);
+  }
+  if (firstScriptGuide.includes('#!/bin/bash') && firstScriptGuide.includes('shebang') && firstScriptGuide.includes('printf')) ok('first-script guide explains shebang and creating a multi-line script');
+  else fail('first-script learning explanation is incomplete');
+
+  await page.click('[data-learning-choice="execute"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect first-script mastery answer is rejected');
+  else fail('incorrect first-script mastery answer was not rejected');
+  await run("printf '#!/bin/bash\\necho \"halcyon-web01 status check\"\\n' > ~/status.sh");
+  await run('cat ~/status.sh');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Your first script') ok('script creation cannot bypass the mastery gate');
+  else fail('first-script mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="interpreter"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. The shebang')) ok('correct first-script mastery answer explains interpreter selection');
+  else fail('correct first-script mastery answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Make it executable') ok('first script + mastery check complete the mission');
+  else fail('first-script mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
