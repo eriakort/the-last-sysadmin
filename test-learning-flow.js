@@ -455,6 +455,28 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Keys only, no passwords') ok('SSH root-login setting + mastery check complete the mission');
   else fail('SSH root-login mission did not advance after objective and mastery');
 
+  const sshPasswordGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (sshPasswordGuide.includes(stage)) ok('Chapter 13 SSH password-authentication learning stage present: ' + stage);
+    else fail('Chapter 13 SSH password-authentication learning stage missing: ' + stage);
+  }
+  if (sshPasswordGuide.includes('PasswordAuthentication no') && sshPasswordGuide.includes('public-key') && sshPasswordGuide.includes('sshd_config')) ok('SSH guide distinguishes password authentication from key-based access');
+  else fail('SSH password-authentication explanation is incomplete');
+
+  await page.click('[data-learning-choice="yes"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect SSH password-authentication mastery answer is rejected');
+  else fail('incorrect SSH password-authentication answer was not rejected');
+  await run("sudo sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config");
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Keys only, no passwords') ok('SSH password-authentication config cannot bypass the mastery gate');
+  else fail('SSH password-authentication mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="no"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. PasswordAuthentication no')) ok('correct SSH password-authentication mastery answer explains key-based access');
+  else fail('correct SSH password-authentication answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Apply the changes') ok('SSH password-authentication setting + mastery check complete the mission');
+  else fail('SSH password-authentication mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
