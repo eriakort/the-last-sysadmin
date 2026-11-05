@@ -4114,6 +4114,18 @@ const MISSIONS = [
     hints: ['`sudo ss -tlnp` lists listening TCP sockets with the owning process.', 'Count the LISTEN lines (ignore the header).', 'There are three: 22 (ssh), 8080 (halcyon) and 5432 (postgres, loopback only). Run `submit 3`.'],
     answer: a => a.trim() === '3' },
   { ch: 9, id: 'ssh-root', title: 'No root login over SSH',
+    learning: {
+      concept: 'SSH is a remote door into a Linux machine. The root account has unrestricted administrative power, so allowing direct root login gives attackers a high-value account to target. The sshd_config file controls the SSH server. PermitRootLogin no disables direct root logins; administrators should connect with their own named account and use sudo when they need elevated privileges. A setting must be an active, uncommented line to take effect.',
+      example: 'sudo grep -n PermitRootLogin /etc/ssh/sshd_config\nsudo sed -i \'s/^#PermitRootLogin.*/PermitRootLogin no/\' /etc/ssh/sshd_config\ngrep PermitRootLogin /etc/ssh/sshd_config',
+      practice: 'Inspect /etc/ssh/sshd_config. A line beginning with # is a comment and is not an active setting. Use sudo to edit the root-owned file, remove the comment marker, and set the value to no. Then read the file again to verify the exact active setting.',
+      investigate: 'The Halcyon server is receiving automated SSH login attempts. Keep SSH available for named administrators, but prevent anyone from signing in directly as root. Change only PermitRootLogin for this ticket; password authentication is handled by the next hardening step.',
+      review: 'PermitRootLogin controls whether the SSH server accepts direct logins to the root account. Set an active PermitRootLogin no line in /etc/ssh/sshd_config. Use sudo to edit the protected file, then verify the saved line before moving on.',
+      question: 'Which value disables direct SSH login to the root account?',
+      choices: [{ value: 'yes', label: 'yes · allow direct root login' }, { value: 'no', label: 'no · block direct root login' }, { value: 'prohibit-password', label: 'prohibit-password · block password-based root login only' }],
+      answer: 'no',
+      correctFeedback: 'Correct. PermitRootLogin no blocks direct root logins. Administrators can use their own accounts and elevate with sudo.',
+      incorrectFeedback: 'Not quite. yes permits direct root login. prohibit-password still allows root access with an authorised key. no disables direct root login.'
+    },
     story: "SSH is the main door. Two settings in /etc/ssh/sshd_config harden it. First: never allow a direct root login, so an attacker can't target the one account that can do anything. The setting is `PermitRootLogin`.",
     objective: 'Set `PermitRootLogin no` in `/etc/ssh/sshd_config`.',
     hints: ['The file has a commented line `#PermitRootLogin prohibit-password`. You need an active line reading `PermitRootLogin no`.', 'The file is owned by root, so edit it with sudo. `sed -i` edits a file in place.', "Run: `sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config`, then `grep PermitRootLogin /etc/ssh/sshd_config`."],
