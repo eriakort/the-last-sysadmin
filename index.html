@@ -4043,6 +4043,18 @@ const MISSIONS = [
     hints: ['The command is `apt update` (or `apt-get update`). It needs root.', 'It talks to the package servers, so it has to run as root.', 'Run `sudo apt update`.'],
     check: () => !!S.aptUpdated },
   { ch: 8, id: 'apt-search', title: 'Find the tool',
+    learning: {
+      concept: 'Package managers use a package index to find software. The apt search command looks through package names and descriptions for a word or phrase. It is a read-only search: it does not install, remove or upgrade anything, and it does not need sudo. Search results can include several related packages, so read the description to identify the tool you need.',
+      example: 'apt search fail2ban\\napt show fail2ban',
+      practice: 'Search is like looking up a product in a catalogue. The search term can match a package name or words in its description. apt show then gives details about one package, including its description, version and dependencies. Neither command changes installed software.',
+      investigate: 'The incident plan names fail2ban, but before installing it you must confirm that the package exists in the refreshed catalogue and understand what it does. Search for fail2ban and inspect the matching result.',
+      review: 'Use apt search WORD to find packages by name or description. It is safe to run without sudo because it only reads the local package index. Use apt show PACKAGE for details; use apt install only when you are ready to add software.',
+      question: 'What does apt search fail2ban do?',
+      choices: [{ value: 'install', label: 'Downloads and installs fail2ban' }, { value: 'search', label: 'Finds packages whose names or descriptions match fail2ban' }, { value: 'upgrade', label: 'Upgrades installed packages' }],
+      answer: 'search',
+      correctFeedback: 'Correct. apt search looks for matching package names and descriptions. It does not install or upgrade software.',
+      incorrectFeedback: 'Not quite. Search only finds matching packages. Installation and upgrades are separate commands.'
+    },
     story: "Before installing something, find its exact package name. `apt search` looks through the package names and descriptions.",
     objective: 'Search the packages for `fail2ban`.',
     hints: ['`apt search TERM` (or `apt-cache search TERM`) searches names and descriptions.', 'Searching does not change anything, so no sudo is needed.', 'Run `apt search fail2ban`.'],
