@@ -15,15 +15,37 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
-      - name: Unit tests (pure helpers + mission checkers)
-        run: npm test
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Build index.html and service-worker.js from src/
-        run: npm run build
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
 
-      - name: Verify the built page (features present + scripts parse)
-        run: npm run verify
+      - name: Linux build, unit tests, verification, and generated-file check
+        run: npm run check
 
-      - name: Staleness guard — committed files must match a fresh build
-        run: git diff --exit-code -- index.html service-worker.js
+      - name: Linux browser smoke test
+        run: npm run smoke
+
+      - name: Linux classroom UI tests
+        run: npm run test:ui
+
+      - name: Linux authored-mission playback tests
+        run: npm run test:play
+
+      - name: Build Network Trainer
+        run: npm run build:net
+
+      - name: Network Trainer generated-file check
+        run: git diff --exit-code -- network-trainer/index.html
+
+      - name: Network Trainer engine, CLI, mission, scenario, and classroom tests
+        run: npm --prefix network-trainer test
+
+      - name: Network Trainer browser UI tests
+        run: npm --prefix network-trainer run test:ui
+
+      - name: Verify Network Trainer generated file remains current
+        run: git diff --exit-code -- network-trainer/index.html
