@@ -294,7 +294,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await run('tar -xzf /mnt/backups/halcyon-config.tar.gz -C ~/restore-test');
   await run('find ~/restore-test');
   await run('gzip ~/incident/logs/app.log');
-  await run("echo '0 2 * * * tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config' | sudo crontab -u root - -");
+  await run("echo '0 2 * * * tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config' | sudo crontab -u root -");
   if ((await page.textContent('#pTitle')) === 'Refresh the package list') ok('Chapter 8 starts after the Chapter 7 backup and restore workflow');
   else fail('did not reach the first Chapter 8 mission');
 
