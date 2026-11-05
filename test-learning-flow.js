@@ -749,6 +749,40 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'systemctl status halcyon'
   ], 'Correct. Restarting Halcyon makes the service load the release');
 
+
+  // Chapter 16: a complete service-outage investigation and recovery.
+  await checkLearningStages('The pager goes off', 'enabled', ['systemctl status halcyon', 'Active:', 'enabled']);
+  await proveAnswerMission('The pager goes off', 'Why did it die?', 'inactive', [
+    'systemctl status halcyon'
+  ], 'inactive', 'Correct. inactive means the service is not currently running');
+
+  await checkLearningStages('Why did it die?', 'workers', ['journalctl -u halcyon', 'FATAL', 'count']);
+  await proveAnswerMission('Why did it die?', 'Confirm it in the config', 'count', [
+    'journalctl -u halcyon'
+  ], 'count', 'Correct. The worker count is zero');
+
+  await checkLearningStages('Confirm it in the config', '4', ['grep count', 'count = 0', 'verify']);
+  await proveAnswerMission('Confirm it in the config', 'Fix the config', '0', [
+    'grep count /srv/halcyon/releases/v2.4.0/config/app.conf'
+  ], '0', 'Correct. count = 0 matches the fatal error');
+
+  await checkLearningStages('Fix the config', 'extended', ['sed -i', 'in place', 'grep count']);
+  await proveMission('Fix the config', 'Bring it back', 'inplace', [
+    "sed -i 's/count = 0/count = 4/' /srv/halcyon/releases/v2.4.0/config/app.conf",
+    'grep count /srv/halcyon/releases/v2.4.0/config/app.conf'
+  ], 'Correct. -i writes the substitution back');
+
+  await checkLearningStages('Bring it back', 'journal', ['systemctl restart halcyon', 'systemctl is-active', 'active']);
+  await proveMission('Bring it back', 'Confirm it is serving', 'restart', [
+    'sudo systemctl restart halcyon',
+    'systemctl is-active halcyon'
+  ], 'Correct. Restarting Halcyon makes the process load');
+
+  await checkLearningStages('Confirm it is serving', '22', ['ss -tlnp', 'LISTEN', '8080']);
+  await proveAnswerMission('Confirm it is serving', 'Everything is slow', '8080', [
+    'sudo ss -tlnp'
+  ], '8080', 'Correct. Halcyon is listening on TCP port 8080');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
