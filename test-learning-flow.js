@@ -432,6 +432,29 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'No root login over SSH') ok('port inventory + mastery check complete the mission');
   else fail('port-audit mission did not advance after objective and mastery');
 
+  
+  const sshRootGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (sshRootGuide.includes(stage)) ok('Chapter 13 SSH root-login learning stage present: ' + stage);
+    else fail('Chapter 13 SSH root-login learning stage missing: ' + stage);
+  }
+  if (sshRootGuide.includes('PermitRootLogin no') && sshRootGuide.includes('sshd_config') && sshRootGuide.includes('sudo')) ok('Chapter 13 explains the SSH root-login setting and protected config file');
+  else fail('Chapter 13 SSH root-login explanation is incomplete');
+
+  await page.click('[data-learning-choice="yes"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect SSH root-login mastery answer is rejected');
+  else fail('incorrect SSH root-login mastery answer was not rejected');
+  await run("sudo sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config");
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'No root login over SSH') ok('SSH root-login config cannot bypass the mastery gate');
+  else fail('SSH root-login mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="no"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. PermitRootLogin no')) ok('correct SSH root-login mastery answer explains the security outcome');
+  else fail('correct SSH root-login answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Keys only, no passwords') ok('SSH root-login setting + mastery check complete the mission');
+  else fail('SSH root-login mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
