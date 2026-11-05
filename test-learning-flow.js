@@ -342,6 +342,29 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Install fail2ban') ok('package search + mastery check complete the mission');
   else fail('package-search mission did not advance after objective and mastery');
 
+
+  const aptInstallGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (aptInstallGuide.includes(stage)) ok('Chapter 10 package-install learning stage present: ' + stage);
+    else fail('Chapter 10 package-install learning stage missing: ' + stage);
+  }
+  if (aptInstallGuide.includes('apt install') && aptInstallGuide.includes('sudo') && aptInstallGuide.includes('starting the service')) ok('Chapter 10 distinguishes package installation from service startup');
+  else fail('Chapter 10 installation explanation is incomplete');
+
+  await page.click('[data-learning-choice="start"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect package-install mastery answer is rejected');
+  else fail('incorrect package-install mastery answer was not rejected');
+  await run('sudo apt install -y fail2ban');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Install fail2ban') ok('package installation cannot bypass the mastery gate');
+  else fail('package-install mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="install"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. apt install')) ok('correct package-install mastery answer distinguishes installation from service management');
+  else fail('correct package-install answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Start it, and keep it started') ok('package installation + mastery check complete the mission');
+  else fail('package-install mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
