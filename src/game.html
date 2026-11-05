@@ -3890,6 +3890,18 @@ const MISSIONS = [
     check: () => !S.crontabs.halcyon },
 
   { ch: 5, id: 'listening', title: 'What ports are open?',
+    learning: {
+      concept: 'A network socket is an endpoint for communication. A server that is listening has opened a port and is waiting for incoming connections. The ss command displays socket information: -t selects TCP, -l keeps listening sockets, -n shows numeric addresses and ports, and -p shows the owning process (which requires root for other users’ processes). A listening port is not the same as an established connection.',
+      example: 'ss -tln       → listening TCP sockets\nsudo ss -tlnp  → sockets plus owning process\n0.0.0.0:8080  → port 8080 on every IPv4 interface',
+      practice: 'Run ss -tln to list listening TCP ports. Then use sudo ss -tlnp to match the halcyon-worker process to its port. Submit the port number shown by the terminal.',
+      investigate: 'The unwanted address is still connected to Halcyon. Before blocking it, establish which service is exposed and which port it uses. Separate listening sockets (services waiting for traffic) from established connections (peers already communicating).',
+      review: 'ss -tln lists listening TCP sockets with numeric ports. Add -p to show process details; use sudo to see processes owned by other accounts. The local address 0.0.0.0 means the service listens on all IPv4 interfaces. Here the app listens on port 8080.',
+      question: 'Which ss option filters the output to sockets that are waiting for incoming connections?',
+      choices: [{ value: 'numeric', label: '-n (numeric addresses)' }, { value: 'listening', label: '-l (listening sockets)' }, { value: 'process', label: '-p (process details)' }],
+      answer: 'listening',
+      correctFeedback: 'Correct. -l means listening: it shows sockets waiting for incoming connections. -n changes address formatting, while -p adds process information.',
+      incorrectFeedback: 'Not quite. Think about the letter that stands for “listening”; -n is numeric and -p is process information.'
+    },
     story: "The schedule is dead, but one loose end remains: that IP address. Networking first. See what this server is listening for. `ss` lists sockets: `-t` for TCP, `-l` for listening, `-n` for numeric ports, `-p` for the owning process (that one needs root).",
     objective: 'List the listening TCP ports. Which port is the halcyon app listening on? Answer with `submit PORT`.',
     hints: ['`ss -tln` lists listening TCP sockets with numeric ports.', 'Add `-p` with sudo to see which process owns each port: `sudo ss -tlnp`.', 'The halcyon-worker line listens on 0.0.0.0:8080. Run `submit 8080`.'],
