@@ -2529,7 +2529,7 @@ CMDS.check = (a, ctx) => {
     return 0;
   }
   if (m.check) {
-    if (m.check()) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
+    if (m.check() && (!m.learning || learningMasteryPassed)) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
     let extra = '';
     const fixed = repairWorld();
     if (fixed) extra += `<br><br>&#9888; The server was missing ${fixed} file${fixed === 1 ? '' : 's'} the game needs &mdash; something got deleted earlier. I restored ${fixed === 1 ? 'it' : 'them'} to the original state, so try the step again.`;
