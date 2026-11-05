@@ -183,6 +183,16 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Survey the machine') ok('Chapter 5 starts after the Chapter 4 access lockdown');
   else fail('did not reach the first Chapter 5 mission');
 
+  await run('ps aux');
+  await run('submit 2447');
+  await run('sudo kill 2447');
+  await run('sudo systemctl enable halcyon');
+  await run('sudo crontab -l -u halcyon');
+  await run('submit /srv/halcyon/export/sync_out.sh');
+  await run('sudo crontab -r -u halcyon');
+  if ((await page.textContent('#pTitle')) === 'What ports are open?') ok('Chapter 5 reaches the listening-ports mission');
+  else fail('Chapter 5 did not reach the listening-ports mission');
+
   const ch5Guide = await page.textContent('#learningPath').catch(() => '');
   for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
     if (ch5Guide.includes(stage)) ok('Chapter 5 learning stage present: ' + stage);
@@ -194,15 +204,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('[data-learning-choice="numeric"]');
   if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 5 mastery answer is rejected');
   else fail('incorrect Chapter 5 mastery answer was not rejected');
-  await run('ps aux');
-  await run('submit 2447');
-  await run('sudo kill 2447');
-  await run('sudo systemctl enable halcyon');
-  await run('sudo crontab -l -u halcyon');
-  await run('submit /srv/halcyon/export/sync_out.sh');
-  await run('sudo crontab -r -u halcyon');
-  if ((await page.textContent('#pTitle')) === 'What ports are open?') ok('Chapter 5 reaches the listening-ports mission');
-  else fail('Chapter 5 did not reach the listening-ports mission');
+
   await run('ss -tln');
   await run('submit 8080');
   if ((await page.textContent('#pTitle')) === 'What ports are open?') ok('correct Chapter 5 terminal answer cannot bypass the mastery gate');
