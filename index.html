@@ -4799,7 +4799,7 @@ function afterCommand() {
   if (pendingComplete) { pendingComplete = false; completeMission(); return; }
   if (m.fail) { const f = m.fail(); if (f && !S.nudged.includes('F:' + f)) { S.nudged.push('F:' + f); emitSys('⚠ ' + md(f), 'warn'); } }
   if (m.nudge) { const n = m.nudge(); if (n && !S.nudged.includes(n)) { S.nudged.push(n); emitSys(md(n), 'nudge'); } }
-  if (m.check && m.check()) completeMission();
+  if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
 const rewardFor = m => Math.max(25, 100 - 25 * (S.hints[m.id] || 0));
 function fmtDur(ms) {
