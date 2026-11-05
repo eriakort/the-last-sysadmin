@@ -365,6 +365,28 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Start it, and keep it started') ok('package installation + mastery check complete the mission');
   else fail('package-install mission did not advance after objective and mastery');
 
+  const serviceGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (serviceGuide.includes(stage)) ok('Chapter 10 service-management learning stage present: ' + stage);
+    else fail('Chapter 10 service-management learning stage missing: ' + stage);
+  }
+  if (serviceGuide.includes('systemctl enable --now') && serviceGuide.includes('start') && serviceGuide.includes('boot')) ok('service guide explains immediate startup and boot enablement');
+  else fail('service-management explanation is incomplete');
+
+  await page.click('[data-learning-choice="start"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect service-management mastery answer is rejected');
+  else fail('incorrect service-management answer was not rejected');
+  await run('sudo systemctl enable --now fail2ban');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Start it, and keep it started') ok('service startup cannot bypass the mastery gate');
+  else fail('service mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="both"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct.')) ok('correct service-management mastery answer explains both actions');
+  else fail('correct service-management answer did not show success feedback');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Confirm the version') ok('service objective + mastery check complete the mission');
+  else fail('service mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
