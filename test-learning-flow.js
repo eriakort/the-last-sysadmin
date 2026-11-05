@@ -320,6 +320,28 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Find the tool') ok('Chapter 8 package-index update + mastery check complete the mission');
   else fail('Chapter 8 mission did not advance after objective and mastery');
 
+  const aptSearchGuide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (aptSearchGuide.includes(stage)) ok('Chapter 9 package-search learning stage present: ' + stage);
+    else fail('Chapter 9 package-search learning stage missing: ' + stage);
+  }
+  if (aptSearchGuide.includes('apt search') && aptSearchGuide.includes('read-only') && aptSearchGuide.includes('apt show')) ok('Chapter 9 explains package search, package details and read-only behaviour');
+  else fail('Chapter 9 package-search explanation is incomplete');
+
+  await page.click('[data-learning-choice="install"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect package-search mastery answer is rejected');
+  else fail('incorrect package-search mastery answer was not rejected');
+  await run('apt search fail2ban');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Find the tool') ok('package search cannot bypass the mastery gate');
+  else fail('package-search mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="search"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. apt search')) ok('correct package-search mastery answer explains read-only search');
+  else fail('correct package-search answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Install fail2ban') ok('package search + mastery check complete the mission');
+  else fail('package-search mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
