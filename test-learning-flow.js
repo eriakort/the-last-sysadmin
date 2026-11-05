@@ -632,6 +632,50 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     "printf '[Unit]\\nDescription=Run Halcyon backup daily\\n[Timer]\\nOnCalendar=daily\\nPersistent=true\\n[Install]\\nWantedBy=timers.target\\n' | sudo tee /etc/systemd/system/halcyon-backup.timer"
   ], 'Correct. OnCalendar defines when the timer');
 
+
+  // Medium batch 2: finish systemd timer migration and introduce access-log analysis.
+  await checkLearningStages('Tell systemd to look', 'restart', ['daemon-reload', 'in-memory', 'does not start']);
+  await proveMission('Tell systemd to look', 'Start the timer', 'reload', [
+    'sudo systemctl daemon-reload',
+    'systemctl list-timers'
+  ], 'Correct. daemon-reload makes systemd reread unit files');
+
+  await checkLearningStages('Start the timer', 'enable', ['active', 'enabled', 'list-timers']);
+  await proveMission('Start the timer', 'Retire the old cron job', 'enable-now', [
+    'sudo systemctl enable --now halcyon-backup.timer',
+    'systemctl list-timers'
+  ], 'Correct. enable --now configures startup at boot');
+
+  await checkLearningStages('Retire the old cron job', 'list', ['crontab -l', 'crontab -r', 'twice']);
+  await proveMission('Retire the old cron job', 'What are the servers saying?', 'remove', [
+    'sudo crontab -l -u root',
+    'sudo crontab -r -u root',
+    'sudo crontab -l -u root'
+  ], 'Correct. -r removes the selected user');
+
+  const proveAnswerMission = async (title, nextTitle, correct, commands, answer, feedback) => {
+    for (const command of commands) await run(command);
+    await run('submit ' + answer);
+    if ((await page.textContent('#pTitle')) === title) ok(title + ' answer cannot bypass mastery');
+    else fail(title + ' advanced before mastery was proven');
+    await page.click('[data-learning-choice="' + correct + '"]');
+    if ((await page.textContent('#learningFeedback')).includes(feedback)) ok(title + ' correct mastery answer explains the log format');
+    else fail(title + ' correct mastery feedback missing');
+    await run('submit ' + answer);
+    if ((await page.textContent('#pTitle')) === nextTitle) ok(title + ' answer + mastery complete the mission');
+    else fail(title + ' did not advance to ' + nextTitle);
+  };
+
+  await checkLearningStages('What are the servers saying?', 'field7', ['field 9', 'uniq -c', 'sort -rn', 'HTTP status']);
+  await proveAnswerMission('What are the servers saying?', 'The busiest endpoint', 'field9', [
+    "awk '{print $9}' /var/log/halcyon/access.log | sort | uniq -c | sort -rn"
+  ], '200', 'Correct. The HTTP status code is the ninth field');
+
+  await checkLearningStages('The busiest endpoint', 'field9', ['field 7', '/export/customers.csv', 'head', 'sort -rn']);
+  await proveAnswerMission('The busiest endpoint', 'How many visitors?', 'field7', [
+    "awk '{print $7}' /var/log/halcyon/access.log | grep -v '/export/customers.csv' | sort | uniq -c | sort -rn | head"
+  ], '/api/shipments', 'Correct. Field 7 contains the requested path');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
