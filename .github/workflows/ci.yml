@@ -35,6 +35,9 @@ jobs:
       - name: Linux authored-mission playback tests
         run: npm run test:play
 
+      - name: Linux guided-learning pilot tests
+        run: npm run test:learning
+
       - name: Build Network Trainer
         run: npm run build:net
 
