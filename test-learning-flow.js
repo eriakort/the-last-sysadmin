@@ -123,6 +123,52 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Who is hitting us?') ok('Chapter 3 answer + mastery check complete the mission');
   else fail('Chapter 3 mission did not advance after answer and mastery');
 
+  // Finish Chapter 3's investigation tickets and enter Chapter 4.
+  await run("awk '{print $1}' /var/log/halcyon/access.log | sort | uniq -c | sort -rn | head -3");
+  await run('submit 203.0.113.77');
+  if ((await page.textContent('#pTitle')) === 'What did they take?') ok('Chapter 3 identifies the busiest visitor');
+  else fail('Chapter 3 visitor investigation did not complete');
+  await run("grep 203.0.113.77 /var/log/halcyon/access.log | awk '{print $7}' | sort | uniq -c");
+  await run('submit /customers.csv');
+  if ((await page.textContent('#pTitle')) === 'Save the evidence') ok('Chapter 3 identifies the repeatedly requested file');
+  else fail('Chapter 3 requested-file investigation did not complete');
+  await run('grep 203.0.113.77 /var/log/halcyon/access.log > ~/incident/notes/evidence.txt');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'ROOTCAUSE') ok('Chapter 3 preserves the access-log evidence');
+  else fail('Chapter 3 evidence preservation did not complete');
+  await run('grep -rl ROOTCAUSE /srv/halcyon');
+  await run('cat /srv/halcyon/releases/v2.3.1/.dana/draft-report.md');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Who can log in?') ok('Chapter 4 starts with Who can log in?');
+  else fail('did not reach the first Chapter 4 mission');
+
+  const ch4Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch4Guide.includes(stage)) ok('Chapter 4 learning stage present: ' + stage);
+    else fail('Chapter 4 learning stage missing: ' + stage);
+  }
+  if (ch4Guide.includes('seven colon-separated fields') && ch4Guide.includes('/usr/sbin/nologin')) ok('Chapter 4 explains passwd fields and non-login shells');
+  else fail('Chapter 4 account explanation is incomplete');
+
+  await page.click('[data-learning-choice="password"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 4 mastery answer is rejected');
+  else fail('incorrect Chapter 4 mastery answer was not rejected');
+  await run('grep -c \'/bin/bash$\' /etc/passwd');
+  const bashCount = await page.$eval('#tout', el => {
+    const lines = el.innerText.trim().split(/\\r?\\n/);
+    return lines.reverse().find(line => /^\\d+$/.test(line.trim()))?.trim() || '';
+  });
+  if (bashCount !== '4') fail('Chapter 4 grep count should identify four interactive-shell accounts, got ' + bashCount);
+  await run('submit ' + bashCount);
+  if ((await page.textContent('#pTitle')) === 'Who can log in?') ok('correct Chapter 4 answer cannot bypass the mastery gate');
+  else fail('Chapter 4 answer ticket advanced before mastery was proven');
+  await page.click('[data-learning-choice="shell"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. The seventh field')) ok('correct Chapter 4 mastery answer explains the login-shell field');
+  else fail('correct Chapter 4 answer did not show its explanation');
+  await run('submit ' + bashCount);
+  if ((await page.textContent('#pTitle')) === 'Lock your evidence') ok('Chapter 4 answer + mastery check complete the mission');
+  else fail('Chapter 4 mission did not advance after answer and mastery');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
