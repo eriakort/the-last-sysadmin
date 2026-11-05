@@ -288,6 +288,38 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Look inside the archive') ok('Chapter 7 archive + mastery check complete the mission');
   else fail('Chapter 7 mission did not advance after archive and mastery');
 
+  // Complete Chapter 7's backup workflow and enter Chapter 8 package management.
+  await run('tar -tzf /mnt/backups/halcyon-config.tar.gz');
+  await run('mkdir ~/restore-test');
+  await run('tar -xzf /mnt/backups/halcyon-config.tar.gz -C ~/restore-test');
+  await run('find ~/restore-test');
+  await run('gzip ~/incident/logs/app.log');
+  await run("echo '0 2 * * * tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config' | sudo crontab -u root -");
+  if ((await page.textContent('#pTitle')) === 'Refresh the package list') ok('Chapter 8 starts after the Chapter 7 backup and restore workflow');
+  else fail('did not reach the first Chapter 8 mission');
+
+  const ch8Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch8Guide.includes(stage)) ok('Chapter 8 learning stage present: ' + stage);
+    else fail('Chapter 8 learning stage missing: ' + stage);
+  }
+  if (ch8Guide.includes('package index') && ch8Guide.includes('apt update') && ch8Guide.includes('apt upgrade')) ok('Chapter 8 distinguishes refreshing package lists from upgrading software');
+  else fail('Chapter 8 package-management explanation is incomplete');
+
+  await page.click('[data-learning-choice="upgrade"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 8 mastery answer is rejected');
+  else fail('incorrect Chapter 8 mastery answer was not rejected');
+  await run('sudo apt update');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Refresh the package list') ok('Chapter 8 package-index update cannot bypass the mastery gate');
+  else fail('Chapter 8 mission advanced before mastery was proven');
+  await page.click('[data-learning-choice="refresh"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. apt update refreshes')) ok('correct Chapter 8 mastery answer explains package-index refresh');
+  else fail('correct Chapter 8 answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Find the tool') ok('Chapter 8 package-index update + mastery check complete the mission');
+  else fail('Chapter 8 mission did not advance after objective and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');

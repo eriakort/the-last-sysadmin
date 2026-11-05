@@ -4011,6 +4011,18 @@ const MISSIONS = [
     check: () => { const c = S.crontabs.root || ''; return /tar/.test(c) && /backups/.test(c); } },
 
   { ch: 8, id: 'apt-update', title: 'Refresh the package list',
+    learning: {
+      concept: 'Linux distributions keep a local package index: a catalogue of package names, versions, descriptions and download locations. The apt update command downloads the latest catalogue from the configured repositories. It does not install packages or upgrade existing software. Use sudo because it updates system package metadata. The separate apt upgrade command installs newer versions of packages already on the system.',
+      example: 'sudo apt update\napt search fail2ban\nsudo apt install -y fail2ban',
+      practice: 'Think of the package index as a shop catalogue. apt update refreshes the catalogue; apt search looks through it; apt install downloads and installs a selected package. Refreshing the catalogue is safe to do before deciding what to install.',
+      investigate: 'The Halcyon server is receiving repeated SSH login attempts. The incident plan calls for fail2ban, but first refresh the package catalogue so apt can find the current package information. Do not install or upgrade anything yet.',
+      review: 'apt update refreshes the local package lists from configured repositories. It does not itself change installed software. Run it before searching for or installing a package; use apt upgrade when you intentionally want to upgrade installed packages.',
+      question: 'What does sudo apt update do?',
+      choices: [{ value: 'upgrade', label: 'Installs newer versions of installed packages' }, { value: 'refresh', label: 'Refreshes the local package index' }, { value: 'install', label: 'Installs every available package' }],
+      answer: 'refresh',
+      correctFeedback: 'Correct. apt update refreshes the package catalogue. It does not install or upgrade software; that is a separate step.',
+      incorrectFeedback: 'Not quite. apt update refreshes package information. apt upgrade changes installed packages, and apt install adds a selected package.'
+    },
     story: "The auth log is full of brute-force SSH attempts from bots. There is a standard tool that bans an address after repeated failures: fail2ban. To install it, first refresh the list of available packages so you get the current version.",
     objective: 'Update the package index with apt.',
     hints: ['The command is `apt update` (or `apt-get update`). It needs root.', 'It talks to the package servers, so it has to run as root.', 'Run `sudo apt update`.'],
