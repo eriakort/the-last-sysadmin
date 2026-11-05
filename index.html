@@ -79,6 +79,23 @@ button{font:inherit;cursor:pointer}
 .ticket{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:2px}
 .panel h1{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.15;margin:6px 0 0;text-wrap:balance}
 .story{margin:0;color:var(--ink);opacity:.86;max-width:60ch}
+.learning{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.learning h2{font:600 16px var(--f-display);margin:0;color:var(--amber)}
+.learning p{margin:4px 0 0;font-size:13.5px;color:var(--ink)}
+.learning-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.learning-card{background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:9px}
+.learning-card b{font:600 10px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.learning-example{font:12px/1.65 var(--f-mono);white-space:pre-line;color:var(--green);margin-top:5px}
+.learning-question{border-top:1px solid var(--line);padding-top:10px}
+.learning-choices{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.learn-choice{border:1px solid var(--line);border-radius:5px;background:var(--raise);color:var(--ink);padding:7px 12px;font:12px var(--f-mono);cursor:pointer}
+.learn-choice:hover{border-color:var(--blue)}
+.learn-choice.correct{border-color:var(--green);background:color-mix(in srgb,var(--green) 12%,var(--raise))}
+.learn-choice.wrong{border-color:var(--red)}
+.learning-feedback{font-size:12px;color:var(--muted);min-height:18px;margin-top:7px}
+.learning-feedback.ok{color:var(--green)}
+.learning-feedback.bad{color:var(--red)}
+@media(max-width:700px){.learning-grid{grid-template-columns:1fr}}
 .label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
 .label span{letter-spacing:.04em;text-transform:none;font-weight:400}
 .objective{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:14px 14px 12px}
@@ -280,6 +297,7 @@ body.practicing{padding-top:40px}
         <h1 id="pTitle"></h1>
       </div>
       <p class="story" id="pStory"></p>
+      <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
       <div class="objective">
         <div class="label">Objective</div>
         <p id="pObj"></p>
@@ -2518,6 +2536,7 @@ CMDS.check = (a, ctx) => {
     if (FLAG_DIAG[m.id]) extra += '<br><br>' + FLAG_DIAG[m.id];
     if (m.fail) { const f = m.fail(); if (f) extra += '<br><br>&#9888; ' + md(f); }
     if (m.nudge) { const nu = m.nudge(); if (nu) extra += '<br><br>' + md(nu); }
+    if (m.learning && !firstLoginMasteryPassed) extra += '<br><br>Complete the understanding check in the Chapter learning guide on the left, then run <code>check</code> again.';
     if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, <code>repair</code> restores any game files you may have deleted, and <code>hint</code> gives the next step.";
     emitSys(head + extra, 'hint');
     return 0;
@@ -3680,12 +3699,23 @@ const fileContent = p => { const n = getNode(p); return n && n.type === 'file' ?
 const anyFileWith = content => { let found = false; walkAll('/', S.fs, (p, n) => { if (n.type === 'file' && n.content === content) found = true; }); return found; };
 const coresLeft = () => { let c = 0; walkAll('/tmp', getNode('/tmp'), (p, n) => { if (n.type === 'file' && p.endsWith('.core')) c++; }); return c; };
 
+let firstLoginMasteryPassed = false;
 const MISSIONS = [
   { ch: 0, id: 'bearings', title: 'Get your bearings',
+    learning: {
+      concept: 'A shell is your text-based control point. Every command runs as a user and from a current working directory. Knowing both helps you avoid changing the wrong files or using the wrong level of access.',
+      example: 'whoami  →  halcyon\npwd     →  /home/halcyon',
+      practice: 'Use the terminal on the right to run the two commands in the objective. Read each result before moving on.',
+      investigate: 'Priya asks you to inspect a log file. Before touching it, confirm which account you are using and where your shell is starting from. That context can change what you can access and which relative paths will work.',
+      review: 'whoami answers “which user am I?” · pwd answers “which directory am I in?” The first is identity; the second is location.',
+      question: 'Which command prints the absolute path of your current directory?',
+      choices: [{ value: 'whoami', label: 'whoami' }, { value: 'pwd', label: 'pwd' }, { value: 'ls', label: 'ls' }],
+      answer: 'pwd'
+    },
     story: "08:52, your first morning at Halcyon Freight. The web server crashed overnight, and Dana, the admin who ran it, left on Thursday without a word. Priya, the CTO, hands you a login. \"Before you touch anything,\" she says, \"find out where you are.\"",
     objective: 'Run `whoami` to see which user you are, and `pwd` to see which directory you are in.',
     hints: ['Type a command at the prompt and press Enter.', '`whoami` prints your user name. `pwd` means "print working directory".', 'Type `whoami`, press Enter, then type `pwd` and press Enter.'],
-    check: () => S.cmdsM.includes('whoami') && S.cmdsM.includes('pwd') },
+    check: () => S.cmdsM.includes('whoami') && S.cmdsM.includes('pwd') && firstLoginMasteryPassed },
   { ch: 0, id: 'handover', title: 'The handover note',
     story: "Priya says Dana left a note for whoever came next, somewhere in your home directory. A plain `ls` doesn't show it.",
     objective: 'Find the hidden file in your home directory and read it.',
@@ -4844,6 +4874,7 @@ function completeMission() {
 }
 const ticketId = i => `INC-1025-${pad(i + 1)}`;
 function startMission() {
+  firstLoginMasteryPassed = false;
   S.readM = []; S.cmdsM = []; S.nudged = [];
   const m = MISSIONS[S.mission], prev = MISSIONS[S.mission - 1];
   if (m.onStart) m.onStart();
@@ -5008,13 +5039,14 @@ function render() {
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
   if (RACE.active) {
+    show('#learningPath', false);
     renderBoard();
     if (RACE.finished) {
       $('#pChapter').textContent = 'Race';
       $('#pTicket').textContent = RACE.scenario ? RACE.scenario.name : '';
       $('#pTitle').textContent = 'Incident resolved ✓';
       $('#pStory').innerHTML = md(`Your time: **${fmtDur(RACE.myFinishMs)}**. Final standings are below.`);
-      show('.objective', false); show('.hints', false); show('#finale', false);
+      show('.objective', false); show('.hints', false); show('#finale', false); show('#learningPath', false);
       return;
     }
   }
@@ -5023,13 +5055,37 @@ function render() {
     $('#pTicket').textContent = 'Case file: open';
     $('#pTitle').textContent = FINALE.title;
     $('#pStory').textContent = FINALE.story;
-    show('.objective', false); show('.hints', false); show('#finale', true);
+    show('.objective', false); show('.hints', false); show('#finale', true); show('#learningPath', false);
     fin.innerHTML = `<div><div class="label">Final score</div><div class="big">${S.xp} XP</div><div class="ticket">Rank: ${rankName()} · ${Object.values(S.hints).reduce((x, y) => x + y, 0)} hints used</div></div>
       <div class="next"><div class="label">Coming next</div><b>${esc(FINALE.next)}</b><p>${esc(FINALE.nextText)}</p></div>`;
     return;
   }
   show('.objective', true); show('.hints', true); show('#finale', false);
   const m = MISSIONS[S.mission], used = S.hints[m.id] || 0;
+  const guide = $('#learningPath');
+  show('#learningPath', !!m.learning);
+  if (m.learning) {
+    const choices = m.learning.choices.map(c => '<button type="button" class="learn-choice" data-learning-choice="' + c.value + '">' + c.label + '</button>').join('');
+    guide.innerHTML = '<h2>Learn the basics · then prove it</h2>' +
+      '<div class="learning-card"><b>Learn</b><p>' + m.learning.concept + '</p></div>' +
+      '<div class="learning-grid"><div class="learning-card"><b>See it in action</b><div class="learning-example">' + m.learning.example + '</div></div>' +
+      '<div class="learning-card"><b>Investigate</b><p>' + m.learning.investigate + '</p></div></div>' +
+      '<div class="learning-card"><b>Practise</b><p>' + m.learning.practice + '</p></div>' +
+      '<div class="learning-question"><b>Prove your understanding</b><p>' + m.learning.question + '</p><div class="learning-choices">' + choices + '</div>' +
+      '<div class="learning-feedback" id="learningFeedback" role="status" aria-live="polite">' + (firstLoginMasteryPassed ? 'Correct — you can now complete the mission.' : 'Choose an answer to check your understanding.') + '</div></div>' +
+      '<div class="learning-card"><b>Review</b><p>' + m.learning.review + '</p></div>';
+    guide.querySelectorAll('[data-learning-choice]').forEach(button => button.addEventListener('click', () => {
+      const correct = button.dataset.learningChoice === m.learning.answer;
+      guide.querySelectorAll('[data-learning-choice]').forEach(choice => {
+        choice.classList.toggle('correct', correct && choice === button);
+        choice.classList.toggle('wrong', !correct && choice === button);
+      });
+      firstLoginMasteryPassed = correct;
+      const feedback = $('#learningFeedback');
+      feedback.className = 'learning-feedback ' + (correct ? 'ok' : 'bad');
+      feedback.textContent = correct ? 'Correct. pwd prints the absolute path of your current working directory. Run check in the terminal when you have also used whoami and pwd.' : 'Not quite. Which command prints the directory path, rather than your username or the directory contents?';
+    }));
+  }
   $('#pChapter').textContent = `${CHAPTERS[m.ch].label} · ${CHAPTERS[m.ch].name}`;
   $('#pTicket').textContent = `${ticketId(S.mission)} · reward ${rewardFor(m)} XP`;
   $('#pTitle').textContent = m.title;
