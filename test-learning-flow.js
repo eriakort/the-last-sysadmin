@@ -258,6 +258,36 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'Make a mountpoint') ok('Chapter 6 answer + mastery check complete the mission');
   else fail('Chapter 6 mission did not advance after answer and mastery');
 
+  // Complete Chapter 6 storage setup and enter Chapter 7 backup work.
+  await run('sudo mkdir -p /mnt/backups');
+  await run('sudo mount /dev/vdb1 /mnt/backups');
+  await run("echo '/dev/vdb1  /mnt/backups  ext4  defaults  0  2' | sudo tee -a /etc/fstab");
+  await run('sudo mount -a');
+  if ((await page.textContent('#pTitle')) === 'Back up the config') ok('Chapter 7 starts after the backup disk is mounted persistently');
+  else fail('did not reach the first Chapter 7 mission');
+
+  const ch7Guide = await page.textContent('#learningPath').catch(() => '');
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    if (ch7Guide.includes(stage)) ok('Chapter 7 learning stage present: ' + stage);
+    else fail('Chapter 7 learning stage missing: ' + stage);
+  }
+  if (ch7Guide.includes('tar') && ch7Guide.includes('gzip') && ch7Guide.includes('-czf')) ok('Chapter 7 explains tar archives and gzip compression');
+  else fail('Chapter 7 backup explanation is incomplete');
+
+  await page.click('[data-learning-choice="list"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('incorrect Chapter 7 mastery answer is rejected');
+  else fail('incorrect Chapter 7 mastery answer was not rejected');
+  await run('sudo tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Back up the config') ok('Chapter 7 backup command cannot bypass the mastery gate');
+  else fail('Chapter 7 archive advanced before mastery was proven');
+  await page.click('[data-learning-choice="create"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. -c means create')) ok('correct Chapter 7 mastery answer explains tar create flag');
+  else fail('correct Chapter 7 answer did not show its explanation');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Look inside the archive') ok('Chapter 7 archive + mastery check complete the mission');
+  else fail('Chapter 7 mission did not advance after archive and mastery');
+
     await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');

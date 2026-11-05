@@ -3973,6 +3973,18 @@ const MISSIONS = [
     check: () => S.mounts.some(m => m.mp === '/mnt/backups') },
 
   { ch: 7, id: 'backup', title: 'Back up the config',
+    learning: {
+      concept: 'A backup archive is a single file that stores copies of other files and directories. The tar command creates and reads these archives. Its short options are combined: -c creates an archive, -x extracts files, -t lists the archive contents, -z uses gzip compression, and -f names the archive file. With -f, the archive filename comes immediately after the options. When the destination directory is protected, use sudo to write the archive there.',
+      example: 'sudo tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config',
+      practice: 'Read the command from left to right: sudo runs with administrator privileges; tar starts the archive tool; -c creates, -z compresses with gzip, and -f introduces the archive filename. The final path is the folder being backed up.',
+      investigate: 'Priya wants a recoverable copy of the live Halcyon configuration before the next maintenance window. The backup disk is mounted at /mnt/backups. Create one compressed archive of the release config and keep the original files untouched.',
+      review: 'tar -czf ARCHIVE SOURCE creates a gzip-compressed archive. The archive path follows -f; the source file or directory comes after it. A successful command creates a single .tar.gz file containing the selected files.',
+      question: 'In the tar command, what does the -c option do?',
+      choices: [{ value: 'list', label: 'Lists files already inside an archive' }, { value: 'create', label: 'Creates a new archive' }, { value: 'extract', label: 'Extracts files from an archive' }],
+      answer: 'create',
+      correctFeedback: 'Correct. -c means create: tar builds a new archive. -z adds gzip compression, and -f specifies the archive filename.',
+      incorrectFeedback: 'Not quite. Remember the three common tar actions: -c creates, -t lists, and -x extracts.'
+    },
     story: "With somewhere safe to put it, make your first backup: the live release's config. `tar` bundles many files into one archive; add `-z` and it is gzip-compressed. The letters are `c` create, `z` gzip, `f` file.",
     objective: 'Create a gzip-compressed tar archive of `/srv/halcyon/releases/v2.3.1/config` at `/mnt/backups/halcyon-config.tar.gz`.',
     hints: ['The form is `tar -czf ARCHIVE PATHS`. The archive comes first, then what to put in it.', '/mnt/backups is owned by root, so write the archive there with sudo.', 'Run `sudo tar -czf /mnt/backups/halcyon-config.tar.gz /srv/halcyon/releases/v2.3.1/config`.'],
