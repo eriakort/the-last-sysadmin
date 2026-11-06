@@ -423,7 +423,8 @@ function runASA(cli, line) {
       cli.asaObjectGroup = name; cli.asaMode = 'object-group'; return ok('Object-group configuration mode');
     }
     if (words[0] === 'no' && words[1] === 'object-group' && words[2]) {
-      const name=words[2].toUpperCase(); if ((dev.acls||[]).some(r=>r.srcGroup===name||r.dstGroup===name||r.serviceGroup===name)) return err('% Object-group is referenced by an ACL');
+      const name=(words.length===4 && ['network','service'].includes(words[2]) ? words[3] : words[2]).toUpperCase();
+      if ((dev.acls||[]).some(r=>r.srcGroup===name||r.dstGroup===name||r.serviceGroup===name)) return err('% Object-group is referenced by an ACL');
       delete (dev.asaObjectGroups||{})[name]; return ok('');
     }
     if (words[0] === 'object' && words[1] === 'network' && words[2]) {
