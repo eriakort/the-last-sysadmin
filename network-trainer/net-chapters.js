@@ -638,6 +638,7 @@ const chapters = [
     build: () => {
       const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }]);
       const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2', v: 10 }]);
+      sw1.vlans = [1, 20]; sw2.vlans = [1, 20];
       sw1.ifaces.p2.mode = 'trunk'; sw1.ifaces.p2.allowedVlans = [20];
       sw2.ifaces.p1.mode = 'trunk'; sw2.ifaces.p1.allowedVlans = [20];
       return { devices: {
