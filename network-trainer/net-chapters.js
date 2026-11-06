@@ -836,6 +836,47 @@ const chapters = [
       ['h1','dhclient eth0'], ['h1','dig portal.branch.local'], ['h1','ping portal']
     ]
   }
+,
+  { id: 'restore-ospf-branch-connectivity', chapter: 'Enterprise routing',
+    title: 'The remote branch has disappeared from the route table',
+    story: 'A maintenance window replaced a static-routing design with OSPF. The routers can reach their directly connected neighbors, but the remote branch LAN is missing from the route table. The help desk reports that users at HQ cannot reach the inventory application in the branch.',
+    objective: 'Restore OSPF adjacencies across the three-router path, advertise the branch and HQ LANs, keep user-facing LAN interfaces passive, and verify end-to-end connectivity.',
+    ticket: { id: 'INC-3512', from: 'NOC · routing queue', priority: 'P1', symptom: 'Inventory application 10.3.3.10 is unreachable from HQ. R1 has no route for 10.3.3.0/24. Transit links are up and the routers are reachable on their directly connected networks.' },
+    diagnose: { q: 'R1 has no OSPF route for the branch LAN. What should you validate first?', options: ['Check OSPF neighbor state, area consistency and the network statements that enable the transit and LAN interfaces', 'Add a default route on every host and ignore OSPF', 'Change the switch VLANs on all four LAN segments'], answer: 0, because: 'OSPF must first form adjacencies on matching active transit interfaces. Then verify that the branch LAN is included in the process and advertised; a working neighbor alone does not prove the remote prefix is present.' },
+    console: 'r1',
+    hints: ['Use show ip ospf neighbor and show ip ospf interface brief on each router. A transit link must be enabled in the same OSPF area at both ends.', 'Enter router ospf 10, set a unique router-id, and add network statements with wildcard masks. Make the HQ and branch user-facing interfaces passive: their networks are still advertised, but they do not form neighbor adjacencies with end hosts.', 'Verify that R1 learns 10.3.3.0/24 and R3 learns 10.1.1.0/24. Then test from h1 to h3 and save each router configuration.'],
+    build: () => ({
+      devices: {
+        h1: H('h1','10.1.1.10',24,'10.1.1.1'),
+        h3: H('h3','10.3.3.10',24,'10.3.3.1'),
+        r1: R('r1','router',{eth0:iface('10.1.1.1',24),eth1:iface('10.0.12.1',30)}),
+        r2: R('r2','router',{eth0:iface('10.0.12.2',30),eth1:iface('10.0.23.1',30)}),
+        r3: R('r3','router',{eth0:iface('10.0.23.2',30),eth1:iface('10.3.3.1',24)}),
+        s1: SW('s1',[{n:'p1'},{n:'p2'}]), s2: SW('s2',[{n:'p1'},{n:'p2'}]),
+        s3: SW('s3',[{n:'p1'},{n:'p2'}]), s4: SW('s4',[{n:'p1'},{n:'p2'}])
+      },
+      links: [L('h1','eth0','s1','p1'),L('r1','eth0','s1','p2'),
+        L('r1','eth1','s2','p1'),L('r2','eth0','s2','p2'),
+        L('r2','eth1','s3','p1'),L('r3','eth0','s3','p2'),
+        L('r3','eth1','s4','p1'),L('h3','eth0','s4','p2')]
+    }),
+    success: [
+      { type:'ospf_neighbor', dev:'r1', peer:'r2' },
+      { type:'ospf_neighbor', dev:'r2', peer:'r3' },
+      { type:'ospf_route', dev:'r1', cidr:'10.3.3.0/24' },
+      { type:'ospf_route', dev:'r3', cidr:'10.1.1.0/24' },
+      { type:'reachable', a:'h1', b:'h3' }
+    ],
+    solution: [
+      ['r1','enable'],['r1','configure terminal'],['r1','router ospf 10'],['r1','router-id 1.1.1.1'],
+      ['r1','network 10.1.1.0 0.0.0.255 area 0'],['r1','network 10.0.12.0 0.0.0.3 area 0'],['r1','passive-interface eth0'],['r1','end'],['r1','show ip ospf neighbor'],['r1','show ip route'],['r1','write memory'],
+      ['r2','enable'],['r2','configure terminal'],['r2','router ospf 10'],['r2','router-id 2.2.2.2'],
+      ['r2','network 10.0.12.0 0.0.0.3 area 0'],['r2','network 10.0.23.0 0.0.0.3 area 0'],['r2','end'],['r2','show ip ospf neighbor'],['r2','write memory'],
+      ['r3','enable'],['r3','configure terminal'],['r3','router ospf 10'],['r3','router-id 3.3.3.3'],
+      ['r3','network 10.0.23.0 0.0.0.3 area 0'],['r3','network 10.3.3.0 0.0.0.255 area 0'],['r3','passive-interface eth1'],['r3','end'],['r3','show ip route'],['r3','write memory'],
+      ['h1','ping 10.3.3.10']
+    ]
+  }
 ];
 
 module.exports = { chapters };
