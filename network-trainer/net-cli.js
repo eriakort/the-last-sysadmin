@@ -180,7 +180,11 @@ function runCisco(cli, line) {
     if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
     if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
   }
-  if (words[0] === 'show') { const result = ciscoShow(cli, words.slice(1)); return result.code !== 0 && result.out.startsWith('% Invalid input detected at show command') ? dispatch(cli, raw) : result; }
+  if (words[0] === 'show') {
+    const query = words.slice(1).join(' ');
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status'];
+    return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
+  }
   if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
     if (cli.iosMode === 'user') return err('% Privileged EXEC required');
     dev.startupConfig = ciscoRunConfig(dev);
