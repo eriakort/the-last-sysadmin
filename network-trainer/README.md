@@ -248,6 +248,10 @@ Regression coverage includes stable local/remote MAC learning, root election and
 
 The Network Trainer is evolving into a day-to-day network operations environment. The workspace combines an incident brief, live topology, device console, traffic evidence, and a device inspector. Learners work as junior network analysts and engineers: triage a ticket, gather evidence, make a controlled change, verify the service, and record what they learned.
 
+### Operations Overview
+
+The Network Sysadmin workspace opens on a shift dashboard before entering the Workbench. It summarises the active simulator scenario: device health is calculated from interface state, link health from both link and endpoint interfaces, and recent traffic from commands run in the current lab. It also surfaces unresolved training incidents with priority and status, links directly into the selected incident's Workbench, and shows recent local journal activity. The dashboard labels all telemetry as simulated; it is not an external monitoring or NMS integration. Workbench, incident queue, command help, journal, and learning progress remain one click away.
+
 ### Help desk and work journal
 
 - The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.
