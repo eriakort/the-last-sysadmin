@@ -594,8 +594,24 @@ function renderConfig() {
 /* ---------- actions ---------- */
 function renderSessionTabs() {
   if (!RUN) return '';
-  return Object.keys(RUN.net.devices).map(id => `<button type="button" class="session-tab${id === SEL ? ' active' : ''}" data-session-device="${esc(id)}" title="Switch console to ${esc(id)}">${esc(id)}</button>`).join('') || '<span class="dim">No device sessions</span>';
+  return Object.keys(RUN.net.devices).map(id => {
+    const d=RUN.net.devices[id], session=TERM_SESSIONS[id] || {history:[],output:''};
+    const label=d.hostname || id, count=(session.history || []).length;
+    return `<button type="button" class="session-tab${id === SEL ? ' active' : ''}" data-session-device="${esc(id)}" aria-pressed="${id===SEL?'true':'false'}" title="${esc(label)} · ${esc(d.kind || 'device')} · ${count} commands in history"><span>${esc(label)}</span><small>${esc(d.kind || 'device')}</small></button>`;
+  }).join('') || '<span class="dim">No device sessions</span>';
 }
+function cycleDeviceSession(direction) {
+  if (!RUN) return;
+  const ids=Object.keys(RUN.net.devices); if(ids.length<2)return;
+  const current=Math.max(0,ids.indexOf(SEL));
+  selectDevice(ids[(current+direction+ids.length)%ids.length]);
+}
+function clearActiveSessionOutput() {
+  if (!SEL || !$('#tout')) return;
+  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\\n`;
+  persistTerminalSession();
+}
+
 function persistTerminalSession() {
   if (!SEL || !$('#tout')) return;
   TERM_SESSIONS[SEL] = { history: HIST.slice(), index: HISTI, output: $('#tout').textContent };
@@ -613,6 +629,11 @@ function selectDevice(id) {
 }
 function wireSessionTabs() {
   document.querySelectorAll('#sessionTabs [data-session-device]').forEach(b => b.addEventListener('click', () => selectDevice(b.dataset.sessionDevice)));
+  const active=document.querySelector('#sessionTabs .session-tab.active'); if(active) active.scrollIntoView({block:'nearest',inline:'nearest'});
+  const prev=$('#sessionPrev'), next=$('#sessionNext'), clear=$('#sessionClear');
+  if(prev)prev.addEventListener('click',()=>cycleDeviceSession(-1));
+  if(next)next.addEventListener('click',()=>cycleDeviceSession(1));
+  if(clear)clear.addEventListener('click',clearActiveSessionOutput);
 }
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
@@ -959,6 +980,8 @@ function openHelp() { showWorkspaceView('knowledge'); }
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
+    if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') { e.preventDefault(); cycleDeviceSession(-1); return; }
+    if ((e.altKey || e.ctrlKey) && e.key === 'ArrowRight') { e.preventDefault(); cycleDeviceSession(1); return; }
     if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
@@ -1343,7 +1366,7 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>

@@ -358,3 +358,8 @@ The IOS-style switch profile supports access-port MAC security using `switchport
 ## Workbench interface operations inventory
 
 The Workbench device inspector includes an **Interfaces** view for every selected device. It presents interface operational state (including err-disabled), IPv4 address/prefix or switchport access/trunk VLAN settings, the connected simulator peer, and applicable protocol details such as OSPF area, HSRP state, STP role/state, and port-security learning/violation counts. **Inspect in CLI** stages `show interfaces IFACE` in the device console for review; it never executes the command automatically. The inventory is read-only and reflects only the active simulator scenario, not live hardware telemetry.
+
+
+## Multi-device console sessions
+
+Workbench console sessions are available per simulated device. Switch using the session tabs, the previous/next controls, or `Alt` + left/right arrow while the command field is focused. Clear output resets only the visible transcript; command history remains available with the up/down arrows. The active session is brought into view automatically when switching across a long tab strip.
