@@ -662,7 +662,7 @@ const chapters = [
     build: () => {
       const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }, { n: 'p3' }]);
       const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2' }]);
-      const sw3 = SW('sw3', [{ n: 'p1' }, { n: 'p2' }]);
+      const sw3 = SW('sw3', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3', v: 10 }]);
       for (const sw of [sw1, sw2, sw3]) sw.vlans = [1, 10];
       for (const [sw, ports] of [[sw1,['p2','p3']],[sw2,['p1','p2']],[sw3,['p1','p2']]]) {
         for (const port of ports) { sw.ifaces[port].mode = 'trunk'; sw.ifaces[port].allowedVlans = [10]; }
@@ -671,7 +671,7 @@ const chapters = [
         h1: H('h1', '10.40.0.10', 24), srv: SRV('srv', '10.40.0.20', 24, null, { 445: 'smb' }),
         sw1, sw2, sw3
       }, links: [
-        L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw3', 'p2'),
+        L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw3', 'p3'),
         L('sw1', 'p2', 'sw2', 'p1'), L('sw2', 'p2', 'sw3', 'p1'), L('sw3', 'p2', 'sw1', 'p3')
       ] };
     },
