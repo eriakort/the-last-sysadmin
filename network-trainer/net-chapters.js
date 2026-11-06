@@ -918,7 +918,7 @@ const chapters = [
       ['isp','bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in'],
       ['edge','show ip bgp summary'],['edge','show ip bgp advertised-routes 203.0.113.1'],
       ['isp','show ip bgp'],['isp','show ip route'],['hq','ping remote'],
-      ['edge','write memory'],['isp','write memory']
+      ['edge','enable'],['edge','write memory'],['isp','enable'],['isp','write memory']
     ]
   }
 ];
