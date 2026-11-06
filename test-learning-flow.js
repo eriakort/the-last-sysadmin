@@ -783,6 +783,33 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'sudo ss -tlnp'
   ], '8080', 'Correct. Halcyon is listening on TCP port 8080');
 
+
+  // Chapter 17: diagnose load, identify the CPU hog, then manage resource pressure.
+  await checkLearningStages('Everything is slow', 'five', ['load average', '1, 5 and 15 minutes', 'four CPU cores']);
+  await proveMission('Everything is slow', 'Find the hog', 'three', [
+    'uptime'
+  ], 'Correct. uptime reports 1-, 5- and 15-minute load averages');
+
+  await checkLearningStages('Find the hog', 'user', ['top', '%CPU', 'PID']);
+  await proveAnswerMission('Find the hog', 'Stop the batch job', 'pid', [
+    'top'
+  ], '3301', 'Correct. PID is the process identifier');
+
+  await checkLearningStages('Stop the batch job', 'kill9', ['SIGTERM', 'sudo', 'cleanly']);
+  await proveMission('Stop the batch job', 'Check the memory', 'term', [
+    'sudo kill 3301'
+  ], 'Correct. The default is SIGTERM');
+
+  await checkLearningStages('Check the memory', 'free', ['free -h', 'available', 'cache']);
+  await proveMission('Check the memory', 'Tame the workers', 'available', [
+    'free -h'
+  ], 'Correct. available estimates memory');
+
+  await checkLearningStages('Tame the workers', 'lower', ['renice', 'higher niceness', 'yield']);
+  await proveMission('Tame the workers', 'Onboard a new admin', 'higher', [
+    'sudo renice -n 10 -p 812'
+  ], 'Correct. A higher niceness makes the process less favored');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
