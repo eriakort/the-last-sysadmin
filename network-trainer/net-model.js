@@ -139,7 +139,7 @@ function switchMacTable(net, switchId, vlan) {
       const key = swId + '|' + (ingress || '');
       if (visited.has(key)) return; visited.add(key);
       const sw = net.devices[swId], state = stp.switches[swId];
-      if (!sw || !state) return;
+      if (!sw || !state || (ingress && state.ports[ingress] && state.ports[ingress].state === 'blocking')) return;
       for (const port of Object.keys(sw.ifaces).sort()) {
         if (port === ingress || sw.ifaces[port].up === false || !switchPortAllowsVlan(sw.ifaces[port], vid)
             || !switchVlanExists(sw, vid) || (state.ports[port] && state.ports[port].state === 'blocking')) continue;
@@ -179,7 +179,8 @@ function l2Domain(net, startDev, startIface) {
       const [nd, ni] = nb, next = net.devices[nd];
       if (!next) continue;
       if (next.kind === 'switch') {
-        const ingress = next.ifaces[ni];
+        const ingress = next.ifaces[ni], nextStp = spanningTree(net, vlan).switches[nd];
+        if (nextStp && nextStp.ports[ni] && nextStp.ports[ni].state === 'blocking') continue;
         const wireVlan = port.mode === 'trunk' && vlan !== switchNativeVlan(port) ? vlan : null;
         const mapped = ingress && switchIngressVlan(ingress, wireVlan);
         if (mapped != null && switchVlanExists(next, mapped)) stack.push([nd, ni, mapped]);
