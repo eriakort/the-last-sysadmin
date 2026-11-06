@@ -354,7 +354,7 @@ function aclDecision(dev, dir, iface, pkt) {
     for (const r of rules) if (aclMatch(r, dir, iface, pkt)) { r.hits = (r.hits || 0) + 1; return r.action; }
     return 'deny';
   }
-  for (const r of dev.acls || []) if (!r.aclName && aclMatch(r, dir, iface, pkt)) return r.action;
+  for (const r of dev.acls || []) if (!r.aclName && dir === 'in' && aclMatch(r, dir, iface, pkt)) return r.action;
   return 'allow';
 }
 
