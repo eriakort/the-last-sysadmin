@@ -4,7 +4,7 @@
 // test-classroom-ui.js stub approach.
 const path = require('path');
 const { chromium } = require('playwright');
-const URL = 'file://' + path.join(process.cwd(), 'index.html');
+const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
 (async () => {
   const browser = await chromium.launch();
