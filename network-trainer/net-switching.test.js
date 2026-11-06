@@ -121,6 +121,7 @@ function triangle() {
 
 test('MAC learning records local and remote endpoints on the correct egress ports', () => {
   const net = triangle();
+  assert(M.switchMacTable(net,'sw1',10).length === 0, 'the table should be empty before endpoint traffic');
   assert(connected(net), 'traffic should populate the dynamic MAC table');
   const rows = M.switchMacTable(net,'sw1',10);
   const h1 = rows.find(x => x.device === 'h1'), srv = rows.find(x => x.device === 'srv');
