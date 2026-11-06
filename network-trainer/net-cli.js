@@ -345,7 +345,7 @@ function runASA(cli, line) {
       return asaShow(cli,q);
   }
   if (words[0] === 'packet-tracer' && words[1] === 'input') {
-    if (words.length !== 9 || !['tcp','udp','icmp'].includes(words[3])) return err('usage: packet-tracer input <nameif> tcp|udp|icmp <src-ip> <src-port> <dst-ip> <dst-port>');
+    if (words.length !== 8 || !['tcp','udp','icmp'].includes(words[3])) return err('usage: packet-tracer input <nameif> tcp|udp|icmp <src-ip> <src-port> <dst-ip> <dst-port>');
     const phys = asaPhysical(dev, words[2]), src = parseIPv4(words[4]), dst = parseIPv4(words[6]);
     const sport = Number(words[5]), dport = Number(words[7]);
     if (!phys || src == null || dst == null || !Number.isInteger(sport) || !Number.isInteger(dport) || sport < 0 || sport > 65535 || dport < 0 || dport > 65535)
@@ -380,7 +380,7 @@ function runASA(cli, line) {
     if (words[0] === 'no' && words[1] === 'access-list' && words[2]) {
       dev.acls = (dev.acls || []).filter(r=>r.aclName !== words[2].toUpperCase()); return ok('');
     }
-    if (words[0] === 'access-group' && words.length === 6 && words[2] === 'in' && words[3] === 'interface') {
+    if (words[0] === 'access-group' && words.length === 5 && words[2] === 'in' && words[3] === 'interface') {
       const name = words[1].toUpperCase(), phys = asaPhysical(dev, words[4]);
       if (!phys || !(dev.acls || []).some(r=>r.aclName===name)) return err('% ACL or interface nameif not found');
       dev.ifaces[phys].accessGroups = dev.ifaces[phys].accessGroups || {};
@@ -435,7 +435,7 @@ function runASA(cli, line) {
       if (net == null || prefix == null) return err('% Invalid subnet');
       obj.network = { net: M.networkOf(net,prefix), prefix }; return ok('');
     }
-    if (words[0] === 'nat' && words.length === 9 && words[1].startsWith('(') && words[2] === 'static' && words[3] === 'interface' && words[4] === 'service' && words[5] === 'tcp') {
+    if (words[0] === 'nat' && words.length === 8 && words[1].startsWith('(') && words[2] === 'static' && words[3] === 'interface' && words[4] === 'service' && words[5] === 'tcp') {
       const pair = words[1].slice(1,-1).split(','), inside = asaPhysical(dev,pair[0]), outside = asaPhysical(dev,pair[1]);
       const publicPort = Number(words[6]), privatePort = Number(words[7]);
       if (pair.length !== 2 || !inside || !outside || obj.host == null || publicPort !== privatePort ||
