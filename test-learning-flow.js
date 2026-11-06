@@ -1098,6 +1098,64 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'sudo lsof /var/log/halcyon/app.log'
   ], 'Correct. An open file descriptor keeps');
 
+
+  // Large batch: observability, automation and the From Zero capstone (16 missions).
+  await checkLearningStages('A live pulse', 'root', ['vmstat', 'runnable', 'interval samples']);
+  await proveMission('A live pulse', 'Where the io goes', 'run', ['vmstat'], 'Correct. The r column');
+  await checkLearningStages('Where the io goes', 'idle', ['iostat', '%iowait', 'per-device']);
+  await proveMission('Where the io goes', 'Write a health check', 'iowait', ['iostat'], 'Correct. %iowait');
+  await checkLearningStages('Write a health check', 'text', ['systemctl is-active --quiet', 'exit status', 'if']);
+  await proveMission('Write a health check', 'Run it on a schedule', 'exit', [
+    "printf '#!/bin/bash\\nif systemctl is-active --quiet halcyon; then\\n  echo \\"halcyon OK\\"\\nelse\\n  echo \\"halcyon DOWN\\"\\nfi\\n' > ~/health.sh",
+    'chmod +x ~/health.sh', 'bash ~/health.sh'
+  ], 'Correct. The exit status');
+  await checkLearningStages('Run it on a schedule', 'five', ['*/5 * * * *', 'five fields', 'absolute paths']);
+  await proveMission('Run it on a schedule', 'Know your disks', 'cron', [
+    "echo '*/5 * * * * /home/rookie/health.sh' | crontab -", 'crontab -l'
+  ], 'Correct. */5');
+  await checkLearningStages('Know your disks', 'size', ['df -h /', 'Filesystem', 'lsblk']);
+  await proveAnswerMission('Know your disks', 'Write a Makefile', 'vda1', ['df -h /'], '/dev/vda1', 'Correct. The Filesystem column');
+
+  await checkLearningStages('Write a Makefile', 'spaces', ['Makefile', 'literal tab', 'target']);
+  await proveMission('Write a Makefile', 'make backup', 'tab', [
+    "printf 'backup:\\n\\tsudo tar -czf /mnt/backups/nightly.tar.gz /srv/halcyon/releases/v2.3.1/config\\n\\ndeploy:\\n\\techo v2.4.0 > /srv/halcyon/CURRENT\\n\\tsudo systemctl restart halcyon\\n' > ~/Makefile",
+    'cat ~/Makefile'
+  ], 'Correct. Make expects recipe lines');
+  await checkLearningStages('make backup', 'script', ['make backup', 'target', 'verify']);
+  await proveMission('make backup', 'make deploy', 'target', ['cd ~', 'make backup', 'ls -l /mnt/backups'], 'Correct. backup is the Makefile target');
+  await checkLearningStages('make deploy', 'cron', ['make deploy', 'recipe', 'verify']);
+  await proveMission('make deploy', 'Tag the release', 'recipe', ['make deploy', 'cat /srv/halcyon/CURRENT', 'systemctl is-active halcyon'], 'Correct. The recipe');
+  await checkLearningStages('Tag the release', 'branch', ['git tag', 'specific commit', 'release']);
+  await proveMission('Tag the release', 'Look before you run', 'marker', ['cd ~/halcyon-app', 'git tag v2.4.0', 'git tag'], 'Correct. A tag marks');
+  await checkLearningStages('Look before you run', 'live', ['make -n deploy', 'dry run', 'without executing']);
+  await proveMission('Look before you run', 'Capstone: a service account', 'dry', ['make -n deploy'], 'Correct. -n is make');
+
+  await checkLearningStages('Capstone: a service account', 'bash', ['reportsvc', 'nologin', 'least privilege']);
+  await proveMission('Capstone: a service account', 'Capstone: the service script', 'nologin', [
+    'sudo useradd -r -s /usr/sbin/nologin reportsvc', 'getent passwd reportsvc'
+  ], 'Correct. A dedicated non-login account');
+  await checkLearningStages('Capstone: the service script', 'read', ['#!/bin/bash', 'chmod +x', 'predictable environment']);
+  await proveMission('Capstone: the service script', 'Capstone: unit and timer', 'exec', [
+    "printf '#!/bin/bash\\necho \\"report generated at $(date +%F)\\"\\n' > ~/report.sh",
+    'chmod +x ~/report.sh', 'bash ~/report.sh'
+  ], 'Correct. +x adds execute permission');
+  await checkLearningStages('Capstone: unit and timer', 'socket', ['.service', '.timer', 'daemon-reload']);
+  await proveMission('Capstone: unit and timer', 'Capstone: open its port', 'timer', [
+    "printf '[Unit]\\nDescription=Report generator\\n[Service]\\nType=oneshot\\nExecStart=/home/rookie/report.sh\\n' | sudo tee /etc/systemd/system/report-gen.service",
+    "printf '[Unit]\\nDescription=Run report generator hourly\\n[Timer]\\nOnCalendar=hourly\\n[Install]\\nWantedBy=timers.target\\n' | sudo tee /etc/systemd/system/report-gen.timer",
+    'sudo systemctl daemon-reload', 'sudo systemctl enable --now report-gen.timer'
+  ], 'Correct. The .timer unit');
+  await checkLearningStages('Capstone: open its port', 'all', ['9100/tcp', 'least privilege', 'firewall']);
+  await proveMission('Capstone: open its port', 'Capstone: back it up', 'least', ['sudo ufw allow 9100/tcp', 'sudo ufw status'], 'Correct. Least privilege');
+  await checkLearningStages('Capstone: back it up', 'extract', ['tar -czf', 'tar -tzf', 'restore']);
+  await proveMission('Capstone: back it up', 'Capstone: hand it over', 'archive', [
+    'sudo tar -czf /mnt/backups/reports.tar.gz /home/rookie/report.sh', 'tar -tzf /mnt/backups/reports.tar.gz'
+  ], 'Correct. -t lists');
+  await checkLearningStages('Capstone: hand it over', 'secret', ['runbook', 'verified facts', 'recovery']);
+  await proveMission('Capstone: hand it over', 'PAGE: disk full, service failing', 'runbook', [
+    'echo "# reports service: runs report.sh via report-gen.timer as reportsvc, port 9100, backed up to /mnt/backups." > ~/incident/REPORTS.md'
+  ], 'Correct. A runbook');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
