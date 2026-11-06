@@ -25,9 +25,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     else fail(label + ' destination is missing');
   }
 
-  if (await page.locator('#navWorkbench').getAttribute('aria-current') === 'page')
-    ok('Workbench is identified as the active destination');
-  else fail('Workbench active state is missing');
+  if (await page.locator('#navOverview').getAttribute('aria-current') === 'page')
+    ok('Overview is identified as the active destination');
+  else fail('Overview active state is missing');
 
   if (await page.locator('#navIncidents').isEnabled() && await page.locator('#navJournal').isEnabled())
     ok('implemented Incidents and Journal destinations are enabled');
@@ -44,9 +44,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await page.locator('#modal #closeS').click();
 
   await page.locator('#navWorkbench').click();
-  if (await page.locator('#tin').evaluate(el => document.activeElement === el))
-    ok('Workbench navigation returns focus to the device console');
-  else fail('Workbench navigation did not return focus to the console');
+  if (await page.locator('#cols').isVisible() && await page.locator('#overview').isHidden())
+    ok('Workbench navigation opens the operational workspace');
+  else fail('Workbench navigation did not switch views');
+  await page.locator('#navOverview').click();
+  if (await page.locator('#overview').isVisible()) ok('Overview navigation returns to the landing view');
+  else fail('Overview navigation did not return to the landing view');
 
   await page.setViewportSize({ width: 390, height: 844 });
   const railBox = await rail.boundingBox();
