@@ -127,6 +127,9 @@ const COMMANDS = {
         if (!parsed || !ifn) return err('usage: ip addr add <valid-IPv4>/<0-32> dev <existing-interface>');
         if (!dev.ifaces[ifn]) return err('ip addr: no such interface ' + ifn);
         const address = parseIPv4(String(a[2]).split('/')[0]);
+        if (a[1] === 'add' && dev.ifaces[ifn].ip != null
+            && (dev.ifaces[ifn].ip !== address || dev.ifaces[ifn].mask !== parsed.prefix))
+          return err('ip addr: interface already has an address; use replace or delete it first');
         for (const [id, other] of Object.entries(cli.net.devices)) {
           for (const [otherIf, f] of Object.entries(other.ifaces || {})) {
             if (f.up !== false && f.ip === address && !(id === cli.cur && otherIf === ifn))
