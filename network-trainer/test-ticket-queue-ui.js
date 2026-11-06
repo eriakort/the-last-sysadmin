@@ -23,8 +23,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('ticket cards show ID, priority, impact and an SLA target');
   else fail('ticket card lacks operational metadata');
 
-  if (/New/.test(await page.locator('.queue-metrics').innerText())) ok('queue summarizes ticket workflow states');
-  else fail('queue status metrics missing');
+  const metricLabels = await page.locator('.queue-metrics span').allTextContents();
+  if (metricLabels.some(x => x.trim() === 'New') && metricLabels.some(x => /Acknowledged/.test(x)) && metricLabels.some(x => /Resolved/.test(x))) ok('queue summarizes ticket workflow states');
+  else fail('queue status metrics missing: ' + JSON.stringify(metricLabels));
 
   await page.locator('[data-ack="INC-1041"]').click();
   await page.waitForTimeout(60);
@@ -37,6 +38,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   if (/INC-1041/.test(await page.locator('#brief').innerText()) && /can't open the shared drive/i.test(await page.locator('#brief').innerText()))
     ok('investigating a ticket loads its linked network scenario');
   else fail('ticket did not launch its linked scenario');
+
+  // This incident requires a diagnosis before the configuration check is unlocked.
+  await page.locator('.diag-opt').first().click();
+  if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
+  else fail('correct ticket diagnosis did not unlock verification');
 
   const input = page.locator('#tin');
   await input.fill('ip addr add 10.0.1.10/24 dev eth0');
