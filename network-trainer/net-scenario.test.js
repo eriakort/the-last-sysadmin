@@ -98,6 +98,22 @@ test('hand-placed node positions survive fromTopology and toMission', () => {
   assert(net.pos && net.pos.h1[1] === 45, 'build() carries positions into the played net');
 });
 
+
+test('scenario authoring accepts MAC learning and STP objective types', () => {
+  const scn = {
+    title: 'Switch operations',
+    start: { devices: {}, links: [] },
+    success: [
+      { type: 'mac_entry', dev: 'sw1', device: 'h1', vlan: 10, port: 'p1' },
+      { type: 'stp_root', dev: 'sw1', vlan: 10, root: 'sw2' },
+      { type: 'stp_blocked', dev: 'sw1', vlan: 10, port: 'p2' }
+    ]
+  };
+  assert(S.validate(scn).ok, 'all three switching objective types should validate');
+  scn.success[1] = { type: 'stp_root', dev: 'sw1', vlan: 10 };
+  assert(!S.validate(scn).ok, 'missing STP root field should be rejected');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
