@@ -3870,7 +3870,7 @@ let MODE = 'play';                                 // 'play' | 'build' (authorin
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
-let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null; // topology interaction state
+let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false; // topology interaction state
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -3957,7 +3957,7 @@ function renderTopo() {
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   const view = TOPO_VIEW || [0, 0, maxX, maxY];
   let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology">`;
-  for (const l of net.links) s += `<line data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`;
+  for (const l of net.links) { const x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
   for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
@@ -4547,6 +4547,7 @@ function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; RUN.net.pos[id] = [
 
 function wireTopo() {
   const svg = $('#topo');
+  if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || WIRE || e.button !== 0) return;
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
@@ -4604,6 +4605,19 @@ function zoomTopology(factor) {
   svg.setAttribute('viewBox', TOPO_VIEW.join(' '));
 }
 function fitTopology() { TOPO_VIEW = null; refresh(); }
+function focusSelectedTopology() {
+  if (!SEL || !RUN || !RUN.net.devices[SEL]) return;
+  const [x,y] = nodePos(SEL), svg=$('#topo'); if (!svg) return;
+  const v=svg.viewBox.baseVal, w=Math.max(180,Math.min(900,v.width*.62)), h=Math.max(130,Math.min(650,v.height*.62));
+  TOPO_VIEW=[x+24-w/2,y+30-h/2,w,h]; svg.setAttribute('viewBox',TOPO_VIEW.join(' '));
+}
+function toggleTopologyPorts() { TOPO_SHOW_PORTS=!TOPO_SHOW_PORTS; refresh(); }
+function zoomTopologyAt(svg, factor, clientX, clientY) {
+  const p=svgPoint(svg,clientX,clientY), v=svg.viewBox.baseVal;
+  const w=Math.max(120,Math.min(5000,v.width*factor)), h=Math.max(90,Math.min(4000,v.height*factor));
+  const rx=(p[0]-v.x)/v.width, ry=(p[1]-v.y)/v.height;
+  TOPO_VIEW=[p[0]-rx*w,p[1]-ry*h,w,h]; svg.setAttribute('viewBox',TOPO_VIEW.join(' '));
+}
 function autoArrange() { if (RUN && RUN.net) { delete RUN.net.pos; TOPO_VIEW = null; refresh(); } }
 function flashStatus(msg) { const b = $('#status'); if (b) { b.className = 'bad'; b.textContent = msg; } }
 function wireBrief() {
@@ -5177,7 +5191,7 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>
@@ -5196,6 +5210,8 @@ function boot() {
   $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));
   $('#topoFit').addEventListener('click', fitTopology);
   $('#topoArrange').addEventListener('click', autoArrange);
+  $('#topoFocus').addEventListener('click', focusSelectedTopology);
+  $('#topoPorts').addEventListener('click', toggleTopologyPorts);
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
