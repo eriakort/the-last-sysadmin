@@ -12,6 +12,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   const fail = message => { console.error('  ✗ ' + message); errors.push(message); };
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(200);
+  await page.locator('#navWorkbench').click();
+  const device = page.locator('#brief [data-explorer-dev]').first();
+  const deviceId = await device.getAttribute('data-explorer-dev');
+  if (!deviceId) fail('active scenario has no selectable simulator device');
   await page.locator('#navChanges').click();
   if (await page.locator('#changeView h1').innerText() === 'Change management') ok('Change Management is a first-class workspace');
   else fail('Change Management workspace did not open');
@@ -28,7 +32,16 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
     successCriteria: 'Finance endpoints obtain expected addressing and reach approved services.'
   };
   for (const [name,value] of Object.entries(fields)) await page.locator('[name="'+name+'"]').fill(value);
+  const deviceLink = page.locator('input[name="deviceIds"][value="' + deviceId + '"]');
+  if (await deviceLink.count()) await deviceLink.check();
+  else fail('change form did not offer active simulator devices');
   await page.locator('#changeForm button[type="submit"]').click();
+  if (await page.locator('#changeDetail [data-change-device]').count() === 1) ok('change record keeps a structured link to its affected simulator device');
+  else fail('affected simulator device link was not saved');
+  await page.locator('#changeDetail [data-change-device]').click();
+  if (await page.locator('#cols').isVisible() && await page.locator('#termTarget').innerText() === deviceId) ok('change record hands implementation directly to the linked device console');
+  else fail('change-to-Workbench handoff selected the wrong device');
+  await page.locator('#navChanges').click();
   if (await page.locator('.change-state').first().innerText() === 'Draft') ok('new change is saved as a draft with a unique record');
   else fail('new change draft was not created');
 
