@@ -657,7 +657,7 @@ test('HSRP elects an active gateway and tracks an uplink to fail over without ch
     r1:{id:'r1',kind:'router',ifaces:{lan:{ip:ip('10.20.0.2'),mask:24,up:true},wan:{ip:ip('203.0.113.2'),mask:24,up:true}},routes:[]},
     r2:{id:'r2',kind:'router',ifaces:{lan:{ip:ip('10.20.0.3'),mask:24,up:true},wan:{ip:ip('203.0.113.3'),mask:24,up:true}},routes:[]},
     swlan:sw('swlan',['p1','p2','p3']), swwan:sw('swwan',['p1','p2','p3']),
-    upstream:{id:'upstream',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.10'),mask:24,up:true}},routes:[]}
+    upstream:{id:'upstream',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('203.0.113.254')}]}
   },links:[
     link('pc','eth0','swlan','p1'),link('r1','lan','swlan','p2'),link('r2','lan','swlan','p3'),
     link('r1','wan','swwan','p1'),link('r2','wan','swwan','p2'),link('upstream','eth0','swwan','p3')
@@ -669,6 +669,9 @@ test('HSRP elects an active gateway and tracks an uplink to fail over without ch
     eq(cli.run('standby 10 priority '+priority).code,0,'set HSRP priority');
     eq(cli.run('standby 10 preempt').code,0,'enable preemption');
     if (lan==='lan' && cli===r1) eq(cli.run('standby 10 track wan decrement 30').code,0,'track WAN uplink');
+    cli.run('exit'); cli.run('interface wan');
+    eq(cli.run('standby 20 ip 203.0.113.254').code,0,'configure WAN-side virtual gateway');
+    eq(cli.run('standby 20 priority '+priority).code,0,'set WAN-side priority');
     cli.run('exit'); cli.run('end');
   }
   eq(M.hsrpStatus(net,'r1','lan').state,'Active','higher priority router initially active');
