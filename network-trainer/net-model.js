@@ -514,11 +514,11 @@ function dhclient(net, hostId, ifaceName) {
   const p = srv.pool, prefix = Number(p.prefix ?? p.network?.prefix ?? 24);
   const first = p.range ? p.range[0] : (p.network.net + 1) >>> 0;
   const last = p.range ? p.range[1] : (p.network.net + Math.pow(2, 32 - prefix) - 2) >>> 0;
-  const excluded = new Set((p.excluded || []).flatMap(x => x.end == null ? [x.start] : Array.from({ length: Math.max(0, x.end - x.start + 1) }, (_,i)=>x.start+i)));
+  const excluded = p.excluded || [];
   p.bindings = p.bindings || {};
   let addr = null;
   for (let a = first; a <= last; a++) {
-    if (a === p.gw || excluded.has(a)) continue;
+    if (a === p.gw || excluded.some(x => a >= x.start && a <= (x.end ?? x.start))) continue;
     const owner = deviceOwning(net, a);
     const leased = Object.entries(p.bindings).some(([id, lease]) => id !== hostId && lease.ip === a);
     if ((owner && owner !== hostId) || leased) continue;
