@@ -350,7 +350,7 @@ test('ASA network and service object-groups enforce reusable partner HTTPS polic
   const net = {
     devices: {
       partner:{id:'partner',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('203.0.113.1')}]},
-      attacker:{id:'attacker',kind:'host',ifaces:{eth0:{ip:ip('198.51.100.20'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('198.51.100.1')}]},
+      attacker:{id:'attacker',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.50'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('203.0.113.1')}]},
       app:{id:'app',kind:'host',ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.0.2.1')}],services:{443:'https',80:'http',22:'ssh'}},
       asa:{id:'asa',kind:'firewall',firewallOS:'asa',ifaces:{outside:{ip:ip('203.0.113.1'),mask:24,up:true,nameif:'outside',securityLevel:0},inside:{ip:ip('10.0.2.1'),mask:24,up:true,nameif:'inside',securityLevel:100}},routes:[],acls:[],nat:[]},
       sw1:sw('sw1',['p1','p2','p3']),sw2:sw('sw2',['p1','p2'])
@@ -359,7 +359,7 @@ test('ASA network and service object-groups enforce reusable partner HTTPS polic
   };
   const asa=makeCLI(net,'asa'); asa.run('enable'); asa.run('configure terminal');
   asa.run('object-group network APPROVED_PARTNERS');
-  eq(asa.run('network-object 203.0.113.0 255.255.255.0').code,0,'add approved subnet');
+  eq(asa.run('network-object 203.0.113.0 255.255.255.240').code,0,'add approved subnet');
   asa.run('exit'); asa.run('object-group network PORTAL_SERVERS');
   eq(asa.run('network-object host 10.0.2.10').code,0,'add portal host');
   asa.run('exit'); asa.run('object-group service PORTAL_TCP');
@@ -370,7 +370,7 @@ test('ASA network and service object-groups enforce reusable partner HTTPS polic
   asa.run('end');
   eq(M.forward(net,'partner',{src:ip('203.0.113.10'),dst:ip('10.0.2.10'),proto:'tcp',dport:443}).ok,true,'approved partner HTTPS allowed');
   eq(M.forward(net,'partner',{src:ip('203.0.113.10'),dst:ip('10.0.2.10'),proto:'tcp',dport:22}).ok,false,'partner SSH denied');
-  eq(M.forward(net,'attacker',{src:ip('198.51.100.20'),dst:ip('10.0.2.10'),proto:'tcp',dport:443}).ok,false,'unapproved source denied');
+  eq(M.forward(net,'attacker',{src:ip('203.0.113.50'),dst:ip('10.0.2.10'),proto:'tcp',dport:443}).ok,false,'unapproved source denied');
   has(asa.run('show object-group APPROVED_PARTNERS').out,'203.0.113.0','network group visible');
   has(asa.run('show access-list PARTNER_IN').out,'object-group PORTAL_TCP','service group reference visible');
   eq(asa.run('show access-list PARTNER_IN').out.includes('(1 match)'),true,'grouped rule hit counter increments');
