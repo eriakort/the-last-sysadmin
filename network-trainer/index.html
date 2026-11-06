@@ -639,7 +639,7 @@ function resolveTarget(cli, token) {
 }
 const ok = s => ({ out: s, code: 0 });
 const err = s => ({ out: s, code: 1 });
-const parseVlanId = value => /^\\d{1,4}$/.test(String(value)) && Number(value) >= 1 && Number(value) <= 4094 ? Number(value) : null;
+const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >= 1 && Number(value) <= 4094 ? Number(value) : null;
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
