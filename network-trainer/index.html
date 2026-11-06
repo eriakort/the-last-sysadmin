@@ -2689,7 +2689,8 @@ function doCheck() {
   }
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
-    if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }\n    const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
+    if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
@@ -3164,7 +3165,8 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
-        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>\n        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
+        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
@@ -3177,7 +3179,8 @@ function boot() {
       <aside id="config"></aside>
     </div>`;
   wireTerm();
-  $('#btnHelp').addEventListener('click', openHelp);\n  $('#btnQueue').addEventListener('click', openTicketQueue);
+  $('#btnHelp').addEventListener('click', openHelp);
+  $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
   $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
@@ -3191,5 +3194,6 @@ function boot() {
   initCloud();
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
+
 
 </script></body></html>
