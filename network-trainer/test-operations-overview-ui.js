@@ -54,6 +54,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     else fail('selected incident context was not loaded');
   }
 
+  await page.locator('#navOverview').click();
   await page.setViewportSize({ width: 390, height: 844 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   if (!overflow) ok('overview fits a narrow mobile viewport without horizontal page overflow');
