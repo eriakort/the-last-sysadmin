@@ -839,6 +839,47 @@ function wireConfig() {
   const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); const dv = g('.adst'); if (dv.includes('/')) rule.dstnet = M.cidr(dv); else if (/^\d+\.\d+\.\d+\.\d+$/.test(dv)) rule.dst = M.ip(dv); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
   document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
 }
+
+const KNOWLEDGE_COMMANDS = [
+  {cmd:'ip addr',cat:'Linux · basics',desc:'Inspect interface addresses and link state.'},
+  {cmd:'ip route',cat:'Linux · basics',desc:'Inspect the host routing table and default gateway.'},
+  {cmd:'ping 192.0.2.1',cat:'Linux · troubleshooting',desc:'Test reachability to a destination.'},
+  {cmd:'traceroute 192.0.2.1',cat:'Linux · troubleshooting',desc:'Trace the routed path to a destination.'},
+  {cmd:'show vlan brief',cat:'Cisco IOS · switching',desc:'Verify VLAN IDs, names and access-port membership.'},
+  {cmd:'show interfaces status',cat:'Cisco IOS · switching',desc:'Review switch port state, speed, duplex and VLAN.'},
+  {cmd:'show interfaces trunk',cat:'Cisco IOS · switching',desc:'Check trunk state and allowed VLANs.'},
+  {cmd:'show spanning-tree',cat:'Cisco IOS · switching',desc:'Inspect STP root, roles and forwarding/blocking states.'},
+  {cmd:'show mac address-table',cat:'Cisco IOS · switching',desc:'Find the switch port where a MAC address was learned.'},
+  {cmd:'show ip interface brief',cat:'Cisco IOS · routing',desc:'Review router interface addressing and operational state.'},
+  {cmd:'show ip route',cat:'Cisco IOS · routing',desc:'Inspect connected, static and learned routes.'},
+  {cmd:'show ip ospf neighbor',cat:'Cisco IOS · routing',desc:'Verify OSPF neighbour adjacencies.'},
+  {cmd:'show access-lists',cat:'Cisco IOS · security',desc:'Review configured access-control entries.'},
+  {cmd:'show running-config',cat:'Cisco IOS · verification',desc:'Inspect active device configuration.'}
+];
+const KNOWLEDGE_PLAYBOOKS = [
+  {title:'Endpoint cannot reach a resource',steps:['Confirm the endpoint interface is up and has the expected address and mask','Check the local route and default gateway','Test the gateway, then the destination; use traceroute to locate the failing hop','Check VLAN membership, routing and ACL policy along the path']},
+  {title:'Switch port is not forwarding',steps:['Check physical link and administrative state','Verify access VLAN or trunk allowed VLAN configuration','Inspect spanning-tree role and state for the affected VLAN','Check port-security violations and interface counters']},
+  {title:'Routed subnet is unreachable',steps:['Confirm both router interfaces are up/up and correctly addressed','Inspect the routing table for the destination prefix','Verify next-hop reachability and routing protocol neighbours','Review ACLs and return-path routing before changing configuration']},
+  {title:'A recent change caused an outage',steps:['Identify the change window, affected service and scope','Compare current configuration with the last known-good record','Validate the smallest suspected change and its dependencies','Rollback safely if needed, then verify service and document evidence']}
+];
+function renderKnowledgeCenter() {
+  const root = $('#knowledgeView'); if (!root) return;
+  root.innerHTML = `
+    <div class="knowledge-page-heading"><div><div class="eyebrow">Field reference · network operations</div><h1>Network knowledge</h1><p>Practical command references and repeatable troubleshooting workflows. Select a command to send it to the active Workbench console.</p></div><span class="help-key">L1 / L2 FIELD GUIDE</span></div>
+    <section class="knowledge-playbooks"><div class="knowledge-section-head"><h2>Troubleshooting playbooks</h2><span>Work methodically · capture evidence</span></div><div class="knowledge-playbook-grid">${KNOWLEDGE_PLAYBOOKS.map((p,i)=>`<article class="knowledge-playbook"><div class="eyebrow">PLAYBOOK 0${i+1}</div><h3>${esc(p.title)}</h3><ol>${p.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`).join('')}</div></section>
+    <section class="knowledge-library"><div class="knowledge-section-head"><div><h2>Command reference</h2><p>Search by command, task or description. Availability depends on the selected simulator device and CLI mode.</p></div></div><div class="knowledge-toolbar"><input id="knowledgeSearch" type="search" placeholder="Search commands and tasks…" aria-label="Search commands"><select id="knowledgeCategory" aria-label="Filter command category"><option value="all">All categories</option>${[...new Set(KNOWLEDGE_COMMANDS.map(x=>x.cat))].map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div id="knowledgeCommands" class="knowledge-command-list">${renderKnowledgeCommands(KNOWLEDGE_COMMANDS)}</div></section>
+    <p class="knowledge-caveat">Simulator reference only: this is not a complete Cisco IOS / IOS XE command catalogue. Commands vary by device and CLI context; unsupported commands should be treated as unavailable, not assumed to work on production equipment.</p>`;
+  const search=root.querySelector('#knowledgeSearch'), category=root.querySelector('#knowledgeCategory'), list=root.querySelector('#knowledgeCommands');
+  const filter=()=>{const q=search.value.trim().toLowerCase(), cat=category.value; const matches=KNOWLEDGE_COMMANDS.filter(x=>(cat==='all'||x.cat===cat)&&(!q||[x.cmd,x.cat,x.desc].join(' ').toLowerCase().includes(q))); list.innerHTML=renderKnowledgeCommands(matches); wireKnowledgeCommands(root);};
+  search.addEventListener('input',filter); category.addEventListener('change',filter); wireKnowledgeCommands(root);
+}
+function renderKnowledgeCommands(items) {
+  return items.map(x=>`<button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
+}
+function wireKnowledgeCommands(root) {
+  root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; input.focus();}}));
+}
+
 function addJournalEntry(entry) {
   PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
   PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
