@@ -204,10 +204,6 @@ test('STP and MAC learning also work on switch-to-switch access links', () => {
   assert(rows.some(x=>x.device==='srv' && x.port==='p3'), 'remote MAC should be learned across access switch links');
 });
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
-if (failed) process.exit(1);
-
-
 test('port security learns sticky MACs, enforces maximum, and err-disables a violating access port', () => {
   const net = { devices: { h1: host('h1','10.0.0.10'), rogue: host('rogue','10.0.0.20'), srv: host('srv','10.0.0.30'), sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{accessVlan:10}]]) }, links: [link('h1','eth0','sw1','p1'),link('srv','eth0','sw1','p2')] };
   net.devices.sw1.vlans=[1,10];
@@ -254,3 +250,6 @@ test('port-security settings and sticky addresses appear in running configuratio
   const config=command(cli,'sw1','show running-config');
   assert(config.includes('switchport port-security maximum 2') && config.includes('switchport port-security violation restrict') && config.includes('switchport port-security mac-address sticky'),'running config should preserve the operational security policy');
 });
+
+console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
+if (failed) process.exit(1);
