@@ -3420,9 +3420,11 @@ const chapters = [
       {type:'reachable',a:'hq',b:'remote'}
     ],
     solution:[
+      ['edge','enable'],
       ['edge','bgp prefix-list CUSTOMER-OUT permit 198.51.100.0/24'],
       ['edge','bgp prefix-list CUSTOMER-OUT deny 10.10.10.0/24'],
       ['edge','bgp neighbor 203.0.113.1 prefix-list CUSTOMER-OUT out'],
+      ['isp','enable'],
       ['isp','bgp prefix-list PROVIDER-IN permit 198.51.100.0/24'],
       ['isp','bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in'],
       ['edge','show ip bgp summary'],['edge','show ip bgp advertised-routes 203.0.113.1'],
