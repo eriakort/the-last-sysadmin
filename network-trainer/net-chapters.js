@@ -609,8 +609,7 @@ const chapters = [
     }),
     success: [{ type: 'reachable', a: 'pc', b: 'site' }],
     solution: [['edge', 'iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE']]
-  }
-
+  },
 
   { id: 'access-vlan-repair', chapter: 'Switching · VLANs',
     title: 'Put Finance back in its VLAN',
