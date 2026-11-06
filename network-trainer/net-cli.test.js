@@ -513,8 +513,9 @@ test('IOS syslog forwards configuration events to a reachable collector and appl
   const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
   eq(cli.run('logging host 10.0.2.10').code,0,'configure collector');
   eq(cli.run('logging trap informational').code,0,'configure trap');
+  eq(cli.run('logging source-interface eth0').code,0,'configure source interface');
   eq(cli.run('hostname BRANCH-R1').code,0,'generate config event');
-  has(cli.run('show logging').out,'Forwarded messages: 3','forwarding count');
+  has(cli.run('show logging').out,'Forwarded messages: 4','forwarding count');
   const collector=makeCLI(net,'log1').run('show logging').out;
   has(collector,'BRANCH-R1','collector sees sender');
   has(collector,'CONFIG: hostname BRANCH-R1','collector sees configuration change');
