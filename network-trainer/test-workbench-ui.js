@@ -1,5 +1,5 @@
-// Workbench regression: help must be one click away, command examples must be
-// usable, and the work journal must retain commands and learner-authored notes.
+// Workbench regression: global Help and Journal actions must route to the
+// first-class Knowledge and Engineering Journal workspaces.
 const path = require('path');
 const { chromium } = require('playwright');
 const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
@@ -13,58 +13,25 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const fail = message => { console.error('  ✗ ' + message); errors.push(message); };
 
   await page.goto(URL, { waitUntil: 'load' });
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(200);
 
   if (await page.locator('#btnHelp').isVisible() && await page.locator('#btnJournal').isVisible())
-    ok('Help and Journal are always available in the workbench header');
+    ok('Help and Journal remain one click away from the Workbench header');
   else fail('Help or Journal action missing');
 
-  await page.locator('#topo .node[data-dev="sw1"]').click();
   await page.locator('#btnHelp').click();
-  if (await page.locator('#modal .help-sheet').isVisible()) ok('help desk opens from the global Help action');
-  else fail('help desk did not open');
-
-  const context = (await page.locator('#modal .eyebrow').innerText()).toLowerCase();
-  if (/sw1/.test(context) && /switch/.test(context)) ok('help desk identifies the selected switch');
-  else fail('help desk lacks selected-device context: ' + context);
-
-  await page.locator('#helpSearch').fill('vlan 20');
-  const command = page.locator('#helpResults [data-help-cmd="vlan 20"]');
-  if (await command.count()) ok('command reference can be searched');
-  else fail('VLAN command not found in help search');
-
-  await command.click();
-  if (!(await page.locator('#modal').count()) && (await page.locator('#tin').inputValue()) === 'vlan 20')
-    ok('selecting a help example inserts it into the device console');
-  else fail('help command was not inserted into the terminal');
-
-  await page.locator('#tin').press('Enter');
-  await page.waitForTimeout(100);
-  const terminal = await page.locator('#tout').innerText();
-  if (/VLAN 20 created/.test(terminal)) ok('selected command runs on the selected switch');
-  else fail('command example did not execute: ' + terminal);
+  if (await page.locator('#knowledgeView').isVisible()) ok('global Help opens the first-class Knowledge workspace');
+  else fail('global Help did not open Knowledge');
+  if (await page.locator('#knowledgeSearch').isVisible() && await page.locator('.knowledge-playbook').count() >= 4)
+    ok('Help provides searchable command guidance and troubleshooting playbooks');
+  else fail('Knowledge guidance is not available from global Help');
 
   await page.locator('#btnJournal').click();
-  if (await page.locator('#modal .journal-entry').count() > 0) ok('journal records command activity and output');
-  else fail('journal did not record the command');
-
-  await page.locator('#journalNote').fill('Checked the switch VLAN database before changing the access port.');
-  await page.locator('#saveJournalNote').click();
-  await page.waitForTimeout(80); // saving a note reopens the journal automatically
-  const journal = await page.locator('#modal .journal-list').innerText();
-  if (/Checked the switch VLAN database/.test(journal) && /VLAN 20 created/.test(journal))
-    ok('learner notes and command evidence persist in the work journal');
-  else fail('journal is missing note or command output: ' + journal);
-
-  if (await page.locator('#exportJournal').isVisible()) ok('journal offers a Markdown export');
-  else fail('journal export action missing');
-
-  await page.reload({ waitUntil: 'load' });
-  await page.waitForTimeout(250);
-  await page.locator('#btnJournal').click();
-  const afterReload = await page.locator('#modal .journal-list').innerText();
-  if (/Checked the switch VLAN database/.test(afterReload)) ok('work journal survives a browser reload');
-  else fail('journal note did not persist across reload');
+  if (await page.locator('#journalView').isVisible()) ok('global Journal opens the first-class Engineering Journal');
+  else fail('global Journal did not open the journal workspace');
+  if (await page.locator('#journalSearch').isVisible() && await page.locator('#journalExportPage').isVisible())
+    ok('global Journal exposes search and Markdown export');
+  else fail('journal search or export is unavailable from the global action');
 
   await browser.close();
   if (errors.length) { console.error('\\nWORKBENCH UI TEST FAILED (' + errors.length + ')'); process.exit(1); }

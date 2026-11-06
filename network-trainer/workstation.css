@@ -322,3 +322,89 @@ aside{scrollbar-color:#344a60 transparent}
 .infra-detail-empty p{font-size:11px}
 @media(max-width:1100px){.infra-layout{grid-template-columns:minmax(240px,.8fr) minmax(0,1.2fr)}.infra-detail-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){#infrastructureView{padding:18px 12px 26px}.infra-page-heading{display:block}.infra-page-heading h1{font-size:22px}.infra-page-heading>.overview-live{display:inline-flex;margin-top:12px}.infra-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.infra-layout{grid-template-columns:1fr}.infra-device-list{max-height:350px}.infra-detail-heading{display:block}.infra-detail-heading .btn{margin-top:10px}.infra-detail-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Knowledge centre and searchable engineering journal */
+#knowledgeView,#journalView{display:block;flex:1;min-height:0;overflow:auto;padding:26px clamp(18px,3vw,42px) 36px;background:radial-gradient(ellipse at 82% 0%,rgba(37,110,143,.12),transparent 42%),var(--bg)}
+#knowledgeView[hidden],#journalView[hidden]{display:none!important}
+.knowledge-heading,.journal-page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.knowledge-heading h1,.journal-page-heading h1{font-size:26px;letter-spacing:-.035em;margin:5px 0 7px}
+.knowledge-heading p,.journal-page-heading p{margin:0;color:var(--muted);font-size:13px;max-width:760px}
+.knowledge-toolbar,.journal-page-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 13px}
+.knowledge-toolbar input,.journal-page-toolbar input{flex:1;min-width:220px}
+.knowledge-toolbar select,.journal-page-toolbar select,.knowledge-toolbar input,.journal-page-toolbar input{padding:8px 10px;background:var(--panel);border:1px solid var(--line);border-radius:7px;color:var(--ink);font:inherit}
+.knowledge-toolbar>span,.journal-page-toolbar>span{color:var(--muted);font:10px ui-monospace,monospace;white-space:nowrap}
+.knowledge-panel{border:1px solid var(--line);border-radius:10px;background:linear-gradient(155deg,var(--panel),color-mix(in srgb,var(--panel) 92%,var(--bg)));padding:15px;margin-bottom:13px}
+.knowledge-section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:11px}
+.knowledge-section-head h2{font-size:16px;margin:3px 0 0}
+.knowledge-section-head>span{color:var(--muted);font:9px ui-monospace,monospace;text-align:right}
+.knowledge-command-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:560px;overflow:auto}
+.knowledge-command{display:grid;grid-template-columns:minmax(170px,.9fr) 1.1fr;gap:10px;align-items:center;text-align:left;background:var(--raise);border:1px solid var(--line);border-radius:7px;padding:9px;color:var(--ink);cursor:pointer;font:inherit;min-width:0}
+.knowledge-command:hover,.knowledge-command:focus-visible{border-color:var(--amber);outline:none}
+.knowledge-command b{display:block;color:var(--good);font:11px ui-monospace,monospace;overflow-wrap:anywhere}
+.knowledge-command small{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.07em;margin-top:4px}
+.knowledge-command>span:last-child{font-size:10px;color:var(--muted);line-height:1.45}
+.knowledge-playbooks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.knowledge-playbook{min-width:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:rgba(8,19,24,.28)}
+.knowledge-playbook h3{font-size:13px;margin:0 0 5px}
+.knowledge-playbook>p{font-size:11px;color:var(--muted);margin:0 0 8px}
+.knowledge-playbook ol{padding-left:18px;margin:0 0 10px;color:var(--ink);font-size:10.5px;line-height:1.65}
+.knowledge-playbook-commands{display:flex;flex-wrap:wrap;gap:5px}
+.knowledge-disclaimer{font-size:10px;color:var(--muted);line-height:1.6;margin:12px 2px}
+.knowledge-disclaimer code{color:var(--good);font:10px ui-monospace,monospace}
+.journal-page-compose{max-width:100%;margin:0 0 13px}
+.journal-page-compose .row{margin-top:8px}
+.journal-page-toolbar input{flex:1}
+.journal-page-list{display:grid;gap:8px}
+.journal-page-list .journal-entry{background:var(--panel);padding:13px}
+.journal-page-list .journal-meta{align-items:center}
+.journal-page-list .journal-entry p{font-size:12px}
+.journal-page-empty{padding:38px 18px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:9px;background:var(--panel);font-size:12px}
+@media(max-width:760px){
+ #knowledgeView,#journalView{padding:18px 12px 26px}
+ .knowledge-heading,.journal-page-heading{display:block}
+ .knowledge-heading h1,.journal-page-heading h1{font-size:22px}
+ .knowledge-heading>.overview-live{display:inline-flex;margin-top:12px}
+ .journal-page-heading>.btn{margin-top:12px}
+ .knowledge-toolbar,.journal-page-toolbar{align-items:stretch}
+ .knowledge-toolbar input,.journal-page-toolbar input{min-width:100%;flex-basis:100%}
+ .knowledge-toolbar select,.journal-page-toolbar select{flex:1;min-width:0}
+ .knowledge-toolbar>span,.journal-page-toolbar>span{width:100%}
+ .knowledge-command-list,.knowledge-playbooks{grid-template-columns:1fr}
+ .knowledge-command{grid-template-columns:minmax(130px,.85fr) 1.15fr}
+ .knowledge-section-head{display:block}
+ .knowledge-section-head>span{display:block;text-align:left;margin-top:5px}
+ .journal-page-list .journal-meta{flex-wrap:wrap}
+}
+
+
+/* Network Knowledge field reference */
+#knowledgeView,#journalView{min-width:0;overflow:auto;padding:clamp(16px,2.5vw,30px);background:var(--bg);height:100%;max-height:calc(100vh - 58px)}
+.knowledge-page-heading,.journal-page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.knowledge-page-heading h1,.journal-page-heading h1{font-size:24px;margin:5px 0}
+.knowledge-page-heading p,.journal-page-heading p{color:var(--muted);max-width:760px;margin:5px 0}
+.knowledge-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:20px 0 10px}
+.knowledge-section-head h2{font-size:15px;margin:0}
+.knowledge-section-head>span,.knowledge-section-head p{font-size:11px;color:var(--muted);margin:3px 0}
+.knowledge-playbook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.knowledge-playbook{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:13px;min-width:0}
+.knowledge-playbook h3{font-size:14px;margin:4px 0 8px}
+.knowledge-playbook ol{margin:0;padding-left:19px;color:var(--muted);font-size:12px}
+.knowledge-playbook li{padding:3px 0}
+.knowledge-toolbar{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0}
+.knowledge-toolbar input{flex:1;min-width:220px}
+.knowledge-command-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.knowledge-command{display:grid;grid-template-columns:minmax(150px,.8fr) 1.2fr;gap:10px;align-items:center;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;color:var(--ink);cursor:pointer;font:inherit;min-width:0}
+.knowledge-command:hover,.knowledge-command:focus-visible{border-color:var(--amber);outline:none}
+.knowledge-command code{display:block;color:var(--good);font:12px ui-monospace,monospace;overflow-wrap:anywhere}
+.knowledge-command small{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;margin-top:4px}
+.knowledge-command>span:last-child{color:var(--muted);font-size:11px}
+.knowledge-caveat{margin-top:14px;padding:10px 12px;border-left:3px solid var(--amber);background:var(--panel);color:var(--muted);font-size:11px}
+.journal-page-heading{margin-bottom:14px}
+.journal-page-compose{max-width:900px}
+.journal-page-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.journal-page-toolbar input{flex:1;min-width:200px}
+.journal-page-toolbar>span{color:var(--muted);font-size:11px}
+.journal-page-list{display:grid;gap:8px;max-width:1100px}
+.journal-page-empty{padding:20px;border:1px dashed var(--line);border-radius:8px;color:var(--muted)}
+@media(max-width:760px){#knowledgeView,#journalView{height:auto;max-height:none;overflow:visible}.knowledge-page-heading,.journal-page-heading{display:block}.knowledge-playbook-grid,.knowledge-command-list{grid-template-columns:1fr}.knowledge-command{grid-template-columns:minmax(120px,.8fr) 1.2fr}.knowledge-toolbar input{min-width:0;width:100%}}
