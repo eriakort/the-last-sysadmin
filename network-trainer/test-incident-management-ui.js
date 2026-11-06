@@ -44,7 +44,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   const acknowledge = page.locator('#incidentAcknowledge');
   if (await acknowledge.count()) {
     await acknowledge.click();
-    if ((await page.locator('#incidentDetail').innerText()).includes('acknowledged'))
+    if ((await page.locator('#incidentDetail').innerText()).toLowerCase().includes('acknowledged'))
       ok('new incident can be acknowledged from its detail record');
     else fail('acknowledgement did not update the incident state');
   } else ok('selected incident was already acknowledged or in progress');
