@@ -83,6 +83,11 @@ function bgpRoute(net, devId, cidrStr) {
   const hit = M.bgpLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via BGP` : `${devId} has not learned ${cidrStr} via BGP` };
 }
+function bgpRouteAbsent(net, devId, cidrStr) {
+  const c = M.cidr(cidrStr);
+  const hit = M.bgpLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
+  return { ok: !hit, reason: hit ? `${devId} is incorrectly learning ${cidrStr} via BGP` : `${devId} is not learning ${cidrStr} via BGP` };
+}
 // A port-forward works: from `fromId`, traffic to `publicIp:dport` is delivered
 // to the internal `serverId` (not just to the NAT box that owns the public IP).
 function portForward(net, fromId, publicIp, dport, serverId, proto = 'tcp') {
@@ -128,4 +133,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
