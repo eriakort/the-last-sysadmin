@@ -279,7 +279,7 @@ function ospfAdvertised(dev) {
   for (const ifn in dev.ifaces) {
     const f = dev.ifaces[ifn];
     if (f.ospf == null || f.up === false || f.ip == null) continue;
-    ads.push({ dest: networkOf(f.ip, f.mask), mask: f.mask, area: f.ospf, iface: ifn });
+    ads.push({ dest: networkOf(f.ip, f.mask), mask: f.mask, area: String(f.ospf), iface: ifn });
   }
   return ads;
 }
