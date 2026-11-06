@@ -278,6 +278,7 @@ Firewall devices explicitly marked with `firewallOS: 'asa'` use a separate ASA-s
 - Named extended ACLs using ASA syntax: `access-list NAME extended permit|deny tcp|udp|ip|icmp ...`, with `any`, `host`, subnet/netmask and destination-port matching
 - Inbound ACL attachment using `access-group NAME in interface outside`; ordered rules, implicit deny and match counters
 - Network objects with host definitions and same-port TCP static PAT: `nat (inside,outside) static interface service tcp 443 443`
+- Static route add/remove using `route <nameif> NETWORK MASK NEXT-HOP [metric]` and `no route ...`
 - Verification through `show interface ip brief`, `show access-list`, `show access-group`, `show nat`, `show route`, and `packet-tracer input ...`
 - ASA-style security-level policy: higher-to-lower traffic is permitted by default, lower-to-higher and same-level traffic is denied unless an inbound ACL explicitly permits it; established return traffic for an initiated flow is allowed by the shared one-flow connection context
 
