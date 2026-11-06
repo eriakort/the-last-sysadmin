@@ -141,6 +141,21 @@ The DNS model is **authoritative/static** (a resolver maps names→IPs); no recu
 caching, or TTLs — deliberately, since those add protocol machinery without teaching a
 beginner more than "names need a resolver, and a record."
 
+ 
+## Enterprise network services operations
+
+The IOS-style router/server profile now supports a cohesive, testable service workflow:
+
+- **DHCP server pools:** `ip dhcp excluded-address LOW [HIGH]`, `ip dhcp pool NAME`, then `network NET MASK`, `default-router IP`, `dns-server IP`, `domain-name NAME`, and `lease DAYS`. Leases are allocated from the configured subnet, avoid excluded/in-use addresses, and are recorded as bindings.
+- **DHCP relay:** under the client-facing routed interface, configure `ip helper-address SERVER-IP`. The simulator forwards the client lease request to the configured DHCP server across the routed topology; `show ip dhcp pool`, `show ip dhcp binding`, and `show ip dhcp server statistics` expose the operational state.
+- **DNS:** `ip name-server IP` configures a resolver; `ip host NAME IP` adds a local static host entry. `show hosts` and the existing `dig NAME` command help separate local naming from resolver-based lookups. The authoritative DNS zone remains static and intentionally does not simulate recursion, caching, TTL expiry, or record types beyond A.
+- **NTP:** `ntp server IP` configures an upstream peer; `ntp master STRATUM` marks a simulated time source. `show ntp status` and `show ntp associations` distinguish an unreachable peer from a reachable master and report the selected stratum.
+- **Syslog:** `logging host IP`, `logging trap informational`, and `logging source-interface IF` configure forwarding. Successful configuration changes create local operational messages; messages at or above the configured severity are forwarded to a reachable collector listening on UDP/514. `show logging` inspects the sender queue/counters or collector events.
+
+The new **INC-3428 — The branch is online, but services are not** mission ties DHCP relay, DNS, NTP and syslog together in a realistic branch-office restoration ticket. Learners configure the server and router, obtain a client lease, verify name resolution and time sync, inspect central logs, and save the router configuration.
+
+This remains an educational IOS-style subset, not a Cisco IOS image or full protocol implementation. DHCP lease expiry/renewal timers, DHCP options beyond the listed subset, recursive DNS, NTP clock discipline/packet exchange, and full RFC 3164/5424 syslog formatting are not simulated.
+
 ## What the tests prove
 
 - **Switching** — two hosts on one switch reach each other; a host in the wrong subnet doesn't.
@@ -172,7 +187,7 @@ M1–M4 are done: a playable prototype with engine, CLI, missions, and a UI, all
 Natural next steps:
 
 - **Polish the builder** — drag to reposition, add/remove devices and links (right now topology is given per mission and you configure it; the sketch's "build from scratch" capstone needs add/delete).
-- **DNS/DHCP** in the engine → unlocks `dig` / `dhclient` and the naming chapter.
+- **Enterprise services** — deepen DHCP reservation/renewal behavior, DNS diagnostics, NTP failure modes, and syslog filtering / incident correlation.
 - **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
 - **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
 

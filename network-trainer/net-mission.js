@@ -25,6 +25,9 @@ function evalCheck(net, s) {
     case 'mac_entry':      return C.macEntry(net, s.dev, s.device, s.vlan, s.port);
     case 'stp_root':       return C.stpRoot(net, s.dev, s.vlan, s.root);
     case 'stp_blocked':    return C.stpBlocked(net, s.dev, s.port, s.vlan);
+    case 'dhcp_lease':     return C.dhcpLease(net, s.dev, s.iface, s.cidr);
+    case 'ntp_sync':       return C.ntpSynchronized(net, s.dev);
+    case 'syslog_received':return C.syslogReceived(net, s.collector, s.source);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }

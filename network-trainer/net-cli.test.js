@@ -455,6 +455,96 @@ test('ASA command parser rejects bad interfaces, ports, levels and unsupported I
   eq(cli.run('nat (inside,outside) static interface service tcp 443 80').code,1,'reject unsupported port translation');
 });
 
+
+test('IOS DHCP relay allocates an excluded-range-aware lease and delivers DNS options', () => {
+  const net = {
+    devices: {
+      h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } }, routes: [] },
+      srv: { id: 'srv', kind: 'host', ifaces: { eth0: { ip: ip('10.0.2.10'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }], services: { 53: 'dns', 67: 'dhcp', 123: 'ntp', 514: 'syslog' }, dns: { 'portal.branch.local': ip('10.0.2.20') }, ntp: { master: true, stratum: 3 }, syslogCollector: true },
+      portal: { id: 'portal', kind: 'host', ifaces: { eth0: { ip: ip('10.0.2.20'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }] },
+      r1: { id: 'r1', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true }, eth1: { ip: ip('10.0.2.1'), mask: 24, up: true } }, routes: [] },
+      sw1: sw('sw1', ['p1','p2']), sw2: sw('sw2', ['p1','p2','p3'])
+    },
+    links: [link('h1','eth0','sw1','p1'),link('r1','eth0','sw1','p2'),link('portal','eth0','sw2','p1'),link('srv','eth0','sw2','p2'),link('r1','eth1','sw2','p3')]
+  };
+  const server = makeCLI(net, 'srv'); server.run('enable'); server.run('configure terminal');
+  eq(server.run('ip dhcp excluded-address 10.0.1.1 10.0.1.20').code, 0, 'exclude infrastructure range');
+  eq(server.run('ip dhcp pool BRANCH').code, 0, 'create pool');
+  eq(server.run('network 10.0.1.0 255.255.255.0').code, 0, 'pool network');
+  eq(server.run('default-router 10.0.1.1').code, 0, 'pool gateway');
+  eq(server.run('dns-server 10.0.2.10').code, 0, 'pool DNS');
+  eq(server.run('domain-name branch.local').code, 0, 'pool domain');
+  eq(server.run('lease 7').code, 0, 'pool lease');
+  server.run('exit'); server.run('end');
+  const router = makeCLI(net, 'r1'); router.run('enable'); router.run('configure terminal');
+  router.run('interface eth0'); eq(router.run('ip helper-address 10.0.2.10').code, 0, 'configure relay');
+  router.run('exit'); router.run('ip name-server 10.0.2.10');
+  const client = makeCLI(net, 'h1');
+  const lease = client.run('dhclient eth0');
+  eq(lease.code, 0, 'relay returns a lease'); has(lease.out, '10.0.1.21', 'excluded range skipped');
+  eq(net.devices.h1.resolver, ip('10.0.2.10'), 'DNS option applied');
+  eq(client.run('dig portal.branch.local').code, 0, 'DNS resolution works after lease');
+  has(server.run('show ip dhcp binding').out, '10.0.1.21', 'server binding visible');
+  has(server.run('show ip dhcp pool').out, '10.0.1.0/24', 'pool operational state visible');
+  has(router.run('show running-config').out, 'ip helper-address 10.0.2.10', 'relay persists');
+});
+
+test('IOS NTP status distinguishes an unsynchronized clock from a reachable master', () => {
+  const net = { devices: {
+    r1: { id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.2.1'),mask:24,up:true}},routes:[] },
+    srv: { id:'srv',kind:'host',ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}},routes:[],services:{123:'ntp'},ntp:{master:true,stratum:3} },
+    sw: sw('sw',['p1','p2'])
+  }, links:[link('r1','eth0','sw','p1'),link('srv','eth0','sw','p2')] };
+  const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
+  has(cli.run('show ntp status').out,'unsynchronized','initial state');
+  eq(cli.run('ntp server 10.0.2.10').code,0,'configure NTP peer');
+  const status=cli.run('show ntp status').out;
+  has(status,'synchronized','clock sync state'); has(status,'10.0.2.10','reference');
+  has(cli.run('show ntp associations').out,'synchronized','association state');
+  has(cli.run('show running-config').out,'ntp server 10.0.2.10','NTP config persists');
+});
+
+test('IOS syslog forwards configuration events to a reachable collector and applies severity', () => {
+  const net = { devices: {
+    r1: { id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.2.1'),mask:24,up:true}},routes:[] },
+    log1: { id:'log1',kind:'host',ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}},routes:[],services:{514:'syslog'},syslogCollector:true },
+    sw: sw('sw',['p1','p2'])
+  }, links:[link('r1','eth0','sw','p1'),link('log1','eth0','sw','p2')] };
+  const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
+  eq(cli.run('logging host 10.0.2.10').code,0,'configure collector');
+  eq(cli.run('logging trap informational').code,0,'configure trap');
+  eq(cli.run('logging source-interface eth0').code,0,'configure source interface');
+  eq(cli.run('hostname BRANCH-R1').code,0,'generate config event');
+  has(cli.run('show logging').out,'Forwarded messages: 4','forwarding count');
+  const collector=makeCLI(net,'log1').run('show logging').out;
+  has(collector,'BRANCH-R1','collector sees sender');
+  has(collector,'CONFIG: hostname BRANCH-R1','collector sees configuration change');
+  has(collector,'10.0.2.1','configured source-interface address is used');
+  has(cli.run('show running-config').out,'logging host 10.0.2.10','syslog config persists');
+});
+
+
+test('IOS local DNS host entries resolve without an upstream resolver', () => {
+  const net = { devices: {
+    r1: { id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.2.1'),mask:24,up:true}},routes:[] }
+  }, links:[] };
+  const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
+  eq(cli.run('ip host portal.branch.local 10.0.2.20').code,0,'configure local host');
+  has(cli.run('show hosts').out,'portal.branch.local','host table entry');
+  cli.run('end');
+  const resolved=cli.run('dig portal.branch.local');
+  eq(resolved.code,0,'local name resolves without resolver'); has(resolved.out,'10.0.2.20','local address');
+  has(cli.run('show running-config').out,'ip host portal.branch.local 10.0.2.20','local host persists');
+});
+
+test('incomplete DHCP pools fail cleanly and report server statistics', () => {
+  const net={devices:{srv:{id:'srv',kind:'host',ifaces:{eth0:{ip:ip('10.0.1.1'),mask:24,up:true}},routes:[]},h1:{id:'h1',kind:'host',ifaces:{eth0:{up:true}},routes:[]}},links:[link('srv','eth0','h1','eth0')]};
+  const server=makeCLI(net,'srv');server.run('enable');server.run('configure terminal');server.run('ip dhcp pool EMPTY');server.run('exit');
+  const client=makeCLI(net,'h1');
+  const lease=client.run('dhclient eth0');eq(lease.code,1,'incomplete pool rejected');has(lease.out,'no network statement','clear failure reason');
+  has(server.run('show ip dhcp server statistics').out,'Bindings: 0','statistics show no bindings');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

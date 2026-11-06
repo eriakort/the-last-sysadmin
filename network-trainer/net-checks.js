@@ -103,9 +103,29 @@ function stpRoot(net, switchId, vlan, expectedRoot) {
   const ok = !!(state && state.root === expectedRoot);
   return { ok, reason: ok ? expectedRoot + ' is root bridge for VLAN ' + vlan : (state ? state.root + ' is root for VLAN ' + vlan + ', expected ' + expectedRoot : switchId + ' has no active STP instance for VLAN ' + vlan) };
 }
+function dhcpLease(net, devId, ifaceName, cidrStr) {
+  const host = net.devices[devId], iface = host && host.ifaces[ifaceName];
+  if (!iface || iface.ip == null) return { ok: false, reason: devId + '/' + ifaceName + ' has no DHCP address' };
+  const pool = M.dhcpServerFor(net, devId, ifaceName);
+  const lease = pool && pool.pool.bindings && pool.pool.bindings[devId];
+  const expected = M.cidr(cidrStr);
+  const ok = !!(lease && lease.ip === iface.ip && iface.mask === expected.prefix && M.networkOf(iface.ip, expected.prefix) === expected.net);
+  return { ok, reason: ok ? devId + ' has a DHCP lease in ' + cidrStr : devId + ' does not have a matching DHCP lease in ' + cidrStr };
+}
+function ntpSynchronized(net, devId) {
+  const status = M.ntpStatus(net, devId);
+  return { ok: status.synchronized, reason: status.synchronized ? devId + ' is synchronized to ' + status.source : devId + ' clock is unsynchronized: ' + status.reason };
+}
+function syslogReceived(net, collectorId, sourceId) {
+  const collector = net.devices[collectorId];
+  const events = collector && collector.syslogEvents || [];
+  const ok = events.some(x => x.deviceId === sourceId);
+  return { ok, reason: ok ? collectorId + ' has received syslog from ' + sourceId : collectorId + ' has not received syslog from ' + sourceId };
+}
+
 function stpBlocked(net, switchId, port, vlan) {
   const tree = M.spanningTree(net, vlan), state = tree.switches[switchId], p = state && state.ports[port];
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
