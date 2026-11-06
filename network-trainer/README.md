@@ -252,6 +252,14 @@ The Network Trainer is evolving into a day-to-day network operations environment
 
 The Network Sysadmin workspace opens on a shift dashboard before entering the Workbench. It summarises the active simulator scenario: device health is calculated from interface state, link health from both link and endpoint interfaces, and recent traffic from commands run in the current lab. It also surfaces unresolved training incidents with priority and status, links directly into the selected incident's Workbench, and shows recent local journal activity. The dashboard labels all telemetry as simulated; it is not an external monitoring or NMS integration. Workbench, incident queue, command help, journal, and learning progress remain one click away.
 
+### Workbench engineering controls
+
+- **Device explorer:** filter the active scenario's hosts, servers, switches, routers and firewalls; selecting a device synchronises the topology, inspector and console target.
+- **Device inspector tabs:** separate overview/Layer 2 state, routing operations, and firewall policy while retaining the existing configuration actions and simulator model.
+- **Device console sessions:** each device has its own terminal output buffer and command history. Switching sessions does not discard the previous device's visible output or history.
+- **Topology navigation:** zoom in/out, fit the complete topology, auto-arrange nodes, and pan the canvas independently of dragging devices. Device drag and link wiring remain supported.
+- The session buffers are scoped to the active mission/build session and are not presented as durable audit records; command activity continues to be written to the engineering journal.
+
 ### Help desk and work journal
 
 - The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.

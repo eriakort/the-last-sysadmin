@@ -69,7 +69,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   // --- switch to mission 3 and solve via the CONFIG PANEL ---
   await page.selectOption('#pick', { label: 'Routing — Off the local network' }); await page.waitForTimeout(200);
   await clearDiagnosis();   // this mission is gated too — locate the fault first
-  // h1 is the console/selected device; its config panel is on the right. Add a default route.
+  // h1 is the console/selected device; open Routing in the inspector before adding a default route.
+  await page.click('#config .inspector-tab[data-inspector-tab="routing"]');
   await page.fill('#config .rdest', 'default');
   await page.fill('#config .rvia', '10.0.1.1');
   await page.click('#addrt'); await page.waitForTimeout(150);
