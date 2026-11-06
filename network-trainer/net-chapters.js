@@ -714,6 +714,44 @@ const chapters = [
     ],
     solution: [['sw3', 'spanning-tree vlan 10 priority 4096'], ['h1', 'ping srv'], ['sw1', 'show spanning-tree vlan 10'], ['sw1', 'show mac address-table dynamic']]
   }
+
+  ,
+  { id: 'asa-publish-https', chapter: 'Cisco ASA firewall operations',
+    title: 'Publish the secure customer portal',
+    story: 'A customer portal is hosted on an inside web server. The public address belongs to the ASA outside interface. A change request asks for HTTPS-only publication using static PAT, while the inside-to-outside path must remain stateful.',
+    objective: 'Configure ASA interface roles and security levels, publish TCP/443 to the inside web server with an object NAT static PAT rule, apply an inbound outside ACL, verify with packet-tracer, and save the configuration.',
+    ticket: { id: 'CHG-2048', from: 'Network security · change window', priority: 'P1', symptom: 'Customers cannot reach the portal securely. Publish HTTPS on 198.51.100.10 to the inside server 10.0.2.10. Do not expose SSH or HTTP, and do not break normal inside-initiated sessions.' },
+    diagnose: { q: 'The web host is healthy on the inside network, but the public address is owned by the firewall. Which ASA features must work together to publish only HTTPS?', options: ['An outside inbound ACL permit plus object NAT static PAT to the inside host', 'A static route on the web server only', 'An IOS ip access-group on the outside interface'], answer: 0, because: 'ASA publication requires two separate controls: the inbound ACL authorizes the service, and object NAT translates the public interface address/port to the inside server. The ASA security-level model also allows higher-to-lower sessions and their stateful replies.' },
+    console: 'asa',
+    hints: ['Start by entering enable and configure terminal. Give eth0 the nameif outside / level 0 and eth1 the nameif inside / level 100.', 'Create OUTSIDE_IN to permit only TCP/443 to 198.51.100.10, then apply it inbound on outside.', 'Create object network WEB-PORTAL, set host 10.0.2.10, then add nat (inside,outside) static interface service tcp 443 443. Verify with show access-list, show nat and packet-tracer.'],
+    build: () => ({
+      devices: {
+        remote: H('remote', '198.51.100.50', 24, '198.51.100.10'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 443: 'https', 80: 'http', 22: 'ssh' }),
+        asa: Object.assign(R('asa', 'firewall', { eth0: iface('198.51.100.10', 24), eth1: iface('10.0.2.1', 24) }), { firewallOS: 'asa' }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('remote', 'eth0', 'sw1', 'p1'), L('asa', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('asa', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'port_forward', from: 'remote', public: '198.51.100.10', dport: 443, server: 'web', proto: 'tcp' },
+      { type: 'acl_blocks', src: 'remote', dst: '198.51.100.10', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'remote', dst: '198.51.100.10', proto: 'tcp', dport: 80 }
+    ],
+    solution: [
+      ['asa', 'enable'], ['asa', 'show interface ip brief'], ['asa', 'configure terminal'],
+      ['asa', 'interface eth0'], ['asa', 'nameif outside'], ['asa', 'security-level 0'], ['asa', 'exit'],
+      ['asa', 'interface eth1'], ['asa', 'nameif inside'], ['asa', 'security-level 100'], ['asa', 'exit'],
+      ['asa', 'access-list OUTSIDE_IN extended permit tcp any host 198.51.100.10 eq 443'],
+      ['asa', 'access-group OUTSIDE_IN in interface outside'],
+      ['asa', 'object network WEB-PORTAL'], ['asa', 'host 10.0.2.10'],
+      ['asa', 'nat (inside,outside) static interface service tcp 443 443'], ['asa', 'exit'], ['asa', 'end'],
+      ['asa', 'show access-list OUTSIDE_IN'], ['asa', 'show access-group'], ['asa', 'show nat'],
+      ['asa', 'packet-tracer input outside tcp 198.51.100.50 50000 198.51.100.10 443'],
+      ['asa', 'write memory']
+    ]
+  }
+
 ];
 
 module.exports = { chapters };
