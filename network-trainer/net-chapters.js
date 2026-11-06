@@ -792,6 +792,50 @@ const chapters = [
       ['asa','clear access-list PARTNER_IN'], ['asa','show access-list PARTNER_IN'], ['asa','write memory']
     ]
   }
+,
+  { id: 'branch-services-restoration', chapter: 'Enterprise network services',
+    title: 'The branch is online, but services are not',
+    story: 'A branch office was moved onto a routed VLAN. New clients cannot obtain addresses, users cannot resolve the internal portal, device clocks are drifting, and the central log collector is missing router events. The services host is srv at 10.0.2.10. Restore the service chain without changing the addressing plan.',
+    objective: 'Build a DHCP pool and relay, restore DNS resolution, synchronize the router with NTP, and forward operational logs to the central collector. Verify each service and save the router configuration.',
+    ticket: { id: 'INC-3428', from: 'Network operations · branch office', priority: 'P1', symptom: 'The branch help desk reports that new laptops show no network address. The portal works by IP but not by name. Security also says event timestamps do not line up and the collector has stopped receiving router changes.' },
+    diagnose: { q: 'Which approach best isolates this multi-service outage without masking the root causes?', options: ['Validate DHCP allocation and relay first, then test DNS, NTP and syslog transport independently', 'Replace the router and server immediately', 'Set static addresses on every laptop and ignore the monitoring alerts'], answer: 0, because: 'The symptoms span separate services. Establish the client lease and gateway first, then test name resolution, time synchronization and log delivery as independent dependencies.' },
+    console: 'r1',
+    hints: ['On srv, create an IOS DHCP pool for 10.0.1.0/24. Exclude the gateway and infrastructure range, then set default-router 10.0.1.1 and dns-server 10.0.2.10.', 'On r1 eth0, configure ip helper-address 10.0.2.10. Set ip name-server 10.0.2.10 and verify the router can reach srv.', 'Configure ntp server 10.0.2.10 and logging host 10.0.2.10 on r1. Use show ntp status, show ntp associations and show logging; then obtain a lease on h1 and test its portal name lookup.'],
+    build: () => ({
+      devices: {
+        h1: H('h1'),
+        portal: SRV('portal', '10.0.2.20', 24, '10.0.2.1', { 443: 'https' }),
+        srv: Object.assign(SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 53: 'dns', 67: 'dhcp', 123: 'ntp', 514: 'syslog' }),
+          { dns: { 'portal.branch.local': ip('10.0.2.20') }, ntp: { master: true, stratum: 3 }, syslogCollector: true }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('portal', 'eth0', 'sw2', 'p1'), L('srv', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')]
+    }),
+    success: [
+      { type: 'dhcp_lease', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'portal' },
+      { type: 'resolves', dev: 'h1', name: 'portal.branch.local', ip: '10.0.2.20' },
+      { type: 'ntp_sync', dev: 'r1' },
+      { type: 'syslog_received', collector: 'srv', source: 'r1' }
+    ],
+    solution: [
+      ['srv','enable'], ['srv','configure terminal'],
+      ['srv','ip dhcp excluded-address 10.0.1.1 10.0.1.20'],
+      ['srv','ip dhcp pool BRANCH-USERS'], ['srv','network 10.0.1.0 255.255.255.0'],
+      ['srv','default-router 10.0.1.1'], ['srv','dns-server 10.0.2.10'],
+      ['srv','domain-name branch.local'], ['srv','lease 7'], ['srv','exit'], ['srv','end'],
+      ['r1','enable'], ['r1','configure terminal'], ['r1','interface eth0'],
+      ['r1','ip helper-address 10.0.2.10'], ['r1','exit'],
+      ['r1','ip name-server 10.0.2.10'], ['r1','ntp server 10.0.2.10'],
+      ['r1','logging host 10.0.2.10'], ['r1','logging trap informational'],
+      ['r1','logging source-interface eth1'], ['r1','end'],
+      ['r1','show ntp status'], ['r1','show ntp associations'], ['r1','show logging'], ['r1','write memory'],
+      ['h1','dhclient eth0'], ['h1','dig portal.branch.local'], ['h1','ping portal']
+    ]
+  }
 ];
 
 module.exports = { chapters };
