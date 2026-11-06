@@ -1162,9 +1162,11 @@ function asaShow(cli, words) {
     const wanted = words[1] && words[1].toUpperCase();
     const names = [...new Set((dev.acls || []).filter(r => r.aclName && (!wanted || r.aclName === wanted)).map(r => r.aclName))];
     if (wanted && !names.length) return ok('% No access lists found');
+    const addr = (v,w) => v == null ? 'any' : (w === 0 ? 'host ' + M.ipStr(v) : M.ipStr(v) + ' ' + M.ipStr((~w) >>> 0));
     return ok(names.map(name => 'access-list ' + name + '\n' +
       (dev.acls || []).filter(r => r.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))
-        .map(r => ' ' + (r.seq || 10) + ': ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto +
+        .map(r => ' ' + (r.seq || 10) + ': ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto + ' ' +
+          addr(r.src,r.srcWildcard) + ' ' + addr(r.dst,r.dstWildcard) + (r.dport == null ? '' : ' eq ' + r.dport) +
           ' (' + (r.hits || 0) + matchesText(r.hits) + ')').join('\n')).join('\n') || '% No access lists configured');
   }
   if (q === 'access-group') {
