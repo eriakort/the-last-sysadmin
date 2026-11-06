@@ -22,7 +22,8 @@ let MODE = 'play';                                 // 'play' | 'build' (authorin
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
-let LASTPOS = {}, DRAG = null;                     // last rendered node positions + active drag
+let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null; // topology interaction state
+let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -103,7 +104,8 @@ function renderTopo() {
   LASTPOS = pos;
   const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
-  let s = `<svg id="topo" viewBox="0 0 ${maxX} ${maxY}" role="img" aria-label="network topology">`;
+  const view = TOPO_VIEW || [0, 0, maxX, maxY];
+  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology">`;
   for (const l of net.links) s += `<line data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${cx(l.a[0])}" y1="${cy(l.a[0])}" x2="${cx(l.b[0])}" y2="${cy(l.b[0])}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`;
   for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
@@ -291,6 +293,19 @@ function renderFaults(m) {
     <p class="dim">This ticket has more than one problem. Investigate, then check each real fault. Fix them all before Check.</p>
     <div class="rev-list">${rows}</div>`;
 }
+function renderDeviceExplorer() {
+  const devices = Object.entries(RUN.net.devices || {});
+  const rows = devices.map(([id, d]) => {
+    const ports = Object.values(d.ifaces || {}), up = ports.filter(p => p.up !== false && p.errDisabled !== true).length;
+    const state = !ports.length || up === 0 ? 'offline' : up < ports.length ? 'degraded' : 'healthy';
+    return `<button type="button" class="explorer-device${id === SEL ? ' active' : ''}" data-explorer-dev="${esc(id)}" data-search="${esc((id+' '+d.kind+' '+(primaryIp(d)||'')).toLowerCase())}">
+      <span class="explorer-device-icon">${d.kind === 'switch' ? '▦' : d.kind === 'router' ? '⌁' : d.kind === 'firewall' ? '⬡' : '▣'}</span>
+      <span class="explorer-device-name"><b>${esc(id)}</b><small>${esc(d.kind)} · ${esc(primaryIp(d) || 'no IP')}</small></span>
+      <i class="health-dot health-dot-${state}" title="${state}"></i>
+    </button>`;
+  }).join('');
+  return `<section class="device-explorer"><div class="explorer-head"><div class="label">Device explorer <span>${devices.length}</span></div><input id="deviceSearch" type="search" placeholder="Filter devices…" aria-label="Filter devices"/></div><div class="explorer-list">${rows || '<p class="dim">No devices in this scenario.</p>'}</div></section>`;
+}
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
   const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
@@ -311,73 +326,79 @@ function renderBrief() {
     <h1>${esc(m.title)}</h1>
     ${renderTicket(m)}
     <div class="label">What you know</div><p class="story">${esc(m.story)}</p>
+    ${renderDeviceExplorer()}
     ${body}
     <div id="status"></div>`;
 }
 function renderConfig() {
   const pal = renderPalette();
-  if (!SEL || !RUN.net.devices[SEL]) return pal + '<p class="dim">Click a device to configure it.</p>';
+  if (!SEL || !RUN.net.devices[SEL]) return pal + '<div class="inspector-empty"><b>Device inspector</b><p class="dim">Select a device from the explorer or topology to inspect its interfaces, routes and policy.</p></div>';
   const d = RUN.net.devices[SEL];
-  let h = pal + `<div class="label">${SEL} · ${d.kind}</div>`;
+  const panels = [];
+  let overview = '';
   if (d.kind !== 'switch') {
-    h += `<div class="label2">Reachability</div>
-      <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button><button class="btn sm" id="dotrace">Traceroute</button></div>
-      <div id="pingout" class="dim" style="margin:4px 0 8px;white-space:pre-wrap"></div>`;
-  }
-  if (d.kind === 'switch') {
-    const vlans = [...new Set([1, ...(d.vlans || [])])].sort((a,b)=>a-b);
-    h += `<div class="label2">VLAN database</div><div class="dim">${vlans.map(v=>'VLAN '+v).join(' · ')}</div><div class="label2">Switch ports</div>`;
-    for (const n in d.ifaces) {
-      const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
-      h += `<div class="rrow">${n} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
-    }
-    const activeVlan = Object.values(d.ifaces).map(p => p.mode === 'trunk' ? (Array.isArray(p.allowedVlans) ? p.allowedVlans[0] : Number(p.nativeVlan ?? 1)) : Number(p.accessVlan ?? p.vlan ?? 1)).find(v => v !== 1) || vlans.find(v => v !== 1) || 1, tree = M.spanningTree(RUN.net, activeVlan), st = tree.switches[SEL];
-    const blocked = st ? Object.entries(st.ports).filter(([,p]) => p.state === 'blocking').map(([port]) => port) : [];
-    h += `<div class="label2">Spanning Tree · VLAN ${activeVlan}</div><div class="dim">Root bridge: ${esc(st ? st.root : '—')} · Priority: ${st ? st.priority : '—'}<br>Blocked ports: ${blocked.length ? blocked.join(', ') : 'none'}</div>`;
-    const learned = M.switchMacTable(RUN.net, SEL, activeVlan);
-    h += '<div class="label2">Learned MAC addresses</div>' + (learned.length
-      ? learned.slice(0,8).map(e => `<div class="rrow">${esc(e.mac)} · ${esc(e.device)} · ${esc(e.port)} · VLAN ${e.vlan}</div>`).join('')
-      : '<div class="dim">(no learned MAC addresses)</div>');
-    h += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
-  } else {
-    h += `<div class="label2">Interfaces</div>`;
+    overview += `<div class="label2">Reachability</div>
+      <div class="addrow"><input class="pingto" placeholder="host or IP" size="14"/><button class="btn sm" id="doping">Ping</button><button class="btn sm" id="dotrace">Traceroute</button></div>
+      <div id="pingout" class="dim" style="margin:4px 0 8px;white-space:pre-wrap"></div><div class="label2">Interfaces</div>`;
     for (const n in d.ifaces) {
       const f = d.ifaces[n];
-      h += `<div class="ifrow" data-if="${n}"><span class="ifn">${n}</span><input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/><span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/><label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
+      overview += `<div class="ifrow" data-if="${esc(n)}"><span class="ifn">${esc(n)}</span><input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/><span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/><label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
     }
+  } else {
+    const vlans = [...new Set([1, ...(d.vlans || [])])].sort((a,b)=>a-b);
+    overview += `<div class="label2">VLAN database</div><div class="dim">${vlans.map(v=>'VLAN '+v).join(' · ')}</div><div class="label2">Switch ports</div>`;
+    for (const n in d.ifaces) {
+      const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
+      overview += `<div class="rrow">${esc(n)} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
+    }
+    const activeVlan = Object.values(d.ifaces).map(p => p.mode === 'trunk' ? (Array.isArray(p.allowedVlans) ? p.allowedVlans[0] : Number(p.nativeVlan ?? 1)) : Number(p.accessVlan ?? p.vlan ?? 1)).find(v => v !== 1) || vlans.find(v => v !== 1) || 1;
+    const tree = M.spanningTree(RUN.net, activeVlan), st = tree.switches[SEL];
+    const blocked = st ? Object.entries(st.ports).filter(([,p]) => p.state === 'blocking').map(([port]) => port) : [];
+    overview += `<div class="label2">Spanning Tree · VLAN ${activeVlan}</div><div class="dim">Root bridge: ${esc(st ? st.root : '—')} · Priority: ${st ? st.priority : '—'}<br>Blocked ports: ${blocked.length ? blocked.join(', ') : 'none'}</div>`;
+    const learned = M.switchMacTable(RUN.net, SEL, activeVlan);
+    overview += '<div class="label2">Learned MAC addresses</div>' + (learned.length
+      ? learned.slice(0,8).map(e => `<div class="rrow">${esc(e.mac)} · ${esc(e.device)} · ${esc(e.port)} · VLAN ${e.vlan}</div>`).join('')
+      : '<div class="dim">(no learned MAC addresses)</div>');
+    overview += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
   }
+  panels.push({ id:'overview', label:d.kind === 'switch' ? 'Layer 2' : 'Overview', html:overview });
   if (d.kind !== 'switch') {
-    h += '<div class="label2">Routes</div>';
-    (d.routes || []).forEach((r, i) => { const dest = r.mask === 0 ? 'default' : M.ipStr(r.dest) + '/' + r.mask; h += `<div class="rrow">${dest} via ${M.ipStr(r.via)} <button class="x" data-rt="${i}">✕</button></div>`; });
-    h += `<div class="addrow"><input class="rdest" placeholder="default or 10.0.3.0/24"/><input class="rvia" placeholder="via gateway"/><button class="btn sm" id="addrt">Add route</button></div>`;
-  }
-  if (d.kind === 'router') {
-    const ospfIfs = Object.entries(d.ifaces).filter(([,f]) => f.ospf != null).map(([n,f]) => `${n} area ${f.ospf}`).join(', ') || '(none)';
-    const ons = (typeof M.ospfNeighbors === 'function') ? M.ospfNeighbors(RUN.net, SEL) : [];
-    const ost = ons.map(n => `${n.id} ${M.ipStr(n.ip)} area ${n.area}`).join(' · ') || 'no neighbors';
-    const ifopts = Object.keys(d.ifaces).map(n => `<option>${n}</option>`).join('');
-    h += `<div class="label2">OSPF</div>
-      <div class="dim" style="margin-bottom:6px">Enabled: ${esc(ospfIfs)}<br>Neighbors: ${esc(ost)}</div>
-      <div class="addrow"><select class="oif">${ifopts}</select><input class="oarea" placeholder="area" value="0" size="4"/><button class="btn sm" id="ospfen">Enable</button></div>`;
-    const b = d.bgp || { asn: '', neighbors: [], networks: [] };
-    const neigh = (b.neighbors || []).map(n => `${M.ipStr(n.ip)} AS${n.remoteAs}`).join(', ') || '(none)';
-    const nets = (b.networks || []).join(', ') || '(none)';
-    const sess = (typeof M.bgpSessions === 'function') ? M.bgpSessions(RUN.net, SEL) : [];
-    const st = sess.map(s => `${M.ipStr(s.ip)} ${s.up ? 'Established' : s.reason}`).join(' · ') || 'no session';
-    h += `<div class="label2">BGP</div>
-      <div class="dim" style="margin-bottom:6px">Neighbors: ${esc(neigh)}<br>Networks: ${esc(nets)}<br>Session: ${esc(st)}</div>
-      <div class="addrow"><input class="basn" placeholder="local ASN" value="${b.asn != null ? b.asn : ''}" size="6"/><button class="btn sm" id="bgpasn">Set ASN</button></div>
-      <div class="addrow"><input class="bnip" placeholder="neighbor ip" size="10"/><input class="bnas" placeholder="remote AS" size="6"/><button class="btn sm" id="bgpnei">Add neighbor</button></div>
-      <div class="addrow"><input class="bnet" placeholder="10.0.8.0/24" size="12"/><button class="btn sm" id="bgpnet">Advertise</button></div>`;
+    let routing = '<div class="label2">Static routes</div>';
+    (d.routes || []).forEach((r, i) => { const dest = r.mask === 0 ? 'default' : M.ipStr(r.dest) + '/' + r.mask; routing += `<div class="rrow">${dest} via ${M.ipStr(r.via)} <button class="x" data-rt="${i}">✕</button></div>`; });
+    routing += `<div class="addrow"><input class="rdest" placeholder="default or 10.0.3.0/24"/><input class="rvia" placeholder="via gateway"/><button class="btn sm" id="addrt">Add route</button></div>`;
+    if (d.kind === 'router') {
+      const ospfIfs = Object.entries(d.ifaces).filter(([,f]) => f.ospf != null).map(([n,f]) => `${n} area ${f.ospf}`).join(', ') || '(none)';
+      const ons = (typeof M.ospfNeighbors === 'function') ? M.ospfNeighbors(RUN.net, SEL) : [];
+      const ost = ons.map(n => `${n.id} ${M.ipStr(n.ip)} area ${n.area}`).join(' · ') || 'no neighbors';
+      const ifopts = Object.keys(d.ifaces).map(n => `<option>${esc(n)}</option>`).join('');
+      routing += `<div class="label2">OSPF</div><div class="dim" style="margin-bottom:6px">Enabled: ${esc(ospfIfs)}<br>Neighbors: ${esc(ost)}</div>
+        <div class="addrow"><select class="oif">${ifopts}</select><input class="oarea" placeholder="area" value="0" size="4"/><button class="btn sm" id="ospfen">Enable</button></div>`;
+      const b = d.bgp || { asn: '', neighbors: [], networks: [] };
+      const neigh = (b.neighbors || []).map(n => `${M.ipStr(n.ip)} AS${n.remoteAs}`).join(', ') || '(none)';
+      const nets = (b.networks || []).join(', ') || '(none)';
+      const sess = (typeof M.bgpSessions === 'function') ? M.bgpSessions(RUN.net, SEL) : [];
+      const st = sess.map(x => `${M.ipStr(x.ip)} ${x.up ? 'Established' : x.reason}`).join(' · ') || 'no session';
+      routing += `<div class="label2">BGP</div><div class="dim" style="margin-bottom:6px">Neighbors: ${esc(neigh)}<br>Networks: ${esc(nets)}<br>Session: ${esc(st)}</div>
+        <div class="addrow"><input class="basn" placeholder="local ASN" value="${b.asn != null ? b.asn : ''}" size="6"/><button class="btn sm" id="bgpasn">Set ASN</button></div>
+        <div class="addrow"><input class="bnip" placeholder="neighbor IP" size="10"/><input class="bnas" placeholder="remote AS" size="6"/><button class="btn sm" id="bgpnei">Add neighbor</button></div>
+        <div class="addrow"><input class="bnet" placeholder="10.0.8.0/24" size="12"/><button class="btn sm" id="bgpnet">Advertise</button></div>`;
+    }
+    panels.push({ id:'routing', label:'Routing', html:routing });
   }
   if (d.kind === 'router' || d.kind === 'firewall') {
-    h += '<div class="label2">Firewall (inbound)</div>';
+    let security = '<div class="label2">Firewall policy · inbound</div>';
     const dstTxt = r => r.dst != null ? ' dst:' + M.ipStr(r.dst) : r.dstnet ? ' dst:' + M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : '';
-    (d.acls || []).forEach((r, i) => { h += `<div class="rrow">${r.action === 'deny' ? 'DROP' : 'ALLOW'} ${r.proto || 'all'} in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${dstTxt(r)}${r.dport != null ? ' dpt:' + r.dport : ''} <button class="x" data-acl="${i}">✕</button></div>`; });
-    const ifopts = Object.keys(d.ifaces).map(n => `<option>${n}</option>`).join('');
-    h += `<div class="addrow"><select class="aif">${ifopts}</select><select class="aproto"><option value="">any</option><option>tcp</option><option>udp</option><option>icmp</option></select><input class="adport" placeholder="dport" size="4"/><input class="asrc" placeholder="src ip" size="8"/><input class="adst" placeholder="dst ip/cidr" size="10"/><select class="aact"><option value="deny">DROP</option><option value="allow">ALLOW</option></select><button class="btn sm" id="addacl">Add</button></div>`;
+    (d.acls || []).forEach((r, i) => { security += `<div class="rrow">${r.action === 'deny' ? 'DROP' : 'ALLOW'} ${r.proto || 'all'} in:${r.dev || 'any'}${r.src != null ? ' src:' + M.ipStr(r.src) : ''}${dstTxt(r)}${r.dport != null ? ' dpt:' + r.dport : ''} <button class="x" data-acl="${i}">✕</button></div>`; });
+    const ifopts = Object.keys(d.ifaces).map(n => `<option>${esc(n)}</option>`).join('');
+    security += `<div class="addrow"><select class="aif">${ifopts}</select><select class="aproto"><option value="">any</option><option>tcp</option><option>udp</option><option>icmp</option></select><input class="adport" placeholder="dport" size="4"/><input class="asrc" placeholder="src IP" size="8"/><input class="adst" placeholder="dst IP/cidr" size="10"/><select class="aact"><option value="deny">DROP</option><option value="allow">ALLOW</option></select><button class="btn sm" id="addacl">Add</button></div>`;
+    panels.push({ id:'security', label:'Security', html:security });
   }
-  return h;
+  if (!panels.some(p => p.id === INSPECTOR_TAB)) INSPECTOR_TAB = 'overview';
+  const tabs = panels.map(p => `<button type="button" class="inspector-tab${p.id === INSPECTOR_TAB ? ' active' : ''}" data-inspector-tab="${p.id}">${p.label}</button>`).join('');
+  const panel = panels.find(p => p.id === INSPECTOR_TAB);
+  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)}</h2><p>${esc(d.kind)} · ${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
+    <div class="inspector-tabs" role="tablist" aria-label="Device inspector sections">${tabs}</div>
+    <section class="inspector-panel" role="tabpanel">${panel.html}</section>`;
 }
 
 /* ---------- actions ---------- */
