@@ -264,6 +264,10 @@ The Network Sysadmin workspace opens on a shift dashboard before entering the Wo
 
 The Incidents destination is a dedicated service-desk workspace rather than only a modal queue. It provides state counts, search, status and priority filters, a selectable incident detail record, SLA target and impact context, ownership updates, and a ticket-linked investigation timeline. New incidents can be acknowledged, active incidents hand off to their matching Workbench scenario, and resolved incidents can be reviewed. Resolution remains tied to scenario verification rather than a manual status shortcut. The top-bar Tickets action retains the compact queue for quick access.
 
+### Infrastructure inventory
+
+The Infrastructure destination is a live inventory of the active training scenario, not a static device catalogue. It supports device-type and health filtering, search by device or IP, and per-device detail for interfaces, addresses, link state, access/trunk VLANs, spanning-tree state, static routes, ACL policy, configured services/protocols and local engineering journal activity. Selecting a device opens that exact device in the Workbench. Service rows are labelled as configured state from the simulator model; the page does not claim external polling or production monitoring.
+
 ### Help desk and work journal
 
 - The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.
