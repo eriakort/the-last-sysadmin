@@ -63,11 +63,11 @@ function spanningTree(net, vlan = 1) {
     const [a, ap] = l.a, [b, bp] = l.b, da = net.devices[a], db = net.devices[b];
     if (!da || !db || da.kind !== 'switch' || db.kind !== 'switch') continue;
     const pa = da.ifaces[ap], pb = db.ifaces[bp];
-    if (!pa || !pb || pa.up === false || pb.up === false || pa.mode !== 'trunk' || pb.mode !== 'trunk') continue;
+    if (!pa || !pb || pa.up === false || pb.up === false) continue;
     if (!switchVlanExists(da, vlan) || !switchVlanExists(db, vlan)
         || !switchPortAllowsVlan(pa, vlan) || !switchPortAllowsVlan(pb, vlan)) continue;
-    const aWire = vlan === switchNativeVlan(pa) ? null : vlan;
-    const bWire = vlan === switchNativeVlan(pb) ? null : vlan;
+    const aWire = pa.mode === 'trunk' && vlan !== switchNativeVlan(pa) ? vlan : null;
+    const bWire = pb.mode === 'trunk' && vlan !== switchNativeVlan(pb) ? vlan : null;
     if (switchIngressVlan(pb, aWire) !== vlan || switchIngressVlan(pa, bWire) !== vlan) continue;
     edges.push({ a, ap, b, bp });
   }
@@ -150,14 +150,14 @@ function learnMacOnSegment(net, devId, ifaceName) {
     net.macTables[swId][vlan][mac] = { vlan, mac, port: ingress, device: devId, iface: ifaceName, type: 'dynamic' };
     for (const port of Object.keys(current.ifaces).sort()) {
       const p = current.ifaces[port];
-      if (port === ingress || p.up === false || p.mode !== 'trunk' || !switchPortAllowsVlan(p, vlan)
+      if (port === ingress || p.up === false || !switchPortAllowsVlan(p, vlan)
           || (state.ports[port] && state.ports[port].state === 'blocking')) continue;
       const nb = neighbor(net, swId, port); if (!nb) continue;
       const [nextId, nextPort] = nb, next = net.devices[nextId];
-      if (!next || next.kind !== 'switch' || next.ifaces[nextPort].mode !== 'trunk') continue;
+      if (!next || next.kind !== 'switch' || next.ifaces[nextPort].up === false) continue;
       const nextState = stp.switches[nextId];
       if (!nextState || (nextState.ports[nextPort] && nextState.ports[nextPort].state === 'blocking')) continue;
-      const wireVlan = vlan === switchNativeVlan(p) ? null : vlan;
+      const wireVlan = p.mode === 'trunk' && vlan !== switchNativeVlan(p) ? vlan : null;
       if (switchIngressVlan(next.ifaces[nextPort], wireVlan) !== vlan || !switchVlanExists(next, vlan)) continue;
       queue.push([nextId, nextPort]);
     }
