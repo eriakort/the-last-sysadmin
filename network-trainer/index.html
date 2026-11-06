@@ -909,8 +909,10 @@ function ciscoIface(dev, token) {
   const norm = x => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
   const wanted = norm(token);
   const keys = Object.keys(dev.ifaces);
-  return keys.find(k => norm(k) === wanted)
+  const alias = value => norm(value).replace(/^gigabitethernet/, 'gi').replace(/^tengigabitethernet/, 'te').replace(/^fastethernet/, 'fa').replace(/^ethernet/, 'e');
+  return keys.find(k => norm(k) === wanted || alias(k) === wanted || norm(k) === alias(token))
     || keys.find(k => norm(k).startsWith(wanted) && wanted.length >= 2)
+    || keys.find(k => alias(k).startsWith(wanted) && wanted.length >= 2)
     || null;
 }
 function ciscoRunConfig(dev) {
@@ -928,7 +930,7 @@ function ciscoRunConfig(dev) {
     } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
     lines.push(p.up === false ? ' shutdown' : ' no shutdown');
   }
-  for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id);
+  for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id + ((dev.vlanNames || {})[id] ? '\n name ' + dev.vlanNames[id] : ''));
   for (const r of dev.routes || []) lines.push('ip route ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
   for (const r of dev.acls || []) lines.push('access-list ' + (r.list || 101) + ' ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + (r.proto || 'ip') + ' ' + (r.src == null ? 'any' : M.ipStr(r.src)) + ' ' + (r.dst == null ? 'any' : M.ipStr(r.dst)));
   return lines.join('\n') + '\n';
@@ -962,7 +964,7 @@ function ciscoShow(cli, words) {
     const ids = [...new Set([1, ...(dev.vlans || [])])].sort((a,b)=>a-b);
     return ok('VLAN Name                             Status    Ports\n' + ids.map(id => {
       const ports = Object.entries(dev.ifaces).filter(([,p]) => p.mode !== 'trunk' && Number(p.accessVlan ?? p.vlan ?? 1) === id).map(([n])=>n).join(',');
-      return String(id).padEnd(5) + ('VLAN' + id).padEnd(33) + 'active    ' + (ports || '');
+      return String(id).padEnd(5) + String((dev.vlanNames || {})[id] || ('VLAN' + id)).padEnd(33) + 'active    ' + (ports || '');
     }).join('\n'));
   }
   if (q === 'interfaces status' || q === 'int status') {
