@@ -193,14 +193,14 @@ test('address delete and link down/up update the live interface state', () => {
   eq(cli.run('ip addr add 10.0.1.10/24 dev eth0').code, 0, 'address added');
   eq(cli.run('ip link set eth0 down').code, 0, 'link down');
   eq(net.devices.h1.ifaces.eth0.up, false, 'link is down');
-  eq(cli.run('ip addr add 10.0.1.11/24 dev eth0').code, 0, 'address can be staged while link is down');
+  eq(cli.run('ip addr add 10.0.1.11/24 dev eth0').code, 1, 'add does not silently overwrite an existing address');
+  eq(cli.run('ip addr replace 10.0.1.11/24 dev eth0').code, 0, 'explicitly replace address while link is down');
   eq(net.devices.h1.ifaces.eth0.up, false, 'address configuration does not silently raise the link');
-  eq(cli.run('ip addr del 10.0.1.11/24 dev eth0').code, 0, 'staged address removed');
   eq(cli.run('ip link set eth0 up').code, 0, 'link up');
   eq(net.devices.h1.ifaces.eth0.up, true, 'link is up');
-  eq(cli.run('ip addr del 10.0.1.10/24 dev eth0').code, 0, 'address deleted');
+  eq(cli.run('ip addr del 10.0.1.11/24 dev eth0').code, 0, 'address deleted');
   eq(net.devices.h1.ifaces.eth0.ip, undefined, 'address removed');
-  eq(cli.run('ip addr del 10.0.1.10/24 dev eth0').code, 1, 'deleting absent address is an error');
+  eq(cli.run('ip addr del 10.0.1.11/24 dev eth0').code, 1, 'deleting absent address is an error');
 });
 
 test('route configuration validates gateways, replaces matching prefixes, and reports missing deletes', () => {
