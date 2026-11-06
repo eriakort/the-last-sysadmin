@@ -34,7 +34,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], configArchives: Array.isArray(p.configArchives) ? p.configArchives : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -642,6 +642,56 @@ function wireEvidenceTools() {
     a.href=url;a.download='network-console-'+device+'.txt';a.click();URL.revokeObjectURL(url);
     if(status)status.textContent='Transcript download prepared.';
   });
+}
+function currentRunningConfig() {
+  if (!SEL || !RUN || !RUN.net.devices[SEL]) return null;
+  const result=RUN.cli.on(SEL).run('show running-config');
+  return result.code===0 ? result.out : null;
+}
+function captureConfigCheckpoint() {
+  const output=currentRunningConfig(), device=SEL && RUN && RUN.net.devices[SEL];
+  const status=$('#termEvidenceStatus');
+  if(!device){if(status)status.textContent='Select a device before saving a checkpoint.';return;}
+  if(output==null || !output.trim()){if(status)status.textContent='Running configuration is unavailable for this device.';return;}
+  PROG.configArchives=Array.isArray(PROG.configArchives)?PROG.configArchives:[];
+  const record={id:Date.now(),device:SEL,hostname:device.hostname||SEL,kind:device.kind||'device',at:new Date().toISOString(),config:output};
+  PROG.configArchives.unshift(record);
+  PROG.configArchives=PROG.configArchives.slice(0,100);
+  saveProg();
+  addJournalEntry({type:'configuration checkpoint',device:SEL,command:'show running-config',result:'captured',text:'Saved a running-configuration checkpoint.'});
+  if(status)status.textContent='Configuration checkpoint saved locally.';
+}
+function reviewConfigDrift() {
+  const device=SEL && RUN && RUN.net.devices[SEL], status=$('#termEvidenceStatus');
+  if(!device){if(status)status.textContent='Select a device before reviewing configuration.';return;}
+  const output=currentRunningConfig();
+  if(output==null){if(status)status.textContent='Could not read the current running configuration.';return;}
+  const snapshots=(PROG.configArchives||[]).filter(x=>x.device===SEL).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
+  const latest=snapshots[0], baseline=latest?latest.config:'';
+  const oldLines=baseline.split('\n'), newLines=output.split('\n');
+  const oldSet=new Set(oldLines), newSet=new Set(newLines);
+  const removed=oldLines.filter(line=>line.trim()&&!newSet.has(line));
+  const added=newLines.filter(line=>line.trim()&&!oldSet.has(line));
+  const wrap=document.createElement('div');wrap.id='modal';
+  const changes=removed.length||added.length;
+  wrap.innerHTML=`<div class="sheet sheet-wide config-drift-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · simulator</div><h2>Configuration drift review</h2><p class="dim">${esc(device.hostname||SEL)} · ${esc(SEL)}</p></div><button class="btn sm" id="closeConfigDrift">Close</button></div>
+    <div class="config-drift-summary">${latest?`Baseline: ${esc(new Date(latest.at).toLocaleString())}`:'No saved checkpoint for this device. Save one to establish a baseline.'} · ${added.length} added · ${removed.length} removed</div>
+    ${!latest?'<div class="config-drift-empty">Capture a checkpoint, make a configuration change, then review drift here.</div>':!changes?'<div class="config-drift-empty">✓ No line-level configuration drift detected against the latest checkpoint.</div>':`<div class="config-drift-columns"><section><h3>Added lines <span>${added.length}</span></h3><pre class="config-drift-added">${esc(added.join('\n')||'No added lines')}</pre></section><section><h3>Removed lines <span>${removed.length}</span></h3><pre class="config-drift-removed">${esc(removed.join('\n')||'No removed lines')}</pre></section></div>`}
+    <p class="dim config-drift-foot">Read-only comparison against the latest browser-local checkpoint. It does not apply, restore or validate configuration on physical equipment.</p></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+  wrap.querySelector('#closeConfigDrift').addEventListener('click',()=>wrap.remove());
+}
+function exportConfigArchive() {
+  const records=(PROG.configArchives||[]).filter(x=>!SEL||x.device===SEL);
+  if(!records.length){const status=$('#termEvidenceStatus');if(status)status.textContent='No saved configuration checkpoints for this device.';return;}
+  const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='network-config-checkpoints-'+(SEL||'archive')+'.json';a.click();URL.revokeObjectURL(url);
+  const status=$('#termEvidenceStatus');if(status)status.textContent='Configuration checkpoint archive exported.';
+}
+function wireConfigArchiveTools() {
+  $('#termConfigSave')?.addEventListener('click',captureConfigCheckpoint);
+  $('#termConfigReview')?.addEventListener('click',reviewConfigDrift);
 }
 function persistTerminalSession() {
   if (!SEL || !$('#tout')) return;
@@ -1397,13 +1447,14 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>
     </div>`;
   wireTerm();
   wireEvidenceTools();
+  wireConfigArchiveTools();
   wireGlobalPalette();
   $('#btnSearch').addEventListener('click',openPalette);
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
