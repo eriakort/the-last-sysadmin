@@ -189,7 +189,14 @@ function renderConfig() {
       const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
       h += `<div class="rrow">${n} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
     }
-    h += '<p class="dim pal-hint">Configure from the terminal: vlan 10 · interface p1 · switchport access vlan 10 · show vlan brief · show interfaces trunk</p>';
+    const activeVlan = vlans[0] || 1, tree = M.spanningTree(RUN.net, activeVlan), st = tree.switches[SEL];
+    const blocked = st ? Object.entries(st.ports).filter(([,p]) => p.state === 'blocking').map(([port]) => port) : [];
+    h += `<div class="label2">Spanning Tree · VLAN ${activeVlan}</div><div class="dim">Root bridge: ${esc(st ? st.root : '—')} · Priority: ${st ? st.priority : '—'}<br>Blocked ports: ${blocked.length ? blocked.join(', ') : 'none'}</div>`;
+    const learned = M.switchMacTable(RUN.net, SEL, activeVlan);
+    h += '<div class="label2">Learned MAC addresses</div>' + (learned.length
+      ? learned.slice(0,8).map(e => `<div class="rrow">${esc(e.mac)} · ${esc(e.device)} · ${esc(e.port)} · VLAN ${e.vlan}</div>`).join('')
+      : '<div class="dim">(no learned MAC addresses)</div>');
+    h += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
   } else {
     h += `<div class="label2">Interfaces</div>`;
     for (const n in d.ifaces) {
