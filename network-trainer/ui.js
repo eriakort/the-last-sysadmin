@@ -30,7 +30,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [] }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [] }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {} }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -115,7 +115,65 @@ function renderTopo() {
 }
 
 /* ---------- panels ---------- */
-function updateHud() { $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+function updateHud() { const q = $('#queueOpenCount'); if (q) q.textContent = allTickets().filter(t => t.status !== 'resolved').length; $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+/* ---------- service desk / ticket workflow ---------- */
+const TICKET_STATES = ['new', 'acknowledged', 'investigating', 'resolved'];
+const SLA_TARGET = { P1: '1 hour', P2: '4 hours', P3: '1 business day', P4: '3 business days' };
+function ticketRecord(m, index) {
+  const t = m.ticket || {};
+  const id = t.id || ('NET-' + String(index + 1).padStart(4, '0'));
+  const state = PROG.tickets[id] || {};
+  const resolved = !!PROG.done[m.id];
+  return {
+    id, missionId: m.id, index, title: m.title, chapter: m.chapter,
+    priority: t.priority || 'P3', from: t.from || 'Network Operations',
+    symptom: t.symptom || m.objective, status: resolved ? 'resolved' : (state.status || 'new'),
+    impact: t.impact || (t.priority === 'P1' ? 'Multiple users / critical service' : 'Single user or team'),
+    service: t.service || (m.title.match(/DNS|DHCP|VLAN|routing|firewall|internet|server/i) || ['Network connectivity'])[0],
+    assigned: state.assigned || 'Unassigned', updatedAt: state.updatedAt || null,
+    sla: SLA_TARGET[t.priority] || SLA_TARGET.P3
+  };
+}
+function allTickets() { return chapters.map((m, i) => ticketRecord(m, i)); }
+function setTicketState(id, status, assigned) {
+  if (!TICKET_STATES.includes(status)) return;
+  PROG.tickets = PROG.tickets || {};
+  PROG.tickets[id] = { ...(PROG.tickets[id] || {}), status, assigned: assigned || (status === 'new' ? 'Unassigned' : 'You'), updatedAt: new Date().toISOString() };
+  saveProg();
+}
+function openTicketQueue() {
+  const tickets = allTickets();
+  const counts = TICKET_STATES.reduce((o, st) => (o[st] = tickets.filter(t => t.status === st).length, o), {});
+  const rows = tickets.map(t => `<article class="queue-ticket" data-ticket="${esc(t.id)}">
+    <div class="qt-main"><div class="qt-top"><b>${esc(t.id)}</b><span class="tk-pri tk-${esc(t.priority.toLowerCase())}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></div>
+    <h3>${esc(t.title)}</h3><p>${esc(t.symptom)}</p><div class="qt-meta"><span>◈ ${esc(t.service)}</span><span>Impact: ${esc(t.impact)}</span><span>SLA target: ${esc(t.sla)}</span><span>Assigned: ${esc(t.assigned)}</span></div></div>
+    <div class="qt-actions">${t.status === 'new' ? `<button class="btn sm primary" data-ack="${esc(t.id)}">Acknowledge</button>` : ''}
+    ${t.status !== 'resolved' ? `<button class="btn sm" data-work="${esc(t.id)}">${t.status === 'investigating' ? 'Continue work' : 'Investigate'}</button>` : `<button class="btn sm" data-review="${esc(t.id)}">Review</button>`}</div>
+  </article>`).join('');
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide ticket-desk"><div class="modal-head"><div><div class="eyebrow">Service desk · shift ${new Date().toLocaleDateString()}</div><h2>Incident queue</h2><p class="dim">Prioritize the impact, acknowledge ownership, investigate with evidence and resolve only after verification.</p></div><span class="help-key">NOC / L1</span></div>
+  <div class="queue-metrics"><div><b>${counts.new}</b><span>New</span></div><div><b>${counts.acknowledged}</b><span>Acknowledged</span></div><div><b>${counts.investigating}</b><span>In progress</span></div><div><b>${counts.resolved}</b><span>Resolved</span></div></div>
+  <div class="queue-toolbar"><label for="queueFilter">Filter tickets</label><select id="queueFilter"><option value="all">All tickets</option><option value="open">Open tickets</option><option value="new">New</option><option value="acknowledged">Acknowledged</option><option value="investigating">In progress</option><option value="resolved">Resolved</option></select><span class="dim">${tickets.length} incidents in this training shift</span></div>
+  <div class="queue-list" id="queueList">${rows || '<p class="dim">No tickets in the queue.</p>'}</div>
+  <div class="help-note"><b>Shift discipline:</b> Acknowledge first. Read the symptom and impact. Gather evidence before changing configuration. Verify the affected service, then add a resolution note to your work journal.</div>
+  <div class="row"><button class="btn" id="closeS">Close queue</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  const filter = () => { const value = wrap.querySelector('#queueFilter').value; wrap.querySelectorAll('.queue-ticket').forEach(row => { const t = tickets.find(x => x.id === row.dataset.ticket); row.hidden = value === 'open' ? t.status === 'resolved' : value !== 'all' && t.status !== value; }); };
+  wrap.querySelector('#queueFilter').addEventListener('change', filter);
+  wrap.querySelectorAll('[data-ack]').forEach(btn => btn.addEventListener('click', () => {
+    const t = tickets.find(x => x.id === btn.dataset.ack); setTicketState(t.id, 'acknowledged', 'You');
+    addJournalEntry({ type: 'ticket acknowledged', ticket: t.id, text: 'Accepted ownership. Reviewing impact and beginning triage.' });
+    wrap.remove(); openTicketQueue();
+  }));
+  wrap.querySelectorAll('[data-work],[data-review]').forEach(btn => btn.addEventListener('click', () => {
+    const t = tickets.find(x => x.id === (btn.dataset.work || btn.dataset.review));
+    if (t.status !== 'resolved') setTicketState(t.id, 'investigating', 'You');
+    closeModal(); MODE = 'play'; reloadMission(t.index);
+    if (t.status !== 'resolved') addJournalEntry({ type: 'investigation started', ticket: t.id, text: 'Started investigation from the incident queue.' });
+  }));
+}
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
   const pc = 'tk-' + String(t.priority || '').toLowerCase();
@@ -263,7 +321,7 @@ function doCheck() {
   }
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
-    if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }\n    const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
@@ -738,7 +796,7 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
-        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>\n        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
@@ -751,7 +809,7 @@ function boot() {
       <aside id="config"></aside>
     </div>`;
   wireTerm();
-  $('#btnHelp').addEventListener('click', openHelp);
+  $('#btnHelp').addEventListener('click', openHelp);\n  $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
   $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
