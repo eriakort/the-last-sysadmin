@@ -559,7 +559,7 @@ function recordSyslog(net, devId, message, severity = 6) {
   const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
   dev.syslog = dev.syslog || { enabled: true, hosts: [], severity: 6, local: [], forwarded: 0 };
   const cfg = dev.syslog, event = { sequence: (cfg.local.length ? cfg.local[cfg.local.length - 1].sequence : 0) + 1,
-    device: dev.hostname || dev.id || devId, message: String(message), severity, timestamp: new Date().toISOString() };
+    device: dev.hostname || dev.id || devId, deviceId: devId, message: String(message), severity, timestamp: new Date().toISOString() };
   cfg.local.push(event); if (cfg.local.length > 100) cfg.local.shift();
   let forwarded = 0;
   if (cfg.enabled !== false && severity <= Number(cfg.severity ?? 6)) for (const address of cfg.hosts || []) {
