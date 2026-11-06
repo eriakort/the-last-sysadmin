@@ -453,13 +453,38 @@ function routeLookupReachable(net, devId, addr) {
   for (const r of cands) {
     const gwIface = directIface(dev, r.via);
     if (!gwIface) continue;
-    const gw = l2Domain(net, devId, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
+    const gw = l2Domain(net, devId, gwIface).find(([d, i]) => (net.devices[d].ifaces[i].ip === r.via || ownsVirtualIp(net, d, r.via)) && net.devices[d].ifaces[i].up !== false);
     if (gw) return r;
   }
   return null;
 }
+function hsrpStatus(net, devId, ifaceName) {
+  const dev = net.devices[devId], port = dev && dev.ifaces && dev.ifaces[ifaceName], cfg = port && port.hsrp;
+  if (!cfg || cfg.virtualIp == null) return null;
+  const peers = [[devId, ifaceName], ...l2Domain(net, devId, ifaceName)]
+    .filter(([id, name]) => {
+      const d = net.devices[id], p = d && d.ifaces && d.ifaces[name], h = p && p.hsrp;
+      return d && d.kind === 'router' && p && p.up !== false && h &&
+        h.group === cfg.group && h.virtualIp === cfg.virtualIp;
+    });
+  const candidates = peers.map(([id, name]) => {
+    const p = net.devices[id].ifaces[name], h = p.hsrp;
+    const decrement = (h.track || []).filter(t => !net.devices[id].ifaces[t.iface] || net.devices[id].ifaces[t.iface].up === false)
+      .reduce((sum, t) => sum + t.decrement, 0);
+    return { id, iface: name, priority: Math.max(0, Number(h.priority || 100) - decrement), ip: p.ip || 0 };
+  }).sort((a,b) => b.priority - a.priority || a.ip - b.ip || a.id.localeCompare(b.id));
+  const active = candidates[0];
+  const local = candidates.find(x => x.id === devId && x.iface === ifaceName);
+  return { group: cfg.group, virtualIp: cfg.virtualIp, state: active && active.id === devId && active.iface === ifaceName ? 'Active' : 'Standby',
+    active: active ? active.id : null, priority: local ? local.priority : 0, activePriority: active ? active.priority : 0 };
+}
+function ownsVirtualIp(net, devId, addr) {
+  const dev = net.devices[devId]; if (!dev || dev.kind !== 'router') return false;
+  return Object.entries(dev.ifaces || {}).some(([name, p]) => p.hsrp && p.hsrp.virtualIp === addr &&
+    hsrpStatus(net, devId, name)?.state === 'Active');
+}
 function deviceOwning(net, addr) {
-  for (const id in net.devices) if (ownsIp(net.devices[id], addr)) return id;
+  for (const id in net.devices) if (ownsIp(net.devices[id], addr) || ownsVirtualIp(net, id, addr)) return id;
   return null;
 }
 
@@ -674,7 +699,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
     path.push(cur);
     if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
     const dst = pkt.dst;
-    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered', pkt };
+    if (ownsIp(dev, dst) || ownsVirtualIp(net, cur, dst)) return { ok: true, path, reason: 'delivered', pkt };
 
     // choose the egress interface: directly connected, else via a (failover-aware) route
     let eg = directIface(dev, dst), targetIp = dst, viaRoute = null;
@@ -859,7 +884,7 @@ module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
-  ospfNeighbors, ospfLearned, ospfAdvertised,
+  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
@@ -941,6 +966,11 @@ function ospfRoute(net, devId, cidrStr) {
   const hit = M.ospfLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via OSPF` : `${devId} has not learned ${cidrStr} via OSPF` };
 }
+function hsrpState(net, devId, ifaceName, expected) {
+  const state = M.hsrpStatus(net, devId, ifaceName);
+  const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
+  return { ok, reason: state ? devId + '/' + ifaceName + ' is ' + state.state + ' (active: ' + state.active + ')' : devId + '/' + ifaceName + ' has no active HSRP group' };
+}
 function bgpSession(net, devId, peerId) {
   const ss = M.bgpSessions(net, devId);
   const hit = ss.some(s => s.up && (!peerId || s.peer === peerId));
@@ -1001,7 +1031,7 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -1114,6 +1144,13 @@ function ciscoRunConfig(dev) {
         if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
       } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
     } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
+    if (p.hsrp) {
+      const h = p.hsrp;
+      lines.push(' standby ' + h.group + ' ip ' + M.ipStr(h.virtualIp));
+      if (h.priority != null && h.priority !== 100) lines.push(' standby ' + h.group + ' priority ' + h.priority);
+      if (h.preempt) lines.push(' standby ' + h.group + ' preempt');
+      for (const t of h.track || []) lines.push(' standby ' + h.group + ' track ' + t.iface + ' decrement ' + t.decrement);
+    }
     for (const dir of ['in','out']) {
       const acl = p.accessGroups && p.accessGroups[dir];
       if (acl) lines.push(' ip access-group ' + acl + ' ' + dir);
@@ -1268,6 +1305,16 @@ function ciscoShow(cli, words) {
     const ospf = M.ospfLearned(cli.net, cli.cur).map(r => 'O    ' + M.ipStr(r.dest) + '/' + r.mask + ' [110/' + (r.hops || 1) + '] via ' + M.ipStr(r.via) + ', OSPF');
     const bgp = M.bgpLearned(cli.net, cli.cur).map(r => 'B    ' + M.ipStr(r.dest) + '/' + r.mask + ' [20/0] via ' + M.ipStr(r.via) + ', BGP');
     return ok('Codes: C - connected, S - static, O - OSPF, B - BGP\\n' + (connected.concat(statics, ospf, bgp).join('\\n') || '% No routes'));
+  }
+  if (q === 'standby brief' || q === 'standby') {
+    const rows = [];
+    for (const [name, p] of Object.entries(dev.ifaces || {})) if (p.hsrp) {
+      const s = M.hsrpStatus(cli.net, cli.cur, name);
+      rows.push(String(p.hsrp.group).padEnd(7) + M.ipStr(p.hsrp.virtualIp).padEnd(17) +
+        String(s && s.state || 'Unknown').padEnd(10) + String(s && s.priority || 0).padEnd(10) +
+        (s && s.active || 'none') + ' (' + name + ')');
+    }
+    return ok('Grp    Virtual IP       State     Priority  Active router\n' + (rows.join('\n') || '(no HSRP groups configured)'));
   }
   if (q === 'ip bgp summary') {
     const sessions = M.bgpSessions(cli.net, cli.cur);
@@ -1590,6 +1637,36 @@ function runASA(cli, line) {
         if (f.up !== false && f.ip === address && !(id===cli.cur && n===cli.asaIface)) return err('% Address already in use');
       p.ip = address; p.mask = prefix; return ok('');
     }
+
+    if (words[0] === 'standby' && words[1] && words[2] === 'ip' && words.length === 4) {
+      const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
+      if (!Number.isInteger(group) || group < 0 || group > 255 || virtualIp == null) return err('% Use standby <0-255> ip <virtual-ip>');
+      if (dev.kind !== 'router' || p.ip == null || M.sameNet(p.ip, virtualIp, p.mask) === false) return err('% HSRP requires a router interface and a virtual IP in its connected subnet');
+      p.hsrp = { ...(p.hsrp || {}), group, virtualIp, priority: p.hsrp && p.hsrp.priority || 100, preempt: !!(p.hsrp && p.hsrp.preempt), track: p.hsrp && p.hsrp.track || [] };
+      return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'priority' && words.length === 4) {
+      const group = Number(words[1]), priority = Number(words[3]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!Number.isInteger(priority) || priority < 0 || priority > 255) return err('% HSRP priority must be 0-255');
+      p.hsrp.priority = priority; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'preempt' && words.length === 3) {
+      const group = Number(words[1]); if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      p.hsrp.preempt = true; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'track' && words.length === 6 && words[4] === 'decrement') {
+      const group = Number(words[1]), tracked = ciscoIface(dev, words[3]), decrement = Number(words[5]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!tracked || !Number.isInteger(decrement) || decrement < 1 || decrement > 255) return err('% Use standby <group> track <interface> decrement <1-255>');
+      p.hsrp.track = (p.hsrp.track || []).filter(t => t.iface !== tracked).concat([{ iface: tracked, decrement }]); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'standby' && words.length >= 3) {
+      const group = Number(words[2]);
+      if (p.hsrp && p.hsrp.group === group) delete p.hsrp;
+      return ok('');
+    }
+
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'shutdown') { p.up = false; return ok(''); }
     if (words[0] === 'no' && words[1] === 'shutdown') { p.up = true; return ok(''); }
@@ -1656,7 +1733,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -2430,6 +2507,7 @@ function evalCheck(net, s) {
     case 'resolves':       return C.resolves(net, s.dev, s.name, s.ip);
     case 'ospf_neighbor':  return C.ospfNeighbor(net, s.dev, s.peer);
     case 'ospf_route':     return C.ospfRoute(net, s.dev, s.cidr);
+    case 'hsrp_state':    return C.hsrpState(net, s.dev, s.iface, s.state);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);
@@ -3433,6 +3511,49 @@ const chapters = [
     ]
   }
 ];
+
+
+  ,
+  { id: 'wan-gateway-failover', chapter: 'Enterprise WAN · gateway redundancy',
+    title: 'Keep the branch online when its primary WAN fails',
+    story: 'The branch has two edge routers. R1 is preferred, but its WAN circuit is unstable. Users currently depend on a single first-hop gateway, so an R1 uplink failure strands the entire office even though R2 and its carrier path remain healthy. The NOC wants a shared gateway on both the user and WAN segments, with the LAN-side election tracking R1’s uplink.',
+    objective: 'Configure HSRP group 10 on the user LAN and group 20 on the WAN transit. Make R1 preferred, R2 the standby, track R1’s WAN interface from its LAN HSRP group, verify both virtual gateways and end-to-end reachability, then simulate an uplink failure and confirm R2 takes over before restoring R1.',
+    ticket: { id: 'INC-3531', from: 'NOC · Branch connectivity', priority: 'P1', symptom: 'Users report a complete branch outage whenever the primary router loses its carrier link. The backup router is powered and connected, but workstations keep sending traffic to the failed gateway. Restore automatic first-hop failover without changing workstation gateway settings.' },
+    diagnose: { q: 'R1 and R2 are both connected to the user VLAN. Which design lets hosts keep one gateway address while the routers elect an active forwarder?', options: ['Configure a shared HSRP virtual IP on both routers and track R1’s WAN interface so its priority drops on uplink failure', 'Give every workstation two default gateways and rely on host retry timers', 'Configure the same physical interface IP on both routers'], answer: 0, because: 'A first-hop redundancy protocol presents one virtual gateway to clients. Tracking the upstream interface makes the preferred router yield when its WAN path fails, allowing the standby router to forward traffic.' },
+    console: 'r1',
+    hints: ['Use show ip interface brief to identify the LAN and WAN interfaces. Both routers must use the same HSRP group and virtual IP on each shared segment.', 'On both LAN interfaces configure standby 10 ip 10.20.0.1. Set R1 priority 110 and R2 priority 100. On R1, track its WAN interface with decrement 30.', 'On both WAN interfaces configure standby 20 ip 203.0.113.254, with R1 priority 110 and R2 priority 100. Verify with show standby brief, then ping the ISP host from hq.', 'Simulate the fault with interface wan and shutdown on r1. Confirm r2 becomes Active for group 10 and group 20 and hq still reaches isp. Restore with no shutdown and verify R1 preempts back to Active.'],
+    build: () => ({
+      devices: {
+        hq: H('hq','10.20.0.10',24,'10.20.0.1'),
+        isp: H('isp','203.0.113.10',24,'203.0.113.254'),
+        r1: R('r1','router',{lan:iface('10.20.0.2',24),wan:iface('203.0.113.2',24)},[]),
+        r2: R('r2','router',{lan:iface('10.20.0.3',24),wan:iface('203.0.113.3',24)},[]),
+        swlan: SW('swlan',[{n:'p1'},{n:'p2'},{n:'p3'}]),
+        swwan: SW('swwan',[{n:'p1'},{n:'p2'},{n:'p3'}])
+      },
+      links:[
+        L('hq','eth0','swlan','p1'),L('r1','lan','swlan','p2'),L('r2','lan','swlan','p3'),
+        L('r1','wan','swwan','p1'),L('r2','wan','swwan','p2'),L('isp','eth0','swwan','p3')
+      ]
+    }),
+    success:[
+      {type:'hsrp_state',dev:'r1',iface:'lan',state:'Active'},
+      {type:'hsrp_state',dev:'r2',iface:'lan',state:'Standby'},
+      {type:'hsrp_state',dev:'r1',iface:'wan',state:'Active'},
+      {type:'hsrp_state',dev:'r2',iface:'wan',state:'Standby'},
+      {type:'reachable',a:'hq',b:'isp'}
+    ],
+    solution:[
+      ['r1','enable'],['r1','configure terminal'],['r1','interface lan'],
+      ['r1','standby 10 ip 10.20.0.1'],['r1','standby 10 priority 110'],['r1','standby 10 preempt'],['r1','standby 10 track wan decrement 30'],
+      ['r1','exit'],['r1','interface wan'],['r1','standby 20 ip 203.0.113.254'],['r1','standby 20 priority 110'],['r1','standby 20 preempt'],['r1','end'],
+      ['r2','enable'],['r2','configure terminal'],['r2','interface lan'],
+      ['r2','standby 10 ip 10.20.0.1'],['r2','standby 10 priority 100'],['r2','standby 10 preempt'],
+      ['r2','exit'],['r2','interface wan'],['r2','standby 20 ip 203.0.113.254'],['r2','standby 20 priority 100'],['r2','standby 20 preempt'],['r2','end'],
+      ['r1','show standby brief'],['r2','show standby brief'],['hq','ping isp'],
+      ['r1','enable'],['r1','write memory'],['r2','enable'],['r2','write memory']
+    ]
+  }
 
 module.exports = { chapters };
 
