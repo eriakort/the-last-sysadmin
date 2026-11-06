@@ -923,4 +923,47 @@ const chapters = [
   }
 ];
 
+
+  ,
+  { id: 'wan-gateway-failover', chapter: 'Enterprise WAN · gateway redundancy',
+    title: 'Keep the branch online when its primary WAN fails',
+    story: 'The branch has two edge routers. R1 is preferred, but its WAN circuit is unstable. Users currently depend on a single first-hop gateway, so an R1 uplink failure strands the entire office even though R2 and its carrier path remain healthy. The NOC wants a shared gateway on both the user and WAN segments, with the LAN-side election tracking R1’s uplink.',
+    objective: 'Configure HSRP group 10 on the user LAN and group 20 on the WAN transit. Make R1 preferred, R2 the standby, track R1’s WAN interface from its LAN HSRP group, verify both virtual gateways and end-to-end reachability, then simulate an uplink failure and confirm R2 takes over before restoring R1.',
+    ticket: { id: 'INC-3531', from: 'NOC · Branch connectivity', priority: 'P1', symptom: 'Users report a complete branch outage whenever the primary router loses its carrier link. The backup router is powered and connected, but workstations keep sending traffic to the failed gateway. Restore automatic first-hop failover without changing workstation gateway settings.' },
+    diagnose: { q: 'R1 and R2 are both connected to the user VLAN. Which design lets hosts keep one gateway address while the routers elect an active forwarder?', options: ['Configure a shared HSRP virtual IP on both routers and track R1’s WAN interface so its priority drops on uplink failure', 'Give every workstation two default gateways and rely on host retry timers', 'Configure the same physical interface IP on both routers'], answer: 0, because: 'A first-hop redundancy protocol presents one virtual gateway to clients. Tracking the upstream interface makes the preferred router yield when its WAN path fails, allowing the standby router to forward traffic.' },
+    console: 'r1',
+    hints: ['Use show ip interface brief to identify the LAN and WAN interfaces. Both routers must use the same HSRP group and virtual IP on each shared segment.', 'On both LAN interfaces configure standby 10 ip 10.20.0.1. Set R1 priority 110 and R2 priority 100. On R1, track its WAN interface with decrement 30.', 'On both WAN interfaces configure standby 20 ip 203.0.113.254, with R1 priority 110 and R2 priority 100. Verify with show standby brief, then ping the ISP host from hq.', 'Simulate the fault with interface wan and shutdown on r1. Confirm r2 becomes Active for group 10 and group 20 and hq still reaches isp. Restore with no shutdown and verify R1 preempts back to Active.'],
+    build: () => ({
+      devices: {
+        hq: H('hq','10.20.0.10',24,'10.20.0.1'),
+        isp: H('isp','203.0.113.10',24,'203.0.113.254'),
+        r1: R('r1','router',{lan:iface('10.20.0.2',24),wan:iface('203.0.113.2',24)},[]),
+        r2: R('r2','router',{lan:iface('10.20.0.3',24),wan:iface('203.0.113.3',24)},[]),
+        swlan: SW('swlan',[{n:'p1'},{n:'p2'},{n:'p3'}]),
+        swwan: SW('swwan',[{n:'p1'},{n:'p2'},{n:'p3'}])
+      },
+      links:[
+        L('hq','eth0','swlan','p1'),L('r1','lan','swlan','p2'),L('r2','lan','swlan','p3'),
+        L('r1','wan','swwan','p1'),L('r2','wan','swwan','p2'),L('isp','eth0','swwan','p3')
+      ]
+    }),
+    success:[
+      {type:'hsrp_state',dev:'r1',iface:'lan',state:'Active'},
+      {type:'hsrp_state',dev:'r2',iface:'lan',state:'Standby'},
+      {type:'hsrp_state',dev:'r1',iface:'wan',state:'Active'},
+      {type:'hsrp_state',dev:'r2',iface:'wan',state:'Standby'},
+      {type:'reachable',a:'hq',b:'isp'}
+    ],
+    solution:[
+      ['r1','enable'],['r1','configure terminal'],['r1','interface lan'],
+      ['r1','standby 10 ip 10.20.0.1'],['r1','standby 10 priority 110'],['r1','standby 10 preempt'],['r1','standby 10 track wan decrement 30'],
+      ['r1','exit'],['r1','interface wan'],['r1','standby 20 ip 203.0.113.254'],['r1','standby 20 priority 110'],['r1','standby 20 preempt'],['r1','end'],
+      ['r2','enable'],['r2','configure terminal'],['r2','interface lan'],
+      ['r2','standby 10 ip 10.20.0.1'],['r2','standby 10 priority 100'],['r2','standby 10 preempt'],
+      ['r2','exit'],['r2','interface wan'],['r2','standby 20 ip 203.0.113.254'],['r2','standby 20 priority 100'],['r2','standby 20 preempt'],['r2','end'],
+      ['r1','show standby brief'],['r2','show standby brief'],['hq','ping isp'],
+      ['r1','enable'],['r1','write memory'],['r2','enable'],['r2','write memory']
+    ]
+  }
+
 module.exports = { chapters };
