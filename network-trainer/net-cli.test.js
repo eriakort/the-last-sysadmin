@@ -517,6 +517,8 @@ test('IOS syslog forwards configuration events to a reachable collector and appl
   const collector=makeCLI(net,'log1').run('show logging').out;
   has(collector,'BRANCH-R1','collector sees sender');
   has(collector,'CONFIG: hostname BRANCH-R1','collector sees configuration change');
+  has(collector,'10.0.2.1','configured source-interface address is used');
+  has(server.run('show ip dhcp pool').out,'10.0.1.0/24','pool operational state visible');
   has(cli.run('show running-config').out,'logging host 10.0.2.10','syslog config persists');
 });
 
