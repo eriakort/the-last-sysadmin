@@ -223,7 +223,7 @@ function setTicketState(id, status, assigned) {
   if (!TICKET_STATES.includes(status)) return;
   PROG.tickets = PROG.tickets || {};
   PROG.tickets[id] = { ...(PROG.tickets[id] || {}), status, assigned: assigned || (status === 'new' ? 'Unassigned' : 'You'), updatedAt: new Date().toISOString() };
-  saveProg();
+  saveProg(); refreshOverview();
 }
 function openTicketQueue() {
   const tickets = allTickets();
@@ -382,8 +382,8 @@ function renderConfig() {
 
 /* ---------- actions ---------- */
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; }
-function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; refreshOverview(); }
+function runMission(m, solvedKey) { showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
 function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; showWorkspaceView('workbench'); runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
