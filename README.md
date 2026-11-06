@@ -143,3 +143,8 @@ Natural next steps:
 ## Workbench topology inspection
 
 The topology canvas supports pointer-anchored wheel zoom, drag-to-pan, selected-device focus, fit-to-view and automatic arrangement. Toggle **Ports** to reveal the interface endpoints on each simulated link. These controls inspect the active local scenario; they do not connect to physical network devices.
+
+
+## Workbench command evidence
+
+The device console provides **Copy output**, **Save evidence**, and **Download** actions. Saving evidence records the selected simulator device, the most recent command, and the visible console transcript in the browser-local Engineering Journal. Use the journal to search and review captured output alongside investigation notes and ticket activity. Copy/download are local browser actions; evidence is not uploaded to a server or connected to physical network equipment.
