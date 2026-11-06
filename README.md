@@ -148,3 +148,8 @@ The topology canvas supports pointer-anchored wheel zoom, drag-to-pan, selected-
 ## Workbench command evidence
 
 The device console provides **Copy output**, **Save evidence**, and **Download** actions. Saving evidence records the selected simulator device, the most recent command, and the visible console transcript in the browser-local Engineering Journal. Use the journal to search and review captured output alongside investigation notes and ticket activity. Copy/download are local browser actions; evidence is not uploaded to a server or connected to physical network equipment.
+
+
+## Workbench configuration checkpoints
+
+Use **Save checkpoint** to capture the selected simulator device's current `show running-config` output in browser-local storage. **Review drift** compares the current running configuration with the latest checkpoint and lists added and removed lines; **Export archive** downloads saved checkpoints for the selected device as JSON. Checkpoints are retained locally (up to 100 records across devices) and recorded in the Engineering Journal. The comparison is read-only: it does not restore configuration, execute changes, or connect to physical equipment.
