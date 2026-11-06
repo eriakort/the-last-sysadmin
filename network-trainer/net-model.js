@@ -36,6 +36,7 @@ function switchPortAllowsVlan(port, vlan) {
   if (port.mode === 'trunk') return !Array.isArray(port.allowedVlans) || port.allowedVlans.includes(vlan);
   return switchAccessVlan(port) === vlan;
 }
+function switchVlanExists(dev, vlan) { return !Array.isArray(dev.vlans) || dev.vlans.includes(vlan); }
 function switchIngressVlan(port, taggedVlan) {
   if (port.mode === 'trunk') {
     const vlan = taggedVlan == null ? switchNativeVlan(port) : taggedVlan;
@@ -52,12 +53,12 @@ function l2Domain(net, startDev, startIface) {
   if (!firstDev || firstDev.kind !== 'switch') return [first];
   const firstPort = firstDev.ifaces[fi];
   const firstVlan = firstPort && switchIngressVlan(firstPort, null);
-  if (firstVlan == null) return endpoints;
+  if (firstVlan == null || !switchVlanExists(firstDev, firstVlan)) return endpoints;
   const stack = [[fd, fi, firstVlan]];
   while (stack.length) {
     const [d, i, vlan] = stack.pop(), key = d + '|' + i + '|' + vlan;
     if (seen.has(key)) continue; seen.add(key);
-    const dev = net.devices[d]; if (!dev || dev.kind !== 'switch') continue;
+    const dev = net.devices[d]; if (!dev || dev.kind !== 'switch' || !switchVlanExists(dev, vlan)) continue;
     for (const p in dev.ifaces) {
       const port = dev.ifaces[p];
       if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan)) continue;
@@ -66,8 +67,9 @@ function l2Domain(net, startDev, startIface) {
       if (!next) continue;
       if (next.kind === 'switch') {
         const ingress = next.ifaces[ni];
-        const mapped = ingress && switchIngressVlan(ingress, vlan);
-        if (mapped === vlan) stack.push([nd, ni, vlan]);
+        const wireVlan = port.mode === 'trunk' && vlan !== switchNativeVlan(port) ? vlan : null;
+        const mapped = ingress && switchIngressVlan(ingress, wireVlan);
+        if (mapped != null && switchVlanExists(next, mapped)) stack.push([nd, ni, mapped]);
       } else if (port.mode !== 'trunk' || switchNativeVlan(port) === vlan) {
         endpoints.push([nd, ni]);
       }
@@ -358,7 +360,7 @@ function ping(net, srcDev, dst, base = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,
