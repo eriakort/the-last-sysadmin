@@ -816,7 +816,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await proveMission('Onboard a new admin', 'Give Sam admin rights', 'home', [
     'sudo useradd -m -s /bin/bash sam',
     'getent passwd sam'
-  ], 'Correct. -m creates the home directory'); 
+  ], 'Correct. -m creates the home directory');
 
   await checkLearningStages('Give Sam admin rights', 'replace', ['usermod -aG', 'sudo group', 'preserves']);
   await proveMission('Give Sam admin rights', 'Check the account', 'append', [
@@ -834,17 +834,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'ssh-keygen -t ed25519 -C "halcyon admin"'
   ], 'Correct. Install the public key; keep the private key secret');
 
-  await checkLearningStages('Audit who can log in', 'start', ['grep -c', '/bin/bash
-  if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
-  console.log('\nLEARNING FLOW OK.');
-})();
-, 'nologin']);
+  await checkLearningStages('Audit who can log in', 'start', ['grep -c', '/bin/bash$', 'nologin']);
   await proveAnswerMission('Audit who can log in', 'Close a departed account', 'end', [
-    "grep -c '/bin/bash
-  if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
-  console.log('\nLEARNING FLOW OK.');
-})();
- /etc/passwd"
+    "grep -c '/bin/bash$' /etc/passwd"
   ], '4', 'Correct. $ anchors the match to the end of the line');
 
   await browser.close();
