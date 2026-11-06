@@ -877,7 +877,7 @@ function runCisco(cli, line) {
     const p = dev.ifaces[cli.iosIface];
     if (!p) return err('% Interface context no longer exists');
     if (lower === 'shutdown') { p.up = false; return ok(''); }
-    if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
+    if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; p.errDisabled = false; return ok(''); }
     if (words[0] === 'switchport' && words[1] === 'port-security' && dev.kind === 'switch') {
       if (words.length === 2) { p.portSecurity = { ...(p.portSecurity || {}), enabled: true, maximum: Number(p.portSecurity && p.portSecurity.maximum || 1), violation: p.portSecurity && p.portSecurity.violation || 'shutdown', sticky: !!(p.portSecurity && p.portSecurity.sticky), secureMacs: p.portSecurity && p.portSecurity.secureMacs || [], stickyMacs: p.portSecurity && p.portSecurity.stickyMacs || [], violations: Number(p.portSecurity && p.portSecurity.violations || 0) }; return ok('Port security enabled'); }
       if (words[2] === 'maximum' && words.length === 4) { const n=Number(words[3]); if(!Number.isInteger(n)||n<1||n>50)return err('% Port-security maximum must be 1-50'); p.portSecurity=p.portSecurity||{enabled:true,violation:'shutdown',secureMacs:[],stickyMacs:[],violations:0}; p.portSecurity.enabled=true; p.portSecurity.maximum=n; return ok('Maximum secure MAC addresses: '+n); }
