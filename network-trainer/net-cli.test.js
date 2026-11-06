@@ -346,6 +346,44 @@ test('IOS ACL parser rejects malformed entries and unknown bindings', () => {
 });
 
 
+test('ASA network and service object-groups enforce reusable partner HTTPS policy', () => {
+  const net = {
+    devices: {
+      partner:{id:'partner',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('203.0.113.1')}]},
+      attacker:{id:'attacker',kind:'host',ifaces:{eth0:{ip:ip('198.51.100.20'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('198.51.100.1')}]},
+      app:{id:'app',kind:'host',ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.0.2.1')}],services:{443:'https',80:'http',22:'ssh'}},
+      asa:{id:'asa',kind:'firewall',firewallOS:'asa',ifaces:{outside:{ip:ip('203.0.113.1'),mask:24,up:true,nameif:'outside',securityLevel:0},inside:{ip:ip('10.0.2.1'),mask:24,up:true,nameif:'inside',securityLevel:100}},routes:[],acls:[],nat:[]},
+      sw1:sw('sw1',['p1','p2','p3']),sw2:sw('sw2',['p1','p2'])
+    },
+    links:[link('partner','eth0','sw1','p1'),link('attacker','eth0','sw1','p2'),link('asa','outside','sw1','p3'),link('app','eth0','sw2','p1'),link('asa','inside','sw2','p2')]
+  };
+  const asa=makeCLI(net,'asa'); asa.run('enable'); asa.run('configure terminal');
+  asa.run('object-group network APPROVED_PARTNERS');
+  eq(asa.run('network-object 203.0.113.0 255.255.255.0').code,0,'add approved subnet');
+  asa.run('exit'); asa.run('object-group network PORTAL_SERVERS');
+  eq(asa.run('network-object host 10.0.2.10').code,0,'add portal host');
+  asa.run('exit'); asa.run('object-group service PORTAL_TCP');
+  eq(asa.run('service-object tcp destination eq 443').code,0,'add HTTPS service');
+  asa.run('exit');
+  eq(asa.run('access-list PARTNER_IN extended permit tcp object-group APPROVED_PARTNERS object-group PORTAL_SERVERS object-group PORTAL_TCP').code,0,'reference all groups in ACL');
+  eq(asa.run('access-group PARTNER_IN in interface outside').code,0,'apply grouped ACL');
+  asa.run('end');
+  eq(M.forward(net,'partner',{src:ip('203.0.113.10'),dst:ip('10.0.2.10'),proto:'tcp',dport:443}).ok,true,'approved partner HTTPS allowed');
+  eq(M.forward(net,'partner',{src:ip('203.0.113.10'),dst:ip('10.0.2.10'),proto:'tcp',dport:22}).ok,false,'partner SSH denied');
+  eq(M.forward(net,'attacker',{src:ip('198.51.100.20'),dst:ip('10.0.2.10'),proto:'tcp',dport:443}).ok,false,'unapproved source denied');
+  has(asa.run('show object-group APPROVED_PARTNERS').out,'203.0.113.0','network group visible');
+  has(asa.run('show access-list PARTNER_IN').out,'object-group PORTAL_TCP','service group reference visible');
+  eq(asa.run('show access-list PARTNER_IN').out.includes('(1 match)'),true,'grouped rule hit counter increments');
+  asa.run('enable');
+  has(asa.run('clear access-list PARTNER_IN').out,'Cleared hit counters on 1','counter clear reports entries');
+  has(asa.run('show access-list PARTNER_IN').out,'(0 matches)','counter reset visible');
+  eq(asa.run('configure terminal').code,0,'re-enter configuration');
+  eq(asa.run('no object-group network APPROVED_PARTNERS').code,1,'referenced group cannot be removed');
+  asa.run('end'); eq(asa.run('write memory').code,0,'save object groups');
+  has(asa.run('show running-config').out,'object-group service PORTAL_TCP','service group saved');
+  has(asa.run('show running-config').out,'access-list PARTNER_IN extended permit tcp object-group APPROVED_PARTNERS','grouped ACL saved');
+});
+
 test('ASA profile publishes HTTPS with object static PAT, inbound ACL and packet-tracer verification', () => {
   const net = {
     devices: {
