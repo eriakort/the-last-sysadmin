@@ -480,7 +480,7 @@ const MAN = {
   dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
   resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.',
   mac: 'show mac address-table dynamic — inspect learned endpoint MAC addresses, VLANs, and switch ports. Entries are derived from the current Layer 2 topology.',
-  spanning-tree: 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
+  'spanning-tree': 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
