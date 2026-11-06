@@ -983,6 +983,121 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'dmesg | tail'
   ], 'Correct. dmesg reads messages from the kernel ring buffer');
 
+
+  // Large batch: guided learning for shell productivity, permissions, LVM and process signals.
+  await checkLearningStages('Make a shortcut', 'file', ['alias', 'shell shortcut', 'current shell']);
+  await proveMission('Make a shortcut', 'Where does it live?', 'shortcut', [
+    "alias ll='ls -l'",
+    'll /etc'
+  ], 'Correct. An alias is a shell shortcut');
+
+  await checkLearningStages('Where does it live?', 'home', ['PATH', 'which cat', '/usr/bin/cat']);
+  await proveAnswerMission('Where does it live?', 'Command, builtin, or alias?', 'path', [
+    'which cat'
+  ], '/usr/bin/cat', 'Correct. PATH lists the directories');
+
+  await checkLearningStages('Command, builtin, or alias?', 'network', ['type cd', 'shell builtin', 'parent shell']);
+  await proveAnswerMission('Command, builtin, or alias?', 'Keep it after logout', 'parent', [
+    'type cd'
+  ], 'builtin', 'Correct. cd must change the current shell');
+
+  await checkLearningStages('Keep it after logout', 'replace', ['~/.bashrc', '>>', 'interactive Bash']);
+  await proveMission('Keep it after logout', 'An environment variable', 'append', [
+    "echo \"alias ll='ls -l'\" >> ~/.bashrc",
+    'tail ~/.bashrc'
+  ], 'Correct. >> appends the new line');
+
+  await checkLearningStages('An environment variable', 'install', ['export EDITOR=vim', 'child processes', 'environment']);
+  await proveAnswerMission('An environment variable', 'Default permissions', 'inherit', [
+    'export EDITOR=vim',
+    'echo $EDITOR'
+  ], 'vim', 'Correct. export adds the variable');
+
+  await checkLearningStages('Default permissions', 'owner', ['umask', '0022', 'new files']);
+  await proveAnswerMission('Default permissions', 'Find the powerful files', 'remove', [
+    'umask'
+  ], '0022', 'Correct. umask filters permissions');
+
+  await checkLearningStages('Find the powerful files', '2000', ['-perm -4000', 'setuid', '/usr/bin/passwd']);
+  await proveAnswerMission('Find the powerful files', 'A shared directory', '4000', [
+    'find /usr/bin -perm -4000'
+  ], '/usr/bin/passwd', 'Correct. 4000 is the setuid bit');
+
+  await checkLearningStages('A shared directory', 'owner', ['chmod 2775', 'setgid', 'group inheritance']);
+  await proveMission('A shared directory', 'Grant one person access', 'group', [
+    'sudo mkdir -p /srv/reports',
+    'sudo chmod 2775 /srv/reports',
+    'ls -ld /srv/reports'
+  ], 'Correct. New entries inherit the directory');
+
+  await checkLearningStages('Grant one person access', 'chmod', ['setfacl', 'getfacl', 'u:sam:rw']);
+  await proveMission('Grant one person access', 'Lock down the key', 'setfacl', [
+    'setfacl -m u:sam:rw ~/incident/ALL_CLEAR.md',
+    'getfacl ~/incident/ALL_CLEAR.md'
+  ], 'Correct. setfacl edits access-control-list');
+
+  await checkLearningStages('Lock down the key', 'everyone', ['chmod 600', 'private key', '.pub']);
+  await proveMission('Lock down the key', 'A spare disk', 'owner', [
+    'chmod 600 ~/.ssh/id_ed25519',
+    'ls -l ~/.ssh/id_ed25519'
+  ], 'Correct. 600 means owner read/write');
+
+  await checkLearningStages('A spare disk', 'lsmod', ['lsblk', 'block devices', 'mountpoints']);
+  await proveAnswerMission('A spare disk', 'Physical volume', 'lsblk', [
+    'lsblk'
+  ], 'vdc', 'Correct. lsblk shows block devices');
+
+  await checkLearningStages('Physical volume', 'vg', ['pvcreate', 'physical volume', 'pvs']);
+  await proveMission('Physical volume', 'Volume group', 'pv', [
+    'sudo pvcreate /dev/vdc',
+    'sudo pvs'
+  ], 'Correct. The physical volume is the first LVM layer');
+
+  await checkLearningStages('Volume group', 'format', ['vgcreate', 'volume group', 'vgs']);
+  await proveMission('Volume group', 'Logical volume', 'pool', [
+    'sudo vgcreate data /dev/vdc',
+    'sudo vgs'
+  ], 'Correct. A VG pools PV capacity');
+
+  await checkLearningStages('Logical volume', 'pv', ['lvcreate', 'logical volume', 'lvs']);
+  await proveMission('Logical volume', 'Format and mount it', 'lv', [
+    'sudo lvcreate -n reports -L 5G data',
+    'sudo lvs'
+  ], 'Correct. The LV is the block device');
+
+  await checkLearningStages('Format and mount it', 'chmod', ['mkfs.ext4', '/mnt/reports', 'df -h']);
+  await proveMission('Format and mount it', 'What holds the port?', 'format', [
+    'sudo mkfs.ext4 /dev/data/reports',
+    'sudo mkdir -p /mnt/reports',
+    'sudo mount /dev/data/reports /mnt/reports',
+    'df -h'
+  ], 'Correct. Create a filesystem before mounting');
+
+  await checkLearningStages('What holds the port?', 'port', ['lsof -i :8080', 'PID', 'listening port']);
+  await proveAnswerMission('What holds the port?', 'Reload without restarting', 'pid', [
+    'sudo lsof -i :8080'
+  ], '812', 'Correct. PID is the process identifier');
+
+  await checkLearningStages('Reload without restarting', 'kill', ['SIGHUP', 'kill -HUP 812', 'reload']);
+  await proveMission('Reload without restarting', 'Confirm it survived', 'hup', [
+    'sudo kill -HUP 812'
+  ], 'Correct. SIGHUP is commonly used');
+
+  await checkLearningStages('Confirm it survived', 'df', ['ps aux', 'grep', 'processes']);
+  await proveAnswerMission('Confirm it survived', 'Bound a slow command', 'ps', [
+    'ps aux | grep -c halcyon-worker'
+  ], '5', 'Correct. ps displays a snapshot');
+
+  await checkLearningStages('Bound a slow command', 'repeat', ['timeout 3', 'maximum runtime', 'exit status']);
+  await proveMission('Bound a slow command', 'Who has the log open?', 'limit', [
+    'timeout 3 ping -c 2 10.0.4.20'
+  ], 'Correct. timeout limits how long');
+
+  await checkLearningStages('Who has the log open?', 'cache', ['lsof', 'open file descriptor', 'disk space']);
+  await proveMission('Who has the log open?', 'A live pulse', 'fd', [
+    'sudo lsof /var/log/halcyon/app.log'
+  ], 'Correct. An open file descriptor keeps');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
