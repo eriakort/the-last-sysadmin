@@ -4376,6 +4376,30 @@ function renderConfig() {
     overview += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
   }
   panels.push({ id:'overview', label:d.kind === 'switch' ? 'Layer 2' : 'Overview', html:overview });
+
+  // A consistent, read-only operational view of every interface on the selected device.
+  let interfaces = '<div class="label2">Interface inventory</div><div class="iface-table-wrap"><table class="iface-table"><thead><tr><th>Interface</th><th>State</th><th>Address / VLAN</th><th>Connected peer</th><th>Operational details</th><th></th></tr></thead><tbody>';
+  const stpTrees = d.kind === 'switch' ? (d.vlans || [1]).map(v => [v, M.spanningTree(RUN.net, v)]) : [];
+  for (const [name, f] of Object.entries(d.ifaces || {})) {
+    const state = f.errDisabled ? 'err-disabled' : f.up === false ? 'administratively down' : 'up';
+    const peer = M.neighbor(RUN.net, SEL, name);
+    const peerText = peer ? peer[0] + ' · ' + peer[1] : 'not connected';
+    let address = f.ip != null ? M.ipStr(f.ip) + '/' + (f.mask ?? '—') : '—';
+    if (d.kind === 'switch') address = f.mode === 'trunk'
+      ? 'Trunk · native ' + Number(f.nativeVlan ?? 1) + ' · allowed ' + (Array.isArray(f.allowedVlans) ? f.allowedVlans.join(', ') : 'all')
+      : 'Access · VLAN ' + Number(f.accessVlan ?? f.vlan ?? 1);
+    const details = [];
+    if (f.ospf != null) details.push('OSPF area ' + f.ospf);
+    if (f.hsrp) details.push('HSRP ' + (M.hsrpStatus(RUN.net, SEL, name)?.state || 'configured'));
+    const stp = stpTrees.map(([v, tree]) => ({v, port:tree.switches[SEL]?.ports?.[name]})).find(x => x.port);
+    if (stp) details.push('STP VLAN ' + stp.v + ' ' + stp.port.state + (stp.port.role ? ' · ' + stp.port.role : ''));
+    const ps = f.portSecurity;
+    if (ps?.enabled) details.push('Port security · ' + (ps.secureMacs || []).length + '/' + Number(ps.maximum || 1) + ' MACs · ' + Number(ps.violations || 0) + ' violations');
+    if (f.errDisabled) details.push('Err-disabled');
+    interfaces += '<tr><td><b>' + esc(name) + '</b></td><td><span class="iface-state iface-' + (state === 'up' ? 'up' : 'down') + '">' + esc(state) + '</span></td><td class="mono">' + esc(address) + '</td><td>' + esc(peerText) + '</td><td>' + esc(details.join(' · ') || 'No additional protocol state') + '</td><td><button type="button" class="btn sm" data-iface-command="' + esc(name) + '">Inspect in CLI</button></td></tr>';
+  }
+  interfaces += '</tbody></table></div><p class="dim iface-note">This view reflects the active simulator state. Use the CLI action to inspect the device command output; this inventory does not represent live hardware.</p>';
+  panels.push({ id:'interfaces', label:'Interfaces', html:interfaces });
   if (d.kind !== 'switch') {
     let routing = '<div class="label2">Static routes</div>';
     (d.routes || []).forEach((r, i) => { const dest = r.mask === 0 ? 'default' : M.ipStr(r.dest) + '/' + r.mask; routing += `<div class="rrow">${dest} via ${M.ipStr(r.via)} <button class="x" data-rt="${i}">✕</button></div>`; });
@@ -4619,6 +4643,7 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; input.focus(); } }));
   document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
     const id = B.addDevice(RUN.net, b.dataset.add); selectDevice(id); WIRE = null; refresh();
