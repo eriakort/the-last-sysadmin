@@ -42,8 +42,8 @@ test('trunks carry allowed VLANs across two switches and block excluded VLANs', 
   }, links: [link('h1','eth0','sw1','p1'),link('sw1','p2','sw2','p1'),link('srv','eth0','sw2','p2')] };
   assert(!connected(net), 'VLAN 10 must not cross trunks that only allow VLAN 20');
   const cli = makeCLI(net, 'sw1');
-  command(cli, 'sw1', 'vlan 10');
-  command(cli, 'sw2', 'vlan 10');
+  command(cli, 'sw1', 'vlan 10'); command(cli, 'sw1', 'vlan 20');
+  command(cli, 'sw2', 'vlan 10'); command(cli, 'sw2', 'vlan 20');
   command(cli, 'sw1', 'interface p2');
   command(cli, 'sw1', 'switchport trunk allowed vlan 10,20');
   command(cli, 'sw1', 'exit');
