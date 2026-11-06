@@ -121,6 +121,7 @@ function triangle() {
 
 test('MAC learning records local and remote endpoints on the correct egress ports', () => {
   const net = triangle();
+  assert(connected(net), 'traffic should populate the dynamic MAC table');
   const rows = M.switchMacTable(net,'sw1',10);
   const h1 = rows.find(x => x.device === 'h1'), srv = rows.find(x => x.device === 'srv');
   assert(h1 && h1.port === 'p1', 'local host h1 should be learned on sw1/p1');
@@ -144,6 +145,7 @@ test('STP elects the lowest-priority root and blocks one redundant triangle link
 
 test('MAC table CLI exposes dynamic VLAN, MAC, and learned switch port', () => {
   const net = triangle(), cli = makeCLI(net,'sw1');
+  assert(connected(net), 'ping should trigger dynamic MAC learning');
   const output = command(cli,'sw1','show mac address-table dynamic');
   assert(output.includes('VLAN  MAC Address') && output.includes('h1/eth0') && output.includes('srv/eth0'), 'MAC table should show local and remote endpoint records');
 });
