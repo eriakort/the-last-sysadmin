@@ -700,11 +700,14 @@ function runCisco(cli, line) {
     dev.dhcp = dev.dhcp || { excluded: [], bindings: {} };
     if (words[0] === 'network' && words.length === 3) {
       const address = parseIPv4(words[1]), prefix = ciscoMaskPrefix(words[2]);
-      if (address == null || prefix == null) return err('% Use network <network-address> <subnet-mask>');
-      dev.dhcp.network = { net: M.networkOf(address, prefix), prefix }; dev.dhcp.prefix = prefix; return ok('');
+      if (address == null || prefix == null || prefix < 8 || prefix > 30) return err('% DHCP network must use a valid IPv4 network and a /8 through /30 mask');
+      const network = M.networkOf(address, prefix);
+      if (dev.dhcp.defaultRouter != null && !M.sameNet(dev.dhcp.defaultRouter, network, prefix)) return err('% Default router must be inside the DHCP pool network');
+      dev.dhcp.network = { net: network, prefix }; dev.dhcp.prefix = prefix; return ok('');
     }
     if (words[0] === 'default-router' && words[1] && words.length === 2) {
       const address = parseIPv4(words[1]); if (address == null) return err('% Invalid default-router address');
+      if (dev.dhcp.network && !M.sameNet(address, dev.dhcp.network.net, dev.dhcp.network.prefix)) return err('% Default router must be inside the DHCP pool network');
       dev.dhcp.defaultRouter = address; return ok('');
     }
     if (words[0] === 'dns-server' && words[1] && words.length === 2) {
