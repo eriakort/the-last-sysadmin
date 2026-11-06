@@ -74,8 +74,13 @@ test('trunk allowed list and access VLAN reject invalid or nonexistent VLANs wit
   command(cli, 'sw1', 'switchport trunk allowed vlan 1,4095', 1);
   command(cli, 'sw1', 'vlan 0', 1);
   command(cli, 'sw1', 'vlan 4095', 1);
+  command(cli, 'sw1', 'vlan 0x10', 1);
+  command(cli, 'sw1', 'vlan 1e2', 1);
+  command(cli, 'sw1', 'vlan 4094');
+  command(cli, 'sw1', 'interface p1 extra', 1);
   assert(net.devices.sw1.ifaces.p1.mode !== 'trunk', 'invalid configuration must not change port mode');
   assert(!net.devices.sw1.vlans.includes(10), 'invalid configuration must not create a VLAN');
+  assert(net.devices.sw1.vlans.includes(4094), 'the upper valid VLAN boundary should be accepted');
 });
 
 test('VLAN and trunk show commands expose configuration for troubleshooting', () => {
