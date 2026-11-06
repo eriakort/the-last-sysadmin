@@ -40,9 +40,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await page.locator('#navOverview').click();
 
   await page.locator('#navJournal').click();
-  if (await page.locator('#modal .journal-list').isVisible()) ok('Journal navigation opens the existing work journal');
-  else fail('Journal navigation did not open the work journal');
-  await page.locator('#modal #closeS').click();
+  if (await page.locator('#journalView').isVisible() && await page.locator('#journalView .journal-page-list').count() > 0) ok('Journal navigation opens the first-class Engineering Journal workspace');
+  else fail('Journal navigation did not open the Engineering Journal workspace');
 
   await page.locator('#navWorkbench').click();
   if (await page.locator('#cols').isVisible() && await page.locator('#overview').isHidden())
