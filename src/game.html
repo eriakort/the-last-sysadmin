@@ -5070,7 +5070,7 @@ const MISSIONS = [
 
   { ch: 20, id: 'tw-range', title: 'Beyond simple grep',
     learning: {
-      concept: 'grep -E enables extended regular expressions. Escape literal dots in an IP range and use ^ to match the beginning of each log line.',
+      concept: 'grep -E enables extended regular expressions. Use escaped dots to match literal periods in an IP range, and use ^ to match the beginning of the line in each log entry.',
       example: "grep -cE '^203\\.0\\.113\\.' access.log.1\n93",
       practice: 'Count every request whose source address belongs to the 203.0.113.x network.',
       investigate: 'An incident report names a network range, not one host. A literal, anchored pattern avoids counting unrelated addresses elsewhere in the line.',
@@ -5087,7 +5087,7 @@ const MISSIONS = [
     answer: a => a.trim() === '93' },
   { ch: 20, id: 'tw-column', title: 'Make it readable',
     learning: {
-      concept: 'cut selects delimited fields. column -t formats those fields into aligned columns; -s: tells column that a colon separates the fields.',
+      concept: 'cut performs field selection from delimiter-separated records. column -t formats those fields into aligned columns; -s: tells column that a colon separates the fields.',
       example: 'cut -d: -f1,7 /etc/passwd | column -t -s:\nrookie  /bin/bash',
       practice: 'Extract usernames and login shells from /etc/passwd, then align the output.',
       investigate: 'Colon-separated account records are compact but hard to scan. Select only the fields needed for an access review before formatting them.',
@@ -5138,7 +5138,7 @@ const MISSIONS = [
     answer: a => a.trim() === '28/10/2026' },
   { ch: 20, id: 'tw-nl', title: 'Number the script',
     learning: {
-      concept: 'nl adds line numbers to a text file. It is useful when reviewing scripts, comparing versions, or communicating the location of a reported error.',
+      concept: 'nl adds line numbers to a text file for review and handover. It displays numbered output and does not modify the original file, making reported line locations easier to discuss.',
       example: 'nl ~/backup.sh\n     1  #!/bin/bash\n     2  DEST=/mnt/backups/nightly.tar.gz',
       practice: 'Display the backup script with line numbers so another administrator can refer to exact lines.',
       investigate: 'A handover says a script failed on line 12. Numbering the file makes the report actionable and helps the next person inspect the right command.',
