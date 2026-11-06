@@ -3962,8 +3962,92 @@ function renderTopo() {
   return s + '</svg>';
 }
 
+/* ---------- operations overview ---------- */
+function dashboardSnapshot() {
+  const devices = Object.entries((RUN && RUN.net && RUN.net.devices) || {}).map(([id, d]) => {
+    const ports = Object.values(d.ifaces || {});
+    const up = ports.filter(p => p.up !== false && p.errDisabled !== true).length;
+    const down = ports.length - up;
+    const status = !ports.length || up === 0 ? 'offline' : down ? 'degraded' : 'healthy';
+    return { id, kind: d.kind || 'device', ip: primaryIp(d), status, up, total: ports.length };
+  });
+  const links = (RUN && RUN.net && RUN.net.links) || [];
+  const tickets = allTickets();
+  const priority = { P1: 0, P2: 1, P3: 2, P4: 3 };
+  const active = tickets.filter(t => t.status !== 'resolved').sort((a,b) => (priority[a.priority] ?? 9) - (priority[b.priority] ?? 9));
+  return {
+    devices, linksUp: links.filter(l => !linkDown(RUN.net, l)).length, linksTotal: links.length,
+    active, resolved: tickets.filter(t => t.status === 'resolved').length,
+    flows: ((RUN && RUN.cli && RUN.cli.flows) || []).slice(0, 5),
+    activity: (PROG.journal || []).slice(0, 6),
+    solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
+  };
+}
+function showWorkspaceView(view) {
+  const overview = $('#overview'), cols = $('#cols');
+  if (!overview || !cols) return;
+  const isOverview = view === 'overview';
+  overview.hidden = !isOverview;
+  cols.hidden = isOverview;
+  document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
+    if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  if (!isOverview && view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
+}
+function renderOverview() {
+  const root = $('#overview'); if (!root || !RUN) return;
+  const d = dashboardSnapshot();
+  const count = status => d.devices.filter(x => x.status === status).length;
+  const priorityClass = p => 'tk-' + String(p || 'p3').toLowerCase();
+  const deviceRows = d.devices.map(x => `<tr><td><b>${esc(x.id)}</b><small>${esc(x.kind)}</small></td><td class="mono">${esc(x.ip || 'No address')}</td><td><span class="health health-${x.status}"><i></i>${x.status}</span></td><td class="mono">${x.up}/${x.total}</td></tr>`).join('');
+  const incidentRows = d.active.slice(0, 5).map(t => `<article class="overview-incident"><div class="oi-head"><b>${esc(t.id)}</b><span class="tk-pri ${priorityClass(t.priority)}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></div><strong>${esc(t.title)}</strong><p>${esc(t.symptom)}</p><div class="oi-foot"><span>${esc(t.service)}</span><button class="btn sm" data-overview-ticket="${esc(t.id)}">Investigate →</button></div></article>`).join('');
+  const activityRows = d.activity.map(e => `<article class="overview-activity"><span class="activity-dot"></span><div><b>${esc(e.type || 'Activity')}</b><p>${esc([e.ticket,e.device,e.text].filter(Boolean).join(' · ') || e.command || 'Recorded in engineering journal')}</p><time>${esc(new Date(e.at).toLocaleString())}</time></div></article>`).join('');
+  const flowRows = d.flows.map(f => `<div class="overview-flow ${f.ok ? 'flow-ok' : 'flow-bad'}"><b>${esc((f.proto || 'icmp').toUpperCase())}</b><span>${esc(M.ipStr(f.src))} → ${esc(M.ipStr(f.dst))}</span><strong>${f.ok ? 'Delivered' : 'Dropped'}</strong></div>`).join('');
+  root.innerHTML = `
+    <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
+    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
+    <section class="overview-metrics" aria-label="Network summary">
+      <article class="overview-metric"><span>Devices healthy</span><strong>${count('healthy')}<small> / ${d.devices.length}</small></strong><em>${count('degraded')} degraded · ${count('offline')} offline</em></article>
+      <article class="overview-metric"><span>Links operational</span><strong>${d.linksUp}<small> / ${d.linksTotal}</small></strong><em>${d.linksTotal - d.linksUp} links down</em></article>
+      <article class="overview-metric metric-alert"><span>Open incidents</span><strong>${d.active.length}</strong><em>${d.active.filter(t => t.priority === 'P1' || t.priority === 'P2').length} priority 1–2</em></article>
+      <article class="overview-metric"><span>Resolved tickets</span><strong>${d.resolved}<small> / ${d.total}</small></strong><em>${PROG.xp} XP · ${esc(rankFor(PROG.xp))}</em></article>
+    </section>
+    <div class="overview-grid">
+      <section class="overview-panel inventory-panel"><div class="overview-panel-head"><div><span class="eyebrow">Current lab topology</span><h2>Device health</h2></div><button class="text-action" id="healthWorkbench">Inspect topology →</button></div>
+        <div class="overview-table-wrap"><table class="overview-table"><thead><tr><th>Device</th><th>Primary IP</th><th>Status</th><th>Ports up</th></tr></thead><tbody>${deviceRows || '<tr><td colspan="4">No devices in this scenario.</td></tr>'}</tbody></table></div>
+        <p class="overview-footnote">Health is calculated from the active simulator scenario and interface/link state. It is not external monitoring.</p>
+      </section>
+      <section class="overview-panel incident-panel"><div class="overview-panel-head"><div><span class="eyebrow">Service desk</span><h2>Active incidents <span class="panel-count">${d.active.length}</span></h2></div><button class="text-action" id="allIncidents">View queue →</button></div>
+        <div class="overview-incident-list">${incidentRows || '<div class="overview-empty">No open incidents. The queue is clear.</div>'}</div>
+      </section>
+      <section class="overview-panel traffic-panel"><div class="overview-panel-head"><div><span class="eyebrow">Simulator evidence</span><h2>Recent traffic</h2></div><button class="text-action" id="trafficWorkbench">Open console →</button></div>
+        <div class="overview-flow-list">${flowRows || '<div class="overview-empty">No traffic captured yet. Run ping or traceroute in the Workbench to create evidence.</div>'}</div>
+      </section>
+      <section class="overview-panel activity-panel"><div class="overview-panel-head"><div><span class="eyebrow">Engineering records</span><h2>Recent activity</h2></div><button class="text-action" id="allJournal">Open journal →</button></div>
+        <div class="overview-activity-list">${activityRows || '<div class="overview-empty">No activity recorded yet. Commands, ticket actions and notes will appear here.</div>'}</div>
+      </section>
+      <section class="overview-panel progress-panel"><div class="overview-panel-head"><div><span class="eyebrow">Skills progression</span><h2>Shift progress</h2></div><button class="text-action" id="progressStats">View stats →</button></div>
+        <div class="progress-number"><strong>${d.solved}</strong><span>of ${d.total} training tickets resolved</span></div><div class="progress-track"><i style="width:${d.total ? Math.round(d.solved / d.total * 100) : 0}%"></i></div>
+        <p class="overview-footnote">Progress supports learning; operational work remains the focus.</p>
+      </section>
+    </div>`;
+  const click = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
+  ['overviewWorkbench','healthWorkbench','trafficWorkbench'].forEach(id => click(id, () => showWorkspaceView('workbench')));
+  ['overviewIncidents','allIncidents'].forEach(id => click(id, openTicketQueue));
+  ['overviewHelp'].forEach(id => click(id, openHelp));
+  ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
+  click('progressStats', openStats);
+  root.querySelectorAll('[data-overview-ticket]').forEach(btn => btn.addEventListener('click', () => {
+    const t = d.active.find(x => x.id === btn.dataset.overviewTicket); if (!t) return;
+    setTicketState(t.id, 'investigating', 'You'); showWorkspaceView('workbench'); reloadMission(t.index);
+    addJournalEntry({ type: 'investigation started', ticket: t.id, text: 'Started investigation from the Operations Overview.' });
+  }));
+}
+function refreshOverview() { if ($('#overview') && !$('#overview').hidden) renderOverview(); }
+
 /* ---------- panels ---------- */
-function updateHud() { const q = $('#queueOpenCount'); if (q) q.textContent = allTickets().filter(t => t.status !== 'resolved').length; $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+function updateHud() { const q = $('#queueOpenCount'); if (q) q.textContent = allTickets().filter(t => t.status !== 'resolved').length; $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; refreshOverview(); }
 /* ---------- service desk / ticket workflow ---------- */
 const TICKET_STATES = ['new', 'acknowledged', 'investigating', 'resolved'];
 const SLA_TARGET = { P1: '1 hour', P2: '4 hours', P3: '1 business day', P4: '3 business days' };
@@ -3987,7 +4071,7 @@ function setTicketState(id, status, assigned) {
   if (!TICKET_STATES.includes(status)) return;
   PROG.tickets = PROG.tickets || {};
   PROG.tickets[id] = { ...(PROG.tickets[id] || {}), status, assigned: assigned || (status === 'new' ? 'Unassigned' : 'You'), updatedAt: new Date().toISOString() };
-  saveProg();
+  saveProg(); refreshOverview();
 }
 function openTicketQueue() {
   const tickets = allTickets();
@@ -4146,9 +4230,9 @@ function renderConfig() {
 
 /* ---------- actions ---------- */
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; }
-function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
-function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; runMission(chapters[i], chapters[i].id); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; refreshOverview(); }
+function runMission(m, solvedKey) { showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
+function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; showWorkspaceView('workbench'); runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
@@ -4356,7 +4440,7 @@ function wireConfig() {
 function addJournalEntry(entry) {
   PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
   PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
-  PROG.journal = PROG.journal.slice(0, 250); saveProg();
+  PROG.journal = PROG.journal.slice(0, 250); saveProg(); refreshOverview();
 }
 function openJournal() {
   const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b>${e.result ? `<span class="journal-result ${esc(e.result)}">${esc(e.result)}</span>` : ''}<time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
@@ -4482,6 +4566,7 @@ function addCheckFromForm() {
 function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { authored: true, mode: 'build' }, done: () => false, results: () => [] }; }
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild() {
+  showWorkspaceView('workbench');
   MODE = 'build'; WIRE = null; SEL = null; HINTS = 0; PLAYING_DBID = null; stopTimer();
   AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
   RUN = builderRun(B.blank());
@@ -4638,6 +4723,20 @@ async function renderClassroom(sb, body) {
 function boot() {
   applyTheme(PROG.theme);
   document.getElementById('app').innerHTML = `
+    <div id="shell">
+      <aside id="navRail" aria-label="Network workspace navigation">
+        <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
+        <div class="nav-section">Workspace</div>
+        <button class="nav-item" id="navOverview" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
+        <button class="nav-item" id="navIncidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
+        <button class="nav-item" id="navWorkbench" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
+        <button class="nav-item" type="button" disabled title="Infrastructure inventory is in a later implementation phase"><span class="nav-glyph">▤</span>Infrastructure<span class="nav-soon">Next</span></button>
+        <div class="nav-section">Reference & records</div>
+        <button class="nav-item" type="button" disabled title="Knowledge centre is in a later implementation phase"><span class="nav-glyph">⌕</span>Knowledge<span class="nav-soon">Next</span></button>
+        <button class="nav-item" id="navJournal" type="button"><span class="nav-glyph">▧</span>Journal</button>
+        <div class="nav-spacer"></div><div class="nav-foot">LAB STATUS · SIMULATED<br>LOCAL PROGRESS ENABLED</div>
+      </aside>
+      <div id="mainArea">
     <header id="top">
       <div class="apphdr">
         <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
@@ -4655,12 +4754,19 @@ function boot() {
         <button id="btnStats" class="btn" title="Stats">📊</button>
         <button id="btnSet" class="btn" title="Settings">⚙</button></div>
     </header>
-    <div id="cols">
+    <section id="overview" aria-label="Operations overview"></section>
+    <div id="cols" hidden>
       <aside id="brief"></aside>
       <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div class="term-head"><b>DEVICE CONSOLE</b><span>CLI · command history enabled</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
+    </div>
+      </div>
     </div>`;
   wireTerm();
+  $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
+  $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
+  $('#navIncidents').addEventListener('click', openTicketQueue);
+  $('#navJournal').addEventListener('click', openJournal);
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
@@ -4673,6 +4779,8 @@ function boot() {
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
   reloadMission(0);
+  showWorkspaceView(new URLSearchParams(location.search).get('view') === 'workbench' ? 'workbench' : 'overview');
+  renderOverview();
   initCloud();
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
