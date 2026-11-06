@@ -839,6 +839,40 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     "grep -c '/bin/bash$' /etc/passwd"
   ], '4', 'Correct. $ anchors the match to the end of the line');
 
+
+  // Chapter 19: prove the backup can be restored and the schedule remains armed.
+  await run('sudo usermod -s /usr/sbin/nologin dana');
+  await run('check');
+  if ((await page.textContent('#pTitle')) !== 'Disaster-recovery drill') fail('account lock did not advance into the backup recovery chapter');
+
+  await checkLearningStages('Disaster-recovery drill', 'timer', ['known-good backup', 'archive', 'verify']);
+  await proveMission('Disaster-recovery drill', 'Fingerprint the original', 'archive', [
+    'sudo bash ~/backup.sh',
+    'ls -lh /mnt/backups/nightly.tar.gz'
+  ], 'Correct. Verify the archive exists');
+
+  await checkLearningStages('Fingerprint the original', 'owner', ['SHA-256', 'digest', 'checksum']);
+  await proveMission('Fingerprint the original', 'Restore to a safe place', 'digest', [
+    'sha256sum /srv/halcyon/releases/v2.3.1/config/app.conf'
+  ], 'Correct. A checksum fingerprints');
+
+  await checkLearningStages('Restore to a safe place', 'fast', ['tar -xzf', '-C', 'scratch directory']);
+  await proveMission('Restore to a safe place', 'Prove it matches', 'safe', [
+    'mkdir ~/dr-test',
+    'tar -xzf /mnt/backups/nightly.tar.gz -C ~/dr-test',
+    'find ~/dr-test'
+  ], 'Correct. A scratch restore lets you verify');
+
+  await checkLearningStages('Prove it matches', 'missing', ['diff', 'no output', 'identical']);
+  await proveMission('Prove it matches', 'Confirm it keeps happening', 'same', [
+    'diff /srv/halcyon/releases/v2.3.1/config/app.conf ~/dr-test/srv/halcyon/releases/v2.3.1/config/app.conf'
+  ], 'Correct. No diff output means');
+
+  await checkLearningStages('Confirm it keeps happening', 'status', ['systemctl list-timers', 'next trigger', 'UNIT']);
+  await proveMission('Confirm it keeps happening', 'Final review: the filesystem', 'timers', [
+    'systemctl list-timers'
+  ], 'Correct. list-timers shows scheduled units');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
