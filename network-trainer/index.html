@@ -822,6 +822,7 @@ module.exports = {
   bgpSessions, bgpLearned,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
+
 });
 __def("./net-checks", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
@@ -955,6 +956,7 @@ function stpBlocked(net, switchId, port, vlan) {
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
 module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
+
 });
 __def("./net-cli", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
@@ -2185,6 +2187,7 @@ const MAN = {
 };
 
 module.exports = { makeCLI, resolve, primaryIp };
+
 });
 __def("./net-mission", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
@@ -2283,6 +2286,7 @@ function startMission(mission) {
 }
 
 module.exports = { evalCheck, startMission };
+
 });
 __def("./net-chapters", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
@@ -3126,6 +3130,7 @@ const chapters = [
 ];
 
 module.exports = { chapters };
+
 });
 __def("./net-builder", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
