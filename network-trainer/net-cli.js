@@ -601,35 +601,6 @@ function runASA(cli, line) {
       p.ip = address; p.mask = prefix; return ok('');
     }
 
-    if (words[0] === 'standby' && words[1] && words[2] === 'ip' && words.length === 4) {
-      const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
-      if (!Number.isInteger(group) || group < 0 || group > 255 || virtualIp == null) return err('% Use standby <0-255> ip <virtual-ip>');
-      if (dev.kind !== 'router' || p.ip == null || M.sameNet(p.ip, virtualIp, p.mask) === false) return err('% HSRP requires a router interface and a virtual IP in its connected subnet');
-      p.hsrp = { ...(p.hsrp || {}), group, virtualIp, priority: p.hsrp && p.hsrp.priority || 100, preempt: !!(p.hsrp && p.hsrp.preempt), track: p.hsrp && p.hsrp.track || [] };
-      return ok('');
-    }
-    if (words[0] === 'standby' && words[1] && words[2] === 'priority' && words.length === 4) {
-      const group = Number(words[1]), priority = Number(words[3]);
-      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
-      if (!Number.isInteger(priority) || priority < 0 || priority > 255) return err('% HSRP priority must be 0-255');
-      p.hsrp.priority = priority; return ok('');
-    }
-    if (words[0] === 'standby' && words[1] && words[2] === 'preempt' && words.length === 3) {
-      const group = Number(words[1]); if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
-      p.hsrp.preempt = true; return ok('');
-    }
-    if (words[0] === 'standby' && words[1] && words[2] === 'track' && words.length === 6 && words[4] === 'decrement') {
-      const group = Number(words[1]), tracked = ciscoIface(dev, words[3]), decrement = Number(words[5]);
-      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
-      if (!tracked || !Number.isInteger(decrement) || decrement < 1 || decrement > 255) return err('% Use standby <group> track <interface> decrement <1-255>');
-      p.hsrp.track = (p.hsrp.track || []).filter(t => t.iface !== tracked).concat([{ iface: tracked, decrement }]); return ok('');
-    }
-    if (words[0] === 'no' && words[1] === 'standby' && words.length >= 3) {
-      const group = Number(words[2]);
-      if (p.hsrp && p.hsrp.group === group) delete p.hsrp;
-      return ok('');
-    }
-
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'shutdown') { p.up = false; return ok(''); }
     if (words[0] === 'no' && words[1] === 'shutdown') { p.up = true; return ok(''); }
@@ -893,6 +864,35 @@ function runCisco(cli, line) {
     if (!p) return err('% Interface context no longer exists');
     if (lower === 'shutdown') { p.up = false; return ok(''); }
     if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
+    if (words[0] === 'standby' && words[1] && words[2] === 'ip' && words.length === 4) {
+      const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
+      if (!Number.isInteger(group) || group < 0 || group > 255 || virtualIp == null) return err('% Use standby <0-255> ip <virtual-ip>');
+      if (dev.kind !== 'router' || p.ip == null || M.sameNet(p.ip, virtualIp, p.mask) === false) return err('% HSRP requires a router interface and a virtual IP in its connected subnet');
+      p.hsrp = { ...(p.hsrp || {}), group, virtualIp, priority: p.hsrp && p.hsrp.priority || 100, preempt: !!(p.hsrp && p.hsrp.preempt), track: p.hsrp && p.hsrp.track || [] };
+      return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'priority' && words.length === 4) {
+      const group = Number(words[1]), priority = Number(words[3]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!Number.isInteger(priority) || priority < 0 || priority > 255) return err('% HSRP priority must be 0-255');
+      p.hsrp.priority = priority; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'preempt' && words.length === 3) {
+      const group = Number(words[1]); if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      p.hsrp.preempt = true; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'track' && words.length === 6 && words[4] === 'decrement') {
+      const group = Number(words[1]), tracked = ciscoIface(dev, words[3]), decrement = Number(words[5]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!tracked || !Number.isInteger(decrement) || decrement < 1 || decrement > 255) return err('% Use standby <group> track <interface> decrement <1-255>');
+      p.hsrp.track = (p.hsrp.track || []).filter(t => t.iface !== tracked).concat([{ iface: tracked, decrement }]); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'standby' && words.length >= 3) {
+      const group = Number(words[2]);
+      if (p.hsrp && p.hsrp.group === group) delete p.hsrp;
+      return ok('');
+    }
+
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'ip' && words[1] === 'helper-address' && words[2] && words.length === 3) {
       const address = parseIPv4(words[2]); if (address == null) return err('% Invalid helper address');
