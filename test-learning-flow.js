@@ -996,7 +996,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'which cat'
   ], '/usr/bin/cat', 'Correct. PATH lists the directories');
 
-  await checkLearningStages('Command, builtin, or alias?', 'network', ['type cd', 'shell builtin', 'parent shell']);
+  await checkLearningStages('Command, builtin, or alias?', 'network', ['type cd', 'shell builtin', 'parent\'s directory']);
   await proveAnswerMission('Command, builtin, or alias?', 'Keep it after logout', 'parent', [
     'type cd'
   ], 'builtin', 'Correct. cd must change the current shell');
@@ -1023,7 +1023,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'find /usr/bin -perm -4000'
   ], '/usr/bin/passwd', 'Correct. 4000 is the setuid bit');
 
-  await checkLearningStages('A shared directory', 'owner', ['chmod 2775', 'setgid', 'group inheritance']);
+  await checkLearningStages('A shared directory', 'owner', ['chmod 2775', 'setgid', 'inherit the directory\'s group']);
   await proveMission('A shared directory', 'Grant one person access', 'group', [
     'sudo mkdir -p /srv/reports',
     'sudo chmod 2775 /srv/reports',
@@ -1088,7 +1088,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'ps aux | grep -c halcyon-worker'
   ], '5', 'Correct. ps displays a snapshot');
 
-  await checkLearningStages('Bound a slow command', 'repeat', ['timeout 3', 'maximum runtime', 'exit status']);
+  await checkLearningStages('Bound a slow command', 'repeat', ['timeout 3', 'time limit', 'exit status']);
   await proveMission('Bound a slow command', 'Who has the log open?', 'limit', [
     'timeout 3 ping -c 2 10.0.4.20'
   ], 'Correct. timeout limits how long');
