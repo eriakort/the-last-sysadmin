@@ -463,3 +463,18 @@ aside{scrollbar-color:#344a60 transparent}
 .palette-empty{padding:26px 14px;color:var(--muted);text-align:center;font-size:12px}
 .palette-dialog footer{display:flex;gap:16px;padding:10px 15px;border-top:1px solid var(--line);color:var(--muted);font:10px ui-monospace,monospace}
 @media(max-width:700px){.palette-launch kbd{display:none}.palette-overlay{padding:8vh 10px 16px}.palette-dialog{max-height:80vh}.palette-result-kind{width:62px}.palette-dialog footer{justify-content:space-between;gap:5px;font-size:9px}}
+
+/* Workbench interface operations inventory */
+.iface-table-wrap{width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.iface-table{width:100%;min-width:690px;border-collapse:collapse;text-align:left;font-size:10px}
+.iface-table th{padding:8px 9px;color:var(--muted);font-size:8px;letter-spacing:.08em;text-transform:uppercase;background:var(--raise);border-bottom:1px solid var(--line);white-space:nowrap}
+.iface-table td{padding:9px;border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent);vertical-align:middle;line-height:1.45}
+.iface-table tr:last-child td{border-bottom:0}
+.iface-table td b{font:700 10px ui-monospace,monospace;white-space:nowrap}
+.iface-table .mono{font:10px ui-monospace,monospace;white-space:nowrap}
+.iface-state{display:inline-flex;padding:3px 7px;border-radius:20px;border:1px solid var(--line);font:700 8px ui-monospace,monospace;text-transform:uppercase;white-space:nowrap}
+.iface-state.iface-up{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,var(--line));background:color-mix(in srgb,var(--good) 7%,transparent)}
+.iface-state.iface-down{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line));background:color-mix(in srgb,var(--bad) 7%,transparent)}
+.iface-table .btn{white-space:nowrap}
+.iface-note{font-size:9px;line-height:1.55;margin:9px 2px}
+@media(max-width:760px){.iface-table-wrap{margin:0 -2px}.iface-note{font-size:9px}}
