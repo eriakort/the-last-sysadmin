@@ -227,6 +227,8 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 @media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
 `;
 
+const css = css + '\n' + read('workstation.css');
+
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Networking Trainer — prototype</title><style>${css}</style></head>
