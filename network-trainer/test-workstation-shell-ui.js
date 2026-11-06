@@ -19,8 +19,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   if (await rail.isVisible()) ok('persistent workspace navigation renders');
   else fail('workspace navigation is missing');
 
+  const navLabels = await rail.locator('.nav-item').allTextContents();
   for (const label of ['Overview', 'Incidents', 'Workbench', 'Infrastructure', 'Knowledge', 'Journal']) {
-    if (await rail.getByText(label, { exact: true }).count()) ok(label + ' destination is represented');
+    if (navLabels.some(text => text.includes(label))) ok(label + ' destination is represented');
     else fail(label + ' destination is missing');
   }
 
