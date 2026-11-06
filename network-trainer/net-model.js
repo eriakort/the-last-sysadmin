@@ -335,12 +335,25 @@ function bgpLearned(net, devId) {
 function aclWildcardMatch(value, base, wildcard) {
   return value != null && base != null && ((value & ~wildcard) === (base & ~wildcard));
 }
-function aclMatch(rule, dir, iface, pkt) {
+function asaGroupMatches(dev, name, address) {
+  const group = dev.asaObjectGroups && dev.asaObjectGroups[name];
+  if (!group || group.type !== 'network') return false;
+  return (group.members || []).some(member => member.host != null
+    ? address === member.host
+    : !!(member.network && sameNet(address, member.network.net, member.network.prefix)));
+}
+function aclMatch(rule, dir, iface, pkt, dev) {
   if (rule.any) return true;
   if (rule.dir && rule.dir !== dir) return false;
   if (rule.dev && rule.dev !== iface) return false;
   if (rule.proto && rule.proto !== 'ip' && rule.proto !== pkt.proto) return false;
   if (rule.dport != null && rule.dport !== pkt.dport) return false;
+  if (rule.srcGroup && !asaGroupMatches(dev, rule.srcGroup, pkt.src)) return false;
+  if (rule.dstGroup && !asaGroupMatches(dev, rule.dstGroup, pkt.dst)) return false;
+  if (rule.serviceGroup) {
+    const group = dev.asaObjectGroups && dev.asaObjectGroups[rule.serviceGroup];
+    if (!group || group.type !== 'service' || group.protocol !== pkt.proto || !(group.ports || []).includes(pkt.dport)) return false;
+  }
   if (rule.src != null && (rule.srcWildcard != null ? !aclWildcardMatch(pkt.src, rule.src, rule.srcWildcard) : rule.src !== pkt.src)) return false;
   if (rule.dst != null && (rule.dstWildcard != null ? !aclWildcardMatch(pkt.dst, rule.dst, rule.dstWildcard) : rule.dst !== pkt.dst)) return false;
   if (rule.srcnet && !sameNet(pkt.src, rule.srcnet.net, rule.srcnet.prefix)) return false;
@@ -351,7 +364,7 @@ function aclDecision(dev, dir, iface, pkt) {
   const binding = dev.ifaces && dev.ifaces[iface] && dev.ifaces[iface].accessGroups && dev.ifaces[iface].accessGroups[dir];
   if (binding) {
     const rules = (dev.acls || []).filter(r => r.aclName === binding).sort((a,b) => (a.seq || 0) - (b.seq || 0));
-    for (const r of rules) if (aclMatch(r, dir, iface, pkt)) { r.hits = (r.hits || 0) + 1; return r.action; }
+    for (const r of rules) if (aclMatch(r, dir, iface, pkt, dev)) { r.hits = (r.hits || 0) + 1; return r.action; }
     return 'deny';
   }
   for (const r of dev.acls || []) if (!r.aclName && dir === 'in' && aclMatch(r, dir, iface, pkt)) return r.action;
