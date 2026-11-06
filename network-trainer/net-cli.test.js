@@ -485,6 +485,7 @@ test('IOS DHCP relay allocates an excluded-range-aware lease and delivers DNS op
   eq(net.devices.h1.resolver, ip('10.0.2.10'), 'DNS option applied');
   eq(client.run('dig portal.branch.local').code, 0, 'DNS resolution works after lease');
   has(server.run('show ip dhcp binding').out, '10.0.1.21', 'server binding visible');
+  has(server.run('show ip dhcp pool').out, '10.0.1.0/24', 'pool operational state visible');
   has(router.run('show running-config').out, 'ip helper-address 10.0.2.10', 'relay persists');
 });
 
@@ -518,7 +519,6 @@ test('IOS syslog forwards configuration events to a reachable collector and appl
   has(collector,'BRANCH-R1','collector sees sender');
   has(collector,'CONFIG: hostname BRANCH-R1','collector sees configuration change');
   has(collector,'10.0.2.1','configured source-interface address is used');
-  has(server.run('show ip dhcp pool').out,'10.0.1.0/24','pool operational state visible');
   has(cli.run('show running-config').out,'logging host 10.0.2.10','syslog config persists');
 });
 
