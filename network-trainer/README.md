@@ -222,3 +222,29 @@ show mac address-table dynamic
 The switch configuration panel also shows the active VLAN's root bridge, bridge priority, blocked ports, and learned MAC entries. The STP incident mission uses a three-switch triangle to practise root election, redundant-link blocking, MAC-table verification, and end-to-end reachability.
 
 Regression coverage includes stable local/remote MAC learning, root election and priority validation, alternate-port blocking, loop-free reachability, a non-redundant topology, mission solvability, and browser-driven verification.
+
+## Network Operations Workbench
+
+The Network Trainer is evolving into a day-to-day network operations environment. The workspace combines an incident brief, live topology, device console, traffic evidence, and a device inspector. Learners work as junior network analysts and engineers: triage a ticket, gather evidence, make a controlled change, verify the service, and record what they learned.
+
+### Help desk and work journal
+
+- The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.
+- Help identifies the selected device and distinguishes current simulator commands from commands planned for later Cisco IOS/IOS XE fidelity work. The simulator must never imply that an unsupported command executed successfully.
+- **Journal** records command attempts and output, ticket resolutions, and learner-authored investigation notes in browser-local progress storage.
+- Journal entries are capped at 250 to keep local storage bounded. Learners can export the record as Markdown for a personal engineering log or portfolio.
+- The journal is a learning aid, not an audit-grade configuration archive. Browser-local data can be cleared with browser storage; future account-backed records should be added through the existing classroom persistence layer.
+
+### Workbench design principles
+
+1. **Ticket first:** start with a business/user symptom, priority, impact and acceptance criteria.
+2. **Evidence before changes:** encourage interface, neighbour, route, MAC, STP, packet and log inspection before configuration.
+3. **Controlled remediation:** make the smallest safe change, verify it, and preserve a rollback path.
+4. **Document the work:** record observations, commands, outcomes and handover notes.
+5. **Cumulative practice:** reuse known commands in new scenarios while gradually introducing new command families.
+6. **Learning remains visible:** contextual explanations, command examples, hints and post-incident reflection stay one click away.
+
+### Fidelity boundary
+
+The current simulator models a deliberately bounded subset of network behaviour. Cisco-like syntax is used where it is useful for command familiarity, but it is not a licensed Cisco IOS/IOS XE image or a complete emulation. Each command must be implemented and tested before being presented as supported. Advanced protocols and device-specific differences should be introduced in explicit stages.
+
