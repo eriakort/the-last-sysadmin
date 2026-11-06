@@ -268,7 +268,7 @@ function ciscoShow(cli, words) {
       ', local AS number ' + (dev.bgp && dev.bgp.asn != null ? dev.bgp.asn : 'not configured') +
       '\\nNeighbor        V    AS       State/PfxRcd\\n' +
       (sessions.map(s => M.ipStr(s.ip).padEnd(16) + '4    ' + String(s.remoteAs).padEnd(9) +
-        (s.up ? String(M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length) : s.reason)).join('\\n') || '(no BGP neighbors configured)'));
+        (s.up ? 'Established / ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length + ' prefixes' : s.reason)).join('\\n') || '(no BGP neighbors configured)'));
   }
   if (q === 'ip bgp' || q === 'ip bgp ipv4 unicast') {
     const rows = M.bgpLearned(cli.net, cli.cur).map(r => M.ipStr(r.dest) + '/' + r.mask + '     ' + M.ipStr(r.via) + '     ' + (r.asPath || []).join(' '));
