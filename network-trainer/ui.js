@@ -931,7 +931,7 @@ function boot() {
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
   reloadMission(0);
-  showWorkspaceView('overview');
+  showWorkspaceView(new URLSearchParams(location.search).get('view') === 'workbench' ? 'workbench' : 'overview');
   renderOverview();
   initCloud();
 }
