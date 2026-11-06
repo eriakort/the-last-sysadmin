@@ -71,6 +71,8 @@ triage question answered by actually running `ping` / `traceroute` / `ip addr` /
 pick reveals *why*, then unlocks the objective and Check. This turns each mission
 from a tutorial step into on-call troubleshooting: investigate → diagnose → fix.
 
+**ASA object-groups and operational maintenance.** The ASA-style command profile now supports reusable `object-group network` and `object-group service` definitions, host/subnet membership, TCP/UDP destination service members, and ACL references to source, destination, and service groups. The forwarding engine evaluates group membership at packet time, so editing a group changes the policy without rewriting every ACL entry. `show object-group`, `show access-list`, and `clear access-list [name]` support evidence collection and counter resets. Referenced groups cannot be removed until their ACL references are cleared. A vendor-access review ticket practises approved-subnet HTTPS access, explicit diagnostic ICMP, implicit deny, hit-counter verification, and configuration persistence. The command profile remains a bounded educational ASA-style subset; it is not Cisco ASA software and does not implement nested groups, time ranges, IPv6 ACLs, or full service-object syntax.
+
 ## Run the tests
 
 ```bash
