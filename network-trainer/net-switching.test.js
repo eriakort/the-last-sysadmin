@@ -60,7 +60,7 @@ test('trunk native VLAN is mapped as untagged and mismatches break the access VL
     sw1: sw('sw1', [['p1',{accessVlan:99}],['p2',{mode:'trunk',nativeVlan:99}]]),
     sw2: sw('sw2', [['p1',{mode:'trunk',nativeVlan:1}],['p2',{accessVlan:99}]])
   }, links: [link('h1','eth0','sw1','p1'),link('sw1','p2','sw2','p1'),link('srv','eth0','sw2','p2')] };
-  net.devices.sw1.vlans.push(99); net.devices.sw2.vlans.push(99);
+  net.devices.sw1.vlans = [1,99]; net.devices.sw2.vlans = [1,99];
   assert(!connected(net), 'native VLAN mismatch should map untagged traffic into different VLANs');
   net.devices.sw2.ifaces.p1.nativeVlan = 99;
   assert(connected(net), 'matching native VLANs should restore untagged VLAN 99');
