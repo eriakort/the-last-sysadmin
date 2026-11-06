@@ -320,3 +320,8 @@ Firewall devices explicitly marked with `firewallOS: 'asa'` use a separate ASA-s
 - ASA-style security-level policy: higher-to-lower traffic is permitted by default, lower-to-higher and same-level traffic is denied unless an inbound ACL explicitly permits it; established return traffic for an initiated flow is allowed by the shared one-flow connection context
 
 The profile intentionally does not claim full ASA compatibility. It omits access-list object-groups, service/object groups, dynamic PAT, arbitrary port translation, VPN, failover, inspection policies, multi-context mode, and full connection-table persistence. NAT and packet-tracer are limited to the model's supported topology and same-port TCP static PAT. This is an educational ASA-style command profile, not Cisco ASA software or a licensed virtual appliance.
+
+
+## Switch access-layer port security
+
+The IOS-style switch profile supports access-port MAC security using `switchport port-security`, a validated maximum (1–50), sticky secure-MAC learning, and the `protect`, `restrict`, or `shutdown` violation actions. The forwarding model checks the source MAC at the ingress switch port: an unapproved MAC is dropped and increments the violation counter; shutdown mode also err-disables the port until an operator issues `no shutdown`. Use `show port-security` or `show port-security interface PORT` to inspect secure addresses and violations. Sticky addresses appear in the running configuration. This is a deterministic educational access-port security model; it does not simulate aging timers, authentication, 802.1X/MAB, voice VLAN exceptions, or ASIC hardware behavior.
