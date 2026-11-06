@@ -71,6 +71,17 @@ function ciscoMaskPrefix(mask) {
   if (!/^1*0*$/.test(bits)) return null;
   return bits.indexOf('0') < 0 ? 32 : bits.indexOf('0');
 }
+function ospfAreaId(value) {
+  if (/^\\d+$/.test(String(value))) { const n = Number(value); return n >= 0 && n <= 4294967295 ? String(n) : null; }
+  const n = parseIPv4(value); return n == null ? null : String(n);
+}
+function applyOspfNetworks(dev) {
+  for (const p of Object.values(dev.ifaces || {})) delete p.ospf;
+  for (const n of dev.ospf && dev.ospf.networks || []) {
+    const mask = (~n.wildcard) >>> 0;
+    for (const p of Object.values(dev.ifaces || {})) if (p.ip != null && ((p.ip & mask) >>> 0) === ((n.address & mask) >>> 0)) p.ospf = n.area;
+  }
+}
 function ciscoIface(dev, token) {
   if (!token) return null;
   if (dev.ifaces[token]) return token;
@@ -105,6 +116,12 @@ function ciscoRunConfig(dev) {
   for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id + ((dev.vlanNames || {})[id] ? '\n name ' + dev.vlanNames[id] : ''));
   for (const [name,p] of Object.entries(dev.ifaces || {})) if (p.helperAddress != null) lines.push('!', 'interface ' + name, ' ip helper-address ' + M.ipStr(p.helperAddress));
   for (const r of dev.routes || []) lines.push('ip route ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
+  if (dev.ospf && dev.ospf.processId != null) {
+    lines.push('!', 'router ospf ' + dev.ospf.processId);
+    if (dev.ospf.routerId != null) lines.push(' router-id ' + M.ipStr(dev.ospf.routerId));
+    for (const n of dev.ospf.networks || []) lines.push(' network ' + M.ipStr(n.address) + ' ' + M.ipStr(n.wildcard) + ' area ' + n.area);
+    for (const name of dev.ospf.passiveInterfaces || []) lines.push(' passive-interface ' + name);
+  }
   if (dev.dhcp && dev.dhcp.name) {
     for (const x of dev.dhcp.excluded || []) lines.push('ip dhcp excluded-address ' + M.ipStr(x.start) + (x.end != null && x.end !== x.start ? ' ' + M.ipStr(x.end) : ''));
     lines.push('!', 'ip dhcp pool ' + dev.dhcp.name);
@@ -228,7 +245,20 @@ function ciscoShow(cli, words) {
     const connected = Object.entries(dev.ifaces || {}).filter(([,p]) => p.ip != null && p.up !== false)
       .map(([n,p]) => 'C    ' + M.ipStr(M.networkOf(p.ip,p.mask)) + '/' + p.mask + ' is directly connected, ' + n);
     const statics = (dev.routes || []).map(r => 'S    ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' [1/0] via ' + M.ipStr(r.via));
-    return ok('Codes: C - connected, S - static\n' + (connected.concat(statics).join('\n') || '% No routes'));
+    const ospf = M.ospfLearned(cli.net, cli.cur).map(r => 'O    ' + M.ipStr(r.dest) + '/' + r.mask + ' [110/' + (r.hops || 1) + '] via ' + M.ipStr(r.via) + ', OSPF');
+    return ok('Codes: C - connected, S - static, O - OSPF\n' + (connected.concat(statics, ospf).join('\n') || '% No routes'));
+  }
+  if (q === 'ip ospf neighbor') {
+    const ns = M.ospfNeighbors(cli.net, cli.cur);
+    return ok('Neighbor ID       State   Address         Interface\\n' + (ns.map(n => String((cli.net.devices[n.id].ospf && cli.net.devices[n.id].ospf.routerId != null) ? M.ipStr(cli.net.devices[n.id].ospf.routerId) : n.id).padEnd(18) + String(n.state || 'FULL').padEnd(8) + M.ipStr(n.ip).padEnd(16) + n.via).join('\\n') || '(no OSPF neighbors)'));
+  }
+  if (q === 'ip ospf interface brief') {
+    const rows = Object.entries(dev.ifaces || {}).filter(([,p]) => p.ospf != null).map(([name,p]) => name.padEnd(18) + String(p.ospf).padEnd(10) + (p.up === false ? 'down' : 'up') + (dev.ospf && (dev.ospf.passiveInterfaces || []).includes(name) ? ' passive' : ''));
+    return ok('Interface         Area      State\\n' + (rows.join('\\n') || '(no OSPF-enabled interfaces)'));
+  }
+  if (q === 'ip protocols') {
+    const cfg = dev.ospf;
+    return ok('Routing Protocol is ' + (cfg ? 'ospf ' + cfg.processId : 'not configured') + (cfg && cfg.routerId != null ? '\\nRouter ID: ' + M.ipStr(cfg.routerId) : '') + '\\nOSPF neighbors: ' + M.ospfNeighbors(cli.net, cli.cur).length + '\\nOSPF learned routes: ' + M.ospfLearned(cli.net, cli.cur).length);
   }
   if (q === 'vlan brief' || q === 'vlan') {
     if (dev.kind !== 'switch') return err('% VLAN database is available on switches only');
@@ -574,14 +604,14 @@ function runCisco(cli, line) {
   }
   if (lower === 'end' || lower === 'end\n') { cli.iosMode = 'privileged'; cli.iosIface = null; cli.contextIface = null; return ok(''); }
   if (lower === 'exit') {
-    if (cli.iosMode === 'acl' || cli.iosMode === 'dhcp-pool') { cli.iosMode = 'config'; cli.iosAcl = null; cli.iosDhcpPool = null; return ok(''); }
+    if (cli.iosMode === 'acl' || cli.iosMode === 'dhcp-pool' || cli.iosMode === 'router-ospf') { cli.iosMode = 'config'; cli.iosAcl = null; cli.iosDhcpPool = null; cli.iosOspf = null; return ok(''); }
     if (cli.iosMode === 'interface' || cli.iosMode === 'vlan') { cli.iosMode = 'config'; cli.iosIface = null; return ok(''); }
     if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
     if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip ospf neighbor','ip ospf interface brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('access-lists ') || query.startsWith('ip interface ')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
