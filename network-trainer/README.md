@@ -248,3 +248,22 @@ The Network Trainer is evolving into a day-to-day network operations environment
 
 The current simulator models a deliberately bounded subset of network behaviour. Cisco-like syntax is used where it is useful for command familiarity, but it is not a licensed Cisco IOS/IOS XE image or a complete emulation. Each command must be implemented and tested before being presented as supported. Advanced protocols and device-specific differences should be introduced in explicit stages.
 
+
+
+## Cisco IOS-style CLI operations profile
+
+The console now supports a tested, explicitly bounded Cisco IOS-style workflow alongside the original Linux-like commands. Enter `enable` for privileged EXEC, then `configure terminal` (or `conf t`) for global configuration. Use `interface <name>` to enter interface configuration, `vlan <id>` for VLAN configuration, `exit` to move up one level, and `end` to return to privileged EXEC.
+
+Implemented operational commands include:
+
+- `show version`, `show running-config`, `show startup-config`
+- `show ip interface brief`, `show ip route`
+- `show vlan brief`, `show interfaces status`, `show interfaces trunk`
+- `show mac address-table dynamic`, `show spanning-tree [vlan <id>]`
+- Switch configuration: `vlan <id>`, `name <label>`, `switchport mode access|trunk`, access/native/allowed VLAN settings, interface descriptions, `shutdown` / `no shutdown`
+- Router configuration: `ip address <address> <subnet-mask>` under an interface and `ip route <network> <subnet-mask> <next-hop>` in global configuration
+- `write memory` / `copy running-config startup-config` saves a startup-configuration snapshot in the current scenario.
+
+These commands mutate the same device and forwarding model as the existing missions, so verification output and packet reachability stay consistent. The command profile supports common interface abbreviations when the topology's interface names are Cisco-style. Startup configuration is an explicit snapshot; it does not yet model a device reboot or NVRAM hardware. Firewall policy remains in the existing simulator firewall command family for this increment; IOS ACL authoring and ASA-style policy/NAT workflows are a separate next step.
+
+**Fidelity note:** this is an educational IOS-style command profile, not Cisco IOS/IOS XE software or a licensed virtual appliance. Unsupported commands return an error rather than pretending to execute.
