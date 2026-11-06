@@ -810,6 +810,35 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'sudo renice -n 10 -p 812'
   ], 'Correct. A higher niceness makes the process less favored');
 
+
+  // Chapter 17: onboard an administrator and audit account access.
+  await checkLearningStages('Onboard a new admin', 'mail', ['useradd -m', 'login shell', 'getent passwd']);
+  await proveMission('Onboard a new admin', 'Give Sam admin rights', 'home', [
+    'sudo useradd -m -s /bin/bash sam',
+    'getent passwd sam'
+  ], 'Correct. -m creates the home directory');
+
+  await checkLearningStages('Give Sam admin rights', 'replace', ['usermod -aG', 'sudo group', 'preserves']);
+  await proveMission('Give Sam admin rights', 'Check the account', 'append', [
+    'sudo usermod -aG sudo sam',
+    'groups sam'
+  ], 'Correct. -a appends the group');
+
+  await checkLearningStages('Check the account', 'gid', ['id sam', 'uid=', 'groups=']);
+  await proveAnswerMission('Check the account', 'Set up key-based login', 'uid', [
+    'id sam'
+  ], '1003', 'Correct. uid= is followed by the numeric user ID');
+
+  await checkLearningStages('Set up key-based login', 'private', ['ssh-keygen -t ed25519', '.pub', 'private key']);
+  await proveMission('Set up key-based login', 'Audit who can log in', 'public', [
+    'ssh-keygen -t ed25519 -C "halcyon admin"'
+  ], 'Correct. Install the public .pub key and keep the private key secret');
+
+  await checkLearningStages('Audit who can log in', 'start', ['grep -c', '/bin/bash$', 'nologin']);
+  await proveAnswerMission('Audit who can log in', 'Close a departed account', 'end', [
+    "grep -c '/bin/bash$' /etc/passwd"
+  ], '4', 'Correct. $ anchors the match to the end of the line');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
