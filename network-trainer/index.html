@@ -178,7 +178,7 @@ function switchIngressVlan(port, taggedVlan) {
     return switchPortAllowsVlan(port, vlan) ? vlan : null;
   }
   const vlan = switchAccessVlan(port);
-  return taggedVlan == null || taggedVlan === vlan ? vlan : null;
+  return taggedVlan == null ? vlan : null;
 }
 function l2Domain(net, startDev, startIface) {
   const endpoints = [], seen = new Set();
@@ -1780,15 +1780,15 @@ const chapters = [
   { id: 'trunk-allowed-vlan', chapter: 'Switching · VLANs',
     title: 'The VLAN that never crossed the trunk',
     story: 'A small office spans two access switches. h1 and srv are both in VLAN 10 and use the same IP subnet, but the inter-switch trunk only permits VLAN 20. The uplink is up; VLAN 10 traffic is being filtered at Layer 2.',
-    objective: 'Create VLAN 10 on both switches, allow VLAN 10 across the inter-switch trunks, and verify h1 can reach srv.',
+    objective: 'Add VLAN 10 to both trunk allow-lists and verify h1 can reach srv.',
     ticket: { id: 'INC-3102', from: 'NOC · Office network', priority: 'P1', symptom: 'Users on the first switch cannot reach the file server on the second switch. The uplink is up and other VLANs still work.' },
     diagnose: { q: 'Both endpoint ports are access VLAN 10. The trunk is up but only allows VLAN 20. What is the fault?', options: ['VLAN 10 is missing from the trunk allowed list', 'The hosts need different IP subnets', 'The trunk needs to be shut down'], answer: 0, because: 'A trunk only carries VLANs in its allowed list. The link can be physically up while one VLAN is silently excluded.' },
     console: 'h1',
-    hints: ['Inspect show interfaces trunk on both switches.', 'Create VLAN 10 on each switch before adding it to the allowed list.', 'On each trunk port use switchport trunk allowed vlan 10,20, then ping srv from h1.'],
+    hints: ['Inspect show interfaces trunk on both switches.', 'VLAN 10 already exists on both switches; the uplink allow-list is the fault.', 'On each trunk port use switchport trunk allowed vlan 10,20, then ping srv from h1.'],
     build: () => {
       const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }]);
       const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2', v: 10 }]);
-      sw1.vlans = [1, 20]; sw2.vlans = [1, 20];
+      sw1.vlans = [1, 10, 20]; sw2.vlans = [1, 10, 20];
       sw1.ifaces.p2.mode = 'trunk'; sw1.ifaces.p2.allowedVlans = [20];
       sw2.ifaces.p1.mode = 'trunk'; sw2.ifaces.p1.allowedVlans = [20];
       return { devices: {
@@ -1797,7 +1797,7 @@ const chapters = [
       }, links: [L('h1', 'eth0', 'sw1', 'p1'), L('sw1', 'p2', 'sw2', 'p1'), L('srv', 'eth0', 'sw2', 'p2')] };
     },
     success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['sw1', 'vlan 10'], ['sw2', 'vlan 10'], ['sw1', 'interface p2'], ['sw1', 'switchport mode trunk'], ['sw1', 'switchport trunk allowed vlan 10,20'], ['sw1', 'exit'], ['sw2', 'interface p1'], ['sw2', 'switchport mode trunk'], ['sw2', 'switchport trunk allowed vlan 10,20'], ['sw2', 'exit']]
+    solution: [['sw1', 'interface p2'], ['sw1', 'switchport mode trunk'], ['sw1', 'switchport trunk allowed vlan 10,20'], ['sw1', 'exit'], ['sw2', 'interface p1'], ['sw2', 'switchport mode trunk'], ['sw2', 'switchport trunk allowed vlan 10,20'], ['sw2', 'exit']]
   }
 
 ];
