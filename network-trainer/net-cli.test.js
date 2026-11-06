@@ -193,6 +193,9 @@ test('address delete and link down/up update the live interface state', () => {
   eq(cli.run('ip addr add 10.0.1.10/24 dev eth0').code, 0, 'address added');
   eq(cli.run('ip link set eth0 down').code, 0, 'link down');
   eq(net.devices.h1.ifaces.eth0.up, false, 'link is down');
+  eq(cli.run('ip addr add 10.0.1.11/24 dev eth0').code, 0, 'address can be staged while link is down');
+  eq(net.devices.h1.ifaces.eth0.up, false, 'address configuration does not silently raise the link');
+  eq(cli.run('ip addr del 10.0.1.11/24 dev eth0').code, 0, 'staged address removed');
   eq(cli.run('ip link set eth0 up').code, 0, 'link up');
   eq(net.devices.h1.ifaces.eth0.up, true, 'link is up');
   eq(cli.run('ip addr del 10.0.1.10/24 dev eth0').code, 0, 'address deleted');
@@ -208,9 +211,12 @@ test('route configuration validates gateways, replaces matching prefixes, and re
   eq(cli.run('ip route add 10.0.3.0/33 via 10.0.1.1').code, 1, 'reject invalid route prefix');
   eq((net.devices.h1.routes || []).length, 0, 'invalid routes do not mutate state');
   eq(cli.run('ip route add default via 10.0.1.1').code, 0, 'add default route');
-  eq(cli.run('ip route replace default via 10.0.1.254').code, 0, 'replace default route');
-  eq(net.devices.h1.routes.length, 1, 'replace does not create duplicate prefix');
-  eq(net.devices.h1.routes[0].via, ip('10.0.1.254'), 'replacement gateway persisted');
+  eq(cli.run('ip route add default via 10.0.1.1').code, 1, 'reject identical duplicate route');
+  eq(cli.run('ip route add default via 10.0.1.254').code, 0, 'allow alternate next hop for failover');
+  eq(net.devices.h1.routes.length, 2, 'alternate next hop is retained');
+  eq(cli.run('ip route replace default via 10.0.1.253').code, 0, 'replace all routes for the prefix');
+  eq(net.devices.h1.routes.length, 1, 'replace leaves one route for the prefix');
+  eq(net.devices.h1.routes[0].via, ip('10.0.1.253'), 'replacement gateway persisted');
   eq(cli.run('ip route del 10.0.8.0/24').code, 1, 'missing route delete is reported');
   eq(cli.run('ip route del default').code, 0, 'delete default route');
   eq(net.devices.h1.routes.length, 0, 'route removed');
