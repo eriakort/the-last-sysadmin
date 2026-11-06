@@ -15,7 +15,7 @@ const cidr = s => { const [a, p] = String(s).split('/'); return { net: networkOf
 // Is a device interface present and up?
 function ifaceUp(net, dev, name) {
   const d = net.devices[dev]; const f = d && d.ifaces && d.ifaces[name];
-  return !!(f && f.up !== false);
+  return !!(f && f.up !== false && f.errDisabled !== true);
 }
 // The interface on the other end of the link from (dev, name), if the link and both ends are up.
 function neighbor(net, dev, name) {
@@ -144,6 +144,21 @@ function learnMacOnSegment(net, devId, ifaceName) {
     if (visited.has(key)) continue; visited.add(key);
     const current = net.devices[swId], state = stp.switches[swId];
     if (!current || !state || (state.ports[ingress] && state.ports[ingress].state === 'blocking')) continue;
+    const ingressPort = current.ifaces[ingress], security = ingressPort && ingressPort.portSecurity;
+    if (security && security.enabled) {
+      security.secureMacs = security.secureMacs || [];
+      security.stickyMacs = security.stickyMacs || [];
+      if (!security.secureMacs.includes(mac)) {
+        const maximum = Number(security.maximum || 1);
+        if (security.secureMacs.length >= maximum) {
+          security.violations = Number(security.violations || 0) + 1;
+          if ((security.violation || 'shutdown') === 'shutdown') ingressPort.errDisabled = true;
+          return false;
+        }
+        security.secureMacs.push(mac);
+        if (security.sticky) security.stickyMacs.push(mac);
+      }
+    }
     net.macTables = net.macTables || {};
     net.macTables[swId] = net.macTables[swId] || {};
     net.macTables[swId][vlan] = net.macTables[swId][vlan] || {};
@@ -162,6 +177,7 @@ function learnMacOnSegment(net, devId, ifaceName) {
       queue.push([nextId, nextPort]);
     }
   }
+  return true;
 }
 function switchMacTable(net, switchId, vlan) {
   const table = net.macTables && net.macTables[switchId];
@@ -512,7 +528,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
       }
     }
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
-    learnMacOnSegment(net, cur, eg);
+    if (learnMacOnSegment(net, cur, eg) === false) return { ok: false, path, reason: 'switch port-security violation', at: cur };
 
     const ep = l2Domain(net, cur, eg).find(([d, i]) => (net.devices[d].ifaces[i].ip === targetIp || ownsVirtualIp(net, d, targetIp)) && net.devices[d].ifaces[i].up !== false);
     if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
