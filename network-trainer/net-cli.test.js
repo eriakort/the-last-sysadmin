@@ -345,6 +345,71 @@ test('IOS ACL parser rejects malformed entries and unknown bindings', () => {
   eq(cli.run('ip access-group MISSING in').code, 1, 'unknown ACL');
 });
 
+
+test('ASA profile publishes HTTPS with object static PAT, inbound ACL and packet-tracer verification', () => {
+  const net = {
+    devices: {
+      remote: { id:'remote', kind:'host', ifaces:{eth0:{ip:ip('198.51.100.50'),mask:24,up:true}}, routes:[{dest:0,mask:0,via:ip('198.51.100.10')}] },
+      web: { id:'web', kind:'host', ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}}, routes:[{dest:0,mask:0,via:ip('10.0.2.1')}], services:{443:'https',80:'http',22:'ssh'} },
+      asa: { id:'asa',kind:'firewall',firewallOS:'asa',ifaces:{eth0:{ip:ip('198.51.100.10'),mask:24,up:true},eth1:{ip:ip('10.0.2.1'),mask:24,up:true}},routes:[],acls:[],nat:[] },
+      sw1:sw('sw1',['p1','p2']), sw2:sw('sw2',['p1','p2'])
+    },
+    links:[link('remote','eth0','sw1','p1'),link('asa','eth0','sw1','p2'),link('web','eth0','sw2','p1'),link('asa','eth1','sw2','p2')]
+  };
+  const asa=makeCLI(net,'asa');
+  eq(asa.run('configure terminal').code,1,'enable required');
+  asa.run('enable'); asa.run('configure terminal');
+  asa.run('interface eth0'); eq(asa.run('nameif outside').code,0,'outside nameif'); eq(asa.run('security-level 0').code,0,'outside level'); asa.run('exit');
+  asa.run('interface eth1'); eq(asa.run('nameif inside').code,0,'inside nameif'); eq(asa.run('security-level 100').code,0,'inside level'); asa.run('exit');
+  eq(asa.run('access-list OUTSIDE_IN extended permit tcp any host 198.51.100.10 eq 443').code,0,'ASA extended ACL syntax');
+  eq(asa.run('access-group OUTSIDE_IN in interface outside').code,0,'apply ACL to nameif');
+  asa.run('object network WEB-PORTAL'); eq(asa.run('host 10.0.2.10').code,0,'object host');
+  eq(asa.run('nat (inside,outside) static interface service tcp 443 443').code,0,'static PAT');
+  asa.run('exit'); asa.run('end');
+  eq(C.portForward(net,'remote','198.51.100.10',443,'web').ok,true,'public HTTPS forwarded to web server');
+  eq(M.forward(net,'remote',{src:ip('198.51.100.50'),dst:ip('198.51.100.10'),proto:'tcp',dport:22}).ok,false,'SSH denied by implicit ACL deny');
+  eq(M.forward(net,'remote',{src:ip('198.51.100.50'),dst:ip('198.51.100.10'),proto:'tcp',dport:80}).ok,false,'HTTP denied by implicit ACL deny');
+  has(asa.run('show interface ip brief').out,'outside','nameif shown');
+  has(asa.run('show access-list OUTSIDE_IN').out,'matches','ACL hit counter shown');
+  has(asa.run('show access-group').out,'OUTSIDE_IN in interface outside','ACL binding shown');
+  has(asa.run('show nat').out,'WEB-PORTAL','object NAT shown');
+  has(asa.run('packet-tracer input outside tcp 198.51.100.50 50000 198.51.100.10 443').out,'Result: ALLOW','packet tracer result');
+  eq(asa.run('write memory').code,0,'save ASA config');
+  has(asa.run('show running-config').out,'nat (inside,outside) static interface service tcp 443 443','NAT in running config');
+  has(asa.run('show running-config').out,'access-group OUTSIDE_IN in interface outside','ACL binding in running config');
+  has(net.devices.asa.startupConfig,'hostname asa','startup snapshot saved');
+});
+
+test('ASA security levels deny unsolicited low-to-high traffic but permit stateful return traffic', () => {
+  const net = {
+    devices: {
+      remote:{id:'remote',kind:'host',ifaces:{eth0:{ip:ip('198.51.100.50'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('198.51.100.10')}]},
+      inside:{id:'inside',kind:'host',ifaces:{eth0:{ip:ip('10.0.2.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.0.2.1')}]},
+      asa:{id:'asa',kind:'firewall',firewallOS:'asa',ifaces:{eth0:{ip:ip('198.51.100.10'),mask:24,up:true,nameif:'outside',securityLevel:0},eth1:{ip:ip('10.0.2.1'),mask:24,up:true,nameif:'inside',securityLevel:100}},routes:[],acls:[],nat:[]},
+      sw1:sw('sw1',['p1','p2']),sw2:sw('sw2',['p1','p2'])
+    },
+    links:[link('remote','eth0','sw1','p1'),link('asa','eth0','sw1','p2'),link('inside','eth0','sw2','p1'),link('asa','eth1','sw2','p2')]
+  };
+  const unsolicited=M.forward(net,'remote',{src:ip('198.51.100.50'),dst:ip('10.0.2.10'),proto:'tcp',dport:443});
+  eq(unsolicited.ok,false,'outside cannot initiate into inside');
+  has(unsolicited.reason,'security-level','policy reason');
+  eq(M.ping(net,'inside',ip('198.51.100.50'),{proto:'tcp',dport:443}).ok,true,'inside-initiated flow and its return are stateful');
+});
+
+test('ASA command parser rejects bad interfaces, ports, levels and unsupported IOS syntax', () => {
+  const net={devices:{asa:{id:'asa',kind:'firewall',firewallOS:'asa',ifaces:{eth0:{ip:ip('192.0.2.1'),mask:24,up:true}},routes:[],acls:[],nat:[]}},links:[]};
+  const cli=makeCLI(net,'asa'); cli.run('enable'); cli.run('configure terminal');
+  cli.run('interface eth0');
+  eq(cli.run('security-level 101').code,1,'reject invalid security level');
+  eq(cli.run('nameif outside').code,0,'name interface');
+  cli.run('exit');
+  eq(cli.run('access-group MISSING in interface outside').code,1,'reject missing ACL');
+  eq(cli.run('access-list BAD extended permit tcp any host 192.0.2.1 eq 70000').code,1,'reject invalid port');
+  eq(cli.run('ip access-list extended IOS-SYNTAX').code,1,'IOS ACL syntax not accepted on ASA');
+  eq(cli.run('object network BAD').code,0,'enter object');
+  eq(cli.run('nat (inside,outside) static interface service tcp 443 80').code,1,'reject unsupported port translation');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
