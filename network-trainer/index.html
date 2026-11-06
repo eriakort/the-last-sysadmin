@@ -125,6 +125,57 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 :root[data-theme="amber"]{--bg:#120d02;--panel:#1a1304;--raise:#241905;--line:#3a2a08;--ink:#ffe8c2;--muted:#b89158;--amber:#ffb224}
 :root[data-theme="green"]{--bg:#02100a;--panel:#061a10;--raise:#0a2417;--line:#113524;--ink:#c8ffd9;--muted:#6fae86;--amber:#7dff9e}
 :root[data-theme="paper"]{--bg:#eef1f5;--panel:#ffffff;--raise:#f3f6fa;--line:#d4dae3;--ink:#1a2230;--muted:#5a6a82;--amber:#c47f12;--good:#1a9e4b;--bad:#d14343}
+
+/* Operations workbench */
+#cols{grid-template-columns:minmax(270px,310px) minmax(0,1fr) minmax(280px,320px);gap:0}
+#brief,#config{background:linear-gradient(180deg,var(--panel),color-mix(in srgb,var(--panel) 92%,var(--bg)));padding:17px 15px}
+#brief{border-right:1px solid var(--line)}
+#config{border-left:1px solid var(--line)}
+.workbench{background-color:var(--bg);background-image:linear-gradient(rgba(80,150,160,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(80,150,160,.045) 1px,transparent 1px);background-size:24px 24px}
+.deskbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:rgba(8,19,24,.82);flex:none}
+.deskbar>div{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.deskbar .eyebrow{font-size:9px}
+.deskbar strong{font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+.desk-hint{font-size:11px;color:var(--muted)}
+.live-indicator{font:10px ui-monospace,monospace;letter-spacing:.1em;color:var(--good);white-space:nowrap}
+.live-indicator i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:7px;box-shadow:0 0 9px var(--good)}
+#topoWrap{background-image:radial-gradient(circle at 50% 45%,rgba(34,211,238,.07),transparent 55%);min-height:250px}
+#topo{filter:drop-shadow(0 8px 22px rgba(0,0,0,.18))}
+#term{height:38%;min-height:210px;border-top:1px solid var(--line);background:#070d12}
+.term-head{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid #1b3038;background:#0c171d;color:var(--muted);font:10px ui-monospace,monospace;letter-spacing:.08em}
+.term-head b{color:var(--amber);font-size:10px}
+.term-head span{flex:1}
+#termTarget{color:var(--good);font-weight:700;min-width:90px}
+.tline{background:#091219}
+#tin{min-width:0}
+.help-launch{border-color:var(--amber);color:var(--amber);font-weight:700}
+.sheet-wide{width:min(880px,94vw)}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.modal-head h2{margin:2px 0 4px}
+.modal-head .dim{margin:0 0 10px}
+.journal-compose{padding:12px;background:var(--raise);border:1px solid var(--line);border-radius:9px;margin:12px 0}
+.journal-compose label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
+.journal-list{max-height:48vh;overflow:auto;display:grid;gap:7px}
+.journal-entry{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:rgba(8,19,24,.35)}
+.journal-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.journal-meta b{color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-size:10px}
+.journal-meta time,.journal-context{color:var(--muted);font-size:10.5px}
+.journal-context{margin:3px 0 6px}
+.journal-command{display:inline-block;color:var(--good);font:12px ui-monospace,monospace;background:#071016;padding:3px 6px;border-radius:4px}
+.journal-entry p{margin:6px 0 0;font-size:12.5px}
+.journal-entry pre{margin:6px 0 0;padding:7px;background:#071016;color:#b9d6dc;border-radius:5px;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.45 ui-monospace,monospace;max-height:150px;overflow:auto}
+.help-sheet{max-height:90vh}
+.help-key{font:10px ui-monospace,monospace;color:var(--amber);border:1px solid var(--line);border-radius:5px;padding:5px 7px;white-space:nowrap}
+.help-groups{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px;max-height:48vh;overflow:auto}
+.help-command{display:grid;grid-template-columns:minmax(170px,.85fr) 1.15fr;gap:9px;align-items:center;text-align:left;background:var(--raise);border:1px solid var(--line);border-radius:7px;padding:8px;color:var(--ink);cursor:pointer;font:inherit}
+.help-command:hover,.help-command:focus-visible{border-color:var(--amber);outline:none}
+.help-command b{display:block;color:var(--good);font:11.5px ui-monospace,monospace;overflow-wrap:anywhere}
+.help-command small{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+.help-command>span:last-child{font-size:11px;color:var(--muted);line-height:1.4}
+.help-note{padding:10px 12px;border-left:3px solid var(--amber);background:rgba(34,211,238,.05);font-size:11.5px;color:var(--muted);margin-top:12px}
+.help-note b{color:var(--ink)}
+@media(max-width:1100px){#cols{grid-template-columns:minmax(240px,280px) minmax(0,1fr)}#config{grid-column:1/-1;border-top:1px solid var(--line);border-left:0;max-height:380px}}
+@media(max-width:760px){#app{height:auto;min-height:100vh}#cols{display:flex;flex-direction:column}#brief{order:1;max-height:none}main{order:2;min-height:650px}#config{order:3;max-height:none}.hud{gap:6px;flex-wrap:wrap;justify-content:flex-end}.hud>span{display:none}.apphdr{gap:8px}.apptabs{display:none}.deskbar>div{gap:5px}.desk-hint{width:100%}.help-groups{grid-template-columns:1fr}.help-command{grid-template-columns: minmax(135px,.8fr) 1.2fr}.journal-list{max-height:42vh}}
 @media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
 </style></head>
 <body><div id="app"></div><script>
@@ -132,7 +183,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
-__def("./net-model", function(module, exports, require){
+__def("./net-model.js", function(module, exports, require){
 // Networking Trainer — M1 engine spike.
 // Pure, headless network model + forwarding engine. No DOM, no UI.
 // IPs are stored as unsigned 32-bit integers so subnet math is bitwise.
@@ -640,7 +691,7 @@ module.exports = {
 };
 
 });
-__def("./net-checks", function(module, exports, require){
+__def("./net-checks.js", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
 // These are what a mission's success criteria are built from, and what the
 // no-code mission editor would expose. Direct parallel to the sysadmin checkers.
@@ -754,7 +805,7 @@ function stpBlocked(net, switchId, port, vlan) {
 module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked };
 
 });
-__def("./net-cli", function(module, exports, require){
+__def("./net-cli.js", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
 // Headless and testable: a CLI is bound to a world (`net`) and a "current
 // device" (the console you're on). run(line) returns { out, code } and may
@@ -1244,7 +1295,7 @@ const MAN = {
 module.exports = { makeCLI, resolve, primaryIp };
 
 });
-__def("./net-mission", function(module, exports, require){
+__def("./net-mission.js", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
 // A mission is DATA: a starting topology + a list of declarative checks. The
 // runner builds the world, binds a CLI, and grades the checks after any command.
@@ -1340,7 +1391,7 @@ function startMission(mission) {
 module.exports = { evalCheck, startMission };
 
 });
-__def("./net-chapters", function(module, exports, require){
+__def("./net-chapters.js", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
 // Each mission is a starting topology (`build`) + declarative `success` checks,
 // plus a reference `solution` (console device + commands) used to prove the
@@ -2032,7 +2083,7 @@ const chapters = [
 module.exports = { chapters };
 
 });
-__def("./net-builder", function(module, exports, require){
+__def("./net-builder.js", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
 // The design-mode UI and the no-code authoring tool are thin layers over these;
 // keeping them pure means the builder is testable without a DOM. Every op keeps
@@ -2121,7 +2172,7 @@ function setAddress(topo, id, iface, ipStr, prefix) {
 module.exports = { KINDS, blank, addDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
 
 });
-__def("./net-scenario", function(module, exports, require){
+__def("./net-scenario.js", function(module, exports, require){
 // Scenario format — a portable, authorable mission. A scenario is plain data:
 // a starting topology, a success spec (the objectives), and the framing text.
 // It serializes to JSON (shareable / assignable), validates, and converts to a
@@ -2223,7 +2274,7 @@ function fromJSON(text) {
 module.exports = { CHECKS, validate, toMission, fromTopology, toJSON, fromJSON, clone };
 
 });
-__def("./net-classroom", function(module, exports, require){
+__def("./net-classroom.js", function(module, exports, require){
 // Classroom data-access layer for the network trainer. A thin, headless wrapper
 // over a Supabase client (`sb`) — no DOM, so it's tested against a mock client.
 // It mirrors the sysadmin game's classroom calls and reuses the shared tables
@@ -2318,7 +2369,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '' }; } catch (e) { return { done: {}, xp: 0, theme: '' }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [] }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [] }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -2528,7 +2579,7 @@ function renderConfig() {
 
 /* ---------- actions ---------- */
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; }
 function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
 function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
@@ -2556,6 +2607,7 @@ function doCheck() {
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
+      addJournalEntry({ type: 'ticket resolved', device: SEL || '', text: `Resolved ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
       msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
@@ -2733,10 +2785,46 @@ function wireConfig() {
   const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); const dv = g('.adst'); if (dv.includes('/')) rule.dstnet = M.cidr(dv); else if (/^\d+\.\d+\.\d+\.\d+$/.test(dv)) rule.dst = M.ip(dv); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
   document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
 }
+function addJournalEntry(entry) {
+  PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
+  PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
+  PROG.journal = PROG.journal.slice(0, 250); saveProg();
+}
+function openJournal() {
+  const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide"><div class="modal-head"><div><div class="eyebrow">Personal engineering record</div><h2>Work journal</h2><p class="dim">Your commands, investigation notes and ticket outcomes stay in this browser.</p></div><button class="btn" id="exportJournal">Export</button></div><div class="journal-compose"><label for="journalNote">Add an investigation note</label><textarea id="journalNote" class="wide" rows="3" placeholder="What did you observe? What did you rule out? What would you check next time?"></textarea><div class="row"><button class="btn primary" id="saveJournalNote">Save note</button></div></div><div class="journal-list">${rows || '<p class="dim">No activity recorded yet. Run commands or add a note to start your work journal.</p>'}</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#saveJournalNote').addEventListener('click', () => { const note = wrap.querySelector('#journalNote').value.trim(); if (!note) return; addJournalEntry({ type: 'engineer note', device: SEL || '', text: note }); wrap.remove(); openJournal(); });
+  wrap.querySelector('#exportJournal').addEventListener('click', () => {
+    const lines = ['# Network engineering work journal', '', ...(PROG.journal || []).slice().reverse().map(e => `## ${e.type || 'Activity'} — ${new Date(e.at).toLocaleString()}\n${[e.ticket, e.mission, e.device].filter(Boolean).join(' · ')}\n${e.command ? `\n\`${e.command}\`\n` : ''}${e.text || ''}${e.output ? `\n\n\`\`\`text\n${e.output}\n\`\`\`` : ''}`)];
+    const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'network-work-journal.md'; a.click(); URL.revokeObjectURL(url);
+  });
+}
+function openHelp() {
+  const groups = [
+    { name: 'Start here', items: [['help', 'List commands available on the selected device.'], ['man <command>', 'Open the built-in manual for a supported command.'], ['ip addr', 'Inspect interface state and IPv4 addressing.'], ['ip route', 'Inspect the routing table.'], ['ping <host|ip>', 'Test end-to-end reachability.'], ['traceroute <host|ip>', 'Identify the path and the hop where traffic stops.'], ['arp', 'Inspect the ARP neighbour table.'], ['tcpdump', 'Inspect simulated packet evidence.']] },
+    { name: 'Cisco-style switching', items: [['enable', 'Enter privileged EXEC mode.'], ['configure terminal', 'Enter global configuration mode.'], ['vlan 20', 'Create VLAN 20 on a switch.'], ['interface <port>', 'Select a switch interface for configuration.'], ['switchport mode access', 'Make the selected port an access port.'], ['switchport access vlan 20', 'Assign the access port to VLAN 20.'], ['switchport mode trunk', 'Configure a trunk link.'], ['switchport trunk allowed vlan 10,20', 'Restrict the trunk to selected VLANs.'], ['show vlan brief', 'Verify VLANs and access-port membership.'], ['show interfaces trunk', 'Verify operational trunk state.'], ['show spanning-tree vlan 10', 'Inspect STP roles and states for VLAN 10.'], ['show mac address-table dynamic', 'Inspect dynamically learned MAC addresses.']] },
+    { name: 'Routing and troubleshooting', items: [['ip route add default via <gateway>', 'Add a default route on a supported host or router.'], ['ospf <interface> area <id>', 'Enable the simulator OSPF process on an interface.'], ['ospf neighbor', 'Inspect discovered OSPF neighbours.'], ['bgp asn <number>', 'Set the local BGP autonomous system number.'], ['bgp neighbor <ip> remote-as <asn>', 'Configure a BGP peer.'], ['bgp summary', 'Inspect BGP session state.'], ['bgp network <prefix>', 'Advertise a configured network.']] },
+    { name: 'Work safely', items: [['copy running-config startup-config', 'Save the active configuration where supported.'], ['show running-config', 'Capture a before/after configuration record.'], ['clear mac address-table dynamic', 'Clear learned switch entries after a topology change.'], ['exit', 'Leave the current configuration context.']] }
+  ];
+  const selectedKind = RUN && RUN.net.devices[SEL] ? RUN.net.devices[SEL].kind : 'no device selected';
+  const all = groups.flatMap(g => g.items.map(([cmd, desc]) => ({ group: g.name, cmd, desc })));
+  const render = q => { const term = q.trim().toLowerCase(), found = all.filter(x => !term || (x.cmd + ' ' + x.desc + ' ' + x.group).toLowerCase().includes(term)); return found.length ? found.map(x => `<button class="help-command" data-help-cmd="${esc(x.cmd)}"><span><b>${esc(x.cmd)}</b><small>${esc(x.group)}</small></span><span>${esc(x.desc)}</span></button>`).join('') : '<p class="dim">No matching help entry. Try a protocol, command or symptom.</p>'; };
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide help-sheet"><div class="eyebrow">Field guide · selected device: ${esc(SEL || 'none')} (${esc(selectedKind)})</div><div class="modal-head"><div><h2>Engineering help desk</h2><p class="dim">Search command examples and procedures. Select a command to place it in the terminal.</p></div><span class="help-key">? HELP</span></div><input id="helpSearch" class="wide" type="search" placeholder="Search commands, VLANs, routing, interfaces, symptoms…"/><div class="help-groups" id="helpResults">${render('')}</div><div class="help-note"><b>Learning note:</b> This reference distinguishes commands modelled by the current simulator from advanced Cisco IOS/IOS XE commands planned for later releases. If a command is not implemented yet, the device will report that clearly rather than pretending it worked.</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#helpSearch').addEventListener('input', e => { wrap.querySelector('#helpResults').innerHTML = render(e.target.value); });
+  wrap.querySelector('#helpResults').addEventListener('click', e => { const b = e.target.closest('[data-help-cmd]'); if (!b) return; const inp = $('#tin'); inp.value = b.dataset.helpCmd; wrap.remove(); inp.focus(); });
+}
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
   });
@@ -2989,6 +3077,8 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" title="Stats">📊</button>
@@ -2996,10 +3086,13 @@ function boot() {
     </header>
     <div id="cols">
       <aside id="brief"></aside>
-      <main><div id="topoWrap"></div><div id="flows"></div><div id="term"><pre id="tout"></pre><div class="tline"><span>$</span><input id="tin" autocomplete="off" placeholder="type a command — ping, ip addr, ip route add…"/></div></div></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div class="term-head"><b>DEVICE CONSOLE</b><span>CLI · command history enabled</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>`;
   wireTerm();
+  $('#btnHelp').addEventListener('click', openHelp);
+  $('#termHelp').addEventListener('click', openHelp);
+  $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
   $('#btnBuild').addEventListener('click', enterBuild);
