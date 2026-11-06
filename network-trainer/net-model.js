@@ -331,20 +331,30 @@ function bgpLearned(net, devId) {
   return learned;
 }
 
-/* ---------- ACLs (inbound, first match wins, default allow) ---------- */
+/* ---------- ACLs: legacy firewall rules plus bound IOS interface ACLs ---------- */
+function aclWildcardMatch(value, base, wildcard) {
+  return value != null && base != null && ((value & ~wildcard) === (base & ~wildcard));
+}
 function aclMatch(rule, dir, iface, pkt) {
   if (rule.any) return true;
   if (rule.dir && rule.dir !== dir) return false;
   if (rule.dev && rule.dev !== iface) return false;
-  if (rule.proto && rule.proto !== pkt.proto) return false;
+  if (rule.proto && rule.proto !== 'ip' && rule.proto !== pkt.proto) return false;
   if (rule.dport != null && rule.dport !== pkt.dport) return false;
-  if (rule.src != null && rule.src !== pkt.src) return false;
-  if (rule.dst != null && rule.dst !== pkt.dst) return false;
+  if (rule.src != null && (rule.srcWildcard != null ? !aclWildcardMatch(pkt.src, rule.src, rule.srcWildcard) : rule.src !== pkt.src)) return false;
+  if (rule.dst != null && (rule.dstWildcard != null ? !aclWildcardMatch(pkt.dst, rule.dst, rule.dstWildcard) : rule.dst !== pkt.dst)) return false;
+  if (rule.srcnet && !sameNet(pkt.src, rule.srcnet.net, rule.srcnet.prefix)) return false;
   if (rule.dstnet && !sameNet(pkt.dst, rule.dstnet.net, rule.dstnet.prefix)) return false;
   return true;
 }
 function aclDecision(dev, dir, iface, pkt) {
-  for (const r of dev.acls || []) if (aclMatch(r, dir, iface, pkt)) return r.action;
+  const binding = dev.ifaces && dev.ifaces[iface] && dev.ifaces[iface].accessGroups && dev.ifaces[iface].accessGroups[dir];
+  if (binding) {
+    const rules = (dev.acls || []).filter(r => r.aclName === binding).sort((a,b) => (a.seq || 0) - (b.seq || 0));
+    for (const r of rules) if (aclMatch(r, dir, iface, pkt)) { r.hits = (r.hits || 0) + 1; return r.action; }
+    return 'deny';
+  }
+  for (const r of dev.acls || []) if (!r.aclName && aclMatch(r, dir, iface, pkt)) return r.action;
   return 'allow';
 }
 
@@ -406,6 +416,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
       if (!eg) return { ok: false, path, reason: 'next hop not on a connected subnet', at: cur };
       targetIp = viaRoute.via;
     }
+    if (aclDecision(dev, 'out', eg, pkt) === 'deny') return { ok: false, path, reason: 'blocked by ACL', at: cur };
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
     learnMacOnSegment(net, cur, eg);
 
