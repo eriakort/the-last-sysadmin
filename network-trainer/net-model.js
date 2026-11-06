@@ -493,7 +493,7 @@ function resolveName(net, srcDev, name) {
 function dhcpServerFor(net, hostId, ifaceName) {
   for (const [d, i] of l2Domain(net, hostId, ifaceName)) {
     const dev = net.devices[d];
-    if (dev.dhcp && (dev.dhcp.iface === i || (dev.dhcp.network && dev.ifaces[i] && dev.ifaces[i].ip != null && sameNet(dev.ifaces[i].ip, dev.dhcp.network.net, dev.dhcp.network.prefix)))) return { id: d, pool: dev.dhcp, relayed: false };
+    if (dev.dhcp && (dev.dhcp.iface === i || !dev.dhcp.network || (dev.ifaces[i] && dev.ifaces[i].ip != null && sameNet(dev.ifaces[i].ip, dev.dhcp.network.net, dev.dhcp.network.prefix)))) return { id: d, pool: dev.dhcp, relayed: false };
     if (dev.kind === 'router' || dev.kind === 'firewall') {
       const helper = dev.ifaces[i] && dev.ifaces[i].helperAddress;
       if (helper != null) {
