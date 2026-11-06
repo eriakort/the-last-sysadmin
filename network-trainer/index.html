@@ -212,7 +212,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
-__def("./net-model", function(module, exports, require){
+__def("./net-model.js", function(module, exports, require){
 // Networking Trainer — M1 engine spike.
 // Pure, headless network model + forwarding engine. No DOM, no UI.
 // IPs are stored as unsigned 32-bit integers so subnet math is bitwise.
@@ -906,7 +906,7 @@ module.exports = {
 };
 
 });
-__def("./net-checks", function(module, exports, require){
+__def("./net-checks.js", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
 // These are what a mission's success criteria are built from, and what the
 // no-code mission editor would expose. Direct parallel to the sysadmin checkers.
@@ -1050,7 +1050,7 @@ function stpBlocked(net, switchId, port, vlan) {
 module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
 
 });
-__def("./net-cli", function(module, exports, require){
+__def("./net-cli.js", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
 // Headless and testable: a CLI is bound to a world (`net`) and a "current
 // device" (the console you're on). run(line) returns { out, code } and may
@@ -2522,7 +2522,7 @@ const MAN = {
 module.exports = { makeCLI, resolve, primaryIp };
 
 });
-__def("./net-mission", function(module, exports, require){
+__def("./net-mission.js", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
 // A mission is DATA: a starting topology + a list of declarative checks. The
 // runner builds the world, binds a CLI, and grades the checks after any command.
@@ -2623,7 +2623,7 @@ function startMission(mission) {
 module.exports = { evalCheck, startMission };
 
 });
-__def("./net-chapters", function(module, exports, require){
+__def("./net-chapters.js", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
 // Each mission is a starting topology (`build`) + declarative `success` checks,
 // plus a reference `solution` (console device + commands) used to prove the
@@ -3592,7 +3592,7 @@ const chapters = [
 module.exports = { chapters };
 
 });
-__def("./net-builder", function(module, exports, require){
+__def("./net-builder.js", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
 // The design-mode UI and the no-code authoring tool are thin layers over these;
 // keeping them pure means the builder is testable without a DOM. Every op keeps
@@ -3681,7 +3681,7 @@ function setAddress(topo, id, iface, ipStr, prefix) {
 module.exports = { KINDS, blank, addDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
 
 });
-__def("./net-scenario", function(module, exports, require){
+__def("./net-scenario.js", function(module, exports, require){
 // Scenario format — a portable, authorable mission. A scenario is plain data:
 // a starting topology, a success spec (the objectives), and the framing text.
 // It serializes to JSON (shareable / assignable), validates, and converts to a
@@ -3783,7 +3783,7 @@ function fromJSON(text) {
 module.exports = { CHECKS, validate, toMission, fromTopology, toJSON, fromJSON, clone };
 
 });
-__def("./net-classroom", function(module, exports, require){
+__def("./net-classroom.js", function(module, exports, require){
 // Classroom data-access layer for the network trainer. A thin, headless wrapper
 // over a Supabase client (`sb`) — no DOM, so it's tested against a mock client.
 // It mirrors the sysadmin game's classroom calls and reuses the shared tables
@@ -5064,6 +5064,7 @@ function renderChangeManagement() {
   bind('changeRollback',()=>{const v=root.querySelector('#changeRollbackReason').value.trim();if(!v){root.querySelector('#changeRollbackReason').focus();return;}transition('rolled-back','Rollback executed and recorded.',{rollbackReason:v});});
 }
 
+
 /* ---------- global workstation search ---------- */
 let PALETTE_RESULTS = [], PALETTE_ACTIVE = 0;
 function collectPaletteResults(query) {
@@ -5106,7 +5107,6 @@ function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remo
 function wireGlobalPalette() {
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();}else if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
 }
-
 
 /* ---------- boot ---------- */
 function boot() {
