@@ -234,7 +234,7 @@ const chapters = [
     ticket: { id: 'INC-1184', from: 'NOC · application availability', priority: 'P1', symptom: 'Finance users cannot open 10.0.2.10 over HTTPS. The outage began after a firewall policy change. SSH must remain restricted; restore only the required service.' },
     diagnose: { q: 'The interface is up and the route exists. show access-lists FINANCE-IN shows sequence 10 denies all IP traffic, followed by sequence 20 permitting HTTPS. What is the fault?', options: ['First-match processing means sequence 10 shadows the HTTPS permit', 'The HTTPS server needs a gateway change', 'The ACL must be attached outbound on the server interface'], answer: 0, because: 'IOS ACLs are evaluated top-down. The broad deny matches first, so the later HTTPS permit is never reached. Fix the order narrowly; do not remove the security policy.' },
     console: 'r1',
-    hints: ['Inspect show access-lists FINANCE-IN and show ip interface eth0 before changing anything.', 'Remove the broad deny at sequence 10, then add the HTTPS permit before the deny-all rule.', 'Use configure terminal, ip access-list extended FINANCE-IN, no 10, then 10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443 and 20 deny ip any any. Verify HTTPS and SSH, then write memory.'],
+    hints: ['Inspect show access-lists FINANCE-IN and show ip interface eth0 before changing anything.', 'Remove the broad deny at sequence 10 and the stale permit at sequence 20, then rebuild the intended permit-before-deny policy.', 'Use configure terminal, ip access-list extended FINANCE-IN, no 10, no 20, then 10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443 and 20 deny ip any any. Verify HTTPS and SSH, then write memory.'],
     build: () => {
       const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) });
       fw.acls = [
@@ -253,7 +253,7 @@ const chapters = [
       { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
       { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 80 }
     ],
-    solution: [['r1', 'show access-lists FINANCE-IN'], ['r1', 'show ip interface eth0'], ['r1', 'configure terminal'], ['r1', 'ip access-list extended FINANCE-IN'], ['r1', 'no 10'], ['r1', '10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443'], ['r1', '20 deny ip any any'], ['r1', 'end'], ['finance', 'ping app'], ['r1', 'write memory']]
+    solution: [['r1', 'show access-lists FINANCE-IN'], ['r1', 'show ip interface eth0'], ['r1', 'configure terminal'], ['r1', 'ip access-list extended FINANCE-IN'], ['r1', 'no 10'], ['r1', 'no 20'], ['r1', '10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443'], ['r1', '20 deny ip any any'], ['r1', 'end'], ['finance', 'ping app'], ['r1', 'write memory']]
   },
 
   { id: 'renew-the-lease', chapter: 'DHCP',
