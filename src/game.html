@@ -5052,7 +5052,7 @@ const MISSIONS = [
     answer: a => a.trim() === 'v2.4.0' },
   { ch: 19, id: 'grad-signoff', title: 'Sign the handover',
     learning: {
-      concept: 'A handover note gives the next on-call person a concise, verifiable status: what is healthy, which release is live, whether backups are scheduled, and where evidence lives. Never include passwords, private keys, or other secrets.',
+      concept: 'A handover note gives the next on-call person a concise, verified status: what is healthy, which release is live, whether backups are scheduled, and where evidence lives. Never include passwords, private keys, or other secrets.',
       example: 'echo "# All clear - v2.4.0 live; backups scheduled; firewall reviewed." > ~/incident/ALL_CLEAR.md',
       practice: 'Write a short all-clear note in the incident folder using facts you have verified.',
       investigate: 'The next administrator may inherit the server without this conversation. Make the note useful on its own, specific enough to act on, and free of secrets.',
