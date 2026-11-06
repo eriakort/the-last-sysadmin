@@ -498,7 +498,8 @@ function dhcpServerFor(net, hostId, ifaceName) {
       const helper = dev.ifaces[i] && dev.ifaces[i].helperAddress;
       if (helper != null) {
         const serverId = deviceOwning(net, helper), server = serverId && net.devices[serverId];
-        if (server && server.dhcp) return { id: serverId, pool: server.dhcp, relayed: true, relay: d };
+        if (server && server.dhcp && server.services && server.services[67] && ping(net, d, helper, { proto: 'udp', dport: 67 }).ok)
+          return { id: serverId, pool: server.dhcp, relayed: true, relay: d };
       }
     }
   }
@@ -511,14 +512,17 @@ function dhclient(net, hostId, ifaceName) {
   if (!host || !host.ifaces[ifaceName]) return { ok: false, reason: 'no such interface ' + ifaceName };
   const srv = dhcpServerFor(net, hostId, ifaceName);
   if (!srv) return { ok: false, reason: 'no DHCP server responded on the segment' };
-  const p = srv.pool, prefix = Number(p.prefix ?? p.network?.prefix ?? 24);
+  const p = srv.pool;
+  if (!p.range && !p.network) return { ok: false, reason: 'DHCP pool has no network statement' };
+  const prefix = Number(p.prefix ?? p.network?.prefix ?? 24);
   const first = p.range ? p.range[0] : (p.network.net + 1) >>> 0;
   const last = p.range ? p.range[1] : (p.network.net + Math.pow(2, 32 - prefix) - 2) >>> 0;
+  const gateway = p.gw ?? p.defaultRouter ?? null;
   const excluded = p.excluded || [];
   p.bindings = p.bindings || {};
   let addr = null;
   for (let a = first; a <= last; a++) {
-    if (a === p.gw || excluded.some(x => a >= x.start && a <= (x.end ?? x.start))) continue;
+    if (a === gateway || excluded.some(x => a >= x.start && a <= (x.end ?? x.start))) continue;
     const owner = deviceOwning(net, a);
     const leased = Object.entries(p.bindings).some(([id, lease]) => id !== hostId && lease.ip === a);
     if ((owner && owner !== hostId) || leased) continue;
@@ -527,7 +531,7 @@ function dhclient(net, hostId, ifaceName) {
   if (addr == null) return { ok: false, reason: 'DHCP pool exhausted — no free address' };
   host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: prefix, up: true };
   host.routes = (host.routes || []).filter(r => r.mask !== 0);
-  const gw = p.gw ?? p.defaultRouter ?? null, dns = p.dns ?? p.dnsServer ?? null;
+  const gw = gateway, dns = p.dns ?? p.dnsServer ?? null;
   if (gw != null) host.routes.push({ dest: 0, mask: 0, via: gw });
   if (dns != null) host.resolver = dns;
   if (p.domainName) host.domainName = p.domainName;
