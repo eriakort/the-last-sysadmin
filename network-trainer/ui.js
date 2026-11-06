@@ -717,8 +717,8 @@ function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
-    if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
-    if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
+    if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
+    if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
   });
 }
 function openStats() {
@@ -995,7 +995,7 @@ function boot() {
     <section id="overview" aria-label="Operations overview"></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div class="term-head"><b>DEVICE CONSOLE</b><span>CLI · command history enabled</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>
@@ -1005,6 +1005,10 @@ function boot() {
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
   $('#navIncidents').addEventListener('click', openTicketQueue);
   $('#navJournal').addEventListener('click', openJournal);
+  $('#topoZoomIn').addEventListener('click', () => zoomTopology(0.8));
+  $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));
+  $('#topoFit').addEventListener('click', fitTopology);
+  $('#topoArrange').addEventListener('click', autoArrange);
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
