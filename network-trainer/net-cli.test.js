@@ -650,6 +650,54 @@ test('BGP prefix-list sequence order, ge/le matching, implicit deny and invalid 
   eq(M.bgpPrefixListAllows(net.devices.a,'FILTER',ip('10.1.0.0'),16),false,'remaining deny now matches');
 });
 
+
+test('HSRP elects an active gateway and tracks an uplink to fail over without changing the host gateway', () => {
+  const net={devices:{
+    pc:{id:'pc',kind:'host',ifaces:{eth0:{ip:ip('10.20.0.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.20.0.1')}]},
+    r1:{id:'r1',kind:'router',ifaces:{lan:{ip:ip('10.20.0.2'),mask:24,up:true},wan:{ip:ip('203.0.113.2'),mask:24,up:true}},routes:[]},
+    r2:{id:'r2',kind:'router',ifaces:{lan:{ip:ip('10.20.0.3'),mask:24,up:true},wan:{ip:ip('203.0.113.3'),mask:24,up:true}},routes:[]},
+    swlan:sw('swlan',['p1','p2','p3']), swwan:sw('swwan',['p1','p2','p3']),
+    upstream:{id:'upstream',kind:'host',ifaces:{eth0:{ip:ip('203.0.113.10'),mask:24,up:true}},routes:[]}
+  },links:[
+    link('pc','eth0','swlan','p1'),link('r1','lan','swlan','p2'),link('r2','lan','swlan','p3'),
+    link('r1','wan','swwan','p1'),link('r2','wan','swwan','p2'),link('upstream','eth0','swwan','p3')
+  ]};
+  const r1=makeCLI(net,'r1'),r2=makeCLI(net,'r2');
+  for (const [cli,lan,wan,priority] of [[r1,'lan','wan',110],[r2,'lan','wan',100]]) {
+    cli.run('enable'); cli.run('configure terminal'); cli.run('interface '+lan);
+    eq(cli.run('standby 10 ip 10.20.0.1').code,0,'configure shared virtual gateway');
+    eq(cli.run('standby 10 priority '+priority).code,0,'set HSRP priority');
+    eq(cli.run('standby 10 preempt').code,0,'enable preemption');
+    if (lan==='lan' && cli===r1) eq(cli.run('standby 10 track wan decrement 30').code,0,'track WAN uplink');
+    cli.run('exit'); cli.run('end');
+  }
+  eq(M.hsrpStatus(net,'r1','lan').state,'Active','higher priority router initially active');
+  eq(M.hsrpStatus(net,'r2','lan').state,'Standby','secondary router initially standby');
+  eq(M.ping(net,'pc',ip('203.0.113.10')).ok,true,'host reaches upstream through virtual gateway');
+  eq(r1.run('show standby brief').out.includes('Active'),true,'standby summary shows active router');
+  r1.run('configure terminal'); r1.run('interface wan');
+  eq(r1.run('shutdown').code,0,'simulate primary WAN failure');
+  eq(M.hsrpStatus(net,'r1','lan').state,'Standby','tracked uplink failure reduces primary priority');
+  eq(M.hsrpStatus(net,'r2','lan').state,'Active','backup takes over virtual gateway');
+  eq(M.ping(net,'pc',ip('203.0.113.10')).ok,true,'host connectivity survives gateway failover');
+  r1.run('end'); r1.run('configure terminal'); r1.run('interface wan'); r1.run('no shutdown');
+  eq(M.hsrpStatus(net,'r1','lan').state,'Active','preempt returns primary after recovery');
+  r1.run('end'); r1.run('enable'); r1.run('write memory');
+  has(net.devices.r1.startupConfig,'standby 10 ip 10.20.0.1','virtual IP persists');
+  has(net.devices.r1.startupConfig,'standby 10 track wan decrement 30','uplink tracking persists');
+});
+
+test('HSRP rejects invalid groups, priorities, tracked interfaces and virtual IP subnets', () => {
+  const net={devices:{r:{id:'r',kind:'router',ifaces:{lan:{ip:ip('10.0.0.2'),mask:24,up:true},wan:{ip:ip('192.0.2.2'),mask:24,up:true}},routes:[]}},links:[]};
+  const cli=makeCLI(net,'r'); cli.run('enable'); cli.run('configure terminal'); cli.run('interface lan');
+  eq(cli.run('standby 256 ip 10.0.0.1').code,1,'group out of range rejected');
+  eq(cli.run('standby 1 ip 10.1.0.1').code,1,'off-subnet virtual IP rejected');
+  eq(cli.run('standby 1 ip 10.0.0.1').code,0,'valid HSRP group');
+  eq(cli.run('standby 1 priority 300').code,1,'priority out of range rejected');
+  eq(cli.run('standby 1 track missing decrement 20').code,1,'unknown tracked interface rejected');
+  eq(cli.run('standby 1 track wan decrement 20').code,0,'valid tracking accepted');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
