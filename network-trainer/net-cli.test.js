@@ -522,6 +522,27 @@ test('IOS syslog forwards configuration events to a reachable collector and appl
   has(cli.run('show running-config').out,'logging host 10.0.2.10','syslog config persists');
 });
 
+
+test('IOS local DNS host entries resolve without an upstream resolver', () => {
+  const net = { devices: {
+    r1: { id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.2.1'),mask:24,up:true}},routes:[] }
+  }, links:[] };
+  const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
+  eq(cli.run('ip host portal.branch.local 10.0.2.20').code,0,'configure local host');
+  has(cli.run('show hosts').out,'portal.branch.local','host table entry');
+  const resolved=cli.run('dig portal.branch.local');
+  eq(resolved.code,0,'local name resolves without resolver'); has(resolved.out,'10.0.2.20','local address');
+  has(cli.run('show running-config').out,'ip host portal.branch.local 10.0.2.20','local host persists');
+});
+
+test('incomplete DHCP pools fail cleanly and report server statistics', () => {
+  const net={devices:{srv:{id:'srv',kind:'host',ifaces:{eth0:{ip:ip('10.0.1.1'),mask:24,up:true}},routes:[]},h1:{id:'h1',kind:'host',ifaces:{eth0:{up:true}},routes:[]}},links:[link('srv','eth0','h1','eth0')]};
+  const server=makeCLI(net,'srv');server.run('enable');server.run('configure terminal');server.run('ip dhcp pool EMPTY');server.run('exit');
+  const client=makeCLI(net,'h1');
+  const lease=client.run('dhclient eth0');eq(lease.code,1,'incomplete pool rejected');has(lease.out,'no network statement','clear failure reason');
+  has(server.run('show ip dhcp server statistics').out,'Bindings: 0','statistics show no bindings');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
