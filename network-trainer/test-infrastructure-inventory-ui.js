@@ -43,7 +43,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('selecting an inventory record opens its device detail');
   else fail('selected switch detail is missing');
 
-  if (await page.locator('.infra-table').count() >= 2 && await page.locator('.infra-section').innerText().then(t => t.toLowerCase().includes('spanning-tree')))
+  if (await page.locator('.infra-table').count() >= 2 && await page.locator('.infra-detail-panel .infra-section').filter({ hasText: /spanning-tree/i }).count() > 0)
     ok('switch detail includes interface and VLAN / spanning-tree inventory');
   else fail('switch detail is missing interface or VLAN data');
 
