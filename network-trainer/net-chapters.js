@@ -21,7 +21,7 @@ const chapters = [
     ticket: { id: 'INC-1041', from: 'Dana · new hire, Finance', priority: 'P3', symptom: "Just got my desk set up but I can't open the shared drive at all. Brand-new machine — did IT forget something?" },
     diagnose: { q: 'You ping the server from h1 and it fails instantly, before any hop. What does that point to?', options: ['h1 has no IP address on eth0', 'the switch between them is powered off', 'the file server is down'], answer: 0, because: '`ip addr` shows eth0 is up but has no address — with no IP, h1 can\'t send anything onto the wire. Give it one in the server\'s network.' },
     console: 'h1',
-    hints: ['`ip addr` shows h1 has an interface but no address.', 'Pick any free address in 10.0.1.0/24, e.g. 10.0.1.10, mask /24.', 'Run `ip addr replace 10.0.1.10/24 dev eth0`, then `ping srv`.'],
+    hints: ['`ip addr` shows h1 has an interface but no address.', 'Pick any free address in 10.0.1.0/24, e.g. 10.0.1.10, mask /24.', 'Run `ip addr add 10.0.1.10/24 dev eth0`, then `ping srv`.'],
     build: () => ({
       devices: { h1: H('h1'), srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
@@ -43,7 +43,7 @@ const chapters = [
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['h1', 'ip addr add 10.0.1.10/24 dev eth0']]
+    solution: [['h1', 'ip addr replace 10.0.1.10/24 dev eth0']]
   },
 
   { id: 'find-the-gateway', chapter: 'Routing',
@@ -145,7 +145,7 @@ const chapters = [
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['h1', 'ip addr add 10.0.1.10/24 dev eth0']]
+    solution: [['h1', 'ip addr replace 10.0.1.10/24 dev eth0']]
   },
 
   { id: 'default-deny', chapter: 'Network security',
@@ -337,7 +337,7 @@ const chapters = [
     ],
     solution: [
       ['h1', 'fault subnet'], ['h1', 'fault route'], ['h1', 'fault dns'],
-      ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip addr replace 10.0.1.10/24 dev eth0'],
       ['h1', 'ip route add default via 10.0.1.1'],
       ['h1', 'resolvectl dns eth0 10.0.2.53']
     ]
@@ -469,7 +469,7 @@ const chapters = [
     ],
     solution: [
       ['h1', 'fault subnet'], ['h1', 'fault gateway'],
-      ['h1', 'ip addr add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip addr replace 10.0.1.10/24 dev eth0'],
       ['h1', 'ip route del default'],
       ['h1', 'ip route add default via 10.0.1.1']
     ]
