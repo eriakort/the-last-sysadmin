@@ -353,3 +353,8 @@ The profile intentionally does not claim full ASA compatibility. It omits access
 ## Switch access-layer port security
 
 The IOS-style switch profile supports access-port MAC security using `switchport port-security`, a validated maximum (1–50), sticky secure-MAC learning, and the `protect`, `restrict`, or `shutdown` violation actions. The forwarding model checks the source MAC at the ingress switch port: an unapproved MAC is dropped and increments the violation counter; shutdown mode also err-disables the port until an operator issues `no shutdown`. Use `show port-security` or `show port-security interface PORT` to inspect secure addresses and violations. Sticky addresses appear in the running configuration. This is a deterministic educational access-port security model; it does not simulate aging timers, authentication, 802.1X/MAB, voice VLAN exceptions, or ASIC hardware behavior.
+
+
+## Workbench interface operations inventory
+
+The Workbench device inspector includes an **Interfaces** view for every selected device. It presents interface operational state (including err-disabled), IPv4 address/prefix or switchport access/trunk VLAN settings, the connected simulator peer, and applicable protocol details such as OSPF area, HSRP state, STP role/state, and port-security learning/violation counts. **Inspect in CLI** stages `show interfaces IFACE` in the device console for review; it never executes the command automatically. The inventory is read-only and reflects only the active simulator scenario, not live hardware telemetry.
