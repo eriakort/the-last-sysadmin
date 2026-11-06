@@ -545,6 +545,70 @@ test('incomplete DHCP pools fail cleanly and report server statistics', () => {
   has(server.run('show ip dhcp server statistics').out,'Bindings: 0','statistics show no bindings');
 });
 
+
+test('IOS OSPF forms neighbors, floods multi-hop routes and forwards end to end', () => {
+  const net = { devices: {
+    h1:{id:'h1',kind:'host',ifaces:{eth0:{ip:ip('10.1.1.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.1.1.1')}]},
+    h3:{id:'h3',kind:'host',ifaces:{eth0:{ip:ip('10.3.3.10'),mask:24,up:true}},routes:[{dest:0,mask:0,via:ip('10.3.3.1')}]},
+    r1:{id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.1.1.1'),mask:24,up:true},eth1:{ip:ip('10.0.12.1'),mask:30,up:true}},routes:[]},
+    r2:{id:'r2',kind:'router',ifaces:{eth0:{ip:ip('10.0.12.2'),mask:30,up:true},eth1:{ip:ip('10.0.23.1'),mask:30,up:true}},routes:[]},
+    r3:{id:'r3',kind:'router',ifaces:{eth0:{ip:ip('10.0.23.2'),mask:30,up:true},eth1:{ip:ip('10.3.3.1'),mask:24,up:true}},routes:[]},
+    s1:sw('s1',['p1','p2']),s2:sw('s2',['p1','p2']),s3:sw('s3',['p1','p2']),s4:sw('s4',['p1','p2'])
+  },links:[
+    link('h1','eth0','s1','p1'),link('r1','eth0','s1','p2'),
+    link('r1','eth1','s2','p1'),link('r2','eth0','s2','p2'),
+    link('r2','eth1','s3','p1'),link('r3','eth0','s3','p2'),
+    link('r3','eth1','s4','p1'),link('h3','eth0','s4','p2')
+  ]};
+  const configure=(id,networks,passive=[])=>{
+    const c=makeCLI(net,id);c.run('enable');c.run('configure terminal');eq(c.run('router ospf 10').code,0,'enter OSPF process');
+    c.run('router-id '+({r1:'1.1.1.1',r2:'2.2.2.2',r3:'3.3.3.3'}[id]));
+    for(const n of networks)eq(c.run('network '+n+' area 0').code,0,'add OSPF network');
+    for(const p of passive)eq(c.run('passive-interface '+p).code,0,'set passive interface');
+    c.run('end');return c;
+  };
+  const r1=configure('r1',['10.1.1.0 0.0.0.255','10.0.12.0 0.0.0.3'],['eth0']);
+  configure('r2',['10.0.12.0 0.0.0.3','10.0.23.0 0.0.0.3']);
+  configure('r3',['10.0.23.0 0.0.0.3','10.3.3.0 0.0.0.255'],['eth1']);
+  eq(M.ospfNeighbors(net,'r1').length,1,'R1 forms one adjacency');
+  eq(M.ospfNeighbors(net,'r2').length,2,'R2 forms two adjacencies');
+  eq(M.ospfNeighbors(net,'r3').length,1,'R3 forms one adjacency');
+  eq(C.ospfRoute(net,'r1','10.3.3.0/24').ok,true,'R1 learns remote LAN over two hops');
+  has(r1.run('show ip route').out,'O    10.3.3.0/24','OSPF route appears in route table');
+  has(r1.run('show ip ospf neighbor').out,'2.2.2.2','neighbor router ID displayed');
+  has(r1.run('show ip ospf interface brief').out,'eth0','passive LAN remains advertised');
+  eq(C.reachable(net,'h1','h3').ok,true,'end-to-end traffic uses OSPF routes');
+  has(r1.run('show running-config').out,'router ospf 10','OSPF process persists');
+  has(r1.run('show running-config').out,'passive-interface eth0','passive interface persists');
+});
+
+test('IOS OSPF does not form adjacencies across area mismatch, passive ports or shutdown links', () => {
+  const net={devices:{
+    r1:{id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.0.1'),mask:30,up:true}},routes:[]},
+    r2:{id:'r2',kind:'router',ifaces:{eth0:{ip:ip('10.0.0.2'),mask:30,up:true}},routes:[]},
+    s:sw('s',['p1','p2'])
+  },links:[link('r1','eth0','s','p1'),link('r2','eth0','s','p2')]};
+  const a=makeCLI(net,'r1'),b=makeCLI(net,'r2');
+  for(const [c,area] of [[a,0],[b,1]]){c.run('enable');c.run('configure terminal');c.run('router ospf 1');c.run('network 10.0.0.0 0.0.0.3 area '+area);c.run('end');}
+  eq(M.ospfNeighbors(net,'r1').length,0,'area mismatch prevents adjacency');
+  b.run('configure terminal');b.run('router ospf 1');b.run('network 10.0.0.0 0.0.0.3 area 0');b.run('passive-interface eth0');b.run('end');
+  eq(M.ospfNeighbors(net,'r1').length,0,'passive interface prevents adjacency');
+  b.run('configure terminal');b.run('router ospf 1');b.run('no passive-interface eth0');b.run('end');
+  eq(M.ospfNeighbors(net,'r1').length,1,'matching active interfaces form adjacency');
+  b.run('configure terminal');b.run('interface eth0');b.run('shutdown');b.run('end');
+  eq(M.ospfNeighbors(net,'r1').length,0,'shutdown interface drops adjacency');
+});
+
+test('IOS OSPF rejects invalid networks and supports removing a network statement', () => {
+  const net={devices:{r1:{id:'r1',kind:'router',ifaces:{eth0:{ip:ip('10.0.0.1'),mask:24,up:true}},routes:[]}},links:[]};
+  const c=makeCLI(net,'r1');c.run('enable');c.run('configure terminal');c.run('router ospf 1');
+  eq(c.run('network invalid 0.0.0.255 area 0').code,1,'invalid network rejected');
+  eq(c.run('network 10.0.0.0 0.0.0.255 area 0').code,0,'valid network accepted');
+  has(c.run('show ip ospf interface brief').out,'eth0','interface matched');
+  eq(c.run('no network 10.0.0.0 0.0.0.255 area 0').code,0,'remove network statement');
+  eq(c.run('show ip ospf interface brief').out.includes('eth0'),false,'interface no longer enabled');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

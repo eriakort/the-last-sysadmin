@@ -252,42 +252,57 @@ function deviceOwning(net, addr) {
 /* ---------- OSPF (minimal: interface areas, neighbors, connected-route learning) ---------- */
 function ospfArea(dev, iface) {
   const f = dev.ifaces[iface];
-  return f && f.ospf != null ? f.ospf : null;
+  return f && f.ospf != null ? String(f.ospf) : null;
+}
+function ospfPassive(dev, iface) {
+  return (dev.ospf && dev.ospf.passiveInterfaces || []).includes(iface);
 }
 function ospfNeighbors(net, devId) {
   const dev = net.devices[devId]; if (!dev) return [];
   const out = [];
   for (const ifn in dev.ifaces) {
-    const area = ospfArea(dev, ifn);
-    if (area == null || dev.ifaces[ifn].up === false) continue;
+    const area = ospfArea(dev, ifn), local = dev.ifaces[ifn];
+    if (area == null || local.up === false || local.ip == null || ospfPassive(dev, ifn)) continue;
     for (const [nd, ni] of l2Domain(net, devId, ifn)) {
       if (nd === devId) continue;
-      const peer = net.devices[nd];
-      if (ospfArea(peer, ni) !== area) continue;
-      if (peer.ifaces[ni].up === false || peer.ifaces[ni].ip == null) continue;
-      out.push({ id: nd, iface: ni, area, ip: peer.ifaces[ni].ip, via: ifn });
+      const peer = net.devices[nd], remote = peer.ifaces[ni];
+      if (peer.kind !== 'router' || ospfArea(peer, ni) !== area || remote.up === false || remote.ip == null || ospfPassive(peer, ni)) continue;
+      if (!sameNet(local.ip, remote.ip, local.mask) || local.mask !== remote.mask) continue;
+      out.push({ id: nd, iface: ni, area, ip: remote.ip, via: ifn, state: 'FULL' });
     }
   }
   return out;
 }
-// Connected subnets a device advertises (OSPF-enabled interfaces).
+// Connected subnets enabled for OSPF are advertised, including passive LANs.
 function ospfAdvertised(dev) {
   const ads = [];
   for (const ifn in dev.ifaces) {
     const f = dev.ifaces[ifn];
     if (f.ospf == null || f.up === false || f.ip == null) continue;
-    ads.push({ dest: networkOf(f.ip, f.mask), mask: f.mask, area: f.ospf });
+    ads.push({ dest: networkOf(f.ip, f.mask), mask: f.mask, area: String(f.ospf), iface: ifn });
   }
   return ads;
 }
-// Routes learned from OSPF neighbors: their advertised connected nets, via the neighbor.
+// Flood the single-area link-state view through adjacent routers. Routes retain
+// the first-hop neighbor as their next hop; no dynamic cost/DR election is modeled.
 function ospfLearned(net, devId) {
-  const learned = [];
-  for (const n of ospfNeighbors(net, devId)) {
-    const peer = net.devices[n.id];
+  const learned = [], seen = new Set(), queue = [];
+  for (const n of ospfNeighbors(net, devId)) queue.push({ id: n.id, firstHop: n.ip, area: n.area, depth: 1 });
+  const visited = new Set([devId]);
+  while (queue.length) {
+    const item = queue.shift();
+    if (visited.has(item.id)) continue;
+    visited.add(item.id);
+    const peer = net.devices[item.id];
     for (const ad of ospfAdvertised(peer)) {
-      if (ad.area !== n.area) continue;
-      learned.push({ dest: ad.dest, mask: ad.mask, via: n.ip, proto: 'ospf', from: n.id });
+      if (ad.area !== item.area) continue;
+      const key = ad.dest + '/' + ad.mask;
+      if (seen.has(key) || Object.values(net.devices[devId].ifaces || {}).some(f => f.ip != null && f.up !== false && f.mask === ad.mask && networkOf(f.ip,f.mask) === ad.dest)) continue;
+      seen.add(key);
+      learned.push({ dest: ad.dest, mask: ad.mask, via: item.firstHop, proto: 'ospf', from: item.id, hops: item.depth });
+    }
+    for (const n of ospfNeighbors(net, item.id)) {
+      if (n.area === item.area && !visited.has(n.id)) queue.push({ id: n.id, firstHop: item.firstHop, area: item.area, depth: item.depth + 1 });
     }
   }
   return learned;

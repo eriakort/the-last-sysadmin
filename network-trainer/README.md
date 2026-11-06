@@ -285,6 +285,22 @@ Implemented operational commands include:
 
 These commands mutate the same device and forwarding model as existing missions. Extended ACLs support ordered entries, source/destination wildcard matching, TCP/UDP destination ports, inbound and outbound interface bindings, hit counters, and implicit deny on a bound ACL. Legacy simulator firewall rules remain supported. The IOS-style subset omits time ranges, object groups, fragments, reflexive ACLs and full ICMP type matching; it is router ACL syntax, not ASA policy or NAT syntax. Startup configuration is an explicit snapshot and does not model reboot or NVRAM hardware.
 
+
+## OSPF routing operations
+
+The IOS-style router profile supports an operational, single-area OSPF workflow using the familiar process and network-statement model:
+
+- Enter a process with `router ospf 10`; configure a unique `router-id A.B.C.D`.
+- Enable interfaces by matching their addresses with `network ADDRESS WILDCARD area AREA`. Network statements are evaluated against the current interface addresses; changing an interface address or removing a statement updates participation.
+- Configure `passive-interface IFACE` for user-facing LANs. Passive interfaces still advertise their connected prefix but do not form neighbor adjacencies. Use `no passive-interface IFACE` to re-enable adjacency formation.
+- Verify with `show ip ospf neighbor`, `show ip ospf interface brief`, `show ip protocols`, and `show ip route`. OSPF-learned routes are marked `O`, include the first-hop router and a simplified hop metric, and participate in the shared forwarding engine.
+- The topology model forms adjacencies only across directly connected, active router interfaces with matching IP subnets and areas. It floods same-area connected prefixes through multi-router paths and withdraws learned routes when links, areas, or process configuration no longer support them.
+- OSPF process, router ID, network statements and passive-interface settings are serialized in `show running-config` and saved by `write memory`.
+
+The new **INC-3512 — The remote branch has disappeared from the route table** mission asks learners to restore a three-router OSPF path, advertise both user LANs, keep edge LAN interfaces passive, verify neighbors and learned routes, and prove end-to-end application reachability.
+
+**Fidelity boundary:** this is a deterministic educational OSPF model, not a packet-level OSPF implementation. It does not simulate Hello/Dead timers, DR/BDR election, LSA flooding packets or database aging, SPF scheduling, interface costs/bandwidth, authentication, virtual links, multi-area ABR behavior, route redistribution, or vendor-specific timer tuning. Neighbor state is derived from topology/interface/area compatibility, and the displayed hop metric is instructional rather than a real OSPF cost.
+
 **Fidelity note:** this is an educational IOS-style command profile, not Cisco IOS/IOS XE software or a licensed virtual appliance. Unsupported commands return an error rather than pretending to execute.
 
 ## Cisco ASA-style firewall operations profile
