@@ -35,6 +35,7 @@ function resolveTarget(cli, token) {
 }
 const ok = s => ({ out: s, code: 0 });
 const err = s => ({ out: s, code: 1 });
+const parseVlanId = value => /^\\d{1,4}$/.test(String(value)) && Number(value) >= 1 && Number(value) <= 4094 ? Number(value) : null;
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
@@ -57,8 +58,8 @@ const COMMANDS = {
   vlan: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     if (dev.kind !== 'switch') return err('vlan: this command is only available on switches');
-    const id = Number(a[0]);
-    if (!a[0] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: vlan <1-4094>');
+    const id = parseVlanId(a[0]);
+    if (a.length !== 1 || id == null) return err('usage: vlan <1-4094>');
     dev.vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
     if (!dev.vlans.includes(1)) dev.vlans.unshift(1);
     if (dev.vlans.includes(id)) return ok('VLAN ' + id + ' already exists');
@@ -69,7 +70,7 @@ const COMMANDS = {
     const dev = cli.net.devices[cli.cur];
     if (dev.kind !== 'switch') return err('interface: this command is only available on switches');
     const name = a[0];
-    if (!name || !dev.ifaces[name]) return err('interface: unknown switch port ' + (name || ''));
+    if (a.length !== 1 || !name || !dev.ifaces[name]) return err('interface: unknown switch port ' + (name || ''));
     cli.contextIface = name;
     return ok('configuring ' + name + ' — use switchport commands, then exit');
   },
@@ -79,31 +80,31 @@ const COMMANDS = {
     if (dev.kind !== 'switch') return err('switchport: this command is only available on switches');
     if (!name || !dev.ifaces[name]) return err('switchport: enter interface configuration mode first (interface <port>)');
     const port = dev.ifaces[name], sub = a[0];
-    if (sub === 'mode' && ['access', 'trunk'].includes(a[1])) {
+    if (sub === 'mode' && a.length === 2 && ['access', 'trunk'].includes(a[1])) {
       port.mode = a[1];
       if (a[1] === 'access') { port.accessVlan = Number(port.accessVlan ?? port.vlan ?? 1); port.vlan = port.accessVlan; }
       return ok(name + ': switchport mode ' + a[1]);
     }
     if (sub === 'access' && a[1] === 'vlan') {
-      const id = Number(a[2]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
-      if (!a[2] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: switchport access vlan <1-4094>');
+      const id = parseVlanId(a[2]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (a.length !== 3 || id == null) return err('usage: switchport access vlan <1-4094>');
       if (!vlans.includes(id)) return err('switchport: VLAN ' + id + ' does not exist — create it with vlan ' + id);
       port.mode = 'access'; port.accessVlan = id; port.vlan = id;
       return ok(name + ': access VLAN ' + id);
     }
     if (sub === 'trunk' && a[1] === 'native' && a[2] === 'vlan') {
-      const id = Number(a[3]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
-      if (!a[3] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: switchport trunk native vlan <1-4094>');
+      const id = parseVlanId(a[3]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (a.length !== 4 || id == null) return err('usage: switchport trunk native vlan <1-4094>');
       if (!vlans.includes(id)) return err('switchport: VLAN ' + id + ' does not exist — create it with vlan ' + id);
       port.mode = 'trunk'; port.nativeVlan = id;
       return ok(name + ': trunk native VLAN ' + id);
     }
     if (sub === 'trunk' && a[1] === 'allowed' && a[2] === 'vlan') {
       const raw = a[3];
-      if (!raw) return err('usage: switchport trunk allowed vlan <all|10,20,...>');
+      if (a.length !== 4 || !raw) return err('usage: switchport trunk allowed vlan <all|10,20,...>');
       if (raw === 'all') { delete port.allowedVlans; port.mode = 'trunk'; return ok(name + ': all configured VLANs allowed on trunk'); }
-      const ids = raw.split(',').map(Number), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
-      if (!ids.length || ids.some(id => !Number.isInteger(id) || id < 1 || id > 4094)) return err('switchport: invalid VLAN list');
+      const ids = raw.split(',').map(parseVlanId), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (!ids.length || ids.some(id => id == null)) return err('switchport: invalid VLAN list');
       const missing = ids.find(id => !vlans.includes(id));
       if (missing != null) return err('switchport: VLAN ' + missing + ' does not exist — create it with vlan ' + missing);
       port.mode = 'trunk'; port.allowedVlans = [...new Set(ids)].sort((x, y) => x - y);
