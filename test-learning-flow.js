@@ -827,12 +827,12 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await checkLearningStages('Check the account', 'gid', ['id sam', 'uid=', 'groups=']);
   await proveAnswerMission('Check the account', 'Set up key-based login', 'uid', [
     'id sam'
-  ], '1003', 'Correct. uid= identifies the numeric user ID');
+  ], '1003', 'Correct. uid= is followed by the numeric user ID');
 
   await checkLearningStages('Set up key-based login', 'private', ['ssh-keygen -t ed25519', '.pub', 'private key']);
   await proveMission('Set up key-based login', 'Audit who can log in', 'public', [
     'ssh-keygen -t ed25519 -C "halcyon admin"'
-  ], 'Correct. Install the public key; keep the private key secret');
+  ], 'Correct. Install the public .pub key and keep the private key secret');
 
   await checkLearningStages('Audit who can log in', 'start', ['grep -c', '/bin/bash$', 'nologin']);
   await proveAnswerMission('Audit who can log in', 'Close a departed account', 'end', [
