@@ -1078,13 +1078,13 @@ const chapters = [
     ticket: { id: 'INC-1052', from: 'Marcus · Finance', priority: 'P2', symptom: "My machine got reimaged this morning and now I can't reach the file server (10.0.1.5). Everyone else on the floor is fine." },
     diagnose: { q: 'Running `ip addr` on h1 shows 10.0.9.10/24; the server is 10.0.1.5. Why can\'t they talk?', options: ['they sit in two different /24 networks', 'the switch only has two ports', 'the server stopped answering'], answer: 0, because: '10.0.9.x and 10.0.1.x are separate /24 networks — a switch won\'t bridge between them. Re-address h1 into 10.0.1.0/24.' },
     console: 'h1',
-    hints: ['`ip addr` shows h1 is in the wrong network.', '10.0.9.x and 10.0.1.x are different /24 networks — they can\'t talk directly.', 'Re-address: `ip replacer add 10.0.1.10/24 dev eth0`.'],
+    hints: ['`ip addr` shows h1 is in the wrong network.', '10.0.9.x and 10.0.1.x are different /24 networks — they can\'t talk directly.', 'Re-address: `ip addr replace 10.0.1.10/24 dev eth0`.'],
     build: () => ({
       devices: { h1: H('h1', '10.0.9.10', 24), srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['h1', 'ip replacer add 10.0.1.10/24 dev eth0']]
+    solution: [['h1', 'ip addr replace 10.0.1.10/24 dev eth0']]
   },
 
   { id: 'find-the-gateway', chapter: 'Routing',
@@ -1180,13 +1180,13 @@ const chapters = [
     ticket: { id: 'INC-1103', from: 'Lena · Design team', priority: 'P3', symptom: "Weird one: I can reach most machines on my floor, but not the asset server at 10.0.1.200 — and it's supposedly on the same network as me. Some hosts work, that one never does." },
     diagnose: { q: '`ip addr` shows h1 is 10.0.1.10/25. The server is 10.0.1.200. Why does .200 specifically fail when nearby addresses work?', options: ['a /25 splits the range, putting .10 and .200 in different halves', 'the server is powered off', 'h1 is missing a default gateway'], answer: 0, because: 'A /25 divides 10.0.1.0 into .0–.127 and .128–.255. h1 (.10) and the server (.200) land in different halves, so they look non-local to each other. Widen h1 to /24.' },
     console: 'h1',
-    hints: ['`ip addr` shows h1 is 10.0.1.10/25 — a /25, not a /24.', 'With /25, .10 is in 10.0.1.0/25 and .200 is in 10.0.1.128/25 — different networks.', 'Run `ip replacer add 10.0.1.10/24 dev eth0`.'],
+    hints: ['`ip addr` shows h1 is 10.0.1.10/25 — a /25, not a /24.', 'With /25, .10 is in 10.0.1.0/25 and .200 is in 10.0.1.128/25 — different networks.', 'Run `ip addr replace 10.0.1.10/24 dev eth0`.'],
     build: () => ({
       devices: { h1: H('h1', '10.0.1.10', 25), srv: SRV('srv', '10.0.1.200', 24, null, { 445: 'smb' }), sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]) },
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'subnet_correct', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['h1', 'ip replacer add 10.0.1.10/24 dev eth0']]
+    solution: [['h1', 'ip addr replace 10.0.1.10/24 dev eth0']]
   },
 
   { id: 'default-deny', chapter: 'Network security',
@@ -1378,7 +1378,7 @@ const chapters = [
     ],
     solution: [
       ['h1', 'fault subnet'], ['h1', 'fault route'], ['h1', 'fault dns'],
-      ['h1', 'ip replacer add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip addr replace 10.0.1.10/24 dev eth0'],
       ['h1', 'ip route add default via 10.0.1.1'],
       ['h1', 'resolvectl dns eth0 10.0.2.53']
     ]
@@ -1510,7 +1510,7 @@ const chapters = [
     ],
     solution: [
       ['h1', 'fault subnet'], ['h1', 'fault gateway'],
-      ['h1', 'ip replacer add 10.0.1.10/24 dev eth0'],
+      ['h1', 'ip addr replace 10.0.1.10/24 dev eth0'],
       ['h1', 'ip route del default'],
       ['h1', 'ip route add default via 10.0.1.1']
     ]
