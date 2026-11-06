@@ -729,7 +729,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
     learnMacOnSegment(net, cur, eg);
 
-    const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === targetIp && net.devices[d].ifaces[i].up !== false);
+    const ep = l2Domain(net, cur, eg).find(([d, i]) => (net.devices[d].ifaces[i].ip === targetIp || ownsVirtualIp(net, d, targetIp)) && net.devices[d].ifaces[i].up !== false);
     if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
     const [nd, ni] = ep;
     if (aclDecision(net.devices[nd], 'in', ni, pkt) === 'deny') return { ok: false, path: path.concat(nd), reason: 'blocked by ACL', at: nd };
