@@ -226,6 +226,36 @@ const chapters = [
     solution: [['fw', 'iptables -A INPUT -i eth1 -s 10.0.2.10 -d 10.0.3.0/24 -j DROP']]
   },
 
+
+  { id: 'ios-acl-order-incident', chapter: 'Cisco firewall operations',
+    title: 'Restore HTTPS after an ACL change',
+    story: 'Finance users cannot reach the portal after a router policy update. The route and server are healthy. An inbound named ACL is attached to the office interface, but a broad deny is positioned above the intended HTTPS permit.',
+    objective: 'Correct ACL order so office users can reach HTTPS (tcp/443), while SSH (tcp/22) and other unmatched traffic remain blocked. Verify both paths and save the configuration.',
+    ticket: { id: 'INC-1184', from: 'NOC · application availability', priority: 'P1', symptom: 'Finance users cannot open 10.0.2.10 over HTTPS. The outage began after a firewall policy change. SSH must remain restricted; restore only the required service.' },
+    diagnose: { q: 'The interface is up and the route exists. show access-lists FINANCE-IN shows sequence 10 denies all IP traffic, followed by sequence 20 permitting HTTPS. What is the fault?', options: ['First-match processing means sequence 10 shadows the HTTPS permit', 'The HTTPS server needs a gateway change', 'The ACL must be attached outbound on the server interface'], answer: 0, because: 'IOS ACLs are evaluated top-down. The broad deny matches first, so the later HTTPS permit is never reached. Fix the order narrowly; do not remove the security policy.' },
+    console: 'r1',
+    hints: ['Inspect show access-lists FINANCE-IN and show ip interface eth0 before changing anything.', 'Remove the broad deny at sequence 10, then add the HTTPS permit before the deny-all rule.', 'Use configure terminal, ip access-list extended FINANCE-IN, no 10, then 10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443 and 20 deny ip any any. Verify HTTPS and SSH, then write memory.'],
+    build: () => {
+      const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) });
+      fw.acls = [
+        { aclName: 'FINANCE-IN', seq: 10, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null },
+        { aclName: 'FINANCE-IN', seq: 20, action: 'allow', proto: 'tcp', src: ip('10.0.1.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 443 }
+      ];
+      fw.ifaces.eth0.accessGroups = { in: 'FINANCE-IN' };
+      return { devices: {
+        finance: H('finance', '10.0.1.10', 24, '10.0.1.1'),
+        app: SRV('app', '10.0.2.10', 24, '10.0.2.1', { 443: 'https', 22: 'ssh', 80: 'http' }),
+        r1: fw, sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [L('finance', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('app', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')] };
+    },
+    success: [
+      { type: 'reachable', a: 'finance', b: 'app', proto: 'tcp', dport: 443 },
+      { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 80 }
+    ],
+    solution: [['r1', 'show access-lists FINANCE-IN'], ['r1', 'show ip interface eth0'], ['r1', 'configure terminal'], ['r1', 'ip access-list extended FINANCE-IN'], ['r1', 'no 10'], ['r1', '10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443'], ['r1', '20 deny ip any any'], ['r1', 'end'], ['finance', 'ping app'], ['r1', 'write memory']]
+  },
+
   { id: 'renew-the-lease', chapter: 'DHCP',
     title: 'No address, no network',
     story: 'h1 is stuck with a leftover static address (10.0.9.50) from a different site and can\'t reach anything. This office LAN runs a DHCP server on the router r1 that hands out addresses in 10.0.1.0/24, along with the gateway and DNS. The app server is at 10.0.2.10, across r1.',
