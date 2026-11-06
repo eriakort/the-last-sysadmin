@@ -39,7 +39,7 @@ const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >=
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosMode = 'user'; } this.cur = id; return this; } };
+  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
   cli.run = line => runCisco(cli, String(line).trim());
   return cli;
 }
@@ -223,10 +223,242 @@ function ciscoShow(cli, words) {
   }
   return err('% Invalid input detected at show command — supported: show version, show running-config, show startup-config, show ip interface brief, show ip route, show vlan brief, show interfaces status|trunk, show mac address-table dynamic, show spanning-tree');
 }
+/* ---------------- Cisco ASA-style firewall operations ----------------
+ * A separate, intentionally bounded ASA command profile. It shares the
+ * packet engine but does not accept IOS router ACL command syntax.
+ */
+function asaPhysical(dev, nameif) {
+  return Object.keys(dev.ifaces || {}).find(n => dev.ifaces[n].nameif === nameif) || null;
+}
+function asaAddress(words, at) {
+  if (words[at] === 'any') return { value: null, wildcard: null, next: at + 1 };
+  if (words[at] === 'host') {
+    const value = parseIPv4(words[at + 1]);
+    return value == null ? null : { value, wildcard: 0, next: at + 2 };
+  }
+  const value = parseIPv4(words[at]), mask = parseIPv4(words[at + 1]);
+  const prefix = ciscoMaskPrefix(words[at + 1]);
+  if (value == null || mask == null || prefix == null) return null;
+  return { value: M.networkOf(value, prefix), wildcard: (~mask) >>> 0, next: at + 2 };
+}
+function asaAclEntry(words, name, seq) {
+  let at = 0;
+  if (words[at] === 'line') { if (!/^\d+$/.test(words[at + 1] || '')) return null; seq = Number(words[at + 1]); at += 2; }
+  if (words[at++] !== 'extended') return null;
+  const action = words[at++], proto = words[at++];
+  if (!['permit','deny'].includes(action) || !['ip','tcp','udp','icmp'].includes(proto)) return null;
+  const src = asaAddress(words, at); if (!src) return null; at = src.next;
+  const dst = asaAddress(words, at); if (!dst) return null; at = dst.next;
+  let dport = null;
+  if (words[at] === 'eq' && ['tcp','udp'].includes(proto)) {
+    const services = { www: 80, http: 80, https: 443, ssh: 22, domain: 53, smtp: 25 };
+    dport = services[words[at + 1]] || Number(words[at + 1]);
+    if (!Number.isInteger(dport) || dport < 1 || dport > 65535 || at + 2 !== words.length) return null;
+    at += 2;
+  }
+  if (at !== words.length) return null;
+  return { aclName: name, seq, action: action === 'deny' ? 'deny' : 'allow', proto, src: src.value, srcWildcard: src.wildcard, dst: dst.value, dstWildcard: dst.wildcard, dport };
+}
+function asaRunConfig(dev) {
+  const lines = ['hostname ' + (dev.hostname || dev.id || 'ASA'), '!', 'interface configuration'];
+  for (const [name, p] of Object.entries(dev.ifaces || {})) {
+    lines.push('interface ' + name);
+    if (p.nameif) lines.push(' nameif ' + p.nameif);
+    if (p.securityLevel != null) lines.push(' security-level ' + p.securityLevel);
+    if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
+    lines.push(p.up === false ? ' shutdown' : ' no shutdown');
+  }
+  for (const name of [...new Set((dev.acls || []).map(r => r.aclName).filter(Boolean))]) {
+    for (const r of (dev.acls || []).filter(x => x.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))) {
+      const address = (v,w) => v == null ? 'any' : (w === 0 ? 'host ' + M.ipStr(v) : M.ipStr(v) + ' ' + M.ipStr((~w) >>> 0));
+      lines.push('access-list ' + name + ' extended ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto + ' ' +
+        address(r.src,r.srcWildcard) + ' ' + address(r.dst,r.dstWildcard) + (r.dport == null ? '' : ' eq ' + r.dport));
+    }
+  }
+  for (const [name,p] of Object.entries(dev.ifaces || {})) if (p.accessGroups && p.accessGroups.in)
+    lines.push('access-group ' + p.accessGroups.in + ' in interface ' + (p.nameif || name));
+  for (const [name,obj] of Object.entries(dev.asaObjects || {})) {
+    lines.push('object network ' + name);
+    if (obj.host != null) lines.push(' host ' + M.ipStr(obj.host));
+    for (const r of dev.nat || []) if (r.asaObject === name)
+      lines.push(' nat (' + r.insideName + ',' + r.outsideName + ') static interface service ' + r.proto + ' ' + r.publicPort + ' ' + r.privatePort);
+  }
+  for (const r of dev.routes || []) lines.push('route ' + r.iface + ' ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
+  return lines.join('\n') + '\n';
+}
+function asaShow(cli, words) {
+  const dev = cli.net.devices[cli.cur], q = words.join(' ').toLowerCase();
+  if (q === 'version') return ok('Cisco Adaptive Security Appliance Software (simulated command profile)\nDevice: ' + (dev.hostname || dev.id) + '\nModel: ASA-style firewall operations\nThis is an educational command subset, not Cisco ASA software.');
+  if (q === 'running-config' || q === 'run') return ok('Building configuration...\n!\n' + asaRunConfig(dev) + 'end');
+  if (q === 'interface ip brief' || q === 'interface') {
+    return ok('Interface              IP-Address      Nameif     Security-level  Status\n' +
+      Object.entries(dev.ifaces).map(([n,p]) => n.padEnd(23) + (p.ip == null ? 'unassigned' : M.ipStr(p.ip)).padEnd(16) +
+        String(p.nameif || '--').padEnd(11) + String(p.securityLevel ?? 0).padEnd(17) + (p.up === false ? 'administratively down' : 'up')).join('\n'));
+  }
+  if (q === 'access-list' || q.startsWith('access-list ')) {
+    const wanted = words[1] && words[1].toUpperCase();
+    const names = [...new Set((dev.acls || []).filter(r => r.aclName && (!wanted || r.aclName === wanted)).map(r => r.aclName))];
+    if (wanted && !names.length) return ok('% No access lists found');
+    return ok(names.map(name => 'access-list ' + name + '\n' +
+      (dev.acls || []).filter(r => r.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))
+        .map(r => ' ' + (r.seq || 10) + ': ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto +
+          ' (' + (r.hits || 0) + matchesText(r.hits) + ')').join('\n')).join('\n') || '% No access lists configured');
+  }
+  if (q === 'access-group') {
+    const rows = Object.entries(dev.ifaces).filter(([,p])=>p.accessGroups && p.accessGroups.in)
+      .map(([n,p])=>p.accessGroups.in + ' in interface ' + (p.nameif || n));
+    return ok(rows.join('\n') || '(no access groups applied)');
+  }
+  if (q === 'nat' || q === 'nat detail') {
+    const rows = (dev.nat || []).filter(r=>r.asaObject).map(r =>
+      '1 (inside) to (outside) source static ' + r.asaObject + ' interface service ' + r.proto + ' ' + r.publicPort + ' ' + r.privatePort);
+    return ok(rows.join('\n') || '(no ASA object NAT rules configured)');
+  }
+  if (q === 'route' || q === 'route detail') {
+    const rows = [];
+    for (const [n,p] of Object.entries(dev.ifaces)) if (p.ip != null && p.up !== false)
+      rows.push('C ' + M.ipStr(M.networkOf(p.ip,p.mask)) + '/' + p.mask + ' is directly connected, ' + (p.nameif || n));
+    for (const r of dev.routes || []) rows.push('S ' + M.ipStr(r.dest) + '/' + r.mask + ' via ' + M.ipStr(r.via));
+    return ok(rows.join('\n') || '(no routes)');
+  }
+  return err('% Invalid show command — supported: show version, show running-config, show interface ip brief, show access-list, show access-group, show nat, show route');
+}
+function matchesText(hits) { return hits === 1 ? ' match' : ' matches'; }
+function runASA(cli, line) {
+  const raw = line.trim(), words = raw.toLowerCase().split(/\s+/), dev = cli.net.devices[cli.cur];
+  if (!raw) return ok('');
+  if (words[0] === 'enable') { cli.asaMode = 'privileged'; return ok(''); }
+  if (words[0] === 'disable') { cli.asaMode = 'user'; return ok(''); }
+  if (words[0] === 'configure' && words[1] === 'terminal') {
+    if (cli.asaMode === 'user') return err('% Enable mode required');
+    cli.asaMode = 'config'; return ok('Enter configuration commands, one per line.');
+  }
+  if (words[0] === 'end') { cli.asaMode = 'privileged'; cli.asaIface = null; cli.asaObject = null; return ok(''); }
+  if (words[0] === 'exit') {
+    if (cli.asaMode === 'interface' || cli.asaMode === 'object') { cli.asaMode = 'config'; cli.asaIface = null; cli.asaObject = null; return ok(''); }
+    if (cli.asaMode === 'config') { cli.asaMode = 'privileged'; return ok(''); }
+    if (cli.asaMode === 'privileged') { cli.asaMode = 'user'; return ok(''); }
+  }
+  if (words[0] === 'show') {
+    const q = words.slice(1);
+    if (q[0] === 'access-list' || q[0] === 'access-group' || q[0] === 'nat' || q[0] === 'route' || q[0] === 'interface' || q[0] === 'version' || q[0] === 'running-config' || q[0] === 'run')
+      return asaShow(cli,q);
+  }
+  if (words[0] === 'packet-tracer' && words[1] === 'input') {
+    if (words.length !== 9 || !['tcp','udp','icmp'].includes(words[3])) return err('usage: packet-tracer input <nameif> tcp|udp|icmp <src-ip> <src-port> <dst-ip> <dst-port>');
+    const phys = asaPhysical(dev, words[2]), src = parseIPv4(words[4]), dst = parseIPv4(words[6]);
+    const sport = Number(words[5]), dport = Number(words[7]);
+    if (!phys || src == null || dst == null || !Number.isInteger(sport) || !Number.isInteger(dport) || sport < 0 || sport > 65535 || dport < 0 || dport > 65535)
+      return err('% Invalid packet-tracer interface, address, or port');
+    const sourceDev = M.deviceOwning(cli.net, src);
+    if (!sourceDev || !M.l2Domain(cli.net, cli.cur, phys).some(pair=>pair[0]===sourceDev))
+      return err('% Source host is not present on the selected ingress segment');
+    const trace = M.forward(cli.net, sourceDev, { src, dst, proto: words[3], sport, dport });
+    return ok('Phase: ACCESS-LIST / NAT / ROUTE\nInput interface: ' + words[2] + '\n' +
+      'Result: ' + (trace.ok ? 'ALLOW' : 'DROP') + '\nReason: ' + trace.reason + '\nPath: ' + trace.path.join(' -> '));
+  }
+  if (words[0] === 'write' && words[1] === 'memory') {
+    if (cli.asaMode === 'user') return err('% Enable mode required');
+    dev.startupConfig = asaRunConfig(dev); return ok('Cryptochecksum: simulated\n[OK]');
+  }
+  if (cli.asaMode === 'config') {
+    if (words[0] === 'hostname' && words[1]) { dev.hostname = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'interface' && words[1]) {
+      const name = ciscoIface(dev, raw.split(/\s+/)[1]);
+      if (!name) return err('% Invalid interface');
+      cli.asaIface = name; cli.asaMode = 'interface'; return ok('Interface configuration mode');
+    }
+    if (words[0] === 'access-list' && words[1]) {
+      const name = words[1].toUpperCase(); let at = 2;
+      let seq = Math.max(0,...(dev.acls || []).filter(r=>r.aclName===name).map(r=>r.seq || 0)) + 10;
+      const entry = asaAclEntry(words.slice(at),name,seq);
+      if (!entry) return err('% Invalid ASA ACL — use access-list NAME extended permit|deny ip|tcp|udp|icmp source destination [eq port]');
+      dev.acls = dev.acls || [];
+      if (dev.acls.some(r=>r.aclName===name && r.seq===entry.seq)) return err('% ACL line already exists');
+      dev.acls.push(entry); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'access-list' && words[2]) {
+      dev.acls = (dev.acls || []).filter(r=>r.aclName !== words[2].toUpperCase()); return ok('');
+    }
+    if (words[0] === 'access-group' && words.length === 6 && words[2] === 'in' && words[3] === 'interface') {
+      const name = words[1].toUpperCase(), phys = asaPhysical(dev, words[4]);
+      if (!phys || !(dev.acls || []).some(r=>r.aclName===name)) return err('% ACL or interface nameif not found');
+      dev.ifaces[phys].accessGroups = dev.ifaces[phys].accessGroups || {};
+      dev.ifaces[phys].accessGroups.in = name; return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'access-group' && words[2] && words[3] === 'in' && words[4] === 'interface') {
+      const phys = asaPhysical(dev, words[5]);
+      if (!phys) return err('% Interface nameif not found');
+      const groups = dev.ifaces[phys].accessGroups || {};
+      if (groups.in === words[2].toUpperCase()) delete groups.in;
+      return ok('');
+    }
+    if (words[0] === 'object' && words[1] === 'network' && words[2]) {
+      dev.asaObjects = dev.asaObjects || {}; dev.asaObjects[words[2].toUpperCase()] = dev.asaObjects[words[2].toUpperCase()] || {};
+      cli.asaObject = words[2].toUpperCase(); cli.asaMode = 'object'; return ok('Network object configuration mode');
+    }
+    if (words[0] === 'route') {
+      return err('% Static route configuration is not enabled in this ASA simulator profile yet');
+    }
+    return err('% Invalid input in ASA global configuration mode');
+  }
+  if (cli.asaMode === 'interface') {
+    const p = dev.ifaces[cli.asaIface]; if (!p) return err('% Interface context no longer exists');
+    if (words[0] === 'nameif' && words[1] && words.length === 2) {
+      if (Object.entries(dev.ifaces).some(([n,x])=>n!==cli.asaIface && x.nameif===words[1])) return err('% nameif is already assigned');
+      p.nameif = words[1]; return ok('');
+    }
+    if (words[0] === 'security-level' && words.length === 2) {
+      const n = Number(words[1]); if (!Number.isInteger(n) || n < 0 || n > 100) return err('% Security level must be 0–100');
+      p.securityLevel = n; return ok('');
+    }
+    if (words[0] === 'ip' && words[1] === 'address' && words.length === 4) {
+      const address = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]);
+      if (address == null || prefix == null) return err('% Invalid IP address or subnet mask');
+      for (const [id,other] of Object.entries(cli.net.devices)) for (const [n,f] of Object.entries(other.ifaces || {}))
+        if (f.up !== false && f.ip === address && !(id===cli.cur && n===cli.asaIface)) return err('% Address already in use');
+      p.ip = address; p.mask = prefix; return ok('');
+    }
+    if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'shutdown') { p.up = false; return ok(''); }
+    if (words[0] === 'no' && words[1] === 'shutdown') { p.up = true; return ok(''); }
+    return err('% Invalid ASA interface command');
+  }
+  if (cli.asaMode === 'object') {
+    const obj = dev.asaObjects[cli.asaObject];
+    if (words[0] === 'host' && words.length === 2) {
+      const host = parseIPv4(words[1]); if (host == null) return err('% Invalid host address');
+      obj.host = host; return ok('');
+    }
+    if (words[0] === 'subnet' && words.length === 3) {
+      const net = parseIPv4(words[1]), prefix = ciscoMaskPrefix(words[2]);
+      if (net == null || prefix == null) return err('% Invalid subnet');
+      obj.network = { net: M.networkOf(net,prefix), prefix }; return ok('');
+    }
+    if (words[0] === 'nat' && words.length === 9 && words[1].startsWith('(') && words[2] === 'static' && words[3] === 'interface' && words[4] === 'service' && words[5] === 'tcp') {
+      const pair = words[1].slice(1,-1).split(','), inside = asaPhysical(dev,pair[0]), outside = asaPhysical(dev,pair[1]);
+      const publicPort = Number(words[6]), privatePort = Number(words[7]);
+      if (pair.length !== 2 || !inside || !outside || obj.host == null || publicPort !== privatePort ||
+          !Number.isInteger(publicPort) || publicPort < 1 || publicPort > 65535) return err('% Supported static PAT requires known nameifs, a host object, TCP, and identical public/private ports');
+      dev.nat = (dev.nat || []).filter(r=>r.asaObject!==cli.asaObject);
+      dev.nat.push({kind:'dnat',oif:outside,toIp:obj.host,proto:'tcp',dport:publicPort,asaObject:cli.asaObject,insideName:pair[0],outsideName:pair[1],publicPort,privatePort});
+      return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'nat') {
+      dev.nat = (dev.nat || []).filter(r=>r.asaObject!==cli.asaObject); return ok('');
+    }
+    return err('% Invalid network object command — use host, subnet, or nat (inside,outside) static interface service tcp <port> <port>');
+  }
+  if (words[0] === 'ping' || words[0] === 'traceroute' || words[0] === 'nmap' || words[0] === 'help' || words[0] === 'man')
+    return dispatch(cli, raw);
+  return err('% Invalid ASA command — use show, packet-tracer, configure terminal, or help');
+}
+
 function runCisco(cli, line) {
   if (!line) return ok('');
   const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
   if (!dev) return dispatch(cli, raw);
+  if (dev.firewallOS === 'asa') return runASA(cli, raw);
   if (lower === 'enable' || lower === 'en') {
     if (cli.iosMode === 'user') { cli.iosMode = 'privileged'; return ok(''); }
     return ok('% Already in privileged EXEC mode');
@@ -784,6 +1016,7 @@ const MAN = {
   ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
   traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
   'access-list': 'Cisco IOS extended ACLs: enable, configure terminal, ip access-list extended NAME, then [sequence] permit|deny ip|tcp|udp|icmp SOURCE DESTINATION [eq PORT]. Address forms: any, host IP, or IP WILDCARD. Apply under interface mode with ip access-group NAME in|out. Verify with show access-lists and show ip interface IF. Rules are first-match-wins; unmatched traffic is implicitly denied. Remove a sequence with no SEQUENCE. IOS-style router ACL subset; not ASA syntax.',
+  asa: 'Cisco ASA-style firewall profile (separate from IOS router ACLs). Enable, configure terminal; interface eth0; nameif outside; security-level 0; access-list OUTSIDE_IN extended permit tcp any host IP eq 443; access-group OUTSIDE_IN in interface outside. Use object network WEB; host IP; nat (inside,outside) static interface service tcp 443 443. Verify with show access-list, show access-group, show nat, show interface ip brief, packet-tracer input outside tcp SRC SPORT DST DPORT. This is a bounded educational command profile, not Cisco ASA software.',
   iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic (rules match top-down, first match wins).\n  iptables -t nat -A PREROUTING -i IF -p tcp --dport N -j DNAT --to-destination IP — port-forward inbound traffic to an inside host.\n  iptables -t nat -A POSTROUTING -o IF -s CIDR -j MASQUERADE — share the outside IP for an inside network (source NAT).\n  iptables -t nat -L — list NAT rules.',
   nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
   tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
