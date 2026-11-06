@@ -623,7 +623,7 @@ test('BGP prefix-lists filter advertisements and received routes per neighbor di
   eq(edge.run('bgp neighbor 203.0.113.1 prefix-list CUSTOMER-OUT out').code,0,'attach outbound policy');
   eq(C.bgpRoute(net,'provider','198.51.100.0/24').ok,true,'public route remains advertised');
   eq(C.bgpRouteAbsent(net,'provider','10.10.10.0/24').ok,true,'private route withdrawn');
-  eq(isp.run('bgp prefix-list PROVIDER-IN permit 192.0.2.0/24').code,0,'permit provider service prefix');
+  eq(isp.run('bgp prefix-list PROVIDER-IN permit 198.51.100.0/24').code,0,'permit provider service prefix');
   eq(isp.run('bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in').code,0,'attach inbound policy');
   eq(C.bgpRoute(net,'customer','192.0.2.0/24').ok,true,'permitted provider route received');
   has(edge.run('show ip bgp summary').out,'Established','summary reports session state');
