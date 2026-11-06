@@ -869,9 +869,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   ], 'Correct. No diff output means');
 
   await checkLearningStages('Confirm it keeps happening', 'status', ['systemctl list-timers', 'next trigger', 'UNIT']);
-  await proveMission('Confirm it keeps happening', 'Final review: the filesystem', 'timers', [
+  await proveAnswerMission('Confirm it keeps happening', 'Final review: the filesystem', 'timers', [
     'systemctl list-timers'
-  ], 'Correct. list-timers shows scheduled units');
+  ], 'halcyon-backup.timer', 'Correct. list-timers shows scheduled units');
 
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
