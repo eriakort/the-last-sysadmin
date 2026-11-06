@@ -752,6 +752,46 @@ const chapters = [
     ]
   }
 
+,
+  { id: 'asa-object-group-vendor-access', chapter: 'Cisco ASA firewall operations',
+    title: 'Restrict the vendor portal to approved partners',
+    story: 'A vendor portal is reachable from the internet. Security has approved one partner subnet for HTTPS only. The current policy is difficult to maintain because addresses and services are repeated in individual rules.',
+    objective: 'Build reusable network and service object-groups, use them in an ordered inbound ACL, preserve diagnostic ICMP, deny unapproved services, verify hit counters, and save the policy.',
+    ticket: { id: 'SEC-3117', from: 'Security operations · access review', priority: 'P1', symptom: 'The vendor portal must remain available to the approved partner subnet, but the guest network must not reach it and partners must not use SSH or HTTP. Make the policy maintainable so approved server and service members can be updated centrally.' },
+    diagnose: { q: 'What is the safest way to make this policy reusable without broadening access?', options: ['Use separate network object-groups for approved sources and portal servers, plus a TCP/443 service group', 'Permit any source to any destination and rely on the server firewall', 'Create one permit rule per address and leave the old broad rule in place'], answer: 0, because: 'Object-groups centralise related addresses and services. The ACL still applies first-match ordering and an implicit deny, so a precise group-based permit is easier to audit than broad or duplicated rules.' },
+    console: 'asa',
+    hints: ['Enter enable and configure terminal. Set eth0 to nameif outside / security-level 0 and eth1 to nameif inside / security-level 100. Create object-group network APPROVED_PARTNERS with network-object 203.0.113.0 255.255.255.240, and PORTAL_SERVERS with network-object host 10.0.2.10.', 'Create object-group service PORTAL_TCP and add service-object tcp destination eq 443. Exit each group context before creating the ACL.', 'Create PARTNER_IN line 10 to permit tcp between the two network groups using PORTAL_TCP, then line 20 to permit icmp any any. Apply it inbound on outside. Test partner HTTPS, guest HTTPS, partner SSH and HTTP; inspect counters and save.'],
+    build: () => ({
+      devices: {
+        partner: H('partner', '203.0.113.10', 24, '203.0.113.1'),
+        guest: H('guest', '203.0.113.50', 24, '203.0.113.1'),
+        portal: SRV('portal', '10.0.2.10', 24, '10.0.2.1', { 443: 'https', 80: 'http', 22: 'ssh' }),
+        asa: Object.assign(R('asa', 'firewall', { eth0: iface('203.0.113.1', 24), eth1: iface('10.0.2.1', 24) }), { firewallOS: 'asa' }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('partner', 'eth0', 'sw1', 'p1'), L('guest', 'eth0', 'sw1', 'p2'), L('asa', 'eth0', 'sw1', 'p3'), L('portal', 'eth0', 'sw2', 'p1'), L('asa', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [
+      { type: 'reachable', a: 'partner', b: 'portal' },
+      { type: 'acl_blocks', src: 'guest', dst: 'portal', proto: 'tcp', dport: 443 },
+      { type: 'acl_blocks', src: 'partner', dst: 'portal', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'partner', dst: 'portal', proto: 'tcp', dport: 80 }
+    ],
+    solution: [
+      ['asa','enable'], ['asa','configure terminal'],
+      ['asa','interface eth0'], ['asa','nameif outside'], ['asa','security-level 0'], ['asa','exit'],
+      ['asa','interface eth1'], ['asa','nameif inside'], ['asa','security-level 100'], ['asa','exit'],
+      ['asa','object-group network APPROVED_PARTNERS'], ['asa','network-object 203.0.113.0 255.255.255.240'], ['asa','exit'],
+      ['asa','object-group network PORTAL_SERVERS'], ['asa','network-object host 10.0.2.10'], ['asa','exit'],
+      ['asa','object-group service PORTAL_TCP'], ['asa','service-object tcp destination eq 443'], ['asa','exit'],
+      ['asa','access-list PARTNER_IN line 10 extended permit tcp object-group APPROVED_PARTNERS object-group PORTAL_SERVERS object-group PORTAL_TCP'],
+      ['asa','access-list PARTNER_IN line 20 extended permit icmp any any'],
+      ['asa','access-group PARTNER_IN in interface outside'], ['asa','end'],
+      ['asa','ping portal'], ['asa','show object-group'], ['asa','show access-list PARTNER_IN'],
+      ['asa','clear access-list PARTNER_IN'], ['asa','show access-list PARTNER_IN'], ['asa','write memory']
+    ]
+  }
 ];
 
 module.exports = { chapters };
