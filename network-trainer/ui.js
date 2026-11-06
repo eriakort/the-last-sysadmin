@@ -30,7 +30,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '' }; } catch (e) { return { done: {}, xp: 0, theme: '' }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [] }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [] }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -268,6 +268,7 @@ function doCheck() {
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
+      addJournalEntry({ type: 'ticket resolved', device: SEL || '', text: `Resolved ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
       msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
@@ -445,10 +446,46 @@ function wireConfig() {
   const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); const dv = g('.adst'); if (dv.includes('/')) rule.dstnet = M.cidr(dv); else if (/^\d+\.\d+\.\d+\.\d+$/.test(dv)) rule.dst = M.ip(dv); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
   document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
 }
+function addJournalEntry(entry) {
+  PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
+  PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
+  PROG.journal = PROG.journal.slice(0, 250); saveProg();
+}
+function openJournal() {
+  const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide"><div class="modal-head"><div><div class="eyebrow">Personal engineering record</div><h2>Work journal</h2><p class="dim">Your commands, investigation notes and ticket outcomes stay in this browser.</p></div><button class="btn" id="exportJournal">Export</button></div><div class="journal-compose"><label for="journalNote">Add an investigation note</label><textarea id="journalNote" class="wide" rows="3" placeholder="What did you observe? What did you rule out? What would you check next time?"></textarea><div class="row"><button class="btn primary" id="saveJournalNote">Save note</button></div></div><div class="journal-list">${rows || '<p class="dim">No activity recorded yet. Run commands or add a note to start your work journal.</p>'}</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#saveJournalNote').addEventListener('click', () => { const note = wrap.querySelector('#journalNote').value.trim(); if (!note) return; addJournalEntry({ type: 'engineer note', device: SEL || '', text: note }); wrap.remove(); openJournal(); });
+  wrap.querySelector('#exportJournal').addEventListener('click', () => {
+    const lines = ['# Network engineering work journal', '', ...(PROG.journal || []).slice().reverse().map(e => `## ${e.type || 'Activity'} — ${new Date(e.at).toLocaleString()}\n${[e.ticket, e.mission, e.device].filter(Boolean).join(' · ')}\n${e.command ? `\n\`${e.command}\`\n` : ''}${e.text || ''}${e.output ? `\n\n\`\`\`text\n${e.output}\n\`\`\`` : ''}`)];
+    const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'network-work-journal.md'; a.click(); URL.revokeObjectURL(url);
+  });
+}
+function openHelp() {
+  const groups = [
+    { name: 'Start here', items: [['help', 'List commands available on the selected device.'], ['show running-config', 'Inspect the active device configuration.'], ['show interfaces', 'Check interface state, addressing and counters.'], ['ping <host|ip>', 'Test end-to-end reachability.'], ['traceroute <host|ip>', 'Identify the path and the hop where traffic stops.']] },
+    { name: 'Cisco-style switching', items: [['enable', 'Enter privileged EXEC mode.'], ['configure terminal', 'Enter global configuration mode.'], ['vlan 20', 'Create VLAN 20 on a switch.'], ['interface <port>', 'Select a switch interface for configuration.'], ['switchport mode access', 'Make the selected port an access port.'], ['switchport access vlan 20', 'Assign the access port to VLAN 20.'], ['switchport mode trunk', 'Configure a trunk link.'], ['switchport trunk allowed vlan 10,20', 'Restrict the trunk to selected VLANs.'], ['show vlan brief', 'Verify VLANs and access-port membership.'], ['show interfaces trunk', 'Verify operational trunk state.'], ['show spanning-tree vlan 10', 'Inspect STP roles and states for VLAN 10.'], ['show mac address-table dynamic', 'Inspect dynamically learned MAC addresses.']] },
+    { name: 'Routing and troubleshooting', items: [['ip addr', 'Inspect interface addresses on hosts and routers.'], ['ip route', 'Inspect the routing table.'], ['ip route add default via <gateway>', 'Add a default route where supported.'], ['show ip route', 'Inspect known routes on a network device.'], ['show ip ospf neighbor', 'Inspect OSPF adjacency state where supported.'], ['show ip bgp summary', 'Inspect BGP peer state where supported.'], ['show arp', 'Inspect IPv4 neighbour resolution.'], ['show logging', 'Review device event messages.']] },
+    { name: 'Work safely', items: [['copy running-config startup-config', 'Save the active configuration where supported.'], ['show running-config', 'Capture a before/after configuration record.'], ['clear mac address-table dynamic', 'Clear learned switch entries after a topology change.'], ['exit', 'Leave the current configuration context.']] }
+  ];
+  const selectedKind = RUN && RUN.net.devices[SEL] ? RUN.net.devices[SEL].kind : 'no device selected';
+  const all = groups.flatMap(g => g.items.map(([cmd, desc]) => ({ group: g.name, cmd, desc })));
+  const render = q => { const term = q.trim().toLowerCase(), found = all.filter(x => !term || (x.cmd + ' ' + x.desc + ' ' + x.group).toLowerCase().includes(term)); return found.length ? found.map(x => `<button class="help-command" data-help-cmd="${esc(x.cmd)}"><span><b>${esc(x.cmd)}</b><small>${esc(x.group)}</small></span><span>${esc(x.desc)}</span></button>`).join('') : '<p class="dim">No matching help entry. Try a protocol, command or symptom.</p>'; };
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide help-sheet"><div class="eyebrow">Field guide · selected device: ${esc(SEL || 'none')} (${esc(selectedKind)})</div><div class="modal-head"><div><h2>Engineering help desk</h2><p class="dim">Search command examples and procedures. Select a command to place it in the terminal.</p></div><span class="help-key">? HELP</span></div><input id="helpSearch" class="wide" type="search" placeholder="Search commands, VLANs, routing, interfaces, symptoms…"/><div class="help-groups" id="helpResults">${render('')}</div><div class="help-note"><b>Learning note:</b> This reference distinguishes commands modelled by the current simulator from advanced Cisco IOS/IOS XE commands planned for later releases. If a command is not implemented yet, the device will report that clearly rather than pretending it worked.</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#helpSearch').addEventListener('input', e => { wrap.querySelector('#helpResults').innerHTML = render(e.target.value); });
+  wrap.querySelector('#helpResults').addEventListener('click', e => { const b = e.target.closest('[data-help-cmd]'); if (!b) return; const inp = $('#tin'); inp.value = b.dataset.helpCmd; wrap.remove(); inp.focus(); });
+}
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
   });
@@ -701,6 +738,8 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" title="Stats">📊</button>
@@ -712,6 +751,8 @@ function boot() {
       <aside id="config"></aside>
     </div>`;
   wireTerm();
+  $('#btnHelp').addEventListener('click', openHelp);
+  $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
   $('#btnBuild').addEventListener('click', enterBuild);
