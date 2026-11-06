@@ -398,7 +398,7 @@ function applySnat(dev, pkt, eg, ct) {
 function forward(net, srcDev, pktIn, opts = {}) {
   const ttl = opts.ttl || 16, path = [];
   const ct = opts.ct, reverse = !!opts.reverse;
-  let pkt = { ...pktIn }, cur = srcDev;
+  let pkt = { ...pktIn }, cur = srcDev, ingressIface = null;
   for (let hop = 0; hop < ttl; hop++) {
     const dev = net.devices[cur];
     if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
@@ -417,6 +417,21 @@ function forward(net, srcDev, pktIn, opts = {}) {
       targetIp = viaRoute.via;
     }
     if (aclDecision(dev, 'out', eg, pkt) === 'deny') return { ok: false, path, reason: 'blocked by ACL', at: cur };
+    if (dev.firewallOS === 'asa' && ingressIface != null) {
+      const inPort = dev.ifaces[ingressIface], outPort = dev.ifaces[eg];
+      const hasIngressAcl = !!(inPort && inPort.accessGroups && inPort.accessGroups.in);
+      const inLevel = Number(inPort && inPort.securityLevel != null ? inPort.securityLevel : 0);
+      const outLevel = Number(outPort && outPort.securityLevel != null ? outPort.securityLevel : 0);
+      const sessions = ct && Array.isArray(ct.asaSessions) ? ct.asaSessions : [];
+      const established = sessions.some(x => x.proto === pkt.proto && x.src === pkt.dst && x.dst === pkt.src && x.dport === pkt.dport);
+      if (!hasIngressAcl && inLevel <= outLevel && !established)
+        return { ok: false, path, reason: 'ASA security-level policy denied traffic (' + inLevel + ' to ' + outLevel + ')', at: cur };
+      if (ct && !reverse && inLevel > outLevel) {
+        ct.asaSessions = ct.asaSessions || [];
+        if (!ct.asaSessions.some(x => x.proto === pkt.proto && x.src === pkt.src && x.dst === pkt.dst && x.dport === pkt.dport))
+          ct.asaSessions.push({ proto: pkt.proto, src: pkt.src, dst: pkt.dst, dport: pkt.dport });
+      }
+    }
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
     learnMacOnSegment(net, cur, eg);
 
@@ -425,7 +440,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
     const [nd, ni] = ep;
     if (aclDecision(net.devices[nd], 'in', ni, pkt) === 'deny') return { ok: false, path: path.concat(nd), reason: 'blocked by ACL', at: nd };
     if (!viaRoute && !net.devices[nd].nat) return { ok: true, path: path.concat(nd), reason: 'delivered', pkt };
-    cur = nd;                                      // advance (to the gateway, or into a NAT box to translate)
+    cur = nd; ingressIface = ni;                 // remember the ASA ingress interface for security-level policy
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
 }
