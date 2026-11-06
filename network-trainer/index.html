@@ -1017,7 +1017,7 @@ function runCisco(cli, line) {
     if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
     if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
   }
-  if (words[0] === 'show') return ciscoShow(cli, words.slice(1));
+  if (words[0] === 'show') { const result = ciscoShow(cli, words.slice(1)); return result.code !== 0 && result.out.startsWith('% Invalid input detected at show command') ? dispatch(cli, raw) : result; }
   if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
     if (cli.iosMode === 'user') return err('% Privileged EXEC required');
     dev.startupConfig = ciscoRunConfig(dev);
