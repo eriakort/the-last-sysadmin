@@ -204,7 +204,7 @@ function ciscoShow(cli, words) {
     return ok('Address         Peer       Reachable  Status       Stratum\n' + (status.associations || []).map(x => M.ipStr(x.address).padEnd(16) + String(x.peer || '--').padEnd(11) + String(x.reachable).padEnd(11) + (x.synchronized ? 'synchronized' : 'unsynchronized').padEnd(13) + (x.stratum ?? '--')).join('\n') || '(no NTP associations)');
   }
   if (q === 'logging') {
-    if (dev.syslogCollector || (dev.services && dev.services[514])) return ok('Syslog collector: ' + (dev.syslogEvents || []).length + ' events received\n' + (dev.syslogEvents || []).slice(-20).map(x => x.timestamp + ' ' + x.device + ' ' + x.message).join('\n'));
+    if (dev.syslogCollector || (dev.services && dev.services[514])) return ok('Syslog collector: ' + (dev.syslogEvents || []).length + ' events received\n' + (dev.syslogEvents || []).slice(-20).map(x => x.timestamp + ' ' + x.device + ' [' + (x.sourceIp || 'unknown') + '] ' + x.message).join('\n'));
     const cfg = dev.syslog || {};
     return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n'));
   }
