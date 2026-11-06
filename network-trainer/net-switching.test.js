@@ -107,7 +107,7 @@ test('VLAN-aware traversal terminates on redundant switch links', () => {
 
 function triangle() {
   const net = { devices: {
-    h1: host('h1','10.40.0.10'), srv: host('srv','10.40.0.20'),
+    h1: host('h1','10.0.0.10'), srv: host('srv','10.0.0.20'),
     sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{mode:'trunk',allowedVlans:[10]}],['p3',{mode:'trunk',allowedVlans:[10]}]]),
     sw2: sw('sw2',[['p1',{mode:'trunk',allowedVlans:[10]}],['p2',{mode:'trunk',allowedVlans:[10]}]]),
     sw3: sw('sw3',[['p1',{mode:'trunk',allowedVlans:[10]}],['p2',{mode:'trunk',allowedVlans:[10]}],['p3',{accessVlan:10}]])
