@@ -5064,6 +5064,50 @@ function renderChangeManagement() {
   bind('changeRollback',()=>{const v=root.querySelector('#changeRollbackReason').value.trim();if(!v){root.querySelector('#changeRollbackReason').focus();return;}transition('rolled-back','Rollback executed and recorded.',{rollbackReason:v});});
 }
 
+
+/* ---------- global workstation search ---------- */
+let PALETTE_RESULTS = [], PALETTE_ACTIVE = 0;
+function collectPaletteResults(query) {
+  const q=query.trim().toLowerCase(), results=[];
+  const add=(kind,title,detail,action)=>{if(!q||[kind,title,detail].join(' ').toLowerCase().includes(q))results.push({kind,title,detail,action});};
+  [['overview','Operations overview','Shift dashboard'],['incidents','Incident queue','Tickets and investigation'],['workbench','Network Workbench','Topology, device console and inspector'],['infrastructure','Infrastructure inventory','Devices, interfaces, routes and services'],['knowledge','Network knowledge','Cisco command reference and playbooks'],['journal','Engineering journal','Commands, evidence and notes'],['changes','Change management','Planned network changes']].forEach(([view,title,detail])=>add('Workspace',title,detail,()=>showWorkspaceView(view)));
+  if(RUN&&RUN.net) Object.entries(RUN.net.devices||{}).forEach(([id,d])=>add('Device',id,(d.kind||'device')+' · '+(primaryIp(d)||'no IP'),()=>{showWorkspaceView('workbench');selectDevice(id);}));
+  allTickets().forEach(t=>add('Incident',t.id+' · '+t.title,[t.priority,t.status,t.service,t.symptom].join(' · '),()=>{INCIDENT_SELECTED=t.id;INCIDENT_FILTERS.query='';INCIDENT_FILTERS.status='all';showWorkspaceView('incidents');}));
+  (PROG.changes||[]).forEach(c=>add('Change',c.id+' · '+c.title,[changeStateLabel(c.status),c.affected].join(' · '),()=>{CHANGE_SELECTED=c.id;showWorkspaceView('changes');}));
+  KNOWLEDGE_COMMANDS.forEach(c=>add('Command',c.cmd,c.cat+' · '+c.desc,()=>{showWorkspaceView('workbench');const input=$('#tin');if(input){input.value=c.cmd;input.focus();}}));
+  (PROG.journal||[]).forEach((e,i)=>add('Journal',e.type||'Activity',[e.device,e.ticket,e.command,e.text,e.output].filter(Boolean).join(' · '),()=>{JOURNAL_FILTERS.query=q;JOURNAL_FILTERS.type='all';JOURNAL_FILTERS.range='all';showWorkspaceView('journal');}));
+  return results.slice(0,40);
+}
+function renderPaletteResults() {
+  const list=$('#paletteResults'); if(!list)return;
+  list.innerHTML=PALETTE_RESULTS.length?PALETTE_RESULTS.map((r,i)=>'<button type="button" class="palette-result'+(i===PALETTE_ACTIVE?' active':'')+'" data-palette-index="'+i+'" role="option" aria-selected="'+(i===PALETTE_ACTIVE)+'"><span class="palette-result-kind">'+esc(r.kind)+'</span><span class="palette-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.detail)+'</small></span><span class="palette-result-enter">↵</span></button>').join(''):'<div class="palette-empty">No matching devices, incidents, changes or commands.</div>';
+  list.querySelectorAll('[data-palette-index]').forEach(b=>b.addEventListener('click',()=>activatePaletteResult(Number(b.dataset.paletteIndex))));
+}
+function activatePaletteResult(index) {
+  const item=PALETTE_RESULTS[index]; if(!item)return;
+  closePalette(); item.action();
+}
+function openPalette() {
+  if($('#workstationPalette')){const input=$('#paletteSearch');$('#workstationPalette').hidden=false;input.value='';PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();return;}
+  const modal=document.createElement('div');modal.id='workstationPalette';modal.className='palette-overlay';modal.innerHTML='<section class="palette-dialog" role="dialog" aria-modal="true" aria-label="Search workstation"><div class="palette-search-row"><span aria-hidden="true">⌕</span><input id="paletteSearch" type="search" autocomplete="off" placeholder="Search devices, incidents, changes, commands…"><kbd>ESC</kbd></div><div id="paletteResults" class="palette-results" role="listbox"></div><footer><span>↑ ↓ Navigate</span><span>↵ Open</span><span>Ctrl K Search</span></footer></section>';
+  document.body.appendChild(modal);
+  const input=modal.querySelector('#paletteSearch');
+  input.addEventListener('input',()=>{PALETTE_RESULTS=collectPaletteResults(input.value);PALETTE_ACTIVE=0;renderPaletteResults();});
+  input.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){e.preventDefault();PALETTE_ACTIVE=Math.min(PALETTE_RESULTS.length-1,PALETTE_ACTIVE+1);renderPaletteResults();}
+    else if(e.key==='ArrowUp'){e.preventDefault();PALETTE_ACTIVE=Math.max(0,PALETTE_ACTIVE-1);renderPaletteResults();}
+    else if(e.key==='Enter'){e.preventDefault();activatePaletteResult(PALETTE_ACTIVE);}
+    else if(e.key==='Escape'){e.preventDefault();closePalette();}
+    else if(e.key==='Tab'){const first=modal.querySelector('.palette-result');if(first){e.preventDefault();first.focus();}}
+  });
+  modal.addEventListener('click',e=>{if(e.target===modal)closePalette();});
+  PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();
+}
+function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remove();}
+function wireGlobalPalette() {
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();}else if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
+}
+
 /* ---------- boot ---------- */
 function boot() {
   applyTheme(PROG.theme);
@@ -5091,7 +5135,7 @@ function boot() {
           <a class="apptab on" href="#" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
         </nav>
       </div>
-      <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+      <div class="hud"><button id="btnSearch" class="btn palette-launch" title="Search workstation (Ctrl+K)">⌕ Search <kbd>Ctrl K</kbd></button><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
         <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
         <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
@@ -5114,6 +5158,8 @@ function boot() {
       </div>
     </div>`;
   wireTerm();
+  wireGlobalPalette();
+  $('#btnSearch').addEventListener('click',openPalette);
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
