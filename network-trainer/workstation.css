@@ -478,3 +478,9 @@ aside{scrollbar-color:#344a60 transparent}
 .iface-table .btn{white-space:nowrap}
 .iface-note{font-size:9px;line-height:1.55;margin:9px 2px}
 @media(max-width:760px){.iface-table-wrap{margin:0 -2px}.iface-note{font-size:9px}}
+
+/* Topology inspection overlays */
+.edge-label{fill:var(--ink);font:9px ui-monospace,monospace;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:none}
+.desk-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+#topo{touch-action:none}
+@media(max-width:760px){.desk-tools{width:100%;order:3}.desk-tools .btn{flex:1}}
