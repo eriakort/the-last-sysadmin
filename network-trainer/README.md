@@ -120,8 +120,9 @@ command reads or writes the same model the engine runs on — so **a mission is 
 two ways**: a beginner clicks in a config panel, a confident learner types `ip route add`,
 and the grader can't tell the difference (there's a test for exactly this). Supported:
 
-- `ip addr` / `ip addr add <A>/<p> dev <if>` — show / set interface addresses
-- `ip route` / `ip route add default via <ip>` / `ip route add <cidr> via <ip>` — the routing table
+- `ip addr` / `ip addr add|replace|del <A>/<p> dev <if>` — show, assign, explicitly replace, or remove interface addresses (strict IPv4/prefix validation; interface must exist; duplicate live addresses are rejected; `add` will not silently overwrite an existing address)
+- `ip link set <if> up|down` — change interface state and immediately affect forwarding
+- `ip route` / `ip route add|replace <default|cidr> via <ip>` / `ip route del <default|cidr>` — validated route changes; gateways must be on an active connected subnet, exact duplicate routes are rejected, alternate next hops are supported, `replace` replaces a prefix, and missing deletes are reported
 - `ping <host|ip>` — round-trip, reports the path and where a packet died
 - `traceroute <host|ip>` — the hops toward a target
 - `arp` / `ip neigh` — neighbours on the L2 segment

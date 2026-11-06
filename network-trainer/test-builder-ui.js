@@ -29,9 +29,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
   // --- enter build mode ---
   await page.click('#btnBuild'); await page.waitForTimeout(150);
-  if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing');
-  if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing');
-  if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas');
+  if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
+  if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
+  if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas; topology=' + (await page.locator('#topoWrap').innerText().catch(() => '<unavailable>')));
+  if (errors.length) console.error('  Browser errors after entering build mode: ' + errors.join(' | '));
 
   // --- author: place the two endpoints the student will start with ---
   await addDev('host'); await addDev('host');
