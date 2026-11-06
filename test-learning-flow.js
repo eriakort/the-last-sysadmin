@@ -812,7 +812,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
   // Chapter 17: onboard an administrator and audit account access.
-  await checkLearningStages('Onboard a new admin', 'home', ['useradd -m', 'login shell', 'getent passwd']);
+  await checkLearningStages('Onboard a new admin', 'mail', ['useradd -m', 'login shell', 'getent passwd']);
   await proveMission('Onboard a new admin', 'Give Sam admin rights', 'home', [
     'sudo useradd -m -s /bin/bash sam',
     'getent passwd sam'
