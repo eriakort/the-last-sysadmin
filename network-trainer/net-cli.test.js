@@ -299,7 +299,51 @@ test('IOS command mode resets when the console changes devices', () => {
   eq(cli.run('configure terminal').code, 1, 'privilege required on new device');
 });
 
-let failed = 0;
+
+test('IOS named extended ACLs enforce sequence order, wildcard matches and implicit deny', () => {
+  const net = world(), host = makeCLI(net, 'h1'), fw = makeCLI(net, 'r1');
+  host.run('ip addr add 10.0.1.10/24 dev eth0'); host.run('ip route add default via 10.0.1.1');
+  fw.run('enable'); fw.run('configure terminal');
+  eq(fw.run('ip access-list extended OFFICE-IN').code, 0, 'enter ACL');
+  eq(fw.iosMode, 'acl', 'ACL submode');
+  eq(fw.run('10 deny ip any any').code, 0, 'shadowing deny');
+  eq(fw.run('20 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 80').code, 0, 'narrow permit');
+  fw.run('exit'); fw.run('interface eth0');
+  eq(fw.run('ip access-group OFFICE-IN in').code, 0, 'bind inbound');
+  fw.run('end');
+  eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 80 }).ok, false, 'first deny shadows permit');
+  fw.run('configure terminal'); fw.run('ip access-list extended OFFICE-IN');
+  eq(fw.run('no 10').code, 0, 'remove sequence');
+  eq(fw.run('10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 80').code, 0, 'permit first');
+  eq(fw.run('20 deny ip any any').code, 0, 'deny remainder');
+  fw.run('end');
+  eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 80 }).ok, true, 'permitted HTTP passes');
+  eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 22 }).ok, false, 'unmatched SSH denied');
+  has(fw.run('show access-lists OFFICE-IN').out, '10 permit tcp', 'ordered ACL displayed');
+  has(fw.run('show access-lists OFFICE-IN').out, 'matches', 'hit counters displayed');
+  has(fw.run('show ip interface eth0').out, 'Inbound access list is OFFICE-IN', 'binding displayed');
+  has(fw.run('show running-config').out, 'ip access-group OFFICE-IN in', 'binding saved in running config');
+});
+test('IOS outbound ACLs filter egress and can be detached', () => {
+  const net = world(), host = makeCLI(net, 'h1'), fw = makeCLI(net, 'r1');
+  host.run('ip addr add 10.0.1.10/24 dev eth0'); host.run('ip route add default via 10.0.1.1');
+  fw.run('enable'); fw.run('configure terminal'); fw.run('ip access-list extended BLOCK-WEB');
+  fw.run('10 deny tcp any host 10.0.2.10 eq 80'); fw.run('20 permit ip any any'); fw.run('exit');
+  fw.run('interface eth1'); eq(fw.run('ip access-group BLOCK-WEB out').code, 0, 'bind outbound'); fw.run('end');
+  eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 80 }).ok, false, 'outbound denied');
+  fw.run('configure terminal'); fw.run('interface eth1');
+  eq(fw.run('no ip access-group BLOCK-WEB out').code, 0, 'detach'); fw.run('end');
+  eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 80 }).ok, true, 'restored');
+});
+test('IOS ACL parser rejects malformed entries and unknown bindings', () => {
+  const cli = makeCLI(world(), 'r1'); cli.run('enable'); cli.run('configure terminal'); cli.run('ip access-list extended CHECK');
+  eq(cli.run('permit tcp 10.0.1.0 0.0.0.999 any eq 443').code, 1, 'bad wildcard');
+  eq(cli.run('permit gre any any').code, 1, 'unsupported protocol');
+  eq(cli.run('permit tcp any any eq 70000').code, 1, 'bad port');
+  cli.run('exit'); cli.run('interface eth0');
+  eq(cli.run('ip access-group MISSING in').code, 1, 'unknown ACL');
+});
+\nlet failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
 if (failed) process.exit(1);
