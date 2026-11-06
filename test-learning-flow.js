@@ -916,7 +916,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await checkLearningStages('Make it readable', 'f', ['cut -d:', 'field selection', 'column -t']);
   await proveMission('Make it readable', 'Fields and conditions', 'd', [
     'cut -d: -f1,7 /etc/passwd | column -t -s:'
-  ], 'Correct. -d: sets the delimiter');
+  ], 'Correct. -d: sets the colon delimiter');
 
   await checkLearningStages('Fields and conditions', 'one', ['awk -F:', '$3', 'UID']);
   await proveAnswerMission('Fields and conditions', 'Capture and rearrange', 'three', [
