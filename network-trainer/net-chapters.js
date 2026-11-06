@@ -682,7 +682,7 @@ const chapters = [
       { type: 'mac_entry', dev: 'sw1', vlan: 10, device: 'srv', port: 'p3' },
       { type: 'reachable', a: 'h1', b: 'srv' }
     ],
-    solution: [['sw3', 'spanning-tree vlan 10 priority 4096'], ['sw1', 'show spanning-tree vlan 10'], ['sw1', 'show mac address-table dynamic']]
+    solution: [['sw3', 'spanning-tree vlan 10 priority 4096'], ['h1', 'ping srv'], ['sw1', 'show spanning-tree vlan 10'], ['sw1', 'show mac address-table dynamic']]
   }
 ];
 
