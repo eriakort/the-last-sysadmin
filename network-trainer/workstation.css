@@ -450,7 +450,7 @@ aside{scrollbar-color:#344a60 transparent}
 .palette-overlay{position:fixed;inset:0;z-index:10000;display:flex;justify-content:center;align-items:flex-start;padding:12vh 18px 24px;background:rgba(3,8,15,.72);backdrop-filter:blur(5px)}
 .palette-dialog{width:min(680px,100%);max-height:70vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 24px 80px rgba(0,0,0,.5)}
 .palette-search-row{display:flex;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid var(--line);color:var(--muted);font-size:20px}
-.palette-search-row input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:15px inherit}
+.palette-search-row input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:15px}
 .palette-search-row kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:3px 6px}
 .palette-results{overflow:auto;padding:7px;min-height:80px}
 .palette-result{width:100%;display:flex;align-items:center;gap:12px;padding:10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
