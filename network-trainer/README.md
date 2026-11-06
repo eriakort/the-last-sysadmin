@@ -19,7 +19,7 @@ ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
 distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
 persists across reloads.
 
-**Twenty-four missions** across addressing, subnetting, switching, routing, static
+**Twenty-five missions** across addressing, subnetting, switching, routing, static
 routing, security, **DHCP**, **DNS/naming**, **NAT**, **failover**, and **dynamic
 routing (OSPF & BGP)** — including **destination-based firewall rules** for DMZ
 segmentation ("stop the pivot"), a **DHCP lease** that hands out address + gateway
@@ -269,3 +269,16 @@ Implemented operational commands include:
 These commands mutate the same device and forwarding model as existing missions. Extended ACLs support ordered entries, source/destination wildcard matching, TCP/UDP destination ports, inbound and outbound interface bindings, hit counters, and implicit deny on a bound ACL. Legacy simulator firewall rules remain supported. The IOS-style subset omits time ranges, object groups, fragments, reflexive ACLs and full ICMP type matching; it is router ACL syntax, not ASA policy or NAT syntax. Startup configuration is an explicit snapshot and does not model reboot or NVRAM hardware.
 
 **Fidelity note:** this is an educational IOS-style command profile, not Cisco IOS/IOS XE software or a licensed virtual appliance. Unsupported commands return an error rather than pretending to execute.
+
+## Cisco ASA-style firewall operations profile
+
+Firewall devices explicitly marked with `firewallOS: 'asa'` use a separate ASA-style command workflow; IOS router ACL syntax is not accepted on these devices. The implemented subset includes:
+
+- Interface `nameif`, `security-level 0–100`, IP addressing, descriptions and administrative state
+- Named extended ACLs using ASA syntax: `access-list NAME extended permit|deny tcp|udp|ip|icmp ...`, with `any`, `host`, subnet/netmask and destination-port matching
+- Inbound ACL attachment using `access-group NAME in interface outside`; ordered rules, implicit deny and match counters
+- Network objects with host definitions and same-port TCP static PAT: `nat (inside,outside) static interface service tcp 443 443`
+- Verification through `show interface ip brief`, `show access-list`, `show access-group`, `show nat`, `show route`, and `packet-tracer input ...`
+- ASA-style security-level policy: higher-to-lower traffic is permitted by default, lower-to-higher and same-level traffic is denied unless an inbound ACL explicitly permits it; established return traffic for an initiated flow is allowed by the shared one-flow connection context
+
+The profile intentionally does not claim full ASA compatibility. It omits access-list object-groups, service/object groups, dynamic PAT, arbitrary port translation, VPN, failover, inspection policies, multi-context mode, and full connection-table persistence. NAT and packet-tracer are limited to the model's supported topology and same-port TCP static PAT. This is an educational ASA-style command profile, not Cisco ASA software or a licensed virtual appliance.
