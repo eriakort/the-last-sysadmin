@@ -37,8 +37,8 @@ const ok = s => ({ out: s, code: 0 });
 const err = s => ({ out: s, code: 1 });
 
 function makeCLI(net, cur) {
-  if (!net || !net.devices || !net.devices[cur]) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur, lastPing: null, flows: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); this.cur = id; return this; } };
+  if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
+  const cli = { net, cur: cur == null ? null : cur, lastPing: null, flows: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); this.cur = id; return this; } };
   cli.run = line => dispatch(cli, String(line).trim());
   return cli;
 }
@@ -46,6 +46,7 @@ function makeCLI(net, cur) {
 function dispatch(cli, line) {
   if (!line) return ok('');
   const a = line.split(/\s+/); const cmd = a[0];
+  if (cli.cur == null || !cli.net.devices[cli.cur]) return err('no device selected — click a device before running network commands');
   const H = COMMANDS[cmd];
   if (!H) return err(`${cmd}: command not found (try 'help')`);
   return H(cli, a.slice(1));
