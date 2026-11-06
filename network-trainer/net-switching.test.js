@@ -10,7 +10,7 @@ const test = (name, fn) => {
 };
 const assert = (value, message) => { if (!value) throw new Error(message); };
 const host = (id, address) => ({ id, kind: 'host', ifaces: { eth0: { ip: ip(address), mask: 24, up: true } }, routes: [] });
-const sw = (id, ports) => ({ id, kind: 'switch', vlans: [1], ifaces: Object.fromEntries(ports.map(([name, cfg]) => [name, { up: true, ...(cfg || {}) }])) });
+const sw = (id, ports) => ({ id, kind: 'switch', ifaces: Object.fromEntries(ports.map(([name, cfg]) => [name, { up: true, ...(cfg || {}) }])) });
 const link = (a, ai, b, bi) => ({ a: [a, ai], b: [b, bi], up: true });
 const connected = (net) => M.ping(net, 'h1', ip('10.0.0.20')).ok;
 const command = (cli, device, line, expected = 0) => {
@@ -40,6 +40,7 @@ test('trunks carry allowed VLANs across two switches and block excluded VLANs', 
     sw1: sw('sw1', [['p1',{accessVlan:10}],['p2',{mode:'trunk',allowedVlans:[20]}]]),
     sw2: sw('sw2', [['p1',{mode:'trunk',allowedVlans:[20]}],['p2',{accessVlan:10}]])
   }, links: [link('h1','eth0','sw1','p1'),link('sw1','p2','sw2','p1'),link('srv','eth0','sw2','p2')] };
+  net.devices.sw1.vlans = [1,20]; net.devices.sw2.vlans = [1,20];
   assert(!connected(net), 'VLAN 10 must not cross trunks that only allow VLAN 20');
   const cli = makeCLI(net, 'sw1');
   command(cli, 'sw1', 'vlan 10'); command(cli, 'sw1', 'vlan 20');
