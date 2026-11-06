@@ -873,6 +873,39 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'systemctl list-timers'
   ], 'halcyon-backup.timer', 'Correct. list-timers shows scheduled units');
 
+
+  // Medium batch: six graduation and handover missions.
+  await checkLearningStages('Final review: the filesystem', 'recursive', ['-maxdepth 1', '-type f', 'wc -l']);
+  await proveAnswerMission('Final review: the filesystem', 'Final review: the evidence', 'depth', [
+    'find /etc -maxdepth 1 -type f | wc -l'
+  ], '9', 'Correct. -maxdepth 1');
+
+  await checkLearningStages('Final review: the evidence', 'bytes', ['wc -l', 'line count', 'evidence.txt']);
+  await proveAnswerMission('Final review: the evidence', 'Final review: access', 'lines', [
+    'wc -l ~/incident/notes/evidence.txt'
+  ], '64', 'Correct. The -l option');
+
+  await checkLearningStages('Final review: access', 'uid', ['getent passwd', 'seventh field', 'nologin']);
+  await proveAnswerMission('Final review: access', 'Final review: the firewall', 'shell', [
+    'getent passwd jmorrow'
+  ], '/usr/sbin/nologin', 'Correct. The seventh field');
+
+  await checkLearningStages('Final review: the firewall', 'allow', ['sudo ufw status', 'DENY', 'source address']);
+  await proveAnswerMission('Final review: the firewall', 'Final review: automation', 'deny', [
+    'sudo ufw status'
+  ], '203.0.113.77', 'Correct. DENY');
+
+  await checkLearningStages('Final review: automation', 'readme', ['CURRENT', 'systemctl list-timers', 'live release']);
+  await proveAnswerMission('Final review: automation', 'Sign the handover', 'current', [
+    'cat /srv/halcyon/CURRENT',
+    'systemctl list-timers'
+  ], 'v2.4.0', 'Correct. CURRENT');
+
+  await checkLearningStages('Sign the handover', 'secrets', ['ALL_CLEAR.md', 'verified status', 'credentials']);
+  await proveMission('Sign the handover', 'Beyond simple grep', 'verified', [
+    'echo "# All clear - halcyon-web01 stable on v2.4.0, backups scheduled, firewall reviewed." > ~/incident/ALL_CLEAR.md'
+  ], 'Correct. Share verified operational facts');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
