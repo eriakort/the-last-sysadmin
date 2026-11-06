@@ -337,7 +337,7 @@ function bgpNetworkValid(dev, network) {
 function bgpAdvertised(net, devId, neighborIp) {
   const dev = net.devices[devId], cfg = bgpConfig(dev);
   if (!cfg) return [];
-  const peer = (cfg.neighbors || []).find(n => neighborIp == null || n.ip === neighborIp);
+  const peer = neighborIp == null ? null : (cfg.neighbors || []).find(n => n.ip === neighborIp);
   const list = peer && peer.outPrefixList;
   return (cfg.networks || []).filter(n => bgpNetworkValid(dev, n)).map(n => {
     const c = cidr(n); return { dest: c.net, mask: c.prefix, network: n, proto: 'bgp', from: devId };
