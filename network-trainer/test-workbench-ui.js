@@ -24,7 +24,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('#modal .help-sheet').isVisible()) ok('help desk opens from the global Help action');
   else fail('help desk did not open');
 
-  const context = await page.locator('#modal .eyebrow').innerText();
+  const context = (await page.locator('#modal .eyebrow').innerText()).toLowerCase();
   if (/sw1/.test(context) && /switch/.test(context)) ok('help desk identifies the selected switch');
   else fail('help desk lacks selected-device context: ' + context);
 
@@ -50,8 +50,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
   await page.locator('#journalNote').fill('Checked the switch VLAN database before changing the access port.');
   await page.locator('#saveJournalNote').click();
-  await page.waitForTimeout(80);
-  await page.locator('#btnJournal').click();
+  await page.waitForTimeout(80); // saving a note reopens the journal automatically
   const journal = await page.locator('#modal .journal-list').innerText();
   if (/Checked the switch VLAN database/.test(journal) && /VLAN 20 created/.test(journal))
     ok('learner notes and command evidence persist in the work journal');
