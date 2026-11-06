@@ -269,11 +269,13 @@ test('IOS router interface addressing and static routes immediately affect reach
   cli.run('interface eth0');
   eq(cli.run('ip address 10.0.1.1 255.255.255.0').code, 0, 'interface address');
   cli.run('exit');
-  eq(cli.run('ip route 10.0.2.0 255.255.255.0 10.0.1.254').code, 1, 'reject off-link next hop');
+  eq(cli.run('ip route 10.0.2.0 255.255.255.0 10.0.9.254').code, 1, 'reject off-link next hop');
   eq(cli.run('ip route 10.0.2.0 255.255.255.0 10.0.1.1').code, 1, 'reject own interface address as next hop');
+  eq(cli.run('ip route 10.0.3.0 255.255.255.0 10.0.2.254').code, 0, 'install static route through connected next hop');
   cli.run('end');
   has(cli.run('show ip interface brief').out, '10.0.1.1', 'interface summary');
   has(cli.run('show ip route').out, '10.0.1.0/24', 'connected route');
+  has(cli.run('show ip route').out, '10.0.3.0/24', 'static route');
 });
 test('IOS startup configuration is saved explicitly and remains a snapshot', () => {
   const net = world(), cli = makeCLI(net, 'sw1');
