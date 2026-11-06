@@ -91,11 +91,20 @@ function ciscoRunConfig(dev) {
         if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
       } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
     } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
+    for (const dir of ['in','out']) {
+      const acl = p.accessGroups && p.accessGroups[dir];
+      if (acl) lines.push(' ip access-group ' + acl + ' ' + dir);
+    }
     lines.push(p.up === false ? ' shutdown' : ' no shutdown');
   }
   for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id + ((dev.vlanNames || {})[id] ? '\n name ' + dev.vlanNames[id] : ''));
   for (const r of dev.routes || []) lines.push('ip route ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
-  for (const r of dev.acls || []) lines.push('access-list ' + (r.list || 101) + ' ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + (r.proto || 'ip') + ' ' + (r.src == null ? 'any' : M.ipStr(r.src)) + ' ' + (r.dst == null ? 'any' : M.ipStr(r.dst)));
+  const aclNames = [...new Set((dev.acls || []).filter(r => r.aclName).map(r => r.aclName))];
+  for (const name of aclNames) {
+    lines.push('!', 'ip access-list extended ' + name);
+    for (const r of (dev.acls || []).filter(x => x.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))) lines.push(' ' + ciscoAclRuleText(r));
+  }
+  for (const r of dev.acls || []) if (!r.aclName) lines.push('access-list ' + (r.list || 101) + ' ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + (r.proto || 'ip') + ' ' + (r.src == null ? 'any' : M.ipStr(r.src)) + ' ' + (r.dst == null ? 'any' : M.ipStr(r.dst)));
   return lines.join('\n') + '\n';
 }
 function ciscoPrefixMask(prefix) {
@@ -103,9 +112,62 @@ function ciscoPrefixMask(prefix) {
   const bits = '1'.repeat(n) + '0'.repeat(32 - n);
   return [0, 8, 16, 24].map(i => parseInt(bits.slice(i, i + 8), 2)).join('.');
 }
+function ciscoAclAddress(words, at) {
+  const token = words[at];
+  if (!token) return null;
+  if (token === 'any') return { value: null, wildcard: null, next: at + 1 };
+  if (token === 'host') {
+    const value = parseIPv4(words[at + 1]);
+    return value == null ? null : { value, wildcard: 0, next: at + 2 };
+  }
+  const value = parseIPv4(token), wildcard = parseIPv4(words[at + 1]);
+  return value == null || wildcard == null ? null : { value, wildcard, next: at + 2 };
+}
+function ciscoAclRule(words, aclName, defaultSeq) {
+  let at = 0, seq = defaultSeq;
+  if (/^\d+$/.test(words[0] || '')) { seq = Number(words[0]); at++; }
+  const action = words[at++], proto = words[at++];
+  if (!['permit','deny'].includes(action) || !['ip','tcp','udp','icmp'].includes(proto)) return null;
+  const src = ciscoAclAddress(words, at); if (!src) return null; at = src.next;
+  const dst = ciscoAclAddress(words, at); if (!dst) return null; at = dst.next;
+  let dport = null;
+  if (words[at] === 'eq' && ['tcp','udp'].includes(proto)) {
+    dport = Number(words[at + 1]);
+    if (!Number.isInteger(dport) || dport < 1 || dport > 65535 || at + 2 !== words.length) return null;
+    at += 2;
+  }
+  if (at !== words.length) return null;
+  return { aclName, seq, action: action === 'deny' ? 'deny' : 'allow', proto, src: src.value, srcWildcard: src.wildcard, dst: dst.value, dstWildcard: dst.wildcard, dport };
+}
+function ciscoAclAddressText(value, wildcard) {
+  if (value == null) return 'any';
+  if (wildcard === 0) return 'host ' + M.ipStr(value);
+  return M.ipStr(value) + ' ' + M.ipStr(wildcard);
+}
+function ciscoAclRuleText(r) {
+  return (r.seq || 10) + ' ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + (r.proto || 'ip') + ' ' +
+    ciscoAclAddressText(r.src, r.srcWildcard) + ' ' + ciscoAclAddressText(r.dst, r.dstWildcard) +
+    (r.dport == null ? '' : ' eq ' + r.dport);
+}
 function ciscoShow(cli, words) {
   const dev = cli.net.devices[cli.cur], q = words.join(' ').toLowerCase();
   if (q === 'running-config' || q === 'run') return ok('Building configuration...\n!\n' + ciscoRunConfig(dev) + 'end');
+  if (q === 'access-lists' || q.startsWith('access-lists ')) {
+    const wanted = words[1] && words[1].toUpperCase();
+    const names = [...new Set((dev.acls || []).filter(r => r.aclName && (!wanted || r.aclName === wanted)).map(r => r.aclName))];
+    if (wanted && !names.length) return ok('% No access lists found');
+    return ok(names.map(name => 'Extended IP access list ' + name + '\n' +
+      (dev.acls || []).filter(r => r.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))
+        .map(r => ' ' + ciscoAclRuleText(r) + ' (' + (r.hits || 0) + ' matches)').join('\n')).join('\n') || '% No access lists configured');
+  }
+  if (q.startsWith('ip interface ') && q !== 'ip interface brief') {
+    const name = ciscoIface(dev, words[2]);
+    if (!name) return err('% Invalid interface');
+    const groups = dev.ifaces[name].accessGroups || {};
+    return ok(name + ' is ' + (dev.ifaces[name].up === false ? 'administratively down' : 'up') +
+      '\n  Inbound access list is ' + (groups.in || 'not set') +
+      '\n  Outbound access list is ' + (groups.out || 'not set'));
+  }
   if (q === 'startup-config' || q === 'start') return ok(dev.startupConfig || '% startup-config is not saved; use copy running-config startup-config');
   if (q === 'version') return ok('Network Operations Simulator\nIOS-style command profile (implemented subset)\nDevice: ' + (dev.hostname || dev.id) + '\nModel: ' + dev.kind + '\nConfiguration register: 0x2102');
   if (q === 'ip interface brief' || q === 'ip int brief' || q === 'interfaces' || q === 'ip interface') {
@@ -176,13 +238,15 @@ function runCisco(cli, line) {
   }
   if (lower === 'end' || lower === 'end\n') { cli.iosMode = 'privileged'; cli.iosIface = null; cli.contextIface = null; return ok(''); }
   if (lower === 'exit') {
+    if (cli.iosMode === 'acl') { cli.iosMode = 'config'; cli.iosAcl = null; return ok(''); }
     if (cli.iosMode === 'interface' || cli.iosMode === 'vlan') { cli.iosMode = 'config'; cli.iosIface = null; return ok(''); }
     if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
     if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status'];
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status','access-lists'];
+    if (query.startsWith('access-lists ') || query.startsWith('ip interface ')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
   if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
@@ -200,6 +264,22 @@ function runCisco(cli, line) {
       const name = ciscoIface(dev, raw.split(/\s+/)[1]);
       if (!name) return err('% Invalid interface — use show ip interface brief');
       cli.iosIface = name; cli.iosMode = 'interface'; return ok('Enter interface configuration commands.');
+    }
+    if (words[0] === 'ip' && words[1] === 'access-list' && words[2] === 'extended' && words[3] && ['router','firewall'].includes(dev.kind)) {
+      cli.iosAcl = words[3].toUpperCase(); dev.acls = dev.acls || []; cli.iosMode = 'acl';
+      return ok('Extended access-list configuration mode');
+    }
+    if (words[0] === 'access-list' && words.length >= 5 && ['router','firewall'].includes(dev.kind)) {
+      const name = words[1];
+      if (!/^(?:1[0-9]{2}|2[0-6][0-9]{2})$/.test(name)) return err('% Supports numbered extended ACLs 100-199 and 2000-2699');
+      dev.acls = dev.acls || [];
+      const seq = Math.max(0, ...dev.acls.filter(r=>r.aclName===name).map(r=>r.seq||0)) + 10;
+      const rule = ciscoAclRule(words.slice(2), name, seq);
+      if (!rule) return err('% Invalid extended ACL rule');
+      dev.acls.push(rule); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'access-list' && words[2]) {
+      dev.acls = (dev.acls || []).filter(r=>r.aclName !== words[2].toUpperCase()); return ok('');
     }
     if (words[0] === 'vlan' && words[1] && dev.kind === 'switch') {
       const id = parseVlanId(words[1]); if (id == null) return err('% VLAN must be between 1 and 4094');
@@ -219,12 +299,31 @@ function runCisco(cli, line) {
     }
     return err('% Invalid input in global configuration mode');
   }
+  if (cli.iosMode === 'acl') {
+    dev.acls = dev.acls || [];
+    if (words[0] === 'no' && /^\d+$/.test(words[1] || '')) {
+      const seq = Number(words[1]); dev.acls = dev.acls.filter(r => !(r.aclName === cli.iosAcl && r.seq === seq)); return ok('');
+    }
+    const seq = Math.max(0, ...dev.acls.filter(r=>r.aclName===cli.iosAcl).map(r=>r.seq||0)) + 10;
+    const rule = ciscoAclRule(words, cli.iosAcl, seq);
+    if (!rule) return err('% Invalid ACL entry — use [sequence] permit|deny ip|tcp|udp|icmp source destination [eq port]');
+    if (dev.acls.some(r=>r.aclName===cli.iosAcl && r.seq===rule.seq)) return err('% Sequence number already exists; remove it with no <sequence>');
+    dev.acls.push(rule); return ok('');
+  }
   if (cli.iosMode === 'interface') {
     const p = dev.ifaces[cli.iosIface];
     if (!p) return err('% Interface context no longer exists');
     if (lower === 'shutdown') { p.up = false; return ok(''); }
     if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'ip' && words[1] === 'access-group' && words[2] && ['in','out'].includes(words[3])) {
+      const name = words[2].toUpperCase();
+      if (!(dev.acls || []).some(r=>r.aclName===name)) return err('% Access list does not exist');
+      p.accessGroups = p.accessGroups || {}; p.accessGroups[words[3]] = name; return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'ip' && words[2] === 'access-group' && words[3] && ['in','out'].includes(words[4])) {
+      const groups = p.accessGroups || {}; if (groups[words[4]] === words[3].toUpperCase()) delete groups[words[4]]; return ok('');
+    }
     if (words[0] === 'ip' && words[1] === 'address' && words.length === 4 && dev.kind !== 'switch') {
       const address = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]);
       if (address == null || prefix == null) return err('% Invalid IP address or subnet mask');
@@ -684,6 +783,7 @@ const MAN = {
   ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      assign a validated address to an existing interface\n  ip addr del A/p dev IF      remove the matching address\n  ip link set IF up|down      change interface state\n  ip route                    show the routing table\n  ip route add default via G  set or replace the default gateway\n  ip route add CIDR via G     add or replace a static route\n  ip route del default|CIDR   remove a matching route\n  Address and gateway input is validated; gateways must be on an active connected subnet.',
   ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
   traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
+  'access-list': 'Cisco IOS extended ACLs: enable, configure terminal, ip access-list extended NAME, then [sequence] permit|deny ip|tcp|udp|icmp SOURCE DESTINATION [eq PORT]. Address forms: any, host IP, or IP WILDCARD. Apply under interface mode with ip access-group NAME in|out. Verify with show access-lists and show ip interface IF. Rules are first-match-wins; unmatched traffic is implicitly denied. Remove a sequence with no SEQUENCE. IOS-style router ACL subset; not ASA syntax.',
   iptables: 'iptables -L — list firewall rules.\n  iptables -A INPUT -i IF -p tcp --dport N -j DROP — drop matching inbound traffic (rules match top-down, first match wins).\n  iptables -t nat -A PREROUTING -i IF -p tcp --dport N -j DNAT --to-destination IP — port-forward inbound traffic to an inside host.\n  iptables -t nat -A POSTROUTING -o IF -s CIDR -j MASQUERADE — share the outside IP for an inside network (source NAT).\n  iptables -t nat -L — list NAT rules.',
   nmap: 'nmap HOST — (read-only) list the services a host is exposing. Use it to see your own attack surface.',
   tcpdump: 'tcpdump — print the packets from your last ping on the wire.',
