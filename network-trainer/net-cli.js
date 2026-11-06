@@ -194,7 +194,10 @@ function ciscoShow(cli, words) {
       '\n  Outbound access list is ' + (groups.out || 'not set') +
       '\n  DHCP relay is ' + (dev.ifaces[name].helperAddress == null ? 'not configured' : M.ipStr(dev.ifaces[name].helperAddress)));
   }
-  if (q === 'hosts') return ok('Host                  Address         Source\n' + Object.entries(dev.hosts || {}).map(([n,a]) => n.padEnd(22) + M.ipStr(a).padEnd(16) + 'static').join('\n') || '(no local host entries)');
+  if (q === 'hosts') {
+    const rows = Object.entries(dev.hosts || {}).map(([n,a]) => n.padEnd(22) + M.ipStr(a).padEnd(16) + 'static');
+    return ok('Host                  Address         Source\n' + (rows.join('\n') || '(no local host entries)'));
+  }
   if (q === 'ntp status' || q === 'ntp associations') {
     const status = M.ntpStatus(cli.net, cli.cur);
     if (q === 'ntp status') return ok('Clock is ' + (status.synchronized ? 'synchronized' : 'unsynchronized') + '\nStratum: ' + status.stratum + '\nReference: ' + (status.source || 'none') + (status.reason ? '\nReason: ' + status.reason : ''));
@@ -621,6 +624,7 @@ function runCisco(cli, line) {
       const address = parseIPv4(words[2]); if (address == null) return err('% Invalid NTP server address');
       dev.ntp = dev.ntp || { servers: [] }; dev.ntp.servers = [...new Set([...(dev.ntp.servers || []), address])]; return ok('');
     }
+    if (lower === 'no ntp master') { if (dev.ntp) dev.ntp.master = false; return ok(''); }
     if (words[0] === 'ntp' && words[1] === 'master' && words.length <= 3) {
       const stratum = words[2] == null ? 8 : Number(words[2]);
       if (!Number.isInteger(stratum) || stratum < 1 || stratum > 15) return err('% NTP stratum must be 1–15');
