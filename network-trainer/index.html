@@ -4551,7 +4551,8 @@ function exportConfigArchive() {
 }
 function wireConfigArchiveTools() {
   $('#termConfigSave')?.addEventListener('click',captureConfigCheckpoint);
-  $('#termConfigReview')?.addEventListener('click',reviewConfigDrift);\n  $('#termConfigHistory')?.addEventListener('click',openConfigHistory);
+  $('#termConfigReview')?.addEventListener('click',reviewConfigDrift);
+  $('#termConfigHistory')?.addEventListener('click',openConfigHistory);
   $('#termConfigExport')?.addEventListener('click',exportConfigArchive);
 }
 function persistTerminalSession() {
