@@ -1106,7 +1106,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await proveMission('Where the io goes', 'Write a health check', 'iowait', ['iostat'], 'Correct. %iowait');
   await checkLearningStages('Write a health check', 'text', ['systemctl is-active --quiet', 'exit status', 'if']);
   await proveMission('Write a health check', 'Run it on a schedule', 'exit', [
-    "printf '#!/bin/bash\nif systemctl is-active --quiet halcyon; then\n  echo \"halcyon OK\"\nelse\n  echo \"halcyon DOWN\"\nfi\n' > ~/health.sh",
+    "printf '%s\n' '#!/bin/bash' 'if systemctl is-active --quiet halcyon; then' '  echo halcyon OK' 'else' '  echo halcyon DOWN' 'fi' > ~/health.sh",
     'chmod +x ~/health.sh', 'bash ~/health.sh'
   ], 'Correct. The exit status');
   await checkLearningStages('Run it on a schedule', 'five', ['*/5 * * * *', 'five fields', 'absolute paths']);
@@ -1136,7 +1136,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   ], 'Correct. A dedicated non-login account');
   await checkLearningStages('Capstone: the service script', 'read', ['#!/bin/bash', 'chmod +x', 'predictable environment']);
   await proveMission('Capstone: the service script', 'Capstone: unit and timer', 'exec', [
-    "printf '#!/bin/bash\necho \"report generated at $(date +%F)\"\n' > ~/report.sh",
+    "printf '%s\n' '#!/bin/bash' 'echo report generated' > ~/report.sh",
     'chmod +x ~/report.sh', 'bash ~/report.sh'
   ], 'Correct. +x adds execute permission');
   await checkLearningStages('Capstone: unit and timer', 'socket', ['.service', '.timer', 'daemon-reload']);
