@@ -34,7 +34,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {} }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -141,13 +141,14 @@ function dashboardSnapshot() {
   };
 }
 function showWorkspaceView(view) {
-  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), cols = $('#cols');
-  if (!overview || !incidents || !infrastructure || !knowledge || !journal || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !knowledge || !journal || !changes || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
   infrastructure.hidden = view !== 'infrastructure';
   knowledge.hidden = view !== 'knowledge';
   journal.hidden = view !== 'journal';
+  changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench';
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
@@ -158,6 +159,7 @@ function showWorkspaceView(view) {
   if (view === 'infrastructure') renderInfrastructureView();
   if (view === 'knowledge') renderKnowledgeCenter();
   if (view === 'journal') renderJournalPage();
+  if (view === 'changes') renderChangeManagement();
 }
 function renderOverview() {
   const root = $('#overview'); if (!root || !RUN) return;
@@ -1159,6 +1161,57 @@ async function renderClassroom(sb, body) {
   });
 }
 
+
+/* ---------- change management ---------- */
+let CHANGE_SELECTED = null;
+const CHANGE_STATES = ['draft','submitted','approved','implementing','verified','rolled-back'];
+function changeStateLabel(state) { return ({draft:'Draft',submitted:'Awaiting approval',approved:'Approved',implementing:'In progress',verified:'Verified', 'rolled-back':'Rolled back'})[state] || state; }
+function renderChangeManagement() {
+  const root = $('#changeView'); if (!root) return;
+  PROG.changes = Array.isArray(PROG.changes) ? PROG.changes : [];
+  const records = [...PROG.changes].sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  const selected = records.find(x => x.id === CHANGE_SELECTED) || records[0] || null;
+  if (selected) CHANGE_SELECTED = selected.id;
+  const stateCounts = CHANGE_STATES.map(state => [state, records.filter(x=>x.status===state).length]);
+  const list = records.map(x => `<button class="change-list-item ${selected&&selected.id===x.id?'selected':''}" data-change-select="${esc(x.id)}"><span class="change-list-top"><b>${esc(x.id)}</b><em class="change-state state-${esc(x.status)}">${esc(changeStateLabel(x.status))}</em></span><strong>${esc(x.title)}</strong><small>${esc(x.affected||'Scope not specified')} · ${esc(x.risk)} risk</small></button>`).join('');
+  const detail = selected ? `<div class="change-detail-head"><div><div class="eyebrow">Change record · ${esc(selected.id)}</div><h2>${esc(selected.title)}</h2><p>${esc(selected.reason)}</p></div><em class="change-state state-${esc(selected.status)}">${esc(changeStateLabel(selected.status))}</em></div>
+    <div class="change-facts"><div><small>Risk</small><b>${esc(selected.risk)}</b></div><div><small>Affected services / devices</small><b>${esc(selected.affected)}</b></div><div><small>Maintenance window</small><b>${esc(selected.window)}</b></div><div><small>Created</small><b>${esc(new Date(selected.createdAt).toLocaleString())}</b></div></div>
+    <div class="change-plan-grid"><section><h3>Pre-change checks</h3><p>${esc(selected.prechecks)}</p></section><section><h3>Implementation plan</h3><p>${esc(selected.steps)}</p></section><section><h3>Rollback plan</h3><p>${esc(selected.rollback)}</p></section><section><h3>Success criteria</h3><p>${esc(selected.successCriteria)}</p></section></div>
+    ${selected.validation?'<section class="change-validation"><h3>Post-change verification</h3><p>'+esc(selected.validation)+'</p></section>':''}
+    ${selected.rollbackReason?'<section class="change-validation"><h3>Rollback record</h3><p>'+esc(selected.rollbackReason)+'</p></section>':''}
+    <div class="change-actions">${selected.status==='draft'?'<button class="btn primary" id="changeSubmit">Submit for approval</button>':''}${selected.status==='submitted'?'<button class="btn primary" id="changeApprove">Approve change</button>':''}${selected.status==='approved'?'<button class="btn primary" id="changeStart">Start implementation</button>':''}${selected.status==='implementing'?'<textarea id="changeValidation" rows="3" placeholder="Record commands, evidence and post-change checks…"></textarea><button class="btn primary" id="changeVerify">Complete and verify</button><textarea id="changeRollbackReason" rows="2" placeholder="Why is rollback required?"></textarea><button class="btn danger" id="changeRollback">Record rollback</button>':''}</div>
+    <div class="change-timeline"><h3>Change history</h3>${(selected.history||[]).map(h=>'<div><time>'+esc(new Date(h.at).toLocaleString())+'</time><b>'+esc(changeStateLabel(h.status))+'</b><p>'+esc(h.note)+'</p></div>').join('')}</div>` : '<div class="change-empty">No change records yet. Create a request before making a planned network change.</div>';
+  root.innerHTML = `<div class="change-heading"><div><div class="eyebrow">Controlled network operations · local training records</div><h1>Change management</h1><p>Plan, review, implement and verify network changes. Every change needs a reason, impact assessment and rollback path.</p></div><button class="btn primary" id="changeNew">＋ New change</button></div>
+    <div class="change-metrics">${stateCounts.map(([state,count])=>'<div><small>'+esc(changeStateLabel(state))+'</small><b>'+count+'</b></div>').join('')}</div>
+    <div class="change-workspace"><section class="change-list-panel"><div class="change-list-heading"><h2>Change register</h2><span>${records.length} records</span></div><div class="change-list">${list||'<div class="change-empty">No requests recorded.</div>'}</div></section><section class="change-detail-panel" id="changeDetail">${detail}</section></div>
+    <div class="change-form-wrap" id="changeFormWrap" hidden><form id="changeForm" class="change-form"><div class="change-form-heading"><div><div class="eyebrow">New change request</div><h2>Describe the proposed work</h2></div><button type="button" class="btn sm" id="changeFormClose">Close</button></div>
+      <label>Change title<input name="title" required maxlength="120" placeholder="e.g. Add VLAN 30 to the access switch"></label>
+      <div class="change-form-row"><label>Change category<select name="category"><option>Configuration</option><option>Firmware / maintenance</option><option>Routing</option><option>Switching</option><option>Firewall / security</option><option>Service change</option></select></label><label>Risk<select name="risk"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div>
+      <label>Reason and expected outcome<textarea name="reason" required rows="2"></textarea></label><label>Affected devices / services<input name="affected" required placeholder="e.g. SW-CORE, VLAN 30, Finance endpoints"></label>
+      <label>Maintenance window<input name="window" required placeholder="e.g. 2026-11-08 20:00–20:30 CET"></label>
+      <label>Pre-change checks<textarea name="prechecks" required rows="3" placeholder="Current state, backups, reachability, baseline outputs…"></textarea></label>
+      <label>Implementation steps<textarea name="steps" required rows="3" placeholder="Ordered commands and actions…"></textarea></label>
+      <label>Rollback plan<textarea name="rollback" required rows="3" placeholder="Exact reversal steps and rollback trigger…"></textarea></label>
+      <label>Success criteria<textarea name="successCriteria" required rows="2" placeholder="What evidence proves the change succeeded?"></textarea></label>
+      <button class="btn primary" type="submit">Save draft change</button></form></div>`;
+  root.querySelector('#changeNew').addEventListener('click',()=>{root.querySelector('#changeFormWrap').hidden=false;root.querySelector('[name="title"]').focus();});
+  root.querySelector('#changeFormClose').addEventListener('click',()=>{root.querySelector('#changeFormWrap').hidden=true;});
+  root.querySelector('#changeForm').addEventListener('submit',e=>{
+    e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget).entries());
+    const id='CHG-'+String((PROG.changeSequence||0)+1).padStart(4,'0');PROG.changeSequence=(PROG.changeSequence||0)+1;
+    const record={...data,id,status:'draft',createdAt:new Date().toISOString(),history:[{at:new Date().toISOString(),status:'draft',note:'Change request created as a draft.'}]};
+    PROG.changes.unshift(record);CHANGE_SELECTED=id;saveProg();addJournalEntry({type:'change created',text:id+' — '+record.title});renderChangeManagement();
+  });
+  root.querySelectorAll('[data-change-select]').forEach(b=>b.addEventListener('click',()=>{CHANGE_SELECTED=b.dataset.changeSelect;renderChangeManagement();}));
+  const transition=(status,note,extra={})=>{const item=PROG.changes.find(x=>x.id===CHANGE_SELECTED);if(!item)return;Object.assign(item,extra,{status});item.history=item.history||[];item.history.push({at:new Date().toISOString(),status,note});saveProg();addJournalEntry({type:'change '+status,ticket:'',text:item.id+' — '+note});renderChangeManagement();};
+  const bind=(id,fn)=>{const el=root.querySelector('#'+id);if(el)el.addEventListener('click',fn);};
+  bind('changeSubmit',()=>transition('submitted','Submitted for peer / change-owner review.'));
+  bind('changeApprove',()=>transition('approved','Change approved for the stated maintenance window.'));
+  bind('changeStart',()=>transition('implementing','Implementation started; record evidence before completing.'));
+  bind('changeVerify',()=>{const v=root.querySelector('#changeValidation').value.trim();if(!v){root.querySelector('#changeValidation').focus();return;}transition('verified','Post-change checks recorded; success criteria reviewed.',{validation:v});});
+  bind('changeRollback',()=>{const v=root.querySelector('#changeRollbackReason').value.trim();if(!v){root.querySelector('#changeRollbackReason').focus();return;}transition('rolled-back','Rollback executed and recorded.',{rollbackReason:v});});
+}
+
 /* ---------- boot ---------- */
 function boot() {
   applyTheme(PROG.theme);
@@ -1174,6 +1227,7 @@ function boot() {
         <div class="nav-section">Reference & records</div>
         <button class="nav-item" id="navKnowledge" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
         <button class="nav-item" id="navJournal" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
+        <button class="nav-item" id="navChanges" data-view="changes" type="button"><span class="nav-glyph">⇄</span>Changes</button>
         <div class="nav-spacer"></div><div class="nav-foot">LAB STATUS · SIMULATED<br>LOCAL PROGRESS ENABLED</div>
       </aside>
       <div id="mainArea">
@@ -1199,6 +1253,7 @@ function boot() {
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
     <section id="knowledgeView" aria-label="Network knowledge centre" hidden></section>
     <section id="journalView" aria-label="Engineering journal" hidden></section>
+    <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
       <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
@@ -1212,7 +1267,8 @@ function boot() {
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
   $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
-  $('#navJournal').addEventListener('click', openJournal);
+  $('#navJournal').addEventListener('click', () => showWorkspaceView('journal'));
+  $('#navChanges').addEventListener('click', () => showWorkspaceView('changes'));
   $('#topoZoomIn').addEventListener('click', () => zoomTopology(0.8));
   $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));
   $('#topoFit').addEventListener('click', fitTopology);
