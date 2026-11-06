@@ -43,7 +43,7 @@ function switchIngressVlan(port, taggedVlan) {
     return switchPortAllowsVlan(port, vlan) ? vlan : null;
   }
   const vlan = switchAccessVlan(port);
-  return taggedVlan == null || taggedVlan === vlan ? vlan : null;
+  return taggedVlan == null ? vlan : null;
 }
 function l2Domain(net, startDev, startIface) {
   const endpoints = [], seen = new Set();
