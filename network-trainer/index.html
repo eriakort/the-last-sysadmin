@@ -4244,7 +4244,7 @@ function renderConfig() {
   if (!panels.some(p => p.id === INSPECTOR_TAB)) INSPECTOR_TAB = 'overview';
   const tabs = panels.map(p => `<button type="button" class="inspector-tab${p.id === INSPECTOR_TAB ? ' active' : ''}" data-inspector-tab="${p.id}">${p.label}</button>`).join('');
   const panel = panels.find(p => p.id === INSPECTOR_TAB);
-  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)}</h2><p>${esc(d.kind)} · ${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
+  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
     <div class="inspector-tabs" role="tablist" aria-label="Device inspector sections">${tabs}</div>
     <section class="inspector-panel" role="tabpanel">${panel.html}</section>`;
 }
