@@ -189,7 +189,14 @@ function renderConfig() {
       const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
       h += `<div class="rrow">${n} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
     }
-    h += '<p class="dim pal-hint">Configure from the terminal: vlan 10 · interface p1 · switchport access vlan 10 · show vlan brief · show interfaces trunk</p>';
+    const activeVlan = Object.values(d.ifaces).map(p => p.mode === 'trunk' ? (Array.isArray(p.allowedVlans) ? p.allowedVlans[0] : Number(p.nativeVlan ?? 1)) : Number(p.accessVlan ?? p.vlan ?? 1)).find(v => v !== 1) || vlans.find(v => v !== 1) || 1, tree = M.spanningTree(RUN.net, activeVlan), st = tree.switches[SEL];
+    const blocked = st ? Object.entries(st.ports).filter(([,p]) => p.state === 'blocking').map(([port]) => port) : [];
+    h += `<div class="label2">Spanning Tree · VLAN ${activeVlan}</div><div class="dim">Root bridge: ${esc(st ? st.root : '—')} · Priority: ${st ? st.priority : '—'}<br>Blocked ports: ${blocked.length ? blocked.join(', ') : 'none'}</div>`;
+    const learned = M.switchMacTable(RUN.net, SEL, activeVlan);
+    h += '<div class="label2">Learned MAC addresses</div>' + (learned.length
+      ? learned.slice(0,8).map(e => `<div class="rrow">${esc(e.mac)} · ${esc(e.device)} · ${esc(e.port)} · VLAN ${e.vlan}</div>`).join('')
+      : '<div class="dim">(no learned MAC addresses)</div>');
+    h += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
   } else {
     h += `<div class="label2">Interfaces</div>`;
     for (const n in d.ifaces) {
@@ -486,6 +493,9 @@ function describeCheck(s) {
     case 'bgp_session': return `${s.dev} BGP session with ${s.peer}`;
     case 'bgp_route': return `${s.dev} learns ${s.cidr} (BGP)`;
     case 'port_forward': return `${s.from} reaches ${s.server} via ${s.public}:${s.dport}`;
+    case 'mac_entry': return `${s.dev} learns ${s.device} on ${s.port} (VLAN ${s.vlan})`;
+    case 'stp_root': return `${s.root} is root for VLAN ${s.vlan}`;
+    case 'stp_blocked': return `${s.dev}/${s.port} blocks in VLAN ${s.vlan}`;
     default: return s.type;
   }
 }

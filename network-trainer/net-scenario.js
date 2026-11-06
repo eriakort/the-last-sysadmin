@@ -26,7 +26,10 @@ const CHECKS = {
   ospf_route:     ['dev', 'cidr'],
   bgp_session:    ['dev', 'peer'],
   bgp_route:      ['dev', 'cidr'],
-  port_forward:   ['from', 'public', 'dport', 'server']
+  port_forward:   ['from', 'public', 'dport', 'server'],
+  mac_entry:      ['dev', 'device', 'vlan', 'port'],
+  stp_root:       ['dev', 'vlan', 'root'],
+  stp_blocked:    ['dev', 'vlan', 'port']
 };
 
 function validate(scn) {

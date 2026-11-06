@@ -180,6 +180,140 @@ function switchIngressVlan(port, taggedVlan) {
   const vlan = switchAccessVlan(port);
   return taggedVlan == null ? vlan : null;
 }
+// Deterministic per-VLAN spanning tree. Lowest bridge priority wins; device ID
+// breaks ties. A breadth-first tree gives one root port per non-root switch.
+function stpPriority(dev, vlan) {
+  const perVlan = dev.stpPriorities || {};
+  return Number(perVlan[vlan] ?? dev.stpPriority ?? 32768);
+}
+function bridgeCompare(net, vlan, a, b) {
+  const pa = stpPriority(net.devices[a], vlan), pb = stpPriority(net.devices[b], vlan);
+  return pa - pb || String(a).localeCompare(String(b));
+}
+function spanningTree(net, vlan = 1) {
+  const ids = Object.keys(net.devices).filter(id => net.devices[id].kind === 'switch' && switchVlanExists(net.devices[id], vlan)).sort();
+  const edges = [];
+  for (const l of net.links || []) {
+    if (l.up === false) continue;
+    const [a, ap] = l.a, [b, bp] = l.b, da = net.devices[a], db = net.devices[b];
+    if (!da || !db || da.kind !== 'switch' || db.kind !== 'switch') continue;
+    const pa = da.ifaces[ap], pb = db.ifaces[bp];
+    if (!pa || !pb || pa.up === false || pb.up === false) continue;
+    if (!switchVlanExists(da, vlan) || !switchVlanExists(db, vlan)
+        || !switchPortAllowsVlan(pa, vlan) || !switchPortAllowsVlan(pb, vlan)) continue;
+    const aWire = pa.mode === 'trunk' && vlan !== switchNativeVlan(pa) ? vlan : null;
+    const bWire = pb.mode === 'trunk' && vlan !== switchNativeVlan(pb) ? vlan : null;
+    if (switchIngressVlan(pb, aWire) !== vlan || switchIngressVlan(pa, bWire) !== vlan) continue;
+    edges.push({ a, ap, b, bp });
+  }
+  const adj = Object.fromEntries(ids.map(id => [id, []]));
+  edges.forEach((e, index) => {
+    adj[e.a].push({ id: e.b, port: e.ap, peerPort: e.bp, index });
+    adj[e.b].push({ id: e.a, port: e.bp, peerPort: e.ap, index });
+  });
+  for (const id of ids) adj[id].sort((x,y) => String(x.id).localeCompare(String(y.id)) || x.port.localeCompare(y.port));
+  const info = Object.fromEntries(ids.map(id => [id, {
+    root: null, distance: Infinity, priority: stpPriority(net.devices[id], vlan), ports: {}
+  }]));
+  const visited = new Set(), treeEdges = new Set(), parent = {};
+  for (const start of ids) {
+    if (visited.has(start)) continue;
+    const component = [], queue = [start]; visited.add(start);
+    while (queue.length) {
+      const id = queue.shift(); component.push(id);
+      for (const e of adj[id]) if (!visited.has(e.id)) { visited.add(e.id); queue.push(e.id); }
+    }
+    const root = component.slice().sort((a,b)=>bridgeCompare(net,vlan,a,b))[0];
+    const bfs = [root]; info[root].root = root; info[root].distance = 0;
+    const treeSeen = new Set([root]);
+    while (bfs.length) {
+      const id = bfs.shift();
+      for (const e of adj[id]) {
+        if (treeSeen.has(e.id)) continue;
+        treeSeen.add(e.id); bfs.push(e.id); parent[e.id] = { id, edge: e.index };
+        treeEdges.add(e.index); info[e.id].root = root; info[e.id].distance = info[id].distance + 1;
+      }
+    }
+  }
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const e = edges[edgeIndex], ia = info[e.a], ib = info[e.b];
+    let ra, rb;
+    if (treeEdges.has(edgeIndex)) {
+      if (parent[e.a] && parent[e.a].edge === edgeIndex) { ra = 'root'; rb = 'designated'; }
+      else { ra = 'designated'; rb = 'root'; }
+    } else {
+      const aWins = ia.distance < ib.distance || (ia.distance === ib.distance && bridgeCompare(net,vlan,e.a,e.b) < 0);
+      ra = aWins ? 'designated' : 'alternate'; rb = aWins ? 'alternate' : 'designated';
+    }
+    info[e.a].ports[e.ap] = { role: ra, state: ra === 'alternate' ? 'blocking' : 'forwarding', neighbor: e.b, peerPort: e.bp };
+    info[e.b].ports[e.bp] = { role: rb, state: rb === 'alternate' ? 'blocking' : 'forwarding', neighbor: e.a, peerPort: e.ap };
+  }
+  for (const id of ids) {
+    for (const [port, p] of Object.entries(net.devices[id].ifaces || {})) {
+      if (!info[id].ports[port]) info[id].ports[port] = { role: 'designated', state: p.up === false ? 'down' : 'forwarding', neighbor: null, peerPort: null };
+    }
+  }
+  return { vlan, switches: info };
+}
+function stableMac(devId, ifaceName, dev, iface) {
+  const known = iface.mac || dev.mac;
+  if (known) return String(known).toLowerCase();
+  let h = 2166136261;
+  for (const ch of String(devId) + '/' + String(ifaceName)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const bytes = [2, (h >>> 24) & 255, (h >>> 16) & 255, (h >>> 8) & 255, h & 255, (h >>> 4) & 255];
+  return bytes.map(x => x.toString(16).padStart(2,'0')).join(':');
+}
+function learnMacOnSegment(net, devId, ifaceName) {
+  const dev = net.devices[devId], iface = dev && dev.ifaces[ifaceName];
+  if (!dev || dev.kind === 'switch' || !iface || iface.up === false) return;
+  const first = neighbor(net, devId, ifaceName);
+  if (!first) return;
+  const [firstSwitch, firstPort] = first, sw = net.devices[firstSwitch];
+  if (!sw || sw.kind !== 'switch') return;
+  const vlan = switchIngressVlan(sw.ifaces[firstPort], null);
+  if (vlan == null || !switchVlanExists(sw, vlan)) return;
+  const mac = stableMac(devId, ifaceName, dev, iface);
+  const stp = spanningTree(net, vlan), visited = new Set(), queue = [[firstSwitch, firstPort]];
+  while (queue.length) {
+    const [swId, ingress] = queue.shift(), key = swId + '|' + ingress;
+    if (visited.has(key)) continue; visited.add(key);
+    const current = net.devices[swId], state = stp.switches[swId];
+    if (!current || !state || (state.ports[ingress] && state.ports[ingress].state === 'blocking')) continue;
+    net.macTables = net.macTables || {};
+    net.macTables[swId] = net.macTables[swId] || {};
+    net.macTables[swId][vlan] = net.macTables[swId][vlan] || {};
+    net.macTables[swId][vlan][mac] = { vlan, mac, port: ingress, device: devId, iface: ifaceName, type: 'dynamic' };
+    for (const port of Object.keys(current.ifaces).sort()) {
+      const p = current.ifaces[port];
+      if (port === ingress || p.up === false || !switchPortAllowsVlan(p, vlan)
+          || (state.ports[port] && state.ports[port].state === 'blocking')) continue;
+      const nb = neighbor(net, swId, port); if (!nb) continue;
+      const [nextId, nextPort] = nb, next = net.devices[nextId];
+      if (!next || next.kind !== 'switch' || next.ifaces[nextPort].up === false) continue;
+      const nextState = stp.switches[nextId];
+      if (!nextState || (nextState.ports[nextPort] && nextState.ports[nextPort].state === 'blocking')) continue;
+      const wireVlan = p.mode === 'trunk' && vlan !== switchNativeVlan(p) ? vlan : null;
+      if (switchIngressVlan(next.ifaces[nextPort], wireVlan) !== vlan || !switchVlanExists(next, vlan)) continue;
+      queue.push([nextId, nextPort]);
+    }
+  }
+}
+function switchMacTable(net, switchId, vlan) {
+  const table = net.macTables && net.macTables[switchId];
+  if (!table) return [];
+  const vlans = vlan == null ? Object.keys(table).map(Number) : [Number(vlan)];
+  const entries = [];
+  for (const vid of vlans) {
+    for (const entry of Object.values(table[vid] || {})) {
+      const sw = net.devices[switchId], port = sw && sw.ifaces[entry.port];
+      const state = spanningTree(net, vid).switches[switchId];
+      if (!port || port.up === false || !switchVlanExists(sw, vid) || (state && state.ports[entry.port] && state.ports[entry.port].state === 'blocking')) continue;
+      if (port.mode === 'trunk' ? !switchPortAllowsVlan(port, vid) : switchAccessVlan(port) !== vid) continue;
+      entries.push({ ...entry });
+    }
+  }
+  return entries.sort((a,b)=>a.vlan-b.vlan || a.mac.localeCompare(b.mac));
+}
 function l2Domain(net, startDev, startIface) {
   const endpoints = [], seen = new Set();
   const first = neighbor(net, startDev, startIface);
@@ -194,14 +328,16 @@ function l2Domain(net, startDev, startIface) {
     const [d, i, vlan] = stack.pop(), key = d + '|' + i + '|' + vlan;
     if (seen.has(key)) continue; seen.add(key);
     const dev = net.devices[d]; if (!dev || dev.kind !== 'switch' || !switchVlanExists(dev, vlan)) continue;
+    const stp = spanningTree(net, vlan).switches[d];
     for (const p in dev.ifaces) {
       const port = dev.ifaces[p];
-      if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan)) continue;
+      if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan) || (stp && stp.ports[p] && stp.ports[p].state === 'blocking')) continue;
       const nb = neighbor(net, d, p); if (!nb) continue;
       const [nd, ni] = nb, next = net.devices[nd];
       if (!next) continue;
       if (next.kind === 'switch') {
-        const ingress = next.ifaces[ni];
+        const ingress = next.ifaces[ni], nextStp = spanningTree(net, vlan).switches[nd];
+        if (nextStp && nextStp.ports[ni] && nextStp.ports[ni].state === 'blocking') continue;
         const wireVlan = port.mode === 'trunk' && vlan !== switchNativeVlan(port) ? vlan : null;
         const mapped = ingress && switchIngressVlan(ingress, wireVlan);
         if (mapped != null && switchVlanExists(next, mapped)) stack.push([nd, ni, mapped]);
@@ -406,6 +542,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
       targetIp = viaRoute.via;
     }
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
+    learnMacOnSegment(net, cur, eg);
 
     const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === targetIp && net.devices[d].ifaces[i].up !== false);
     if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
@@ -495,7 +632,7 @@ function ping(net, srcDev, dst, base = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,
@@ -598,7 +735,23 @@ function portForward(net, fromId, publicIp, dport, serverId, proto = 'tcp') {
   return { ok, reason: ok ? `${fromId} reaches ${serverId} via the forwarded port ${dport}` : `traffic reaches the gateway but is not forwarded to ${serverId} (lands on ${r.to})` };
 }
 
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward };
+function macEntry(net, switchId, deviceId, vlan, port) {
+  const rows = M.switchMacTable(net, switchId, vlan);
+  const hit = rows.find(e => e.device === deviceId && (!port || e.port === port));
+  const ok = !!hit;
+  return { ok, reason: ok ? switchId + ' learned ' + deviceId + ' on ' + hit.port + ' in VLAN ' + hit.vlan : switchId + ' has not learned ' + deviceId + (port ? ' on ' + port : '') + ' in VLAN ' + vlan };
+}
+function stpRoot(net, switchId, vlan, expectedRoot) {
+  const tree = M.spanningTree(net, vlan), state = tree.switches[switchId];
+  const ok = !!(state && state.root === expectedRoot);
+  return { ok, reason: ok ? expectedRoot + ' is root bridge for VLAN ' + vlan : (state ? state.root + ' is root for VLAN ' + vlan + ', expected ' + expectedRoot : switchId + ' has no active STP instance for VLAN ' + vlan) };
+}
+function stpBlocked(net, switchId, port, vlan) {
+  const tree = M.spanningTree(net, vlan), state = tree.switches[switchId], p = state && state.ports[port];
+  const ok = !!(p && p.state === 'blocking');
+  return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
+}
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -659,6 +812,12 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  clear: (cli, a) => {
+    if (cli.net.devices[cli.cur].kind !== 'switch') return err('clear: switching commands are only available on switches');
+    if (a.join(' ') !== 'mac address-table dynamic') return err('usage: clear mac address-table dynamic');
+    if (cli.net.macTables) delete cli.net.macTables[cli.cur];
+    return ok('dynamic MAC address table cleared on ' + cli.cur);
+  },
   vlan: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     if (dev.kind !== 'switch') return err('vlan: this command is only available on switches');
@@ -669,6 +828,20 @@ const COMMANDS = {
     if (dev.vlans.includes(id)) return ok('VLAN ' + id + ' already exists');
     dev.vlans.push(id); dev.vlans.sort((x, y) => x - y);
     return ok('VLAN ' + id + ' created');
+  },
+  'spanning-tree': (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    if (dev.kind !== 'switch') return err('spanning-tree: this command is only available on switches');
+    const vlan = a[1] === 'priority' ? null : parseVlanId(a[1]);
+    if (a[0] !== 'vlan' || vlan == null || a[2] !== 'priority' || a.length !== 4)
+      return err('usage: spanning-tree vlan <1-4094> priority <0-61440, step 4096>');
+    const priority = /^\d{1,5}$/.test(a[3]) ? Number(a[3]) : NaN;
+    if (!Number.isInteger(priority) || priority < 0 || priority > 61440 || priority % 4096 !== 0)
+      return err('spanning-tree: priority must be 0–61440 in increments of 4096');
+    const vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+    if (!vlans.includes(vlan)) return err('spanning-tree: VLAN ' + vlan + ' does not exist');
+    dev.stpPriorities = { ...(dev.stpPriorities || {}), [vlan]: priority };
+    return ok('VLAN ' + vlan + ' bridge priority set to ' + priority);
   },
   interface: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
@@ -719,6 +892,20 @@ const COMMANDS = {
   show: (cli, a) => {
     const dev = cli.net.devices[cli.cur], sub = a[0], detail = a[1];
     if (dev.kind !== 'switch') return err('show: switching commands are only available on switches');
+    if (sub === 'mac' && detail === 'address-table' && (a.length === 2 || a[2] === 'dynamic')) {
+      const rows = M.switchMacTable(cli.net, cli.cur).map(e => e.vlan + '  ' + e.mac + '  DYNAMIC  ' + e.port + '  (' + e.device + '/' + e.iface + ')');
+      return ok(rows.length ? 'VLAN  MAC Address        Type     Port  Learned from\n' + rows.join('\n') : '(no dynamically learned MAC addresses)');
+    }
+    if (sub === 'spanning-tree') {
+      const vlan = detail === 'vlan' ? parseVlanId(a[2]) : (detail ? parseVlanId(detail) : 1);
+      if (vlan == null || (detail === 'vlan' && a.length !== 3) || (detail && detail !== 'vlan' && a.length !== 2) || (!detail && a.length !== 1))
+        return err('usage: show spanning-tree [vlan <1-4094>]');
+      const tree = M.spanningTree(cli.net, vlan), state = tree.switches[cli.cur];
+      if (!state) return err('show spanning-tree: VLAN ' + vlan + ' is not active on this switch');
+      const rows = Object.entries(state.ports).sort(([a],[b])=>a.localeCompare(b)).map(([port,p]) =>
+        port + '  ' + p.role + '  ' + p.state + (p.neighbor ? '  to ' + p.neighbor + '/' + p.peerPort : ''));
+      return ok('VLAN ' + vlan + ' spanning tree\nRoot bridge: ' + state.root + ' (priority ' + tree.switches[state.root].priority + ')\nLocal bridge: ' + cli.cur + ' (priority ' + state.priority + ')\nPort  Role        State       Neighbor\n' + rows.join('\n'));
+    }
     if (sub === 'vlan' && (!detail || detail === 'brief')) {
       const vlans = [...new Set([1, ...(dev.vlans || []), ...Object.values(dev.ifaces).filter(p => p.mode !== 'trunk').map(p => Number(p.accessVlan ?? p.vlan ?? 1))])].sort((x,y)=>x-y);
       const rows = vlans.map(id => {
@@ -738,7 +925,7 @@ const COMMANDS = {
         n + '  ' + (p.mode === 'trunk' ? 'trunk native ' + Number(p.nativeVlan ?? 1) + ' allowed ' + (Array.isArray(p.allowedVlans) ? p.allowedVlans.join(',') : 'all') : 'access VLAN ' + Number(p.accessVlan ?? p.vlan ?? 1)));
       return ok(rows.length ? rows.join('\n') : '(no matching switch ports)');
     }
-    return err('usage: show vlan brief | show interfaces trunk | show interfaces switchport');
+    return err('usage: show vlan brief | show interfaces trunk | show interfaces switchport | show mac address-table [dynamic] | show spanning-tree [vlan <id>]');
   },
 
   fault: (cli, a) => {
@@ -793,7 +980,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, vlan, interface, switchport, show, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · show vlan brief · show interfaces trunk\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -1049,6 +1236,8 @@ const MAN = {
   dig: 'dig NAME — ask this host\'s configured DNS server to resolve NAME to an address. Fails with NXDOMAIN (no record) or if no resolver is set / reachable.',
   dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
   resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.',
+  mac: 'show mac address-table dynamic — inspect learned endpoint MAC addresses, VLANs, and switch ports. Entries are derived from the current Layer 2 topology.',
+  'spanning-tree': 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
@@ -1080,6 +1269,9 @@ function evalCheck(net, s) {
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'port_forward':   return C.portForward(net, s.from, s.public, s.dport, s.server, s.proto);
+    case 'mac_entry':      return C.macEntry(net, s.dev, s.device, s.vlan, s.port);
+    case 'stp_root':       return C.stpRoot(net, s.dev, s.vlan, s.root);
+    case 'stp_blocked':    return C.stpBlocked(net, s.dev, s.port, s.vlan);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }
@@ -1801,6 +1993,40 @@ const chapters = [
     solution: [['sw1', 'interface p2'], ['sw1', 'switchport mode trunk'], ['sw1', 'switchport trunk allowed vlan 10,20'], ['sw1', 'exit'], ['sw2', 'interface p1'], ['sw2', 'switchport mode trunk'], ['sw2', 'switchport trunk allowed vlan 10,20'], ['sw2', 'exit']]
   }
 
+,
+  { id: 'break-the-switching-loop', chapter: 'Switching · STP & MAC learning',
+    title: 'Stop the loop, keep the link',
+    story: 'A three-switch office has redundant uplinks between all three switches. A recent change left the distribution switch with the wrong bridge priority, so the network team needs the intended root bridge restored and the redundant path safely blocked. Users must stay online while the loop is prevented.',
+    objective: 'Make sw3 the root bridge for VLAN 10, verify STP blocks the redundant sw1–sw2 link at sw2/p1, and confirm both endpoint MAC addresses are learned.',
+    ticket: { id: 'INC-3201', from: 'NOC · Campus switching', priority: 'P1', symptom: 'Broadcast traffic spikes whenever both uplinks are connected. Users report intermittent access, but disconnecting either uplink makes the network stable.' },
+    diagnose: { q: 'Three switches form a triangle. What prevents a Layer 2 loop while preserving a redundant path?', options: ['Spanning Tree Protocol elects a root and blocks one redundant path', 'Change the hosts to different IP subnets', 'Allow every VLAN on every access port'], answer: 0, because: 'STP builds a loop-free forwarding tree. It keeps the physical backup link available but places one port in an alternate/blocking role until the topology changes.' },
+    console: 'sw3',
+    hints: ['Run show spanning-tree vlan 10 on each switch and compare the root bridge.', 'Lower bridge priority wins the root election. Use spanning-tree vlan 10 priority 4096 on sw3.', 'Verify sw2/p1 is alternate/blocking, then inspect show mac address-table dynamic on sw1.'],
+    build: () => {
+      const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }, { n: 'p3' }]);
+      const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2' }]);
+      const sw3 = SW('sw3', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3', v: 10 }]);
+      for (const sw of [sw1, sw2, sw3]) sw.vlans = [1, 10];
+      for (const [sw, ports] of [[sw1,['p2','p3']],[sw2,['p1','p2']],[sw3,['p1','p2']]]) {
+        for (const port of ports) { sw.ifaces[port].mode = 'trunk'; sw.ifaces[port].allowedVlans = [10]; }
+      }
+      return { devices: {
+        h1: H('h1', '10.40.0.10', 24), srv: SRV('srv', '10.40.0.20', 24, null, { 445: 'smb' }),
+        sw1, sw2, sw3
+      }, links: [
+        L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw3', 'p3'),
+        L('sw1', 'p2', 'sw2', 'p1'), L('sw2', 'p2', 'sw3', 'p1'), L('sw3', 'p2', 'sw1', 'p3')
+      ] };
+    },
+    success: [
+      { type: 'stp_root', dev: 'sw1', vlan: 10, root: 'sw3' },
+      { type: 'stp_blocked', dev: 'sw2', vlan: 10, port: 'p1' },
+      { type: 'mac_entry', dev: 'sw1', vlan: 10, device: 'h1', port: 'p1' },
+      { type: 'mac_entry', dev: 'sw1', vlan: 10, device: 'srv', port: 'p3' },
+      { type: 'reachable', a: 'h1', b: 'srv' }
+    ],
+    solution: [['sw3', 'spanning-tree vlan 10 priority 4096'], ['h1', 'ping srv'], ['sw1', 'show spanning-tree vlan 10'], ['sw1', 'show mac address-table dynamic']]
+  }
 ];
 
 module.exports = { chapters };
@@ -1924,7 +2150,10 @@ const CHECKS = {
   ospf_route:     ['dev', 'cidr'],
   bgp_session:    ['dev', 'peer'],
   bgp_route:      ['dev', 'cidr'],
-  port_forward:   ['from', 'public', 'dport', 'server']
+  port_forward:   ['from', 'public', 'dport', 'server'],
+  mac_entry:      ['dev', 'device', 'vlan', 'port'],
+  stp_root:       ['dev', 'vlan', 'root'],
+  stp_blocked:    ['dev', 'vlan', 'port']
 };
 
 function validate(scn) {
@@ -2248,7 +2477,14 @@ function renderConfig() {
       const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
       h += `<div class="rrow">${n} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
     }
-    h += '<p class="dim pal-hint">Configure from the terminal: vlan 10 · interface p1 · switchport access vlan 10 · show vlan brief · show interfaces trunk</p>';
+    const activeVlan = Object.values(d.ifaces).map(p => p.mode === 'trunk' ? (Array.isArray(p.allowedVlans) ? p.allowedVlans[0] : Number(p.nativeVlan ?? 1)) : Number(p.accessVlan ?? p.vlan ?? 1)).find(v => v !== 1) || vlans.find(v => v !== 1) || 1, tree = M.spanningTree(RUN.net, activeVlan), st = tree.switches[SEL];
+    const blocked = st ? Object.entries(st.ports).filter(([,p]) => p.state === 'blocking').map(([port]) => port) : [];
+    h += `<div class="label2">Spanning Tree · VLAN ${activeVlan}</div><div class="dim">Root bridge: ${esc(st ? st.root : '—')} · Priority: ${st ? st.priority : '—'}<br>Blocked ports: ${blocked.length ? blocked.join(', ') : 'none'}</div>`;
+    const learned = M.switchMacTable(RUN.net, SEL, activeVlan);
+    h += '<div class="label2">Learned MAC addresses</div>' + (learned.length
+      ? learned.slice(0,8).map(e => `<div class="rrow">${esc(e.mac)} · ${esc(e.device)} · ${esc(e.port)} · VLAN ${e.vlan}</div>`).join('')
+      : '<div class="dim">(no learned MAC addresses)</div>');
+    h += '<p class="dim pal-hint">Configure: vlan 10 · interface p1 · switchport access vlan 10 · spanning-tree vlan 10 priority 4096 · show spanning-tree · show mac address-table dynamic</p>';
   } else {
     h += `<div class="label2">Interfaces</div>`;
     for (const n in d.ifaces) {
@@ -2545,6 +2781,9 @@ function describeCheck(s) {
     case 'bgp_session': return `${s.dev} BGP session with ${s.peer}`;
     case 'bgp_route': return `${s.dev} learns ${s.cidr} (BGP)`;
     case 'port_forward': return `${s.from} reaches ${s.server} via ${s.public}:${s.dport}`;
+    case 'mac_entry': return `${s.dev} learns ${s.device} on ${s.port} (VLAN ${s.vlan})`;
+    case 'stp_root': return `${s.root} is root for VLAN ${s.vlan}`;
+    case 'stp_blocked': return `${s.dev}/${s.port} blocks in VLAN ${s.vlan}`;
     default: return s.type;
   }
 }

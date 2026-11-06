@@ -55,6 +55,12 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  clear: (cli, a) => {
+    if (cli.net.devices[cli.cur].kind !== 'switch') return err('clear: switching commands are only available on switches');
+    if (a.join(' ') !== 'mac address-table dynamic') return err('usage: clear mac address-table dynamic');
+    if (cli.net.macTables) delete cli.net.macTables[cli.cur];
+    return ok('dynamic MAC address table cleared on ' + cli.cur);
+  },
   vlan: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
     if (dev.kind !== 'switch') return err('vlan: this command is only available on switches');
@@ -65,6 +71,20 @@ const COMMANDS = {
     if (dev.vlans.includes(id)) return ok('VLAN ' + id + ' already exists');
     dev.vlans.push(id); dev.vlans.sort((x, y) => x - y);
     return ok('VLAN ' + id + ' created');
+  },
+  'spanning-tree': (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    if (dev.kind !== 'switch') return err('spanning-tree: this command is only available on switches');
+    const vlan = a[1] === 'priority' ? null : parseVlanId(a[1]);
+    if (a[0] !== 'vlan' || vlan == null || a[2] !== 'priority' || a.length !== 4)
+      return err('usage: spanning-tree vlan <1-4094> priority <0-61440, step 4096>');
+    const priority = /^\d{1,5}$/.test(a[3]) ? Number(a[3]) : NaN;
+    if (!Number.isInteger(priority) || priority < 0 || priority > 61440 || priority % 4096 !== 0)
+      return err('spanning-tree: priority must be 0–61440 in increments of 4096');
+    const vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+    if (!vlans.includes(vlan)) return err('spanning-tree: VLAN ' + vlan + ' does not exist');
+    dev.stpPriorities = { ...(dev.stpPriorities || {}), [vlan]: priority };
+    return ok('VLAN ' + vlan + ' bridge priority set to ' + priority);
   },
   interface: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
@@ -115,6 +135,20 @@ const COMMANDS = {
   show: (cli, a) => {
     const dev = cli.net.devices[cli.cur], sub = a[0], detail = a[1];
     if (dev.kind !== 'switch') return err('show: switching commands are only available on switches');
+    if (sub === 'mac' && detail === 'address-table' && (a.length === 2 || a[2] === 'dynamic')) {
+      const rows = M.switchMacTable(cli.net, cli.cur).map(e => e.vlan + '  ' + e.mac + '  DYNAMIC  ' + e.port + '  (' + e.device + '/' + e.iface + ')');
+      return ok(rows.length ? 'VLAN  MAC Address        Type     Port  Learned from\n' + rows.join('\n') : '(no dynamically learned MAC addresses)');
+    }
+    if (sub === 'spanning-tree') {
+      const vlan = detail === 'vlan' ? parseVlanId(a[2]) : (detail ? parseVlanId(detail) : 1);
+      if (vlan == null || (detail === 'vlan' && a.length !== 3) || (detail && detail !== 'vlan' && a.length !== 2) || (!detail && a.length !== 1))
+        return err('usage: show spanning-tree [vlan <1-4094>]');
+      const tree = M.spanningTree(cli.net, vlan), state = tree.switches[cli.cur];
+      if (!state) return err('show spanning-tree: VLAN ' + vlan + ' is not active on this switch');
+      const rows = Object.entries(state.ports).sort(([a],[b])=>a.localeCompare(b)).map(([port,p]) =>
+        port + '  ' + p.role + '  ' + p.state + (p.neighbor ? '  to ' + p.neighbor + '/' + p.peerPort : ''));
+      return ok('VLAN ' + vlan + ' spanning tree\nRoot bridge: ' + state.root + ' (priority ' + tree.switches[state.root].priority + ')\nLocal bridge: ' + cli.cur + ' (priority ' + state.priority + ')\nPort  Role        State       Neighbor\n' + rows.join('\n'));
+    }
     if (sub === 'vlan' && (!detail || detail === 'brief')) {
       const vlans = [...new Set([1, ...(dev.vlans || []), ...Object.values(dev.ifaces).filter(p => p.mode !== 'trunk').map(p => Number(p.accessVlan ?? p.vlan ?? 1))])].sort((x,y)=>x-y);
       const rows = vlans.map(id => {
@@ -134,7 +168,7 @@ const COMMANDS = {
         n + '  ' + (p.mode === 'trunk' ? 'trunk native ' + Number(p.nativeVlan ?? 1) + ' allowed ' + (Array.isArray(p.allowedVlans) ? p.allowedVlans.join(',') : 'all') : 'access VLAN ' + Number(p.accessVlan ?? p.vlan ?? 1)));
       return ok(rows.length ? rows.join('\n') : '(no matching switch ports)');
     }
-    return err('usage: show vlan brief | show interfaces trunk | show interfaces switchport');
+    return err('usage: show vlan brief | show interfaces trunk | show interfaces switchport | show mac address-table [dynamic] | show spanning-tree [vlan <id>]');
   },
 
   fault: (cli, a) => {
@@ -189,7 +223,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, vlan, interface, switchport, show, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · show vlan brief · show interfaces trunk\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -445,6 +479,8 @@ const MAN = {
   dig: 'dig NAME — ask this host\'s configured DNS server to resolve NAME to an address. Fails with NXDOMAIN (no record) or if no resolver is set / reachable.',
   dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
   resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.',
+  mac: 'show mac address-table dynamic — inspect learned endpoint MAC addresses, VLANs, and switch ports. Entries are derived from the current Layer 2 topology.',
+  'spanning-tree': 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 

@@ -201,3 +201,24 @@ show interfaces switchport
 VLAN IDs must be integers from 1 through 4094. Access/native VLANs and explicit trunk allow-lists must reference VLANs created on that switch. The `all` trunk allow-list option removes the explicit restriction. Switch port configuration is persistent in the scenario state.
 
 The switching pilot adds two practical tickets: correcting mismatched access VLANs and restoring a VLAN excluded from an inter-switch trunk. Tests cover access isolation, multi-switch trunk forwarding, native VLAN mismatches, invalid configuration, verification output, loop-safe traversal, and a browser-driven configuration workflow.
+
+
+## Switching: MAC learning and Spanning Tree
+
+Switches learn endpoint source MAC addresses when traffic crosses a Layer 2 segment. Each endpoint receives a stable locally administered MAC address unless a scenario supplies one. A frame is learned on the ingress port at each switch along the active forwarding tree; a response teaches the reverse direction. The table reports the VLAN, learned MAC, dynamic entry type, ingress port, and endpoint.
+
+Use `show mac address-table dynamic` to inspect learned endpoints. Entries are populated by traffic rather than pre-filled from the topology. Clear dynamic entries with `clear mac address-table dynamic` after a cabling or VLAN change.
+
+Per-VLAN Spanning Tree Protocol (STP) elects the switch with the lowest bridge priority as root (device ID breaks ties). A deterministic shortest-hop spanning tree selects root and designated ports; redundant links receive an alternate/blocking role. Blocking is enforced at both ends of the link in the Layer 2 forwarding model. This is an educational STP model: it does not simulate BPDU timers, convergence delays, path-cost tuning, or the full IEEE state machine.
+
+Configure a bridge priority in increments of 4096:
+
+```text
+spanning-tree vlan 10 priority 4096
+show spanning-tree vlan 10
+show mac address-table dynamic
+```
+
+The switch configuration panel also shows the active VLAN's root bridge, bridge priority, blocked ports, and learned MAC entries. The STP incident mission uses a three-switch triangle to practise root election, redundant-link blocking, MAC-table verification, and end-to-end reachability.
+
+Regression coverage includes stable local/remote MAC learning, root election and priority validation, alternate-port blocking, loop-free reachability, a non-redundant topology, mission solvability, and browser-driven verification.

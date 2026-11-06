@@ -45,6 +45,140 @@ function switchIngressVlan(port, taggedVlan) {
   const vlan = switchAccessVlan(port);
   return taggedVlan == null ? vlan : null;
 }
+// Deterministic per-VLAN spanning tree. Lowest bridge priority wins; device ID
+// breaks ties. A breadth-first tree gives one root port per non-root switch.
+function stpPriority(dev, vlan) {
+  const perVlan = dev.stpPriorities || {};
+  return Number(perVlan[vlan] ?? dev.stpPriority ?? 32768);
+}
+function bridgeCompare(net, vlan, a, b) {
+  const pa = stpPriority(net.devices[a], vlan), pb = stpPriority(net.devices[b], vlan);
+  return pa - pb || String(a).localeCompare(String(b));
+}
+function spanningTree(net, vlan = 1) {
+  const ids = Object.keys(net.devices).filter(id => net.devices[id].kind === 'switch' && switchVlanExists(net.devices[id], vlan)).sort();
+  const edges = [];
+  for (const l of net.links || []) {
+    if (l.up === false) continue;
+    const [a, ap] = l.a, [b, bp] = l.b, da = net.devices[a], db = net.devices[b];
+    if (!da || !db || da.kind !== 'switch' || db.kind !== 'switch') continue;
+    const pa = da.ifaces[ap], pb = db.ifaces[bp];
+    if (!pa || !pb || pa.up === false || pb.up === false) continue;
+    if (!switchVlanExists(da, vlan) || !switchVlanExists(db, vlan)
+        || !switchPortAllowsVlan(pa, vlan) || !switchPortAllowsVlan(pb, vlan)) continue;
+    const aWire = pa.mode === 'trunk' && vlan !== switchNativeVlan(pa) ? vlan : null;
+    const bWire = pb.mode === 'trunk' && vlan !== switchNativeVlan(pb) ? vlan : null;
+    if (switchIngressVlan(pb, aWire) !== vlan || switchIngressVlan(pa, bWire) !== vlan) continue;
+    edges.push({ a, ap, b, bp });
+  }
+  const adj = Object.fromEntries(ids.map(id => [id, []]));
+  edges.forEach((e, index) => {
+    adj[e.a].push({ id: e.b, port: e.ap, peerPort: e.bp, index });
+    adj[e.b].push({ id: e.a, port: e.bp, peerPort: e.ap, index });
+  });
+  for (const id of ids) adj[id].sort((x,y) => String(x.id).localeCompare(String(y.id)) || x.port.localeCompare(y.port));
+  const info = Object.fromEntries(ids.map(id => [id, {
+    root: null, distance: Infinity, priority: stpPriority(net.devices[id], vlan), ports: {}
+  }]));
+  const visited = new Set(), treeEdges = new Set(), parent = {};
+  for (const start of ids) {
+    if (visited.has(start)) continue;
+    const component = [], queue = [start]; visited.add(start);
+    while (queue.length) {
+      const id = queue.shift(); component.push(id);
+      for (const e of adj[id]) if (!visited.has(e.id)) { visited.add(e.id); queue.push(e.id); }
+    }
+    const root = component.slice().sort((a,b)=>bridgeCompare(net,vlan,a,b))[0];
+    const bfs = [root]; info[root].root = root; info[root].distance = 0;
+    const treeSeen = new Set([root]);
+    while (bfs.length) {
+      const id = bfs.shift();
+      for (const e of adj[id]) {
+        if (treeSeen.has(e.id)) continue;
+        treeSeen.add(e.id); bfs.push(e.id); parent[e.id] = { id, edge: e.index };
+        treeEdges.add(e.index); info[e.id].root = root; info[e.id].distance = info[id].distance + 1;
+      }
+    }
+  }
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const e = edges[edgeIndex], ia = info[e.a], ib = info[e.b];
+    let ra, rb;
+    if (treeEdges.has(edgeIndex)) {
+      if (parent[e.a] && parent[e.a].edge === edgeIndex) { ra = 'root'; rb = 'designated'; }
+      else { ra = 'designated'; rb = 'root'; }
+    } else {
+      const aWins = ia.distance < ib.distance || (ia.distance === ib.distance && bridgeCompare(net,vlan,e.a,e.b) < 0);
+      ra = aWins ? 'designated' : 'alternate'; rb = aWins ? 'alternate' : 'designated';
+    }
+    info[e.a].ports[e.ap] = { role: ra, state: ra === 'alternate' ? 'blocking' : 'forwarding', neighbor: e.b, peerPort: e.bp };
+    info[e.b].ports[e.bp] = { role: rb, state: rb === 'alternate' ? 'blocking' : 'forwarding', neighbor: e.a, peerPort: e.ap };
+  }
+  for (const id of ids) {
+    for (const [port, p] of Object.entries(net.devices[id].ifaces || {})) {
+      if (!info[id].ports[port]) info[id].ports[port] = { role: 'designated', state: p.up === false ? 'down' : 'forwarding', neighbor: null, peerPort: null };
+    }
+  }
+  return { vlan, switches: info };
+}
+function stableMac(devId, ifaceName, dev, iface) {
+  const known = iface.mac || dev.mac;
+  if (known) return String(known).toLowerCase();
+  let h = 2166136261;
+  for (const ch of String(devId) + '/' + String(ifaceName)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  const bytes = [2, (h >>> 24) & 255, (h >>> 16) & 255, (h >>> 8) & 255, h & 255, (h >>> 4) & 255];
+  return bytes.map(x => x.toString(16).padStart(2,'0')).join(':');
+}
+function learnMacOnSegment(net, devId, ifaceName) {
+  const dev = net.devices[devId], iface = dev && dev.ifaces[ifaceName];
+  if (!dev || dev.kind === 'switch' || !iface || iface.up === false) return;
+  const first = neighbor(net, devId, ifaceName);
+  if (!first) return;
+  const [firstSwitch, firstPort] = first, sw = net.devices[firstSwitch];
+  if (!sw || sw.kind !== 'switch') return;
+  const vlan = switchIngressVlan(sw.ifaces[firstPort], null);
+  if (vlan == null || !switchVlanExists(sw, vlan)) return;
+  const mac = stableMac(devId, ifaceName, dev, iface);
+  const stp = spanningTree(net, vlan), visited = new Set(), queue = [[firstSwitch, firstPort]];
+  while (queue.length) {
+    const [swId, ingress] = queue.shift(), key = swId + '|' + ingress;
+    if (visited.has(key)) continue; visited.add(key);
+    const current = net.devices[swId], state = stp.switches[swId];
+    if (!current || !state || (state.ports[ingress] && state.ports[ingress].state === 'blocking')) continue;
+    net.macTables = net.macTables || {};
+    net.macTables[swId] = net.macTables[swId] || {};
+    net.macTables[swId][vlan] = net.macTables[swId][vlan] || {};
+    net.macTables[swId][vlan][mac] = { vlan, mac, port: ingress, device: devId, iface: ifaceName, type: 'dynamic' };
+    for (const port of Object.keys(current.ifaces).sort()) {
+      const p = current.ifaces[port];
+      if (port === ingress || p.up === false || !switchPortAllowsVlan(p, vlan)
+          || (state.ports[port] && state.ports[port].state === 'blocking')) continue;
+      const nb = neighbor(net, swId, port); if (!nb) continue;
+      const [nextId, nextPort] = nb, next = net.devices[nextId];
+      if (!next || next.kind !== 'switch' || next.ifaces[nextPort].up === false) continue;
+      const nextState = stp.switches[nextId];
+      if (!nextState || (nextState.ports[nextPort] && nextState.ports[nextPort].state === 'blocking')) continue;
+      const wireVlan = p.mode === 'trunk' && vlan !== switchNativeVlan(p) ? vlan : null;
+      if (switchIngressVlan(next.ifaces[nextPort], wireVlan) !== vlan || !switchVlanExists(next, vlan)) continue;
+      queue.push([nextId, nextPort]);
+    }
+  }
+}
+function switchMacTable(net, switchId, vlan) {
+  const table = net.macTables && net.macTables[switchId];
+  if (!table) return [];
+  const vlans = vlan == null ? Object.keys(table).map(Number) : [Number(vlan)];
+  const entries = [];
+  for (const vid of vlans) {
+    for (const entry of Object.values(table[vid] || {})) {
+      const sw = net.devices[switchId], port = sw && sw.ifaces[entry.port];
+      const state = spanningTree(net, vid).switches[switchId];
+      if (!port || port.up === false || !switchVlanExists(sw, vid) || (state && state.ports[entry.port] && state.ports[entry.port].state === 'blocking')) continue;
+      if (port.mode === 'trunk' ? !switchPortAllowsVlan(port, vid) : switchAccessVlan(port) !== vid) continue;
+      entries.push({ ...entry });
+    }
+  }
+  return entries.sort((a,b)=>a.vlan-b.vlan || a.mac.localeCompare(b.mac));
+}
 function l2Domain(net, startDev, startIface) {
   const endpoints = [], seen = new Set();
   const first = neighbor(net, startDev, startIface);
@@ -59,14 +193,16 @@ function l2Domain(net, startDev, startIface) {
     const [d, i, vlan] = stack.pop(), key = d + '|' + i + '|' + vlan;
     if (seen.has(key)) continue; seen.add(key);
     const dev = net.devices[d]; if (!dev || dev.kind !== 'switch' || !switchVlanExists(dev, vlan)) continue;
+    const stp = spanningTree(net, vlan).switches[d];
     for (const p in dev.ifaces) {
       const port = dev.ifaces[p];
-      if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan)) continue;
+      if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan) || (stp && stp.ports[p] && stp.ports[p].state === 'blocking')) continue;
       const nb = neighbor(net, d, p); if (!nb) continue;
       const [nd, ni] = nb, next = net.devices[nd];
       if (!next) continue;
       if (next.kind === 'switch') {
-        const ingress = next.ifaces[ni];
+        const ingress = next.ifaces[ni], nextStp = spanningTree(net, vlan).switches[nd];
+        if (nextStp && nextStp.ports[ni] && nextStp.ports[ni].state === 'blocking') continue;
         const wireVlan = port.mode === 'trunk' && vlan !== switchNativeVlan(port) ? vlan : null;
         const mapped = ingress && switchIngressVlan(ingress, wireVlan);
         if (mapped != null && switchVlanExists(next, mapped)) stack.push([nd, ni, mapped]);
@@ -271,6 +407,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
       targetIp = viaRoute.via;
     }
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
+    learnMacOnSegment(net, cur, eg);
 
     const ep = l2Domain(net, cur, eg).find(([d, i]) => net.devices[d].ifaces[i].ip === targetIp && net.devices[d].ifaces[i].up !== false);
     if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
@@ -360,7 +497,7 @@ function ping(net, srcDev, dst, base = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,

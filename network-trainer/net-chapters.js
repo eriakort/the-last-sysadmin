@@ -650,6 +650,40 @@ const chapters = [
     solution: [['sw1', 'interface p2'], ['sw1', 'switchport mode trunk'], ['sw1', 'switchport trunk allowed vlan 10,20'], ['sw1', 'exit'], ['sw2', 'interface p1'], ['sw2', 'switchport mode trunk'], ['sw2', 'switchport trunk allowed vlan 10,20'], ['sw2', 'exit']]
   }
 
+,
+  { id: 'break-the-switching-loop', chapter: 'Switching · STP & MAC learning',
+    title: 'Stop the loop, keep the link',
+    story: 'A three-switch office has redundant uplinks between all three switches. A recent change left the distribution switch with the wrong bridge priority, so the network team needs the intended root bridge restored and the redundant path safely blocked. Users must stay online while the loop is prevented.',
+    objective: 'Make sw3 the root bridge for VLAN 10, verify STP blocks the redundant sw1–sw2 link at sw2/p1, and confirm both endpoint MAC addresses are learned.',
+    ticket: { id: 'INC-3201', from: 'NOC · Campus switching', priority: 'P1', symptom: 'Broadcast traffic spikes whenever both uplinks are connected. Users report intermittent access, but disconnecting either uplink makes the network stable.' },
+    diagnose: { q: 'Three switches form a triangle. What prevents a Layer 2 loop while preserving a redundant path?', options: ['Spanning Tree Protocol elects a root and blocks one redundant path', 'Change the hosts to different IP subnets', 'Allow every VLAN on every access port'], answer: 0, because: 'STP builds a loop-free forwarding tree. It keeps the physical backup link available but places one port in an alternate/blocking role until the topology changes.' },
+    console: 'sw3',
+    hints: ['Run show spanning-tree vlan 10 on each switch and compare the root bridge.', 'Lower bridge priority wins the root election. Use spanning-tree vlan 10 priority 4096 on sw3.', 'Verify sw2/p1 is alternate/blocking, then inspect show mac address-table dynamic on sw1.'],
+    build: () => {
+      const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }, { n: 'p3' }]);
+      const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2' }]);
+      const sw3 = SW('sw3', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3', v: 10 }]);
+      for (const sw of [sw1, sw2, sw3]) sw.vlans = [1, 10];
+      for (const [sw, ports] of [[sw1,['p2','p3']],[sw2,['p1','p2']],[sw3,['p1','p2']]]) {
+        for (const port of ports) { sw.ifaces[port].mode = 'trunk'; sw.ifaces[port].allowedVlans = [10]; }
+      }
+      return { devices: {
+        h1: H('h1', '10.40.0.10', 24), srv: SRV('srv', '10.40.0.20', 24, null, { 445: 'smb' }),
+        sw1, sw2, sw3
+      }, links: [
+        L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw3', 'p3'),
+        L('sw1', 'p2', 'sw2', 'p1'), L('sw2', 'p2', 'sw3', 'p1'), L('sw3', 'p2', 'sw1', 'p3')
+      ] };
+    },
+    success: [
+      { type: 'stp_root', dev: 'sw1', vlan: 10, root: 'sw3' },
+      { type: 'stp_blocked', dev: 'sw2', vlan: 10, port: 'p1' },
+      { type: 'mac_entry', dev: 'sw1', vlan: 10, device: 'h1', port: 'p1' },
+      { type: 'mac_entry', dev: 'sw1', vlan: 10, device: 'srv', port: 'p3' },
+      { type: 'reachable', a: 'h1', b: 'srv' }
+    ],
+    solution: [['sw3', 'spanning-tree vlan 10 priority 4096'], ['h1', 'ping srv'], ['sw1', 'show spanning-tree vlan 10'], ['sw1', 'show mac address-table dynamic']]
+  }
 ];
 
 module.exports = { chapters };

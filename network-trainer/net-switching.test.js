@@ -104,5 +104,105 @@ test('VLAN-aware traversal terminates on redundant switch links', () => {
   assert(connected(net), 'looped Layer 2 topology should still find the endpoint');
 });
 
+
+function triangle() {
+  const net = { devices: {
+    h1: host('h1','10.0.0.10'), srv: host('srv','10.0.0.20'),
+    sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{mode:'trunk',allowedVlans:[10]}],['p3',{mode:'trunk',allowedVlans:[10]}]]),
+    sw2: sw('sw2',[['p1',{mode:'trunk',allowedVlans:[10]}],['p2',{mode:'trunk',allowedVlans:[10]}]]),
+    sw3: sw('sw3',[['p1',{mode:'trunk',allowedVlans:[10]}],['p2',{mode:'trunk',allowedVlans:[10]}],['p3',{accessVlan:10}]])
+  }, links: [
+    link('h1','eth0','sw1','p1'), link('srv','eth0','sw3','p3'),
+    link('sw1','p2','sw2','p1'), link('sw2','p2','sw3','p1'), link('sw3','p2','sw1','p3')
+  ] };
+  for (const id of ['sw1','sw2','sw3']) net.devices[id].vlans = [1,10];
+  return net;
+}
+
+test('MAC learning records local and remote endpoints on the correct egress ports', () => {
+  const net = triangle();
+  assert(M.switchMacTable(net,'sw1',10).length === 0, 'the table should be empty before endpoint traffic');
+  assert(connected(net), 'traffic should populate the dynamic MAC table');
+  const rows = M.switchMacTable(net,'sw1',10);
+  const h1 = rows.find(x => x.device === 'h1'), srv = rows.find(x => x.device === 'srv');
+  assert(h1 && h1.port === 'p1', 'local host h1 should be learned on sw1/p1');
+  assert(srv && srv.port === 'p3', 'remote server should be learned through sw1/p3');
+  assert(rows.every(x => x.type === 'dynamic' && /^02:/.test(x.mac)), 'entries should be stable dynamic MACs');
+});
+
+test('STP elects the lowest-priority root and blocks one redundant triangle link', () => {
+  const net = triangle();
+  const initial = M.spanningTree(net,10);
+  assert(initial.switches.sw1.root === 'sw1', 'default bridge ID tie-break should elect sw1');
+  const cli = makeCLI(net,'sw3');
+  command(cli,'sw3','spanning-tree vlan 10 priority 4096');
+  const tree = M.spanningTree(net,10);
+  assert(tree.switches.sw1.root === 'sw3' && tree.switches.sw2.root === 'sw3', 'all switches should agree on sw3 as root');
+  assert(tree.switches.sw2.ports.p1.state === 'blocking', 'sw2/p1 should be alternate on the non-tree link');
+  assert(connected(net), 'STP should preserve reachability across the loop-free tree');
+  const shown = command(cli,'sw3','show spanning-tree vlan 10');
+  assert(shown.includes('Root bridge: sw3') && shown.includes('designated'), 'show spanning-tree should report root and roles');
+});
+
+test('MAC table CLI exposes dynamic VLAN, MAC, and learned switch port', () => {
+  const net = triangle(), cli = makeCLI(net,'sw1');
+  assert(connected(net), 'ping should trigger dynamic MAC learning');
+  const output = command(cli,'sw1','show mac address-table dynamic');
+  assert(output.includes('VLAN  MAC Address') && output.includes('h1/eth0') && output.includes('srv/eth0'), 'MAC table should show local and remote endpoint records');
+  command(cli,'sw1','clear mac address-table dynamic');
+  assert(M.switchMacTable(net,'sw1',10).length === 0, 'clear should remove learned entries from the selected switch');
+});
+
+test('STP priority validates VLAN existence and 4096-step bridge priority values', () => {
+  const net = triangle(), cli = makeCLI(net,'sw3');
+  command(cli,'sw3','spanning-tree vlan 10 priority 4096');
+  command(cli,'sw3','spanning-tree vlan 10 priority 4097',1);
+  command(cli,'sw3','spanning-tree vlan 10 priority 65536',1);
+  command(cli,'sw3','spanning-tree vlan 20 priority 4096',1);
+  command(cli,'sw3','spanning-tree vlan 10 priority 0x1000',1);
+  assert(net.devices.sw3.stpPriorities[10] === 4096, 'invalid values must not mutate priority');
+});
+
+test('a simple two-switch topology has no alternate blocking port', () => {
+  const net = { devices: {
+    h1: host('h1','10.0.0.10'),
+    sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{mode:'trunk',allowedVlans:[10]}]]),
+    sw2: sw('sw2',[['p1',{mode:'trunk',allowedVlans:[10]}],['p2',{accessVlan:10}]])
+  }, links: [link('h1','eth0','sw1','p1'),link('sw1','p2','sw2','p1')] };
+  net.devices.sw1.vlans=[1,10]; net.devices.sw2.vlans=[1,10];
+  const tree=M.spanningTree(net,10);
+  assert(!Object.values(tree.switches).some(s=>Object.values(s.ports).some(p=>p.state==='blocking')), 'tree topology should not block a port');
+});
+
+
+test('STP root election is independent for each VLAN', () => {
+  const net = triangle();
+  for (const id of ['sw1','sw2','sw3']) {
+    net.devices[id].vlans = [1,10,20];
+    for (const port of Object.values(net.devices[id].ifaces)) if (port.mode === 'trunk') port.allowedVlans = [10,20];
+  }
+  net.devices.sw3.stpPriorities = { 10: 4096 };
+  net.devices.sw2.stpPriorities = { 20: 4096 };
+  assert(M.spanningTree(net,10).switches.sw1.root === 'sw3', 'VLAN 10 should elect sw3');
+  assert(M.spanningTree(net,20).switches.sw1.root === 'sw2', 'VLAN 20 should elect sw2');
+});
+
+
+test('STP and MAC learning also work on switch-to-switch access links', () => {
+  const net = triangle();
+  for (const id of ['sw1','sw2','sw3']) {
+    for (const p of Object.values(net.devices[id].ifaces)) {
+      p.mode = 'access'; p.accessVlan = 10; p.vlan = 10; delete p.allowedVlans;
+    }
+  }
+  net.devices.sw3.stpPriorities = { 10: 4096 };
+  const tree = M.spanningTree(net,10);
+  assert(tree.switches.sw1.root === 'sw3', 'sw3 should be elected on an access-link topology');
+  assert(tree.switches.sw2.ports.p1.state === 'blocking', 'the redundant access link should be blocked');
+  assert(connected(net), 'STP should preserve reachability on access switch links');
+  const rows = M.switchMacTable(net,'sw1',10);
+  assert(rows.some(x=>x.device==='srv' && x.port==='p3'), 'remote MAC should be learned across access switch links');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
 if (failed) process.exit(1);
