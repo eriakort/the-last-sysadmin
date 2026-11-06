@@ -73,6 +73,11 @@ function ospfRoute(net, devId, cidrStr) {
   const hit = M.ospfLearned(net, devId).some(r => M.networkOf(r.dest, c.prefix) === c.net && r.mask >= c.prefix);
   return { ok: hit, reason: hit ? `${devId} learned ${cidrStr} via OSPF` : `${devId} has not learned ${cidrStr} via OSPF` };
 }
+function hsrpState(net, devId, ifaceName, expected) {
+  const state = M.hsrpStatus(net, devId, ifaceName);
+  const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
+  return { ok, reason: state ? devId + '/' + ifaceName + ' is ' + state.state + ' (active: ' + state.active + ')' : devId + '/' + ifaceName + ' has no active HSRP group' };
+}
 function bgpSession(net, devId, peerId) {
   const ss = M.bgpSessions(net, devId);
   const hit = ss.some(s => s.up && (!peerId || s.peer === peerId));
@@ -133,4 +138,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
