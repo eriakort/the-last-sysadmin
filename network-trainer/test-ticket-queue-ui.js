@@ -81,7 +81,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   // Dismiss the queue modal before opening the work journal in the page header.
   await page.locator('#closeS').click();
   await page.locator('#btnJournal').click();
-  const journal = await page.locator('.journal-list').innerText();
+  const journal = await page.locator('.journal-page-list').innerText();
   if (/ticket acknowledged/i.test(journal) && /investigation started/i.test(journal) && /ticket resolved/i.test(journal))
     ok('journal records acknowledgement, investigation and resolution');
   else fail('journal does not contain the complete ticket lifecycle');
