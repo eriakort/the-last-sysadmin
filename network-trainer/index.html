@@ -212,7 +212,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
-__def("./net-model", function(module, exports, require){
+__def("./net-model.js", function(module, exports, require){
 // Networking Trainer — M1 engine spike.
 // Pure, headless network model + forwarding engine. No DOM, no UI.
 // IPs are stored as unsigned 32-bit integers so subnet math is bitwise.
@@ -906,7 +906,7 @@ module.exports = {
 };
 
 });
-__def("./net-checks", function(module, exports, require){
+__def("./net-checks.js", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
 // These are what a mission's success criteria are built from, and what the
 // no-code mission editor would expose. Direct parallel to the sysadmin checkers.
@@ -1050,7 +1050,7 @@ function stpBlocked(net, switchId, port, vlan) {
 module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
 
 });
-__def("./net-cli", function(module, exports, require){
+__def("./net-cli.js", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
 // Headless and testable: a CLI is bound to a world (`net`) and a "current
 // device" (the console you're on). run(line) returns { out, code } and may
@@ -2522,7 +2522,7 @@ const MAN = {
 module.exports = { makeCLI, resolve, primaryIp };
 
 });
-__def("./net-mission", function(module, exports, require){
+__def("./net-mission.js", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
 // A mission is DATA: a starting topology + a list of declarative checks. The
 // runner builds the world, binds a CLI, and grades the checks after any command.
@@ -2623,7 +2623,7 @@ function startMission(mission) {
 module.exports = { evalCheck, startMission };
 
 });
-__def("./net-chapters", function(module, exports, require){
+__def("./net-chapters.js", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
 // Each mission is a starting topology (`build`) + declarative `success` checks,
 // plus a reference `solution` (console device + commands) used to prove the
@@ -3592,7 +3592,7 @@ const chapters = [
 module.exports = { chapters };
 
 });
-__def("./net-builder", function(module, exports, require){
+__def("./net-builder.js", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
 // The design-mode UI and the no-code authoring tool are thin layers over these;
 // keeping them pure means the builder is testable without a DOM. Every op keeps
@@ -3681,7 +3681,7 @@ function setAddress(topo, id, iface, ipStr, prefix) {
 module.exports = { KINDS, blank, addDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
 
 });
-__def("./net-scenario", function(module, exports, require){
+__def("./net-scenario.js", function(module, exports, require){
 // Scenario format — a portable, authorable mission. A scenario is plain data:
 // a starting topology, a success spec (the objectives), and the framing text.
 // It serializes to JSON (shareable / assignable), validates, and converts to a
@@ -3783,7 +3783,7 @@ function fromJSON(text) {
 module.exports = { CHECKS, validate, toMission, fromTopology, toJSON, fromJSON, clone };
 
 });
-__def("./net-classroom", function(module, exports, require){
+__def("./net-classroom.js", function(module, exports, require){
 // Classroom data-access layer for the network trainer. A thin, headless wrapper
 // over a Supabase client (`sb`) — no DOM, so it's tested against a mock client.
 // It mirrors the sysadmin game's classroom calls and reuses the shared tables
@@ -3874,6 +3874,7 @@ let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null; // topology interac
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
+let JOURNAL_FILTERS = { query:'', type:'all', range:'all' };
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -3988,11 +3989,13 @@ function dashboardSnapshot() {
   };
 }
 function showWorkspaceView(view) {
-  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), cols = $('#cols');
-  if (!overview || !incidents || !infrastructure || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !knowledge || !journal || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
   infrastructure.hidden = view !== 'infrastructure';
+  knowledge.hidden = view !== 'knowledge';
+  journal.hidden = view !== 'journal';
   cols.hidden = view !== 'workbench';
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
@@ -4001,6 +4004,8 @@ function showWorkspaceView(view) {
   if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
   if (view === 'incidents') renderIncidentCenter();
   if (view === 'infrastructure') renderInfrastructureView();
+  if (view === 'knowledge') renderKnowledgeCenter();
+  if (view === 'journal') renderJournalPage();
 }
 function renderOverview() {
   const root = $('#overview'); if (!root || !RUN) return;
@@ -4687,39 +4692,36 @@ function addJournalEntry(entry) {
   PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
   PROG.journal = PROG.journal.slice(0, 250); saveProg(); refreshOverview(); refreshIncidentCenter();
 }
-function openJournal() {
-  const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b>${e.result ? `<span class="journal-result ${esc(e.result)}">${esc(e.result)}</span>` : ''}<time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
-  const wrap = document.createElement('div'); wrap.id = 'modal';
-  wrap.innerHTML = `<div class="sheet sheet-wide"><div class="modal-head"><div><div class="eyebrow">Personal engineering record</div><h2>Work journal</h2><p class="dim">Your commands, investigation notes and ticket outcomes stay in this browser.</p></div><button class="btn" id="exportJournal">Export</button></div><div class="journal-compose"><label for="journalNote">Add an investigation note</label><textarea id="journalNote" class="wide" rows="3" placeholder="What did you observe? What did you rule out? What would you check next time?"></textarea><div class="row"><button class="btn primary" id="saveJournalNote">Save note</button></div></div><div class="journal-list">${rows || '<p class="dim">No activity recorded yet. Run commands or add a note to start your work journal.</p>'}</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
-  wrap.querySelector('#saveJournalNote').addEventListener('click', () => { const note = wrap.querySelector('#journalNote').value.trim(); if (!note) return; addJournalEntry({ type: 'engineer note', device: SEL || '', text: note }); wrap.remove(); openJournal(); });
-  wrap.querySelector('#exportJournal').addEventListener('click', () => {
-    const lines = ['# Network engineering work journal', '', ...(PROG.journal || []).slice().reverse().map(e => `## ${e.type || 'Activity'} — ${new Date(e.at).toLocaleString()}\n${[e.ticket, e.mission, e.device].filter(Boolean).join(' · ')}\n${e.command ? `\n\`${e.command}\`\n` : ''}${e.text || ''}${e.output ? `\n\n\`\`\`text\n${e.output}\n\`\`\`` : ''}`)];
-    const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'network-work-journal.md'; a.click(); URL.revokeObjectURL(url);
+function renderJournalPage() {
+  const root = $('#journalView'); if (!root) return;
+  const all = Array.isArray(PROG.journal) ? PROG.journal : [];
+  const query = JOURNAL_FILTERS.query.trim().toLowerCase();
+  const now = Date.now(), rangeMs = JOURNAL_FILTERS.range === '24h' ? 86400000 : JOURNAL_FILTERS.range === '7d' ? 604800000 : JOURNAL_FILTERS.range === '30d' ? 2592000000 : Infinity;
+  const types = [...new Set(all.map(e => e.type || 'activity'))].sort();
+  const matches = all.filter(e => {
+    const hay = [e.type,e.ticket,e.mission,e.device,e.command,e.text,e.output,e.result].filter(Boolean).join(' ').toLowerCase();
+    const at = Date.parse(e.at || '') || 0;
+    return (!query || hay.includes(query)) && (JOURNAL_FILTERS.type === 'all' || (e.type || 'activity') === JOURNAL_FILTERS.type) && (rangeMs === Infinity || now - at <= rangeMs);
   });
+  const rows = matches.map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b>${e.result ? `<span class="journal-result ${esc(e.result)}">${esc(e.result)}</span>` : ''}<time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket,e.mission,e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
+  root.innerHTML = `
+    <div class="journal-page-heading"><div><div class="eyebrow">Personal engineering record · local to this browser</div><h1>Engineering journal</h1><p>Search and review the commands, evidence, investigation notes and outcomes you have recorded while working incidents.</p></div><button class="btn" id="journalExportPage">Export Markdown</button></div>
+    <section class="journal-compose journal-page-compose"><label for="journalNotePage">Add an investigation note</label><textarea id="journalNotePage" class="wide" rows="3" placeholder="What did you observe? What did you rule out? What would you check next time?"></textarea><div class="row"><button class="btn primary" id="saveJournalNotePage">Save note</button></div></section>
+    <div class="journal-page-toolbar"><input id="journalSearch" type="search" value="${esc(JOURNAL_FILTERS.query)}" placeholder="Search device, incident, command, note or output…" aria-label="Search journal"><select id="journalType" aria-label="Filter journal activity"><option value="all">All activity types</option>${types.map(t=>`<option value="${esc(t)}" ${JOURNAL_FILTERS.type===t?'selected':''}>${esc(t)}</option>`).join('')}</select><select id="journalRange" aria-label="Filter journal date"><option value="all" ${JOURNAL_FILTERS.range==='all'?'selected':''}>Any time</option><option value="24h" ${JOURNAL_FILTERS.range==='24h'?'selected':''}>Last 24 hours</option><option value="7d" ${JOURNAL_FILTERS.range==='7d'?'selected':''}>Last 7 days</option><option value="30d" ${JOURNAL_FILTERS.range==='30d'?'selected':''}>Last 30 days</option></select><span>${matches.length} of ${all.length} records</span></div>
+    <div class="journal-page-list">${rows || '<div class="journal-page-empty">No matching records. Commands and ticket actions will appear here, or add an investigation note above.</div>'}</div>`;
+  root.querySelector('#journalSearch').addEventListener('input', e => { JOURNAL_FILTERS.query=e.target.value; renderJournalPage(); const field=root.querySelector('#journalSearch'); field.focus(); field.setSelectionRange(field.value.length,field.value.length); });
+  root.querySelector('#journalType').addEventListener('change', e => { JOURNAL_FILTERS.type=e.target.value; renderJournalPage(); });
+  root.querySelector('#journalRange').addEventListener('change', e => { JOURNAL_FILTERS.range=e.target.value; renderJournalPage(); });
+  root.querySelector('#saveJournalNotePage').addEventListener('click', () => { const note=root.querySelector('#journalNotePage').value.trim(); if (!note) return; addJournalEntry({type:'engineer note',device:SEL||'',text:note}); JOURNAL_FILTERS.query=''; JOURNAL_FILTERS.type='all'; JOURNAL_FILTERS.range='all'; renderJournalPage(); });
+  root.querySelector('#journalExportPage').addEventListener('click', exportJournal);
 }
-function openHelp() {
-  const groups = [
-    { name: 'Start here', items: [['help', 'List commands available on the selected device.'], ['man <command>', 'Open the built-in manual for a supported command.'], ['ip addr', 'Inspect interface state and IPv4 addressing.'], ['ip route', 'Inspect the routing table.'], ['ping <host|ip>', 'Test end-to-end reachability.'], ['traceroute <host|ip>', 'Identify the path and the hop where traffic stops.'], ['arp', 'Inspect the ARP neighbour table.'], ['tcpdump', 'Inspect simulated packet evidence.']] },
-    { name: 'Cisco IOS · access and verification', items: [['enable', 'Enter privileged EXEC mode.'], ['configure terminal', 'Enter global configuration from privileged EXEC.'], ['show version', 'Identify the simulated device and supported command profile.'], ['show running-config', 'Inspect the active device configuration.'], ['show startup-config', 'Inspect the last saved configuration snapshot.'], ['show ip interface brief', 'Review interface addressing and line state.'], ['show ip route', 'Verify connected and static routes.'], ['write memory', 'Save the running configuration snapshot.'], ['end', 'Return to privileged EXEC from configuration mode.'], ['disable', 'Return to user EXEC mode.']] },
-    { name: 'Cisco IOS · switching', items: [['conf t', 'Enter global configuration mode.'], ['vlan 20', 'Create VLAN 20 on a switch.'], ['name STAFF', 'Name the VLAN in VLAN configuration mode.'], ['interface <port>', 'Select a switch interface for configuration.'], ['switchport mode access', 'Make the selected port an access port.'], ['switchport access vlan 20', 'Assign the access port to VLAN 20.'], ['switchport mode trunk', 'Configure a trunk link.'], ['switchport trunk native vlan 10', 'Set the native VLAN on a trunk.'], ['switchport trunk allowed vlan 10,20', 'Restrict the trunk to selected VLANs.'], ['show vlan brief', 'Verify VLANs and access-port membership.'], ['show interfaces status', 'Review switch port state and VLAN.'], ['show interfaces trunk', 'Verify operational trunk state.'], ['show spanning-tree vlan 10', 'Inspect STP roles and states for VLAN 10.'], ['show mac address-table dynamic', 'Inspect dynamically learned MAC addresses.']] },
-    { name: 'Cisco IOS · routing', items: [['interface <name>', 'Enter a router interface context from global configuration.'], ['ip address 10.0.1.1 255.255.255.0', 'Assign an IPv4 address and dotted subnet mask in interface mode.'], ['no shutdown', 'Administratively enable the selected interface.'], ['ip route 10.0.2.0 255.255.255.0 10.0.1.254', 'Install a static route using a reachable next hop.'], ['show ip interface brief', 'Verify interface state after a change.'], ['show ip route', 'Verify the routing table after a change.']] },
-    { name: 'Routing and troubleshooting', items: [['ip route add default via <gateway>', 'Add a default route on a supported host or router.'], ['ospf <interface> area <id>', 'Enable the simulator OSPF process on an interface.'], ['ospf neighbor', 'Inspect discovered OSPF neighbours.'], ['bgp asn <number>', 'Set the local BGP autonomous system number.'], ['bgp neighbor <ip> remote-as <asn>', 'Configure a BGP peer.'], ['bgp summary', 'Inspect BGP session state.'], ['bgp network <prefix>', 'Advertise a configured network.']] },
-    { name: 'Work safely', items: [['clear mac address-table dynamic', 'Clear learned switch entries after a topology change.'], ['exit', 'Leave the current interface configuration context.'], ['help', 'List the commands currently available in this simulator.']] }
-  ];
-  const selectedKind = RUN && RUN.net.devices[SEL] ? RUN.net.devices[SEL].kind : 'no device selected';
-  const all = groups.flatMap(g => g.items.map(([cmd, desc]) => ({ group: g.name, cmd, desc })));
-  const render = q => { const term = q.trim().toLowerCase(), found = all.filter(x => !term || (x.cmd + ' ' + x.desc + ' ' + x.group).toLowerCase().includes(term)); return found.length ? found.map(x => `<button class="help-command" data-help-cmd="${esc(x.cmd)}"><span><b>${esc(x.cmd)}</b><small>${esc(x.group)}</small></span><span>${esc(x.desc)}</span></button>`).join('') : '<p class="dim">No matching help entry. Try a protocol, command or symptom.</p>'; };
-  const wrap = document.createElement('div'); wrap.id = 'modal';
-  wrap.innerHTML = `<div class="sheet sheet-wide help-sheet"><div class="eyebrow">Field guide · selected device: ${esc(SEL || 'none')} (${esc(selectedKind)})</div><div class="modal-head"><div><h2>Engineering help desk</h2><p class="dim">Search command examples and procedures. Select a command to place it in the terminal.</p></div><span class="help-key">? HELP</span></div><input id="helpSearch" class="wide" type="search" placeholder="Search commands, VLANs, routing, interfaces, symptoms…"/><div class="help-groups" id="helpResults">${render('')}</div><div class="help-note"><b>Learning note:</b> This reference distinguishes commands modelled by the current simulator from advanced Cisco IOS/IOS XE commands planned for later releases. If a command is not implemented yet, the device will report that clearly rather than pretending it worked.</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
-  wrap.querySelector('#helpSearch').addEventListener('input', e => { wrap.querySelector('#helpResults').innerHTML = render(e.target.value); });
-  wrap.querySelector('#helpResults').addEventListener('click', e => { const b = e.target.closest('[data-help-cmd]'); if (!b) return; const inp = $('#tin'); inp.value = b.dataset.helpCmd; wrap.remove(); inp.focus(); });
+function exportJournal() {
+  const lines = ['# Network engineering work journal', '', ...(PROG.journal || []).slice().reverse().map(e => `## ${e.type || 'Activity'} — ${new Date(e.at).toLocaleString()}\n${[e.ticket,e.mission,e.device].filter(Boolean).join(' · ')}\n${e.command ? `\n\x60${e.command}\x60\n` : ''}${e.text || ''}${e.output ? `\n\n\x60\x60\x60text\n${e.output}\n\x60\x60\x60` : ''}`)];
+  const blob = new Blob([lines.join('\n\n')], {type:'text/markdown;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='network-work-journal.md'; a.click(); URL.revokeObjectURL(url);
 }
+function openJournal() { showWorkspaceView('journal'); }
+function openHelp() { showWorkspaceView('knowledge'); }
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
@@ -4977,8 +4979,8 @@ function boot() {
         <button class="nav-item" id="navWorkbench" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
         <button class="nav-item" id="navInfrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
         <div class="nav-section">Reference & records</div>
-        <button class="nav-item" type="button" disabled title="Knowledge centre is in a later implementation phase"><span class="nav-glyph">⌕</span>Knowledge<span class="nav-soon">Next</span></button>
-        <button class="nav-item" id="navJournal" type="button"><span class="nav-glyph">▧</span>Journal</button>
+        <button class="nav-item" id="navKnowledge" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
+        <button class="nav-item" id="navJournal" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
         <div class="nav-spacer"></div><div class="nav-foot">LAB STATUS · SIMULATED<br>LOCAL PROGRESS ENABLED</div>
       </aside>
       <div id="mainArea">
@@ -5002,6 +5004,8 @@ function boot() {
     <section id="overview" aria-label="Operations overview"></section>
     <section id="incidentsView" aria-label="Incident management" hidden></section>
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
+    <section id="knowledgeView" aria-label="Network knowledge centre" hidden></section>
+    <section id="journalView" aria-label="Engineering journal" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
       <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
@@ -5014,6 +5018,7 @@ function boot() {
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
+  $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
   $('#navJournal').addEventListener('click', openJournal);
   $('#topoZoomIn').addEventListener('click', () => zoomTopology(0.8));
   $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));
