@@ -506,6 +506,7 @@ function runASA(cli, line) {
     }
     return err('% Invalid network object command — use host, subnet, or nat (inside,outside) static interface service tcp <port> <port>');
   }
+  if (words[0] === 'help' || words[0] === '?') return ok('ASA operational quick reference\\n  enable · configure terminal · interface <physical-if> · nameif <name> · security-level <0-100>\\n  object-group network <name> · network-object host <ip> · network-object <network> <mask>\\n  object-group service <name> · service-object tcp|udp destination eq <port>\\n  access-list <name> [line <n>] extended permit|deny <proto> <source> <destination> [eq <port>|object-group <service-group>]\\n  access-group <name> in interface <nameif> · no access-group ...\\n  show object-group · show access-list · clear access-list [name] · show access-group · show nat · show route\\n  packet-tracer input <nameif> tcp <src-ip> <src-port> <dst-ip> <dst-port> · write memory\\n  Group references are evaluated against current members; unmatched traffic hits implicit deny.\\n  This is an educational ASA-style command subset, not Cisco ASA software.');
   if (words[0] === 'ping' || words[0] === 'traceroute' || words[0] === 'nmap' || words[0] === 'help' || words[0] === 'man')
     return dispatch(cli, raw);
   return err('% Invalid ASA command — use show, packet-tracer, configure terminal, or help');
