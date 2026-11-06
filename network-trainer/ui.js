@@ -25,6 +25,7 @@ let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared 
 let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null; // topology interaction state
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
+let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -139,10 +140,11 @@ function dashboardSnapshot() {
   };
 }
 function showWorkspaceView(view) {
-  const overview = $('#overview'), incidents = $('#incidentsView'), cols = $('#cols');
-  if (!overview || !incidents || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
+  infrastructure.hidden = view !== 'infrastructure';
   cols.hidden = view !== 'workbench';
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
@@ -150,6 +152,7 @@ function showWorkspaceView(view) {
   });
   if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
   if (view === 'incidents') renderIncidentCenter();
+  if (view === 'infrastructure') renderInfrastructureView();
 }
 function renderOverview() {
   const root = $('#overview'); if (!root || !RUN) return;
@@ -162,7 +165,7 @@ function renderOverview() {
   const flowRows = d.flows.map(f => `<div class="overview-flow ${f.ok ? 'flow-ok' : 'flow-bad'}"><b>${esc((f.proto || 'icmp').toUpperCase())}</b><span>${esc(M.ipStr(f.src))} → ${esc(M.ipStr(f.dst))}</span><strong>${f.ok ? 'Delivered' : 'Dropped'}</strong></div>`).join('');
   root.innerHTML = `
     <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
-    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
+    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
     <section class="overview-metrics" aria-label="Network summary">
       <article class="overview-metric"><span>Devices healthy</span><strong>${count('healthy')}<small> / ${d.devices.length}</small></strong><em>${count('degraded')} degraded · ${count('offline')} offline</em></article>
       <article class="overview-metric"><span>Links operational</span><strong>${d.linksUp}<small> / ${d.linksTotal}</small></strong><em>${d.linksTotal - d.linksUp} links down</em></article>
@@ -191,6 +194,7 @@ function renderOverview() {
   const click = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
   ['overviewWorkbench','healthWorkbench','trafficWorkbench'].forEach(id => click(id, () => showWorkspaceView('workbench')));
   ['overviewIncidents','allIncidents'].forEach(id => click(id, () => showWorkspaceView('incidents')));
+  click('overviewInfrastructure', () => showWorkspaceView('infrastructure'));
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
   click('progressStats', openStats);
@@ -329,6 +333,91 @@ function renderIncidentCenter() {
   if (review) review.addEventListener('click', () => { MODE='play'; reloadMission(selected.index); });
 }
 function refreshIncidentCenter() { if ($('#incidentsView') && !$('#incidentsView').hidden) renderIncidentCenter(); }
+
+function infrastructureSnapshot() {
+  return Object.entries((RUN && RUN.net && RUN.net.devices) || {}).map(([id,d]) => {
+    const ports = Object.entries(d.ifaces || {}), up = ports.filter(([,f]) => f.up !== false && f.errDisabled !== true).length;
+    const attached = (RUN.net.links || []).filter(l => l.a[0] === id || l.b[0] === id);
+    const linksUp = attached.filter(l => !linkDown(RUN.net,l)).length;
+    const status = !ports.length || up === 0 ? 'offline' : up < ports.length || linksUp < attached.length ? 'degraded' : 'healthy';
+    const addresses = ports.filter(([,f]) => f.ip != null && f.up !== false).map(([name,f]) => ({ name, address:M.ipStr(f.ip)+'/'+(f.mask ?? 24) }));
+    const vlans = d.kind === 'switch' ? [...new Set([1,...(d.vlans || []),...ports.map(([,f]) => Number(f.mode === 'trunk' ? f.nativeVlan ?? 1 : f.accessVlan ?? f.vlan ?? 1))])].sort((a,b)=>a-b) : [];
+    return { id, device:d, kind:d.kind || 'device', ports, up, total:ports.length, attached:attached.length, linksUp, status, addresses, vlans };
+  });
+}
+function renderInfrastructureView() {
+  const root = $('#infrastructureView'); if (!root || !RUN) return;
+  const devices = infrastructureSnapshot();
+  const counts = { hosts:0, switches:0, routers:0, firewalls:0, down:0 };
+  devices.forEach(d => { if (d.kind === 'switch') counts.switches++; else if (d.kind === 'router') counts.routers++; else if (d.kind === 'firewall') counts.firewalls++; else counts.hosts++; if (d.status !== 'healthy') counts.down++; });
+  const matches = devices.filter(d => {
+    const q = INFRA_FILTERS.query.toLowerCase(), text = [d.id,d.kind,...d.addresses.map(a=>a.address)].join(' ').toLowerCase();
+    return (!q || text.includes(q)) && (INFRA_FILTERS.kind === 'all' || d.kind === INFRA_FILTERS.kind) && (INFRA_FILTERS.status === 'all' || d.status === INFRA_FILTERS.status);
+  });
+  const selected = matches.find(d => d.id === INFRA_SELECTED) || matches[0] || null;
+  INFRA_SELECTED = selected ? selected.id : null;
+  const rows = matches.map(d => `<button type="button" class="infra-device-row${selected && selected.id === d.id ? ' active' : ''}" data-infra-device="${esc(d.id)}">
+    <span class="infra-kind-icon">${d.kind === 'switch' ? '▦' : d.kind === 'router' ? '⌁' : d.kind === 'firewall' ? '⬡' : '▣'}</span>
+    <span class="infra-device-main"><b>${esc(d.id)}</b><small>${esc(d.kind)} · ${esc(d.addresses[0]?.address || 'No configured IP')}</small></span>
+    <span class="health health-${d.status}"><i></i>${d.status}</span>
+    <span class="infra-port-count">${d.up}/${d.total} ports</span>
+  </button>`).join('');
+  let detail = '<div class="infra-detail-empty"><b>Select a device</b><p>Choose an inventory record to inspect its interfaces, services and configuration.</p></div>';
+  if (selected) {
+    const d = selected.device;
+    const interfaces = selected.ports.map(([name,f]) => {
+      const state = f.errDisabled ? 'ERR-DISABLED' : f.up === false ? 'DOWN' : 'UP';
+      const mode = f.mode === 'trunk' ? 'TRUNK' : d.kind === 'switch' ? 'ACCESS' : 'L3';
+      const vlan = d.kind === 'switch' ? (f.mode === 'trunk' ? 'Native '+Number(f.nativeVlan ?? 1)+' · '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(', '):'all allowed') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)) : '—';
+      return `<tr><td><b>${esc(name)}</b></td><td class="mono">${f.ip != null ? esc(M.ipStr(f.ip)+'/'+(f.mask ?? 24)) : 'Unassigned'}</td><td><span class="health health-${state === 'UP' ? 'healthy' : 'offline'}">${state}</span></td><td>${mode}</td><td>${vlan}</td></tr>`;
+    }).join('');
+    const routes = (d.routes || []).map(r => `<tr><td class="mono">${r.mask === 0 ? '0.0.0.0/0' : esc(M.ipStr(r.dest)+'/'+r.mask)}</td><td class="mono">${esc(M.ipStr(r.via))}</td><td>Static</td></tr>`).join('');
+    const acls = (d.acls || []).map((r,i) => `<tr><td>${i+1}</td><td>${esc((r.action || 'allow').toUpperCase())}</td><td>${esc(r.proto || 'any')}</td><td>${r.src != null ? esc(M.ipStr(r.src)) : 'any'}</td><td>${r.dst != null ? esc(M.ipStr(r.dst)) : r.dstnet ? esc(M.ipStr(r.dstnet.net)+'/'+r.dstnet.prefix) : 'any'}</td><td>${r.dport != null ? r.dport : 'any'}</td></tr>`).join('');
+    const services = Object.entries(d.services || {}).map(([port,name]) => `<tr><td>${esc(port)}</td><td>${esc(typeof name === 'string' ? name : 'service')}</td><td><span class="health health-healthy">CONFIGURED</span></td></tr>`).join('');
+    const protocolNotes = [];
+    if (d.kind === 'router') {
+      const ospfIfs = Object.entries(d.ifaces || {}).filter(([,f]) => f.ospf != null).map(([name,f]) => name+' · area '+f.ospf);
+      if (ospfIfs.length) protocolNotes.push('OSPF: '+ospfIfs.join(', '));
+      if (d.bgp && d.bgp.asn != null) protocolNotes.push('BGP: local AS '+d.bgp.asn+' · '+(d.bgp.neighbors || []).length+' peers configured');
+    }
+    if (d.ntp) {
+      const ntp = M.ntpStatus(RUN.net,selected.id);
+      protocolNotes.push('NTP: '+(ntp.synchronized ? 'synchronized · '+(ntp.source || 'local clock') : ntp.reason));
+    }
+    if (d.dhcp) protocolNotes.push('DHCP: server/pool configuration present');
+    if (d.resolver != null) protocolNotes.push('DNS resolver: '+(typeof d.resolver === 'number' ? M.ipStr(d.resolver) : String(d.resolver)));
+    if (d.dns && Object.keys(d.dns).length) protocolNotes.push('DNS zones: '+Object.keys(d.dns).join(', '));
+    if (d.syslog) protocolNotes.push('Syslog: '+(d.syslog.enabled === false ? 'disabled' : 'enabled')+' · '+(d.syslog.hosts || []).length+' collectors');
+    const vlanRows = selected.vlans.map(v => {
+      const st = d.kind === 'switch' && typeof M.spanningTree === 'function' ? M.spanningTree(RUN.net,v).switches[selected.id] : null;
+      return `<tr><td>VLAN ${v}</td><td>${st ? esc(st.root) : '—'}</td><td>${st ? st.priority : '—'}</td><td>${st ? Object.values(st.ports).filter(p=>p.state==='blocking').length : '—'}</td></tr>`;
+    }).join('');
+    const history = (PROG.journal || []).filter(e => e.device === selected.id || e.ticket && RUN.mission && RUN.mission.ticket && e.ticket === RUN.mission.ticket.id).slice(0,5).map(e => `<article class="infra-history-item"><b>${esc(e.type || 'Activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time><p>${esc(e.command || e.text || e.output || 'Configuration activity')}</p></article>`).join('');
+    detail = `
+      <div class="infra-detail-heading"><div><div class="eyebrow">Inventory record · ${esc(selected.id)}</div><h2>${esc(selected.id)} · ${esc(selected.kind)}</h2><p>${esc(selected.addresses.map(a=>a.address).join(' · ') || 'No configured management address')}</p></div><button class="btn primary" id="infraOpenWorkbench">Open in Workbench →</button></div>
+      <div class="infra-detail-stats"><span><b>${selected.up}/${selected.total}</b> interfaces up</span><span><b>${selected.linksUp}/${selected.attached}</b> links operational</span><span><b>${(d.routes||[]).length}</b> routes</span><span><b>${(d.acls||[]).length}</b> ACL rules</span></div>
+      <section class="infra-section"><div class="infra-section-head"><h3>Interfaces</h3><span>${selected.total} interfaces</span></div><div class="infra-table-wrap"><table class="infra-table"><thead><tr><th>Interface</th><th>Address</th><th>State</th><th>Mode</th><th>VLAN / trunk</th></tr></thead><tbody>${interfaces || '<tr><td colspan="5">No interfaces configured.</td></tr>'}</tbody></table></div></section>
+      ${d.kind === 'switch' ? `<section class="infra-section"><div class="infra-section-head"><h3>VLAN and spanning-tree inventory</h3><span>${selected.vlans.length} VLANs</span></div><div class="infra-table-wrap"><table class="infra-table"><thead><tr><th>VLAN</th><th>Root bridge</th><th>Priority</th><th>Blocked ports</th></tr></thead><tbody>${vlanRows || '<tr><td colspan="4">No VLAN data.</td></tr>'}</tbody></table></div></section>` : ''}
+      ${d.kind !== 'switch' ? `<section class="infra-section"><div class="infra-section-head"><h3>Routing table</h3><span>${(d.routes||[]).length} routes</span></div><div class="infra-table-wrap"><table class="infra-table"><thead><tr><th>Destination</th><th>Next hop</th><th>Type</th></tr></thead><tbody>${routes || '<tr><td colspan="3">No static routes configured.</td></tr>'}</tbody></table></div></section>` : ''}
+      ${d.kind === 'router' || d.kind === 'firewall' ? `<section class="infra-section"><div class="infra-section-head"><h3>Security policy</h3><span>${(d.acls||[]).length} rules</span></div><div class="infra-table-wrap"><table class="infra-table"><thead><tr><th>#</th><th>Action</th><th>Protocol</th><th>Source</th><th>Destination</th><th>Port</th></tr></thead><tbody>${acls || '<tr><td colspan="6">No ACL rules configured.</td></tr>'}</tbody></table></div></section>` : ''}
+      <section class="infra-section"><div class="infra-section-head"><h3>Configured services and protocols</h3></div><div class="infra-table-wrap"><table class="infra-table"><thead><tr><th>Port</th><th>Service</th><th>State</th></tr></thead><tbody>${services || '<tr><td colspan="3">No listening services declared on this device.</td></tr>'}</tbody></table></div><ul class="infra-protocol-notes">${protocolNotes.map(x=>'<li>'+esc(x)+'</li>').join('') || '<li>No additional protocol/service configuration detected.</li>'}</ul></section>
+      <section class="infra-section"><div class="infra-section-head"><h3>Recent configuration and activity history</h3><span>Local journal</span></div><div class="infra-history">${history || '<p class="dim">No device-specific journal entries yet.</p>'}</div></section>`;
+  }
+  root.innerHTML = `
+      <div class="infra-page-heading"><div><div class="eyebrow">Network operations · current lab</div><h1>Infrastructure inventory</h1><p>Inspect the active scenario's devices, interface state, switching, routing, security and recorded engineering activity.</p></div><span class="overview-live"><i></i> CURRENT SCENARIO</span></div>
+      <div class="infra-summary"><article><b>${devices.length}</b><span>Total devices</span></article><article><b>${counts.switches}</b><span>Switches</span></article><article><b>${counts.routers + counts.firewalls}</b><span>Routers / firewalls</span></article><article class="infra-summary-warn"><b>${counts.down}</b><span>Degraded / offline</span></article></div>
+      <div class="infra-layout"><section class="infra-list-panel"><div class="infra-section-head"><div><span class="eyebrow">Device inventory</span><h2>All devices <small>${matches.length} shown</small></h2></div></div>
+        <div class="infra-filters"><input id="infraSearch" type="search" value="${esc(INFRA_FILTERS.query)}" placeholder="Search hostname or IP…"/><div><select id="infraKind"><option value="all"${INFRA_FILTERS.kind==='all'?' selected':''}>All types</option><option value="host"${INFRA_FILTERS.kind==='host'?' selected':''}>Hosts / servers</option><option value="switch"${INFRA_FILTERS.kind==='switch'?' selected':''}>Switches</option><option value="router"${INFRA_FILTERS.kind==='router'?' selected':''}>Routers</option><option value="firewall"${INFRA_FILTERS.kind==='firewall'?' selected':''}>Firewalls</option></select><select id="infraStatus"><option value="all"${INFRA_FILTERS.status==='all'?' selected':''}>All states</option><option value="healthy"${INFRA_FILTERS.status==='healthy'?' selected':''}>Healthy</option><option value="degraded"${INFRA_FILTERS.status==='degraded'?' selected':''}>Degraded</option><option value="offline"${INFRA_FILTERS.status==='offline'?' selected':''}>Offline</option></select></div></div>
+        <div class="infra-device-list">${rows || '<div class="overview-empty">No devices match these filters.</div>'}</div>
+      </section><section class="infra-detail-panel">${detail}</section></div>`;
+  root.querySelector('#infraSearch').addEventListener('input',e=>{INFRA_FILTERS.query=e.target.value;renderInfrastructureView();const el=$('#infraSearch');el.focus();el.setSelectionRange(el.value.length,el.value.length);});
+  root.querySelector('#infraKind').addEventListener('change',e=>{INFRA_FILTERS.kind=e.target.value;renderInfrastructureView();});
+  root.querySelector('#infraStatus').addEventListener('change',e=>{INFRA_FILTERS.status=e.target.value;renderInfrastructureView();});
+  root.querySelectorAll('[data-infra-device]').forEach(b=>b.addEventListener('click',()=>{INFRA_SELECTED=b.dataset.infraDevice;renderInfrastructureView();}));
+  const open=root.querySelector('#infraOpenWorkbench');
+  if(open) open.addEventListener('click',()=>{showWorkspaceView('workbench');selectDevice(selected.id);});
+}
+function refreshInfrastructureView() { if ($('#infrastructureView') && !$('#infrastructureView').hidden) renderInfrastructureView(); }
 
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
@@ -500,7 +589,7 @@ function refresh() {
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
   const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
-  refreshOverview();
+  refreshOverview(); refreshInfrastructureView();
 }
 function runMission(m, solvedKey) {
   showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console;
@@ -1038,7 +1127,7 @@ function boot() {
         <button class="nav-item" id="navOverview" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
         <button class="nav-item" id="navIncidents" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
         <button class="nav-item" id="navWorkbench" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
-        <button class="nav-item" type="button" disabled title="Infrastructure inventory is in a later implementation phase"><span class="nav-glyph">▤</span>Infrastructure<span class="nav-soon">Next</span></button>
+        <button class="nav-item" id="navInfrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
         <div class="nav-section">Reference & records</div>
         <button class="nav-item" type="button" disabled title="Knowledge centre is in a later implementation phase"><span class="nav-glyph">⌕</span>Knowledge<span class="nav-soon">Next</span></button>
         <button class="nav-item" id="navJournal" type="button"><span class="nav-glyph">▧</span>Journal</button>
@@ -1064,6 +1153,7 @@ function boot() {
     </header>
     <section id="overview" aria-label="Operations overview"></section>
     <section id="incidentsView" aria-label="Incident management" hidden></section>
+    <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
       <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
@@ -1075,6 +1165,7 @@ function boot() {
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
+  $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
   $('#navJournal').addEventListener('click', openJournal);
   $('#topoZoomIn').addEventListener('click', () => zoomTopology(0.8));
   $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));
