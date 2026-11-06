@@ -38,7 +38,7 @@ const err = s => ({ out: s, code: 1 });
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur: cur == null ? null : cur, lastPing: null, flows: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); this.cur = id; return this; } };
+  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) this.contextIface = null; this.cur = id; return this; } };
   cli.run = line => dispatch(cli, String(line).trim());
   return cli;
 }
@@ -54,6 +54,88 @@ function dispatch(cli, line) {
 
 /* ---------------- commands ---------------- */
 const COMMANDS = {
+  vlan: (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    if (dev.kind !== 'switch') return err('vlan: this command is only available on switches');
+    const id = Number(a[0]);
+    if (!a[0] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: vlan <1-4094>');
+    dev.vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+    if (!dev.vlans.includes(1)) dev.vlans.unshift(1);
+    if (dev.vlans.includes(id)) return ok('VLAN ' + id + ' already exists');
+    dev.vlans.push(id); dev.vlans.sort((x, y) => x - y);
+    return ok('VLAN ' + id + ' created');
+  },
+  interface: (cli, a) => {
+    const dev = cli.net.devices[cli.cur];
+    if (dev.kind !== 'switch') return err('interface: this command is only available on switches');
+    const name = a[0];
+    if (!name || !dev.ifaces[name]) return err('interface: unknown switch port ' + (name || ''));
+    cli.contextIface = name;
+    return ok('configuring ' + name + ' — use switchport commands, then exit');
+  },
+  exit: cli => { cli.contextIface = null; return ok('left interface configuration mode'); },
+  switchport: (cli, a) => {
+    const dev = cli.net.devices[cli.cur], name = cli.contextIface;
+    if (dev.kind !== 'switch') return err('switchport: this command is only available on switches');
+    if (!name || !dev.ifaces[name]) return err('switchport: enter interface configuration mode first (interface <port>)');
+    const port = dev.ifaces[name], sub = a[0];
+    if (sub === 'mode' && ['access', 'trunk'].includes(a[1])) {
+      port.mode = a[1];
+      if (a[1] === 'access') { port.accessVlan = Number(port.accessVlan ?? port.vlan ?? 1); port.vlan = port.accessVlan; }
+      return ok(name + ': switchport mode ' + a[1]);
+    }
+    if (sub === 'access' && a[1] === 'vlan') {
+      const id = Number(a[2]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (!a[2] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: switchport access vlan <1-4094>');
+      if (!vlans.includes(id)) return err('switchport: VLAN ' + id + ' does not exist — create it with vlan ' + id);
+      port.mode = 'access'; port.accessVlan = id; port.vlan = id;
+      return ok(name + ': access VLAN ' + id);
+    }
+    if (sub === 'trunk' && a[1] === 'native' && a[2] === 'vlan') {
+      const id = Number(a[3]), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (!a[3] || !Number.isInteger(id) || id < 1 || id > 4094) return err('usage: switchport trunk native vlan <1-4094>');
+      if (!vlans.includes(id)) return err('switchport: VLAN ' + id + ' does not exist — create it with vlan ' + id);
+      port.mode = 'trunk'; port.nativeVlan = id;
+      return ok(name + ': trunk native VLAN ' + id);
+    }
+    if (sub === 'trunk' && a[1] === 'allowed' && a[2] === 'vlan') {
+      const raw = a[3];
+      if (!raw) return err('usage: switchport trunk allowed vlan <all|10,20,...>');
+      if (raw === 'all') { delete port.allowedVlans; port.mode = 'trunk'; return ok(name + ': all configured VLANs allowed on trunk'); }
+      const ids = raw.split(',').map(Number), vlans = Array.isArray(dev.vlans) ? dev.vlans : [1];
+      if (!ids.length || ids.some(id => !Number.isInteger(id) || id < 1 || id > 4094)) return err('switchport: invalid VLAN list');
+      const missing = ids.find(id => !vlans.includes(id));
+      if (missing != null) return err('switchport: VLAN ' + missing + ' does not exist — create it with vlan ' + missing);
+      port.mode = 'trunk'; port.allowedVlans = [...new Set(ids)].sort((x, y) => x - y);
+      return ok(name + ': allowed VLANs ' + port.allowedVlans.join(','));
+    }
+    return err('usage: switchport mode access|trunk | switchport access vlan <id> | switchport trunk native vlan <id> | switchport trunk allowed vlan <all|id,id,...>');
+  },
+  show: (cli, a) => {
+    const dev = cli.net.devices[cli.cur], sub = a[0], detail = a[1];
+    if (dev.kind !== 'switch') return err('show: switching commands are only available on switches');
+    if (sub === 'vlan' && (!detail || detail === 'brief')) {
+      const vlans = [...new Set([1, ...(dev.vlans || []), ...Object.values(dev.ifaces).filter(p => p.mode !== 'trunk').map(p => Number(p.accessVlan ?? p.vlan ?? 1))])].sort((x,y)=>x-y);
+      const rows = vlans.map(id => {
+        const ports = Object.entries(dev.ifaces).filter(([,p]) => p.mode !== 'trunk' && Number(p.accessVlan ?? p.vlan ?? 1) === id).map(([n])=>n);
+        return id + '  VLAN' + id + '  active  ' + (ports.join(', ') || '(none)');
+      });
+      return ok('VLAN  Name    Status  Ports\n' + rows.join('\n'));
+    }
+    if (sub === 'interfaces' && detail === 'trunk') {
+      const rows = Object.entries(dev.ifaces).filter(([,p])=>p.mode==='trunk').map(([n,p]) =>
+        n + '  trunk  native ' + Number(p.nativeVlan ?? 1) + '  allowed ' + (Array.isArray(p.allowedVlans) ? p.allowedVlans.join(',') : 'all'));
+      return ok(rows.length ? 'Port  Mode  Native VLAN  Allowed VLANs\n' + rows.join('\n') : '(no trunk ports)');
+    }
+    if (sub === 'interfaces' && (detail === 'switchport' || !detail)) {
+      const only = a[2] === 'switchport' ? detail : null;
+      const rows = Object.entries(dev.ifaces).filter(([n])=>!only || n===only).map(([n,p]) =>
+        n + '  ' + (p.mode === 'trunk' ? 'trunk native ' + Number(p.nativeVlan ?? 1) + ' allowed ' + (Array.isArray(p.allowedVlans) ? p.allowedVlans.join(',') : 'all') : 'access VLAN ' + Number(p.accessVlan ?? p.vlan ?? 1)));
+      return ok(rows.length ? rows.join('\n') : '(no matching switch ports)');
+    }
+    return err('usage: show vlan brief | show interfaces trunk | show interfaces switchport');
+  },
+
   fault: (cli, a) => {
     const id = a[0]; if (!id) return err('usage: fault <id>');
     const m = cli.mission; if (!m || !m.faults) return err('fault: not a multi-fault mission');
@@ -106,7 +188,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, show, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -361,7 +443,7 @@ const MAN = {
   arp: 'arp — show the neighbours learned on each interface (same L2 segment).',
   dig: 'dig NAME — ask this host\'s configured DNS server to resolve NAME to an address. Fails with NXDOMAIN (no record) or if no resolver is set / reachable.',
   dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
-  resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.'
+  resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.',\n  vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
 module.exports = { makeCLI, resolve, primaryIp };
