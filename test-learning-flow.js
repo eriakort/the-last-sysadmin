@@ -934,6 +934,29 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   ], 'Correct. nl prints numbered output');
 
 
+
+  // Complete the existing DNS/network diagnostics chapter before entering kernel work.
+  await run('dig +short halcyon-db01');
+  await run('submit 10.0.4.20');
+  if ((await page.textContent('#pTitle')) === 'Addresses to names') ok('DNS lookup advances to reverse lookup');
+  else fail('DNS lookup did not advance');
+  await run('host 10.0.4.20');
+  await run('submit halcyon-db01');
+  if ((await page.textContent('#pTitle')) === 'Is the port open?') ok('reverse lookup advances to port check');
+  else fail('reverse lookup did not advance');
+  await run('nc -zv 10.0.4.20 5432');
+  await run('submit succeeded');
+  if ((await page.textContent('#pTitle')) === 'Add a name by hand') ok('port check advances to local name mapping');
+  else fail('port check did not advance');
+  await run('echo "10.0.4.30  halcyon-cache01" | sudo tee -a /etc/hosts');
+  await run('check');
+  if ((await page.textContent('#pTitle')) === 'Resolve the way the system does') ok('local hosts entry advances to resolver check');
+  else fail('local hosts entry did not advance');
+  await run('getent hosts halcyon-cache01');
+  await run('submit 10.0.4.30');
+  if ((await page.textContent('#pTitle')) === 'Which kernel?') ok('DNS and network diagnostics complete before kernel chapter');
+  else fail('did not reach the first kernel fundamentals mission');
+
   // Chapter 22: understand, inspect, change, persist, and diagnose kernel settings.
   await checkLearningStages('Which kernel?', 'a', ['uname -r', 'kernel release', 'compatibility']);
   await proveAnswerMission('Which kernel?', 'Read a kernel setting', 'r', [
