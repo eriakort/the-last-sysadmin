@@ -885,7 +885,7 @@ const chapters = [
     ticket: { id: 'INC-3520', from: 'NOC · ISP peering', priority: 'P1', symptom: 'Our provider says they are receiving 10.10.10.0/24 from our edge router. That is an internal office subnet and must never leave our AS. The public DMZ and internet access must remain online while we correct the advertisements.' },
     diagnose: { q: 'The BGP session is Established and the ISP has learned both 10.10.10.0/24 and 198.51.100.0/24. What is the safest correction?', options: ['Apply an outbound prefix-list to the customer neighbor that permits the public DMZ prefix and denies the private office prefix', 'Shut down the BGP session and remove every network statement', 'Change the office subnet to a public address'], answer: 0, because: 'The peering session is healthy; the fault is route policy. Filter advertisements per neighbor so the required public prefix remains available while the private prefix is withdrawn. A broad session shutdown would cause an avoidable outage.' },
     console: 'edge',
-    hints: ['Run show ip bgp summary on edge and isp, then show ip bgp on the ISP. Separate a healthy session from an incorrect advertised prefix.', 'Build CUSTOMER-OUT on edge. Permit 198.51.100.0/24; explicitly deny 10.10.10.0/24. Attach it outbound to neighbor 203.0.113.1.', 'Build PROVIDER-IN on isp to permit 192.0.2.0/24 and attach it inbound to 203.0.113.2. Verify the ISP no longer learns 10.10.10.0/24, still learns the DMZ, and hq can ping remote.'],
+    hints: ['Run show ip bgp summary on edge and isp, then show ip bgp on the ISP. Separate a healthy session from an incorrect advertised prefix.', 'Build CUSTOMER-OUT on edge. Permit 198.51.100.0/24; explicitly deny 10.10.10.0/24. Attach it outbound to neighbor 203.0.113.1.', 'Build PROVIDER-IN on isp to permit the customer DMZ prefix 198.51.100.0/24 and attach it inbound to 203.0.113.2. Verify the ISP no longer learns 10.10.10.0/24, still learns the DMZ, and hq can ping remote.'],
     build: () => ({
       devices: {
         hq: H('hq','10.10.10.10',24,'10.10.10.1'),
@@ -912,7 +912,7 @@ const chapters = [
       ['edge','bgp prefix-list CUSTOMER-OUT permit 198.51.100.0/24'],
       ['edge','bgp prefix-list CUSTOMER-OUT deny 10.10.10.0/24'],
       ['edge','bgp neighbor 203.0.113.1 prefix-list CUSTOMER-OUT out'],
-      ['isp','bgp prefix-list PROVIDER-IN permit 192.0.2.0/24'],
+      ['isp','bgp prefix-list PROVIDER-IN permit 198.51.100.0/24'],
       ['isp','bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in'],
       ['edge','show ip bgp summary'],['edge','show ip bgp advertised-routes 203.0.113.1'],
       ['isp','show ip bgp'],['isp','show ip route'],['hq','ping remote'],
