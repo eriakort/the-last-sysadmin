@@ -92,4 +92,20 @@ function portForward(net, fromId, publicIp, dport, serverId, proto = 'tcp') {
   return { ok, reason: ok ? `${fromId} reaches ${serverId} via the forwarded port ${dport}` : `traffic reaches the gateway but is not forwarded to ${serverId} (lands on ${r.to})` };
 }
 
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward };
+function macEntry(net, switchId, deviceId, vlan, port) {
+  const rows = M.switchMacTable(net, switchId, vlan);
+  const hit = rows.find(e => e.device === deviceId && (!port || e.port === port));
+  const ok = !!hit;
+  return { ok, reason: ok ? switchId + ' learned ' + deviceId + ' on ' + hit.port + ' in VLAN ' + hit.vlan : switchId + ' has not learned ' + deviceId + (port ? ' on ' + port : '') + ' in VLAN ' + vlan };
+}
+function stpRoot(net, switchId, vlan, expectedRoot) {
+  const tree = M.spanningTree(net, vlan), state = tree.switches[switchId];
+  const ok = !!(state && state.root === expectedRoot);
+  return { ok, reason: ok ? expectedRoot + ' is root bridge for VLAN ' + vlan : (state ? state.root + ' is root for VLAN ' + vlan + ', expected ' + expectedRoot : switchId + ' has no active STP instance for VLAN ' + vlan) };
+}
+function stpBlocked(net, switchId, port, vlan) {
+  const tree = M.spanningTree(net, vlan), state = tree.switches[switchId], p = state && state.ports[port];
+  const ok = !!(p && p.state === 'blocking');
+  return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
+}
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked };
