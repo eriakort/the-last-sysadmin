@@ -402,14 +402,49 @@ function renderConfig() {
 }
 
 /* ---------- actions ---------- */
+function renderSessionTabs() {
+  if (!RUN) return '';
+  return Object.keys(RUN.net.devices).map(id => `<button type="button" class="session-tab${id === SEL ? ' active' : ''}" data-session-device="${esc(id)}" title="Switch console to ${esc(id)}">${esc(id)}</button>`).join('') || '<span class="dim">No device sessions</span>';
+}
+function persistTerminalSession() {
+  if (!SEL || !$('#tout')) return;
+  TERM_SESSIONS[SEL] = { history: HIST.slice(), index: HISTI, output: $('#tout').textContent };
+}
+function selectDevice(id) {
+  if (!RUN || !RUN.net.devices[id]) return;
+  if (SEL === id) { refresh(); return; }
+  persistTerminalSession();
+  SEL = id; INSPECTOR_TAB = 'overview';
+  const session = TERM_SESSIONS[id] || { history: [], index: -1, output: '' };
+  HIST = session.history.slice(); HISTI = session.index;
+  const out = $('#tout'); if (out) out.textContent = session.output || `— Console session for ${id}. Run help or show commands to begin. —\n`;
+  document.querySelectorAll('#brief [data-explorer-dev]').forEach(b => b.classList.toggle('active', b.dataset.explorerDev === id));
+  refresh();
+}
+function wireSessionTabs() {
+  document.querySelectorAll('#sessionTabs [data-session-device]').forEach(b => b.addEventListener('click', () => selectDevice(b.dataset.sessionDevice)));
+}
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; refreshOverview(); }
-function runMission(m, solvedKey) { showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
+function refresh() {
+  $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig();
+  const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
+  wireTopo(); wireConfig(); wireSessionTabs();
+  const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
+  refreshOverview();
+}
+function runMission(m, solvedKey) {
+  showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console;
+  TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; PAN = null; INSPECTOR_TAB = 'overview';
+  TERM_SESSIONS[SEL] = { history: [], index: -1, output: '' };
+  HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]);
+  startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear();
+  termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`);
+}
 function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; showWorkspaceView('workbench'); runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
-function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; }
-function termClear() { $('#tout').textContent = ''; }
+function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; persistTerminalSession(); }
+function termClear() { const o = $('#tout'); if (o) o.textContent = ''; persistTerminalSession(); }
 function nextUnsolved() { const cur = chapters.findIndex(c => c.id === RUN.mission.id); for (let k = 1; k <= chapters.length; k++) { const i = (cur + k) % chapters.length; if (!PROG.done[chapters[i].id]) return i; } return -1; }
 function doCheck() {
   const box = $('#status'); const done = RUN.done();
@@ -473,6 +508,14 @@ const nodePos = id => (RUN.net.pos && RUN.net.pos[id]) || LASTPOS[id] || [90, 50
 function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; RUN.net.pos[id] = [Math.max(4, x), Math.max(4, y)]; }
 
 function wireTopo() {
+  const svg = $('#topo');
+  if (svg) svg.addEventListener('pointerdown', e => {
+    if (e.target.closest('.node') || WIRE || e.button !== 0) return;
+    const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
+    PAN = { x:e.clientX, y:e.clientY, view:[vb.x,vb.y,vb.width,vb.height], width:rect.width, height:rect.height };
+    svg.classList.add('panning');
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+  });
   document.querySelectorAll('#topo .node').forEach(n => {
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
@@ -489,8 +532,15 @@ function wireTopo() {
   });
 }
 function onDragMove(e) {
-  if (!DRAG) return;
   const svg = $('#topo'); if (!svg) return;
+  if (PAN) {
+    const dx = (e.clientX - PAN.x) * PAN.view[2] / Math.max(1, PAN.width);
+    const dy = (e.clientY - PAN.y) * PAN.view[3] / Math.max(1, PAN.height);
+    TOPO_VIEW = [PAN.view[0] - dx, PAN.view[1] - dy, PAN.view[2], PAN.view[3]];
+    svg.setAttribute('viewBox', TOPO_VIEW.join(' '));
+    return;
+  }
+  if (!DRAG) return;
   const [px, py] = svgPoint(svg, e.clientX, e.clientY);
   const nx = px - DRAG.offX, ny = py - DRAG.offY;
   const prev = nodePos(DRAG.id);
@@ -503,12 +553,20 @@ function onDragMove(e) {
   document.querySelectorAll(`#topo line[data-b="${DRAG.id}"]`).forEach(l => { l.setAttribute('x2', cx); l.setAttribute('y2', cy); });
 }
 function onDragUp() {
+  if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
-  if (!d.moved) { SEL = d.id; refresh(); }            // a click, not a drag: select the device
-  else refresh();                                     // settle: re-render cleanly from the new positions
+  if (!d.moved) selectDevice(d.id);
+  else refresh();
 }
-function autoArrange() { if (RUN && RUN.net) { delete RUN.net.pos; refresh(); } }
+function zoomTopology(factor) {
+  const svg = $('#topo'); if (!svg) return;
+  const v = svg.viewBox.baseVal, w = Math.max(120, Math.min(5000, v.width * factor)), h = Math.max(90, Math.min(4000, v.height * factor));
+  TOPO_VIEW = [v.x + (v.width - w) / 2, v.y + (v.height - h) / 2, w, h];
+  svg.setAttribute('viewBox', TOPO_VIEW.join(' '));
+}
+function fitTopology() { TOPO_VIEW = null; refresh(); }
+function autoArrange() { if (RUN && RUN.net) { delete RUN.net.pos; TOPO_VIEW = null; refresh(); } }
 function flashStatus(msg) { const b = $('#status'); if (b) { b.className = 'bad'; b.textContent = msg; } }
 function wireBrief() {
   if (MODE === 'build') {                              // authoring panel
@@ -525,6 +583,12 @@ function wireBrief() {
     const sl = $('#saveLib'); if (sl) sl.addEventListener('click', saveToLibrary);
     return;
   }
+  const deviceSearch = $('#deviceSearch');
+  if (deviceSearch) deviceSearch.addEventListener('input', () => {
+    const q = deviceSearch.value.trim().toLowerCase();
+    document.querySelectorAll('#brief [data-explorer-dev]').forEach(b => { b.hidden = q && !b.dataset.search.includes(q); });
+  });
+  document.querySelectorAll('#brief [data-explorer-dev]').forEach(b => b.addEventListener('click', () => selectDevice(b.dataset.explorerDev)));
   document.querySelectorAll('#brief [data-fault]').forEach(cb => cb.addEventListener('change', () => {
     RUN.toggleFault(cb.dataset.fault);
   }));
@@ -541,14 +605,15 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
+  document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
-    const id = B.addDevice(RUN.net, b.dataset.add); SEL = id; WIRE = null; refresh();
+    const id = B.addDevice(RUN.net, b.dataset.add); selectDevice(id); WIRE = null; refresh();
   }));
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
     if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
     refresh();
   });
-  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); SEL = null; WIRE = null; refresh(); } });
+  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; refresh(); } });
   const ab = $('#arrangeBtn'); if (ab) ab.addEventListener('click', autoArrange);
   function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
@@ -740,7 +805,7 @@ function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { aut
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild() {
   showWorkspaceView('workbench');
-  MODE = 'build'; WIRE = null; SEL = null; HINTS = 0; PLAYING_DBID = null; stopTimer();
+  MODE = 'build'; WIRE = null; SEL = null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
   AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
   RUN = builderRun(B.blank());
   renderAll();
