@@ -235,11 +235,11 @@ function spanningTree(net, vlan = 1) {
       }
     }
   }
-  for (const e of edges) {
-    const ia = info[e.a], ib = info[e.b];
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const e = edges[edgeIndex], ia = info[e.a], ib = info[e.b];
     let ra, rb;
-    if (treeEdges.has(edges.indexOf(e))) {
-      if (parent[e.a] && parent[e.a].edge === edges.indexOf(e)) { ra = 'root'; rb = 'designated'; }
+    if (treeEdges.has(edgeIndex)) {
+      if (parent[e.a] && parent[e.a].edge === edgeIndex) { ra = 'root'; rb = 'designated'; }
       else { ra = 'designated'; rb = 'root'; }
     } else {
       const aWins = ia.distance < ib.distance || (ia.distance === ib.distance && bridgeCompare(net,vlan,e.a,e.b) < 0);
