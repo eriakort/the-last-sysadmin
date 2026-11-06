@@ -1202,7 +1202,7 @@ const COMMANDS = {
       const vlans = [...new Set([1, ...(dev.vlans || []), ...Object.values(dev.ifaces).filter(p => p.mode !== 'trunk').map(p => Number(p.accessVlan ?? p.vlan ?? 1))])].sort((x,y)=>x-y);
       const rows = vlans.map(id => {
         const ports = Object.entries(dev.ifaces).filter(([,p]) => p.mode !== 'trunk' && Number(p.accessVlan ?? p.vlan ?? 1) === id).map(([n])=>n);
-        return id + '  VLAN' + id + '  active  ' + (ports.join(', ') || '(none)');
+        return id + '  VLAN' + id + ((dev.vlanNames || {})[id] ? ' [' + dev.vlanNames[id] + ']' : '') + '  active  ' + (ports.join(', ') || '(none)');
       });
       return ok('VLAN  Name    Status  Ports\n' + rows.join('\n'));
     }
