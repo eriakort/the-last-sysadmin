@@ -23,9 +23,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   const secondId = await explorer.nth(1).getAttribute('data-explorer-dev');
   const search = page.locator('#deviceSearch');
   await search.fill(firstId);
-  if (await explorer.filter({ has: page.locator('b') }).count() >= 1 && await explorer.first().isVisible())
+  const visibleExplorerRows = await explorer.evaluateAll(rows => rows.filter(row => !row.hidden).length);
+  if (visibleExplorerRows === 1 && await explorer.first().isVisible())
     ok('device explorer search filters by device identifier');
-  else fail('device explorer search did not retain the matching device');
+  else fail('device explorer search did not retain only the matching device');
   await search.fill('');
 
   const sessionTabs = page.locator('#sessionTabs [data-session-device]');
