@@ -183,6 +183,7 @@ On a selected switch, use:
 
 ```text
 vlan 10
+vlan 20
 interface p1
 switchport mode access
 switchport access vlan 10
