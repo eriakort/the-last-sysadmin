@@ -165,7 +165,7 @@ function renderOverview() {
   const flowRows = d.flows.map(f => `<div class="overview-flow ${f.ok ? 'flow-ok' : 'flow-bad'}"><b>${esc((f.proto || 'icmp').toUpperCase())}</b><span>${esc(M.ipStr(f.src))} → ${esc(M.ipStr(f.dst))}</span><strong>${f.ok ? 'Delivered' : 'Dropped'}</strong></div>`).join('');
   root.innerHTML = `
     <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
-    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
+    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
     <section class="overview-metrics" aria-label="Network summary">
       <article class="overview-metric"><span>Devices healthy</span><strong>${count('healthy')}<small> / ${d.devices.length}</small></strong><em>${count('degraded')} degraded · ${count('offline')} offline</em></article>
       <article class="overview-metric"><span>Links operational</span><strong>${d.linksUp}<small> / ${d.linksTotal}</small></strong><em>${d.linksTotal - d.linksUp} links down</em></article>
@@ -194,6 +194,7 @@ function renderOverview() {
   const click = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
   ['overviewWorkbench','healthWorkbench','trafficWorkbench'].forEach(id => click(id, () => showWorkspaceView('workbench')));
   ['overviewIncidents','allIncidents'].forEach(id => click(id, () => showWorkspaceView('incidents')));
+  click('overviewInfrastructure', () => showWorkspaceView('infrastructure'));
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
   click('progressStats', openStats);
@@ -384,7 +385,8 @@ function renderInfrastructureView() {
       protocolNotes.push('NTP: '+(ntp.synchronized ? 'synchronized · '+(ntp.source || 'local clock') : ntp.reason));
     }
     if (d.dhcp) protocolNotes.push('DHCP: server/pool configuration present');
-    if (d.resolver != null) protocolNotes.push('DNS resolver: '+M.ipStr(d.resolver));
+    if (d.resolver != null) protocolNotes.push('DNS resolver: '+(typeof d.resolver === 'number' ? M.ipStr(d.resolver) : String(d.resolver)));
+    if (d.dns && Object.keys(d.dns).length) protocolNotes.push('DNS zones: '+Object.keys(d.dns).join(', '));
     if (d.syslog) protocolNotes.push('Syslog: '+(d.syslog.enabled === false ? 'disabled' : 'enabled')+' · '+(d.syslog.hosts || []).length+' collectors');
     const vlanRows = selected.vlans.map(v => {
       const st = d.kind === 'switch' && typeof M.spanningTree === 'function' ? M.spanningTree(RUN.net,v).switches[selected.id] : null;
