@@ -109,7 +109,7 @@ aside{scrollbar-color:#344a60 transparent}
 .overview-panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .overview-panel-head .eyebrow{font-size:9px}
 .overview-panel-head h2{font-size:15px;margin:3px 0 0;letter-spacing:-.015em}
-.text-action{border:0;background:none;color:var(--amber);font:600 10px inherit;cursor:pointer;white-space:nowrap;padding:5px}
+.text-action{border:0;background:none;color:var(--amber);font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;padding:5px}
 .text-action:hover{text-decoration:underline}
 .overview-table-wrap{overflow-x:auto}
 .overview-table{width:100%;border-collapse:collapse;font-size:11px;text-align:left}
