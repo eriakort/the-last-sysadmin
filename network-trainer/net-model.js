@@ -252,7 +252,7 @@ function deviceOwning(net, addr) {
 /* ---------- OSPF (minimal: interface areas, neighbors, connected-route learning) ---------- */
 function ospfArea(dev, iface) {
   const f = dev.ifaces[iface];
-  return f && f.ospf != null ? f.ospf : null;
+  return f && f.ospf != null ? String(f.ospf) : null;
 }
 function ospfPassive(dev, iface) {
   return (dev.ospf && dev.ospf.passiveInterfaces || []).includes(iface);
