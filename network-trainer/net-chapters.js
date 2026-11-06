@@ -609,6 +609,45 @@ const chapters = [
     }),
     success: [{ type: 'reachable', a: 'pc', b: 'site' }],
     solution: [['edge', 'iptables -t nat -A POSTROUTING -o eth1 -s 10.0.1.0/24 -j MASQUERADE']]
+  },
+
+  { id: 'access-vlan-repair', chapter: 'Switching · VLANs',
+    title: 'Put Finance back in its VLAN',
+    story: 'Finance workstation h1 and the file server srv are on the same IP subnet, but a recent switch change placed their ports in different VLANs. The cable links are up. Restore Layer 2 connectivity without changing either IP address.',
+    objective: 'Create VLAN 20 if needed, place both endpoint ports in access VLAN 20, then verify h1 can reach srv.',
+    ticket: { id: 'INC-3101', from: 'NOC · Finance floor', priority: 'P2', symptom: 'The workstation can no longer reach the file server. Both devices still show the expected 10.20.0.x addresses and the switch links are green.' },
+    diagnose: { q: 'Both devices have correct addresses in the same /24, and their links are up. What should you inspect next?', options: ['The switch access VLAN assigned to each port', 'The default route on h1', 'The DNS resolver on srv'], answer: 0, because: 'Hosts in different VLANs are in separate Layer 2 broadcast domains. Correct IP addresses do not bridge that separation.' },
+    console: 'h1',
+    hints: ['Select sw1 and run show vlan brief to inspect port membership.', 'Create VLAN 20 with vlan 20, then enter each port with interface p1 or interface p2.', 'Set both ports with switchport mode access and switchport access vlan 20, then test with ping srv.'],
+    build: () => ({ devices: {
+      h1: H('h1', '10.20.0.10', 24), srv: SRV('srv', '10.20.0.20', 24, null, { 445: 'smb' }),
+      sw1: SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2', v: 20 }])
+    }, links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')] }),
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['sw1', 'vlan 10'], ['sw1', 'vlan 20'], ['sw1', 'interface p1'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'], ['sw1', 'exit'], ['sw1', 'interface p2'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'], ['sw1', 'exit']]
+  },
+
+  { id: 'trunk-allowed-vlan', chapter: 'Switching · VLANs',
+    title: 'The VLAN that never crossed the trunk',
+    story: 'A small office spans two access switches. h1 and srv are both in VLAN 10 and use the same IP subnet, but the inter-switch trunk only permits VLAN 20. The uplink is up; VLAN 10 traffic is being filtered at Layer 2.',
+    objective: 'Add VLAN 10 to both trunk allow-lists and verify h1 can reach srv.',
+    ticket: { id: 'INC-3102', from: 'NOC · Office network', priority: 'P1', symptom: 'Users on the first switch cannot reach the file server on the second switch. The uplink is up and other VLANs still work.' },
+    diagnose: { q: 'Both endpoint ports are access VLAN 10. The trunk is up but only allows VLAN 20. What is the fault?', options: ['VLAN 10 is missing from the trunk allowed list', 'The hosts need different IP subnets', 'The trunk needs to be shut down'], answer: 0, because: 'A trunk only carries VLANs in its allowed list. The link can be physically up while one VLAN is silently excluded.' },
+    console: 'h1',
+    hints: ['Inspect show interfaces trunk on both switches.', 'VLAN 10 already exists on both switches; the uplink allow-list is the fault.', 'On each trunk port use switchport trunk allowed vlan 10,20, then ping srv from h1.'],
+    build: () => {
+      const sw1 = SW('sw1', [{ n: 'p1', v: 10 }, { n: 'p2' }]);
+      const sw2 = SW('sw2', [{ n: 'p1' }, { n: 'p2', v: 10 }]);
+      sw1.vlans = [1, 10, 20]; sw2.vlans = [1, 10, 20];
+      sw1.ifaces.p2.mode = 'trunk'; sw1.ifaces.p2.allowedVlans = [20];
+      sw2.ifaces.p1.mode = 'trunk'; sw2.ifaces.p1.allowedVlans = [20];
+      return { devices: {
+        h1: H('h1', '10.30.0.10', 24), srv: SRV('srv', '10.30.0.20', 24, null, { 445: 'smb' }),
+        sw1, sw2
+      }, links: [L('h1', 'eth0', 'sw1', 'p1'), L('sw1', 'p2', 'sw2', 'p1'), L('srv', 'eth0', 'sw2', 'p2')] };
+    },
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['sw1', 'interface p2'], ['sw1', 'switchport mode trunk'], ['sw1', 'switchport trunk allowed vlan 10,20'], ['sw1', 'exit'], ['sw2', 'interface p1'], ['sw2', 'switchport mode trunk'], ['sw2', 'switchport trunk allowed vlan 10,20'], ['sw2', 'exit']]
   }
 
 ];

@@ -173,3 +173,31 @@ Natural next steps:
 - **DNS/DHCP** in the engine → unlocks `dig` / `dhclient` and the naming chapter.
 - **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
 - **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
+
+
+## Switching: VLANs and trunks
+
+Switches support access and trunk ports. The Layer 2 model keeps VLANs separate across a switch and carries tagged VLANs only when every trunk in the path permits them. Trunk native VLANs model untagged traffic; a native-VLAN mismatch can therefore break a path even while the uplink remains up.
+
+On a selected switch, use:
+
+```text
+vlan 10
+vlan 20
+interface p1
+switchport mode access
+switchport access vlan 10
+exit
+interface p2
+switchport mode trunk
+switchport trunk native vlan 1
+switchport trunk allowed vlan 10,20
+exit
+show vlan brief
+show interfaces trunk
+show interfaces switchport
+```
+
+VLAN IDs must be integers from 1 through 4094. Access/native VLANs and explicit trunk allow-lists must reference VLANs created on that switch. The `all` trunk allow-list option removes the explicit restriction. Switch port configuration is persistent in the scenario state.
+
+The switching pilot adds two practical tickets: correcting mismatched access VLANs and restoring a VLAN excluded from an inter-switch trunk. Tests cover access isolation, multi-switch trunk forwarding, native VLAN mismatches, invalid configuration, verification output, loop-safe traversal, and a browser-driven configuration workflow.

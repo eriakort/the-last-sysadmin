@@ -182,10 +182,20 @@ function renderConfig() {
       <div class="addrow"><input class="pingto" placeholder="host or ip" size="14"/><button class="btn sm" id="doping">Ping</button><button class="btn sm" id="dotrace">Traceroute</button></div>
       <div id="pingout" class="dim" style="margin:4px 0 8px;white-space:pre-wrap"></div>`;
   }
-  h += `<div class="label2">Interfaces</div>`;
-  for (const n in d.ifaces) {
-    const f = d.ifaces[n];
-    h += `<div class="ifrow" data-if="${n}"><span class="ifn">${n}</span><input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/><span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/><label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
+  if (d.kind === 'switch') {
+    const vlans = [...new Set([1, ...(d.vlans || [])])].sort((a,b)=>a-b);
+    h += `<div class="label2">VLAN database</div><div class="dim">${vlans.map(v=>'VLAN '+v).join(' · ')}</div><div class="label2">Switch ports</div>`;
+    for (const n in d.ifaces) {
+      const f = d.ifaces[n], mode = f.mode === 'trunk' ? 'trunk' : 'access';
+      h += `<div class="rrow">${n} · ${mode} · ${mode === 'trunk' ? 'native '+Number(f.nativeVlan ?? 1)+' · allowed '+(Array.isArray(f.allowedVlans)?f.allowedVlans.join(','):'all') : 'VLAN '+Number(f.accessVlan ?? f.vlan ?? 1)} · ${f.up === false ? 'DOWN' : 'UP'}</div>`;
+    }
+    h += '<p class="dim pal-hint">Configure from the terminal: vlan 10 · interface p1 · switchport access vlan 10 · show vlan brief · show interfaces trunk</p>';
+  } else {
+    h += `<div class="label2">Interfaces</div>`;
+    for (const n in d.ifaces) {
+      const f = d.ifaces[n];
+      h += `<div class="ifrow" data-if="${n}"><span class="ifn">${n}</span><input class="ip" value="${f.ip != null ? M.ipStr(f.ip) : ''}" placeholder="address"/><span>/</span><input class="pfx" value="${f.mask != null ? f.mask : ''}" placeholder="24" size="2"/><label class="up"><input type="checkbox" class="upc"${f.up !== false ? ' checked' : ''}/>up</label></div>`;
+    }
   }
   if (d.kind !== 'switch') {
     h += '<div class="label2">Routes</div>';

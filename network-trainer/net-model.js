@@ -30,24 +30,49 @@ function neighbor(net, dev, name) {
 // All host/router interfaces in the same L2 broadcast domain as (startDev, startIface).
 // Switches are transparent (we expand to their other ports in the same VLAN);
 // hosts and routers are endpoints (we don't forward through them at L2).
+function switchAccessVlan(port) { return Number(port.accessVlan ?? port.vlan ?? 1); }
+function switchNativeVlan(port) { return Number(port.nativeVlan ?? 1); }
+function switchPortAllowsVlan(port, vlan) {
+  if (port.mode === 'trunk') return !Array.isArray(port.allowedVlans) || port.allowedVlans.includes(vlan);
+  return switchAccessVlan(port) === vlan;
+}
+function switchVlanExists(dev, vlan) { return !Array.isArray(dev.vlans) || dev.vlans.includes(vlan); }
+function switchIngressVlan(port, taggedVlan) {
+  if (port.mode === 'trunk') {
+    const vlan = taggedVlan == null ? switchNativeVlan(port) : taggedVlan;
+    return switchPortAllowsVlan(port, vlan) ? vlan : null;
+  }
+  const vlan = switchAccessVlan(port);
+  return taggedVlan == null ? vlan : null;
+}
 function l2Domain(net, startDev, startIface) {
   const endpoints = [], seen = new Set();
   const first = neighbor(net, startDev, startIface);
   if (!first) return endpoints;
-  const stack = [first];
+  const [fd, fi] = first, firstDev = net.devices[fd];
+  if (!firstDev || firstDev.kind !== 'switch') return [first];
+  const firstPort = firstDev.ifaces[fi];
+  const firstVlan = firstPort && switchIngressVlan(firstPort, null);
+  if (firstVlan == null || !switchVlanExists(firstDev, firstVlan)) return endpoints;
+  const stack = [[fd, fi, firstVlan]];
   while (stack.length) {
-    const [d, i] = stack.pop(); const key = d + '|' + i;
+    const [d, i, vlan] = stack.pop(), key = d + '|' + i + '|' + vlan;
     if (seen.has(key)) continue; seen.add(key);
-    const dev = net.devices[d]; if (!dev) continue;
-    if (dev.kind === 'switch') {
-      const vlan = dev.ifaces[i] ? (dev.ifaces[i].vlan ?? null) : null;
-      for (const p in dev.ifaces) {
-        if (p === i || dev.ifaces[p].up === false) continue;
-        if ((dev.ifaces[p].vlan ?? null) !== vlan) continue;   // VLAN segmentation
-        const nb = neighbor(net, d, p); if (nb) stack.push(nb);
+    const dev = net.devices[d]; if (!dev || dev.kind !== 'switch' || !switchVlanExists(dev, vlan)) continue;
+    for (const p in dev.ifaces) {
+      const port = dev.ifaces[p];
+      if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan)) continue;
+      const nb = neighbor(net, d, p); if (!nb) continue;
+      const [nd, ni] = nb, next = net.devices[nd];
+      if (!next) continue;
+      if (next.kind === 'switch') {
+        const ingress = next.ifaces[ni];
+        const wireVlan = port.mode === 'trunk' && vlan !== switchNativeVlan(port) ? vlan : null;
+        const mapped = ingress && switchIngressVlan(ingress, wireVlan);
+        if (mapped != null && switchVlanExists(next, mapped)) stack.push([nd, ni, mapped]);
+      } else if (port.mode !== 'trunk' || switchNativeVlan(port) === vlan) {
+        endpoints.push([nd, ni]);
       }
-    } else {
-      endpoints.push([d, i]);
     }
   }
   return endpoints;
@@ -335,7 +360,7 @@ function ping(net, srcDev, dst, base = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,
