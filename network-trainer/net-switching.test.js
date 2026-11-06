@@ -187,5 +187,22 @@ test('STP root election is independent for each VLAN', () => {
   assert(M.spanningTree(net,20).switches.sw1.root === 'sw2', 'VLAN 20 should elect sw2');
 });
 
+
+test('STP and MAC learning also work on switch-to-switch access links', () => {
+  const net = triangle();
+  for (const id of ['sw1','sw2','sw3']) {
+    for (const p of Object.values(net.devices[id].ifaces)) {
+      p.mode = 'access'; p.accessVlan = 10; p.vlan = 10; delete p.allowedVlans;
+    }
+  }
+  net.devices.sw3.stpPriorities = { 10: 4096 };
+  const tree = M.spanningTree(net,10);
+  assert(tree.switches.sw1.root === 'sw3', 'sw3 should be elected on an access-link topology');
+  assert(tree.switches.sw2.ports.p1.state === 'blocking', 'the redundant access link should be blocked');
+  assert(connected(net), 'STP should preserve reachability on access switch links');
+  const rows = M.switchMacTable(net,'sw1',10);
+  assert(rows.some(x=>x.device==='srv' && x.port==='p3'), 'remote MAC should be learned across access switch links');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
 if (failed) process.exit(1);
