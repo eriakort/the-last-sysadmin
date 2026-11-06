@@ -174,5 +174,18 @@ test('a simple two-switch topology has no alternate blocking port', () => {
   assert(!Object.values(tree.switches).some(s=>Object.values(s.ports).some(p=>p.state==='blocking')), 'tree topology should not block a port');
 });
 
+
+test('STP root election is independent for each VLAN', () => {
+  const net = triangle();
+  for (const id of ['sw1','sw2','sw3']) {
+    net.devices[id].vlans = [1,10,20];
+    for (const port of Object.values(net.devices[id].ifaces)) if (port.mode === 'trunk') port.allowedVlans = [10,20];
+  }
+  net.devices.sw3.stpPriorities = { 10: 4096 };
+  net.devices.sw2.stpPriorities = { 20: 4096 };
+  assert(M.spanningTree(net,10).switches.sw1.root === 'sw3', 'VLAN 10 should elect sw3');
+  assert(M.spanningTree(net,20).switches.sw1.root === 'sw2', 'VLAN 20 should elect sw2');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
 if (failed) process.exit(1);
