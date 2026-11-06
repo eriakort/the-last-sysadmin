@@ -261,9 +261,11 @@ Implemented operational commands include:
 - `show vlan brief`, `show interfaces status`, `show interfaces trunk`
 - `show mac address-table dynamic`, `show spanning-tree [vlan <id>]`
 - Switch configuration: `vlan <id>`, `name <label>`, `switchport mode access|trunk`, access/native/allowed VLAN settings, interface descriptions, `shutdown` / `no shutdown`
-- Router configuration: `ip address <address> <subnet-mask>` under an interface and `ip route <network> <subnet-mask> <next-hop>` in global configuration
-- `write memory` / `copy running-config startup-config` saves a startup-configuration snapshot in the current scenario.
+- Router configuration: ip address ADDRESS MASK under an interface and ip route NETWORK MASK NEXT-HOP in global configuration
+- Extended ACLs: ip access-list extended NAME, optional sequence numbers, permit|deny ip|tcp|udp|icmp, source/destination any, host IP, or IP WILDCARD, and TCP/UDP eq PORT
+- Apply an ACL under interface configuration with ip access-group NAME in|out; remove it with no ip access-group NAME in|out
+- Verify policy and attachment with show access-lists [NAME] and show ip interface IF; save with write memory / copy running-config startup-config
 
-These commands mutate the same device and forwarding model as the existing missions, so verification output and packet reachability stay consistent. The command profile supports common interface abbreviations when the topology's interface names are Cisco-style. Startup configuration is an explicit snapshot; it does not yet model a device reboot or NVRAM hardware. Firewall policy remains in the existing simulator firewall command family for this increment; IOS ACL authoring and ASA-style policy/NAT workflows are a separate next step.
+These commands mutate the same device and forwarding model as existing missions. Extended ACLs support ordered entries, source/destination wildcard matching, TCP/UDP destination ports, inbound and outbound interface bindings, hit counters, and implicit deny on a bound ACL. Legacy simulator firewall rules remain supported. The IOS-style subset omits time ranges, object groups, fragments, reflexive ACLs and full ICMP type matching; it is router ACL syntax, not ASA policy or NAT syntax. Startup configuration is an explicit snapshot and does not model reboot or NVRAM hardware.
 
 **Fidelity note:** this is an educational IOS-style command profile, not Cisco IOS/IOS XE software or a licensed virtual appliance. Unsupported commands return an error rather than pretending to execute.
