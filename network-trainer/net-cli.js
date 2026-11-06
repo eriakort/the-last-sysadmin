@@ -39,10 +39,10 @@ const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >=
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
+  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, iosOspf: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosOspf = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
   cli.run = line => {
     const command = String(line).trim(), result = runCisco(cli, command);
-    if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|write memory|copy running-config)/i.test(command))
+    if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|router ospf|network |no network|router-id |passive-interface |no passive-interface|write memory|copy running-config)/i.test(command))
       M.recordSyslog(cli.net, cli.cur, 'CONFIG: ' + command, 5);
     return result;
   };
@@ -713,6 +713,18 @@ function runCisco(cli, line) {
       dev.vlans = [...new Set([1, ...(dev.vlans || []), id])].sort((a,b)=>a-b);
       cli.iosMode = 'vlan'; cli.iosVlan = id; return ok('VLAN configuration mode');
     }
+    if (words[0] === 'router' && words[1] === 'ospf' && words.length === 3) {
+      const processId = Number(words[2]);
+      if (!Number.isInteger(processId) || processId < 1 || processId > 65535) return err('% OSPF process ID must be 1–65535');
+      if (dev.kind !== 'router') return err('% OSPF is available on routers only');
+      dev.ospf = dev.ospf || { networks: [], passiveInterfaces: [] };
+      dev.ospf.processId = processId; dev.ospf.networks = dev.ospf.networks || []; dev.ospf.passiveInterfaces = dev.ospf.passiveInterfaces || [];
+      cli.iosOspf = processId; cli.iosMode = 'router-ospf'; return ok('OSPF router configuration mode');
+    }
+    if (words[0] === 'no' && words[1] === 'router' && words[2] === 'ospf' && words.length === 4) {
+      if (dev.ospf && dev.ospf.processId === Number(words[3])) { delete dev.ospf; applyOspfNetworks(dev); return ok(''); }
+      return err('% OSPF process not found');
+    }
     if (words[0] === 'ip' && words[1] === 'route' && words.length === 5) {
       if (!['router','firewall'].includes(dev.kind)) return err('% Static routes can only be configured on routers/firewalls');
       const dest = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]), via = parseIPv4(words[4]);
@@ -725,6 +737,35 @@ function runCisco(cli, line) {
       return ok('');
     }
     return err('% Invalid input in global configuration mode');
+  }
+  if (cli.iosMode === 'router-ospf') {
+    dev.ospf = dev.ospf || { processId: cli.iosOspf, networks: [], passiveInterfaces: [] };
+    dev.ospf.networks = dev.ospf.networks || []; dev.ospf.passiveInterfaces = dev.ospf.passiveInterfaces || [];
+    if (words[0] === 'router-id' && words.length === 2) {
+      const id = parseIPv4(words[1]); if (id == null || id === 0) return err('% Invalid OSPF router ID');
+      dev.ospf.routerId = id; return ok('');
+    }
+    if (words[0] === 'network' && words.length === 5 && words[3] === 'area') {
+      const address = parseIPv4(words[1]), wildcard = parseIPv4(words[2]), area = ospfAreaId(words[4]);
+      if (address == null || wildcard == null || area == null) return err('% Use network <address> <wildcard> area <area-id>');
+      if (!dev.ospf.networks.some(n => n.address === address && n.wildcard === wildcard && n.area === area))
+        dev.ospf.networks.push({ address, wildcard, area });
+      applyOspfNetworks(dev); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'network' && words.length === 6 && words[4] === 'area') {
+      const address = parseIPv4(words[2]), wildcard = parseIPv4(words[3]), area = ospfAreaId(words[5]);
+      dev.ospf.networks = dev.ospf.networks.filter(n => !(n.address === address && n.wildcard === wildcard && n.area === area));
+      applyOspfNetworks(dev); return ok('');
+    }
+    if (words[0] === 'passive-interface' && words.length === 2) {
+      const name = ciscoIface(dev, words[1]); if (!name) return err('% Invalid interface');
+      if (!dev.ospf.passiveInterfaces.includes(name)) dev.ospf.passiveInterfaces.push(name); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'passive-interface' && words.length === 3) {
+      const name = ciscoIface(dev, words[2]); if (!name) return err('% Invalid interface');
+      dev.ospf.passiveInterfaces = dev.ospf.passiveInterfaces.filter(x => x !== name); return ok('');
+    }
+    return err('% Use router-id, network <address> <wildcard> area <area-id>, or passive-interface <interface>');
   }
   if (cli.iosMode === 'dhcp-pool') {
     dev.dhcp = dev.dhcp || { excluded: [], bindings: {} };
