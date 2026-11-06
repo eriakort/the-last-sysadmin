@@ -567,16 +567,16 @@ function recordSyslog(net, devId, message, severity = 6) {
     if (!collector || !ping(net, devId, address, { proto: 'udp', dport: 514 }).ok) continue;
     if (!(collector.syslogCollector || (collector.services && collector.services[514]))) continue;
     collector.syslogEvents = collector.syslogEvents || [];
-    collector.syslogEvents.push({ ...event, sourceIp: primaryAddress(dev) });
+    collector.syslogEvents.push({ ...event, sourceIp: primaryAddress(dev, cfg.sourceInterface) });
     if (collector.syslogEvents.length > 500) collector.syslogEvents.shift();
     forwarded++;
   }
   cfg.forwarded = (cfg.forwarded || 0) + forwarded;
   return { recorded: true, forwarded };
 }
-function primaryAddress(dev) {
-  const f = Object.values(dev.ifaces || {}).find(x => x.up !== false && x.ip != null);
-  return f ? ipStr(f.ip) : 'unassigned';
+function primaryAddress(dev, ifaceName) {
+  const f = (ifaceName && dev.ifaces && dev.ifaces[ifaceName]) || Object.values(dev.ifaces || {}).find(x => x.up !== false && x.ip != null);
+  return f && f.up !== false && f.ip != null ? ipStr(f.ip) : 'unassigned';
 }
 
 // A full round trip (like ICMP echo): request must arrive AND the reply must come back.
