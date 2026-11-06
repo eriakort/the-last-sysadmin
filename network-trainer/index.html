@@ -687,8 +687,10 @@ function sourceIpToward(net, devId, dst) {
 // `resolver` (a DNS server IP); that server holds a `dns` zone of name -> ipInt.
 // Returns { ok, ip?, reason? } — every failure is a teachable one.
 function resolveName(net, srcDev, name) {
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return { ok: true, ip: ip(name), name };   // already an address
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return { ok: true, ip: ip(name), name };
   const dev = net.devices[srcDev];
+  const local = dev && dev.hosts && dev.hosts[String(name).toLowerCase()];
+  if (local != null) return { ok: true, ip: local, name, source: 'local' };
   const res = dev && dev.resolver;
   if (res == null) return { ok: false, reason: 'no DNS resolver configured' };
   const q = ping(net, srcDev, res, { proto: 'udp', dport: 53 });                    // can we reach the resolver?
@@ -706,7 +708,14 @@ function resolveName(net, srcDev, name) {
 function dhcpServerFor(net, hostId, ifaceName) {
   for (const [d, i] of l2Domain(net, hostId, ifaceName)) {
     const dev = net.devices[d];
-    if (dev.dhcp && dev.dhcp.iface === i) return { id: d, pool: dev.dhcp };
+    if (dev.dhcp && (dev.dhcp.iface === i || (dev.dhcp.network && dev.ifaces[i] && dev.ifaces[i].ip != null && sameNet(dev.ifaces[i].ip, dev.dhcp.network.net, dev.dhcp.network.prefix)))) return { id: d, pool: dev.dhcp, relayed: false };
+    if (dev.kind === 'router' || dev.kind === 'firewall') {
+      const helper = dev.ifaces[i] && dev.ifaces[i].helperAddress;
+      if (helper != null) {
+        const serverId = deviceOwning(net, helper), server = serverId && net.devices[serverId];
+        if (server && server.dhcp) return { id: serverId, pool: server.dhcp, relayed: true, relay: d };
+      }
+    }
   }
   return null;
 }
@@ -717,20 +726,72 @@ function dhclient(net, hostId, ifaceName) {
   if (!host || !host.ifaces[ifaceName]) return { ok: false, reason: 'no such interface ' + ifaceName };
   const srv = dhcpServerFor(net, hostId, ifaceName);
   if (!srv) return { ok: false, reason: 'no DHCP server responded on the segment' };
-  const p = srv.pool;
+  const p = srv.pool, prefix = Number(p.prefix ?? p.network?.prefix ?? 24);
+  const first = p.range ? p.range[0] : (p.network.net + 1) >>> 0;
+  const last = p.range ? p.range[1] : (p.network.net + Math.pow(2, 32 - prefix) - 2) >>> 0;
+  const excluded = new Set((p.excluded || []).flatMap(x => x.end == null ? [x.start] : Array.from({ length: Math.max(0, x.end - x.start + 1) }, (_,i)=>x.start+i)));
+  p.bindings = p.bindings || {};
   let addr = null;
-  for (let a = p.range[0]; a <= p.range[1]; a++) {
-    if (a === p.gw) continue;
+  for (let a = first; a <= last; a++) {
+    if (a === p.gw || excluded.has(a)) continue;
     const owner = deviceOwning(net, a);
-    if (owner && owner !== hostId) continue;        // taken by someone else
+    const leased = Object.entries(p.bindings).some(([id, lease]) => id !== hostId && lease.ip === a);
+    if ((owner && owner !== hostId) || leased) continue;
     addr = a; break;
   }
   if (addr == null) return { ok: false, reason: 'DHCP pool exhausted — no free address' };
-  host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: p.prefix, up: true };
-  host.routes = (host.routes || []).filter(r => r.mask !== 0);     // replace any old default
-  if (p.gw != null) host.routes.push({ dest: 0, mask: 0, via: p.gw });
-  if (p.dns != null) host.resolver = p.dns;
-  return { ok: true, ip: addr, gw: p.gw, dns: p.dns, prefix: p.prefix };
+  host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: prefix, up: true };
+  host.routes = (host.routes || []).filter(r => r.mask !== 0);
+  const gw = p.gw ?? p.defaultRouter ?? null, dns = p.dns ?? p.dnsServer ?? null;
+  if (gw != null) host.routes.push({ dest: 0, mask: 0, via: gw });
+  if (dns != null) host.resolver = dns;
+  if (p.domainName) host.domainName = p.domainName;
+  p.bindings[hostId] = { ip: addr, iface: ifaceName, prefix, gateway: gw, dns, domainName: p.domainName || null, leaseDays: p.leaseDays || 1 };
+  return { ok: true, ip: addr, gw, dns, prefix, domainName: p.domainName || null, relayed: srv.relayed };
+}
+
+
+// NTP is deliberately small: a configured peer must be reachable on UDP/123
+// and advertise itself as an NTP master before a client reports synchronization.
+function ntpStatus(net, devId) {
+  const dev = net.devices[devId], cfg = dev && dev.ntp || {};
+  if (!dev) return { synchronized: false, reason: 'device not found', associations: [] };
+  if (cfg.master) return { synchronized: true, stratum: Number(cfg.stratum || 8), source: 'local clock', associations: [] };
+  const associations = (cfg.servers || []).map(address => {
+    const id = deviceOwning(net, address), peer = id && net.devices[id];
+    const reachable = !!(peer && ping(net, devId, address, { proto: 'udp', dport: 123 }).ok);
+    const master = !!(peer && peer.ntp && peer.ntp.master && peer.services && peer.services[123]);
+    return { address, peer: id, reachable, synchronized: reachable && master, stratum: master ? Number(peer.ntp.stratum || 8) : null };
+  });
+  const active = associations.find(x => x.synchronized);
+  return active
+    ? { synchronized: true, stratum: Math.min(15, active.stratum + 1), source: ipStr(active.address), associations }
+    : { synchronized: false, stratum: 16, source: null, reason: associations.length ? 'no reachable NTP master' : 'no NTP servers configured', associations };
+}
+
+// Record a local operational event and forward it to configured, reachable collectors.
+function recordSyslog(net, devId, message, severity = 6) {
+  const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
+  dev.syslog = dev.syslog || { enabled: true, hosts: [], severity: 6, local: [], forwarded: 0 };
+  const cfg = dev.syslog, event = { sequence: (cfg.local.length ? cfg.local[cfg.local.length - 1].sequence : 0) + 1,
+    device: dev.hostname || dev.id || devId, deviceId: devId, message: String(message), severity, timestamp: new Date().toISOString() };
+  cfg.local.push(event); if (cfg.local.length > 100) cfg.local.shift();
+  let forwarded = 0;
+  if (cfg.enabled !== false && severity <= Number(cfg.severity ?? 6)) for (const address of cfg.hosts || []) {
+    const collectorId = deviceOwning(net, address), collector = collectorId && net.devices[collectorId];
+    if (!collector || !ping(net, devId, address, { proto: 'udp', dport: 514 }).ok) continue;
+    if (!(collector.syslogCollector || (collector.services && collector.services[514]))) continue;
+    collector.syslogEvents = collector.syslogEvents || [];
+    collector.syslogEvents.push({ ...event, sourceIp: primaryAddress(dev) });
+    if (collector.syslogEvents.length > 500) collector.syslogEvents.shift();
+    forwarded++;
+  }
+  cfg.forwarded = (cfg.forwarded || 0) + forwarded;
+  return { recorded: true, forwarded };
+}
+function primaryAddress(dev) {
+  const f = Object.values(dev.ifaces || {}).find(x => x.up !== false && x.ip != null);
+  return f ? ipStr(f.ip) : 'unassigned';
 }
 
 // A full round trip (like ICMP echo): request must arrive AND the reply must come back.
@@ -755,9 +816,8 @@ module.exports = {
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,
-  resolveName, dhclient, dhcpServerFor
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
-
 });
 __def("./net-checks", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
@@ -865,13 +925,32 @@ function stpRoot(net, switchId, vlan, expectedRoot) {
   const ok = !!(state && state.root === expectedRoot);
   return { ok, reason: ok ? expectedRoot + ' is root bridge for VLAN ' + vlan : (state ? state.root + ' is root for VLAN ' + vlan + ', expected ' + expectedRoot : switchId + ' has no active STP instance for VLAN ' + vlan) };
 }
+function dhcpLease(net, devId, ifaceName, cidrStr) {
+  const host = net.devices[devId], iface = host && host.ifaces[ifaceName];
+  if (!iface || iface.ip == null) return { ok: false, reason: devId + '/' + ifaceName + ' has no DHCP address' };
+  const pool = M.dhcpServerFor(net, devId, ifaceName);
+  const lease = pool && pool.pool.bindings && pool.pool.bindings[devId];
+  const expected = M.cidr(cidrStr);
+  const ok = !!(lease && lease.ip === iface.ip && iface.mask === expected.prefix && M.networkOf(iface.ip, expected.prefix) === expected.net);
+  return { ok, reason: ok ? devId + ' has a DHCP lease in ' + cidrStr : devId + ' does not have a matching DHCP lease in ' + cidrStr };
+}
+function ntpSynchronized(net, devId) {
+  const status = M.ntpStatus(net, devId);
+  return { ok: status.synchronized, reason: status.synchronized ? devId + ' is synchronized to ' + status.source : devId + ' clock is unsynchronized: ' + status.reason };
+}
+function syslogReceived(net, collectorId, sourceId) {
+  const collector = net.devices[collectorId];
+  const events = collector && collector.syslogEvents || [];
+  const ok = events.some(x => x.deviceId === sourceId);
+  return { ok, reason: ok ? collectorId + ' has received syslog from ' + sourceId : collectorId + ' has not received syslog from ' + sourceId };
+}
+
 function stpBlocked(net, switchId, port, vlan) {
   const tree = M.spanningTree(net, vlan), state = tree.switches[switchId], p = state && state.ports[port];
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked };
-
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
 });
 __def("./net-cli", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
@@ -916,7 +995,12 @@ const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >=
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
   const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
-  cli.run = line => runCisco(cli, String(line).trim());
+  cli.run = line => {
+    const command = String(line).trim(), result = runCisco(cli, command);
+    if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|write memory|copy running-config)/i.test(command))
+      M.recordSyslog(cli.net, cli.cur, 'CONFIG: ' + command, 5);
+    return result;
+  };
   return cli;
 }
 
@@ -974,7 +1058,27 @@ function ciscoRunConfig(dev) {
     lines.push(p.up === false ? ' shutdown' : ' no shutdown');
   }
   for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id + ((dev.vlanNames || {})[id] ? '\n name ' + dev.vlanNames[id] : ''));
+  for (const [name,p] of Object.entries(dev.ifaces || {})) if (p.helperAddress != null) lines.push('!', 'interface ' + name, ' ip helper-address ' + M.ipStr(p.helperAddress));
   for (const r of dev.routes || []) lines.push('ip route ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
+  if (dev.dhcp && dev.dhcp.name) {
+    for (const x of dev.dhcp.excluded || []) lines.push('ip dhcp excluded-address ' + M.ipStr(x.start) + (x.end != null && x.end !== x.start ? ' ' + M.ipStr(x.end) : ''));
+    lines.push('!', 'ip dhcp pool ' + dev.dhcp.name);
+    if (dev.dhcp.network) lines.push(' network ' + M.ipStr(dev.dhcp.network.net) + ' ' + ciscoPrefixMask(dev.dhcp.network.prefix));
+    if (dev.dhcp.defaultRouter != null) lines.push(' default-router ' + M.ipStr(dev.dhcp.defaultRouter));
+    if (dev.dhcp.dnsServer != null) lines.push(' dns-server ' + M.ipStr(dev.dhcp.dnsServer));
+    if (dev.dhcp.domainName) lines.push(' domain-name ' + dev.dhcp.domainName);
+    if (dev.dhcp.leaseDays) lines.push(' lease ' + dev.dhcp.leaseDays);
+  }
+  if (dev.resolver != null) lines.push('ip name-server ' + M.ipStr(dev.resolver));
+  for (const [name,address] of Object.entries(dev.hosts || {})) lines.push('ip host ' + name + ' ' + M.ipStr(address));
+  if (dev.ntp && dev.ntp.master) lines.push('ntp master ' + Number(dev.ntp.stratum || 8));
+  for (const address of dev.ntp && dev.ntp.servers || []) lines.push('ntp server ' + M.ipStr(address));
+  if (dev.syslog) {
+    for (const address of dev.syslog.hosts || []) lines.push('logging host ' + M.ipStr(address));
+    if (dev.syslog.severity != null) lines.push('logging trap ' + Number(dev.syslog.severity));
+    if (dev.syslog.sourceInterface) lines.push('logging source-interface ' + dev.syslog.sourceInterface);
+    if (dev.syslog.enabled === false) lines.push('no logging on');
+  }
   const aclNames = [...new Set((dev.acls || []).filter(r => r.aclName).map(r => r.aclName))];
   for (const name of aclNames) {
     lines.push('!', 'ip access-list extended ' + name);
@@ -1042,7 +1146,25 @@ function ciscoShow(cli, words) {
     const groups = dev.ifaces[name].accessGroups || {};
     return ok(name + ' is ' + (dev.ifaces[name].up === false ? 'administratively down' : 'up') +
       '\n  Inbound access list is ' + (groups.in || 'not set') +
-      '\n  Outbound access list is ' + (groups.out || 'not set'));
+      '\n  Outbound access list is ' + (groups.out || 'not set') +
+      '\n  DHCP relay is ' + (dev.ifaces[name].helperAddress == null ? 'not configured' : M.ipStr(dev.ifaces[name].helperAddress)));
+  }
+  if (q === 'hosts') return ok('Host                  Address         Source\n' + Object.entries(dev.hosts || {}).map(([n,a]) => n.padEnd(22) + M.ipStr(a).padEnd(16) + 'static').join('\n') || '(no local host entries)');
+  if (q === 'ntp status' || q === 'ntp associations') {
+    const status = M.ntpStatus(cli.net, cli.cur);
+    if (q === 'ntp status') return ok('Clock is ' + (status.synchronized ? 'synchronized' : 'unsynchronized') + '\nStratum: ' + status.stratum + '\nReference: ' + (status.source || 'none') + (status.reason ? '\nReason: ' + status.reason : ''));
+    return ok('Address         Peer       Reachable  Status       Stratum\n' + (status.associations || []).map(x => M.ipStr(x.address).padEnd(16) + String(x.peer || '--').padEnd(11) + String(x.reachable).padEnd(11) + (x.synchronized ? 'synchronized' : 'unsynchronized').padEnd(13) + (x.stratum ?? '--')).join('\n') || '(no NTP associations)');
+  }
+  if (q === 'logging') {
+    if (dev.syslogCollector || (dev.services && dev.services[514])) return ok('Syslog collector: ' + (dev.syslogEvents || []).length + ' events received\n' + (dev.syslogEvents || []).slice(-20).map(x => x.timestamp + ' ' + x.device + ' ' + x.message).join('\n'));
+    const cfg = dev.syslog || {};
+    return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n'));
+  }
+  if (q === 'ip dhcp pool' || q === 'ip dhcp binding' || q === 'ip dhcp server statistics') {
+    const pool = dev.dhcp;
+    if (q === 'ip dhcp binding') return ok('IP address       Client ID   Lease (days)\n' + Object.entries(pool && pool.bindings || {}).map(([id,x]) => M.ipStr(x.ip).padEnd(17) + id.padEnd(12) + x.leaseDays).join('\n') || '(no DHCP bindings)');
+    if (q === 'ip dhcp server statistics') return ok('Pool: ' + (pool && pool.name || 'not configured') + '\nBindings: ' + Object.keys(pool && pool.bindings || {}).length + '\nExcluded ranges: ' + (pool && pool.excluded || []).length + '\nDHCP relay requests served: ' + Object.keys(pool && pool.bindings || {}).length);
+    return ok(pool ? 'Pool ' + (pool.name || '(unnamed)') + '\nNetwork: ' + (pool.network ? M.ipStr(pool.network.net) + '/' + pool.network.prefix : 'not configured') + '\nDefault router: ' + (pool.defaultRouter == null ? 'not set' : M.ipStr(pool.defaultRouter)) + '\nDNS server: ' + (pool.dnsServer == null ? 'not set' : M.ipStr(pool.dnsServer)) + '\nDomain: ' + (pool.domainName || 'not set') + '\nLeases: ' + Object.keys(pool.bindings || {}).length : '% No DHCP pool configured');
   }
   if (q === 'startup-config' || q === 'start') return ok(dev.startupConfig || '% startup-config is not saved; use copy running-config startup-config');
   if (q === 'version') return ok('Network Operations Simulator\nIOS-style command profile (implemented subset)\nDevice: ' + (dev.hostname || dev.id) + '\nModel: ' + dev.kind + '\nConfiguration register: 0x2102');
@@ -1404,14 +1526,14 @@ function runCisco(cli, line) {
   }
   if (lower === 'end' || lower === 'end\n') { cli.iosMode = 'privileged'; cli.iosIface = null; cli.contextIface = null; return ok(''); }
   if (lower === 'exit') {
-    if (cli.iosMode === 'acl') { cli.iosMode = 'config'; cli.iosAcl = null; return ok(''); }
+    if (cli.iosMode === 'acl' || cli.iosMode === 'dhcp-pool') { cli.iosMode = 'config'; cli.iosAcl = null; cli.iosDhcpPool = null; return ok(''); }
     if (cli.iosMode === 'interface' || cli.iosMode === 'vlan') { cli.iosMode = 'config'; cli.iosIface = null; return ok(''); }
     if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
     if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status','access-lists'];
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('access-lists ') || query.startsWith('ip interface ')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -1426,6 +1548,66 @@ function runCisco(cli, line) {
   }
   if (cli.iosMode === 'config') {
     if (words[0] === 'hostname' && words[1]) { dev.hostname = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'ip' && words[1] === 'dhcp' && words[2] === 'excluded-address' && (words.length === 4 || words.length === 5)) {
+      const first = parseIPv4(words[3]), last = words[4] ? parseIPv4(words[4]) : first;
+      if (first == null || last == null || first > last) return err('% Invalid DHCP excluded-address range');
+      dev.dhcp = dev.dhcp || { excluded: [], bindings: {} }; dev.dhcp.excluded = dev.dhcp.excluded || [];
+      if (!dev.dhcp.excluded.some(x => x.start === first && x.end === last)) dev.dhcp.excluded.push({ start: first, end: last });
+      return ok('');
+    }
+    if (words[0] === 'ip' && words[1] === 'dhcp' && words[2] === 'pool' && words[3] && words.length === 4) {
+      dev.dhcp = dev.dhcp || { excluded: [], bindings: {} };
+      dev.dhcp.name = words[3]; dev.dhcp.excluded = dev.dhcp.excluded || []; dev.dhcp.bindings = dev.dhcp.bindings || {};
+      cli.iosDhcpPool = words[3]; cli.iosMode = 'dhcp-pool'; return ok('DHCP pool configuration mode');
+    }
+    if (words[0] === 'no' && words[1] === 'ip' && words[2] === 'dhcp' && words[3] === 'pool' && words[4]) {
+      if (dev.dhcp && dev.dhcp.name === words[4]) { delete dev.dhcp; return ok(''); }
+      return err('% DHCP pool not found');
+    }
+    if (words[0] === 'ip' && words[1] === 'name-server' && words[2]) {
+      const address = parseIPv4(words[2]); if (address == null) return err('% Invalid DNS server address');
+      dev.resolver = address; return ok('');
+    }
+    if (words[0] === 'ip' && words[1] === 'host' && words[2] && words[3]) {
+      const address = parseIPv4(words[3]); if (address == null) return err('% Invalid host address');
+      dev.hosts = dev.hosts || {}; dev.hosts[words[2].toLowerCase()] = address; return ok('');
+    }
+    if (words[0] === 'ntp' && words[1] === 'server' && words[2] && words.length === 3) {
+      const address = parseIPv4(words[2]); if (address == null) return err('% Invalid NTP server address');
+      dev.ntp = dev.ntp || { servers: [] }; dev.ntp.servers = [...new Set([...(dev.ntp.servers || []), address])]; return ok('');
+    }
+    if (words[0] === 'ntp' && words[1] === 'master' && words.length <= 3) {
+      const stratum = words[2] == null ? 8 : Number(words[2]);
+      if (!Number.isInteger(stratum) || stratum < 1 || stratum > 15) return err('% NTP stratum must be 1–15');
+      dev.ntp = dev.ntp || { servers: [] }; dev.ntp.master = true; dev.ntp.stratum = stratum; return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'ntp' && words[2] === 'server' && words[3]) {
+      const address = parseIPv4(words[3]); if (dev.ntp) dev.ntp.servers = (dev.ntp.servers || []).filter(x => x !== address); return ok('');
+    }
+    if (words[0] === 'logging' && words[1] === 'host' && words[2] && words.length === 3) {
+      const address = parseIPv4(words[2]); if (address == null) return err('% Invalid syslog host address');
+      dev.syslog = dev.syslog || { enabled: true, hosts: [], severity: 6, local: [], forwarded: 0 };
+      dev.syslog.hosts = [...new Set([...(dev.syslog.hosts || []), address])]; return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'logging' && words[2] === 'host' && words[3]) {
+      const address = parseIPv4(words[3]); if (dev.syslog) dev.syslog.hosts = (dev.syslog.hosts || []).filter(x => x !== address); return ok('');
+    }
+    if (words[0] === 'logging' && words[1] === 'trap' && words[2]) {
+      const levels = { emergencies: 0, alerts: 1, critical: 2, errors: 3, warnings: 4, notifications: 5, informational: 6, debugging: 7 };
+      const level = /^\d$/.test(words[2]) ? Number(words[2]) : levels[words[2]];
+      if (level == null || level < 0 || level > 7) return err('% Use a syslog severity name or 0–7');
+      dev.syslog = dev.syslog || { enabled: true, hosts: [], local: [], forwarded: 0 };
+      dev.syslog.severity = level; return ok('');
+    }
+    if (words[0] === 'logging' && words[1] === 'source-interface' && words[2]) {
+      const name = ciscoIface(dev, words[2]); if (!name) return err('% Invalid source interface');
+      dev.syslog = dev.syslog || { enabled: true, hosts: [], severity: 6, local: [], forwarded: 0 };
+      dev.syslog.sourceInterface = name; return ok('');
+    }
+    if (lower === 'logging on' || lower === 'logging buffered') {
+      dev.syslog = dev.syslog || { hosts: [], severity: 6, local: [], forwarded: 0 }; dev.syslog.enabled = true; return ok('');
+    }
+    if (lower === 'no logging on') { if (dev.syslog) dev.syslog.enabled = false; return ok(''); }
     if (words[0] === 'interface' && words[1]) {
       const name = ciscoIface(dev, raw.split(/\s+/)[1]);
       if (!name) return err('% Invalid interface — use show ip interface brief');
@@ -1465,6 +1647,28 @@ function runCisco(cli, line) {
     }
     return err('% Invalid input in global configuration mode');
   }
+  if (cli.iosMode === 'dhcp-pool') {
+    dev.dhcp = dev.dhcp || { excluded: [], bindings: {} };
+    if (words[0] === 'network' && words.length === 3) {
+      const address = parseIPv4(words[1]), prefix = ciscoMaskPrefix(words[2]);
+      if (address == null || prefix == null) return err('% Use network <network-address> <subnet-mask>');
+      dev.dhcp.network = { net: M.networkOf(address, prefix), prefix }; dev.dhcp.prefix = prefix; return ok('');
+    }
+    if (words[0] === 'default-router' && words[1] && words.length === 2) {
+      const address = parseIPv4(words[1]); if (address == null) return err('% Invalid default-router address');
+      dev.dhcp.defaultRouter = address; return ok('');
+    }
+    if (words[0] === 'dns-server' && words[1] && words.length === 2) {
+      const address = parseIPv4(words[1]); if (address == null) return err('% Invalid DNS server address');
+      dev.dhcp.dnsServer = address; return ok('');
+    }
+    if (words[0] === 'domain-name' && words[1] && words.length === 2) { dev.dhcp.domainName = words[1]; return ok(''); }
+    if (words[0] === 'lease' && words[1] && words.length === 2) {
+      const days = Number(words[1]); if (!Number.isInteger(days) || days < 1 || days > 365) return err('% Lease must be 1–365 days');
+      dev.dhcp.leaseDays = days; return ok('');
+    }
+    return err('% Use network, default-router, dns-server, domain-name or lease in DHCP pool mode');
+  }
   if (cli.iosMode === 'acl') {
     dev.acls = dev.acls || [];
     if (words[0] === 'no' && /^\d+$/.test(words[1] || '')) {
@@ -1482,6 +1686,11 @@ function runCisco(cli, line) {
     if (lower === 'shutdown') { p.up = false; return ok(''); }
     if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'ip' && words[1] === 'helper-address' && words[2] && words.length === 3) {
+      const address = parseIPv4(words[2]); if (address == null) return err('% Invalid helper address');
+      p.helperAddress = address; return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'ip' && words[2] === 'helper-address') { delete p.helperAddress; return ok(''); }
     if (words[0] === 'ip' && words[1] === 'access-group' && words[2] && ['in','out'].includes(words[3])) {
       const name = words[2].toUpperCase();
       if (!(dev.acls || []).some(r=>r.aclName===name)) return err('% Access list does not exist');
@@ -1700,7 +1909,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  IOS services: ip dhcp pool · ip helper-address · ip name-server · ip host · ntp server|master · logging host|trap\n  show ip dhcp pool|binding|server statistics · show hosts · show ntp status|associations · show logging\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -1958,13 +2167,13 @@ const MAN = {
   dig: 'dig NAME — ask this host\'s configured DNS server to resolve NAME to an address. Fails with NXDOMAIN (no record) or if no resolver is set / reachable.',
   dhclient: 'dhclient [IF] — request a DHCP lease on IF (default eth0): an address, a default gateway, and a DNS server, all handed out by the segment\'s DHCP pool.',
   resolvectl: 'resolvectl dns IF SERVER — set the DNS resolver for a link.\n  resolvectl status — show the current DNS server.',
+  services: 'IOS service operations: ip dhcp excluded-address LOW [HIGH]; ip dhcp pool NAME; network NET MASK; default-router IP; dns-server IP; domain-name NAME; lease DAYS. Configure DHCP relay under the client-facing interface with ip helper-address SERVER. Configure DNS with ip name-server IP and ip host NAME IP. Configure time with ntp server IP (or ntp master STRATUM on a time source); verify show ntp status and show ntp associations. Configure remote logging with logging host IP, logging trap informational, logging source-interface IF; verify show logging on sender and collector. This is an educational IOS-style subset, not a full IOS implementation.',
   mac: 'show mac address-table dynamic — inspect learned endpoint MAC addresses, VLANs, and switch ports. Entries are derived from the current Layer 2 topology.',
   'spanning-tree': 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
 module.exports = { makeCLI, resolve, primaryIp };
-
 });
 __def("./net-mission", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
@@ -1994,6 +2203,9 @@ function evalCheck(net, s) {
     case 'mac_entry':      return C.macEntry(net, s.dev, s.device, s.vlan, s.port);
     case 'stp_root':       return C.stpRoot(net, s.dev, s.vlan, s.root);
     case 'stp_blocked':    return C.stpBlocked(net, s.dev, s.port, s.vlan);
+    case 'dhcp_lease':     return C.dhcpLease(net, s.dev, s.iface, s.cidr);
+    case 'ntp_sync':       return C.ntpSynchronized(net, s.dev);
+    case 'syslog_received':return C.syslogReceived(net, s.collector, s.source);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }
@@ -2060,7 +2272,6 @@ function startMission(mission) {
 }
 
 module.exports = { evalCheck, startMission };
-
 });
 __def("./net-chapters", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
@@ -2857,10 +3068,53 @@ const chapters = [
       ['asa','clear access-list PARTNER_IN'], ['asa','show access-list PARTNER_IN'], ['asa','write memory']
     ]
   }
+,
+  { id: 'branch-services-restoration', chapter: 'Enterprise network services',
+    title: 'The branch is online, but services are not',
+    story: 'A branch office was moved onto a routed VLAN. New clients cannot obtain addresses, users cannot resolve the internal portal, device clocks are drifting, and the central log collector is missing router events. The services host is srv at 10.0.2.10. Restore the service chain without changing the addressing plan.',
+    objective: 'Build a DHCP pool and relay, restore DNS resolution, synchronize the router with NTP, and forward operational logs to the central collector. Verify each service and save the router configuration.',
+    ticket: { id: 'INC-3428', from: 'Network operations · branch office', priority: 'P1', symptom: 'The branch help desk reports that new laptops show no network address. The portal works by IP but not by name. Security also says event timestamps do not line up and the collector has stopped receiving router changes.' },
+    diagnose: { q: 'Which approach best isolates this multi-service outage without masking the root causes?', options: ['Validate DHCP allocation and relay first, then test DNS, NTP and syslog transport independently', 'Replace the router and server immediately', 'Set static addresses on every laptop and ignore the monitoring alerts'], answer: 0, because: 'The symptoms span separate services. Establish the client lease and gateway first, then test name resolution, time synchronization and log delivery as independent dependencies.' },
+    console: 'r1',
+    hints: ['On srv, create an IOS DHCP pool for 10.0.1.0/24. Exclude the gateway and infrastructure range, then set default-router 10.0.1.1 and dns-server 10.0.2.10.', 'On r1 eth0, configure ip helper-address 10.0.2.10. Set ip name-server 10.0.2.10 and verify the router can reach srv.', 'Configure ntp server 10.0.2.10 and logging host 10.0.2.10 on r1. Use show ntp status, show ntp associations and show logging; then obtain a lease on h1 and test its portal name lookup.'],
+    build: () => ({
+      devices: {
+        h1: H('h1'),
+        portal: SRV('portal', '10.0.2.20', 24, '10.0.2.1', { 443: 'https' }),
+        srv: Object.assign(SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 53: 'dns', 67: 'dhcp', 123: 'ntp', 514: 'syslog' }),
+          { dns: { 'portal.branch.local': ip('10.0.2.20') }, ntp: { master: true, stratum: 3 }, syslogCollector: true }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('portal', 'eth0', 'sw2', 'p1'), L('srv', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')]
+    }),
+    success: [
+      { type: 'dhcp_lease', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'portal' },
+      { type: 'resolves', dev: 'h1', name: 'portal.branch.local', ip: '10.0.2.20' },
+      { type: 'ntp_sync', dev: 'r1' },
+      { type: 'syslog_received', collector: 'srv', source: 'r1' }
+    ],
+    solution: [
+      ['srv','enable'], ['srv','configure terminal'],
+      ['srv','ip dhcp excluded-address 10.0.1.1 10.0.1.20'],
+      ['srv','ip dhcp pool BRANCH-USERS'], ['srv','network 10.0.1.0 255.255.255.0'],
+      ['srv','default-router 10.0.1.1'], ['srv','dns-server 10.0.2.10'],
+      ['srv','domain-name branch.local'], ['srv','lease 7'], ['srv','exit'], ['srv','end'],
+      ['r1','enable'], ['r1','configure terminal'], ['r1','interface eth0'],
+      ['r1','ip helper-address 10.0.2.10'], ['r1','exit'],
+      ['r1','ip name-server 10.0.2.10'], ['r1','ntp server 10.0.2.10'],
+      ['r1','logging host 10.0.2.10'], ['r1','logging trap informational'],
+      ['r1','logging source-interface eth1'], ['r1','end'],
+      ['r1','show ntp status'], ['r1','show ntp associations'], ['r1','show logging'], ['r1','write memory'],
+      ['h1','dhclient eth0'], ['h1','dig portal.branch.local'], ['h1','ping portal']
+    ]
+  }
 ];
 
 module.exports = { chapters };
-
 });
 __def("./net-builder", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
