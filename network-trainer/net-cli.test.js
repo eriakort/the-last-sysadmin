@@ -370,7 +370,7 @@ test('ASA profile publishes HTTPS with object static PAT, inbound ACL and packet
   eq(M.forward(net,'remote',{src:ip('198.51.100.50'),dst:ip('198.51.100.10'),proto:'tcp',dport:22}).ok,false,'SSH denied by implicit ACL deny');
   eq(M.forward(net,'remote',{src:ip('198.51.100.50'),dst:ip('198.51.100.10'),proto:'tcp',dport:80}).ok,false,'HTTP denied by implicit ACL deny');
   has(asa.run('show interface ip brief').out,'outside','nameif shown');
-  has(asa.run('show access-list OUTSIDE_IN').out,'matches','ACL hit counter shown');
+  has(asa.run('show access-list OUTSIDE_IN').out,'(1 match)','ACL hit counter shown');
   has(asa.run('show access-group').out,'OUTSIDE_IN in interface outside','ACL binding shown');
   has(asa.run('show nat').out,'WEB-PORTAL','object NAT shown');
   has(asa.run('packet-tracer input outside tcp 198.51.100.50 50000 198.51.100.10 443').out,'Result: ALLOW','packet tracer result');
