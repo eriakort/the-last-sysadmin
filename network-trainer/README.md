@@ -205,9 +205,9 @@ The switching pilot adds two practical tickets: correcting mismatched access VLA
 
 ## Switching: MAC learning and Spanning Tree
 
-Switches now derive a dynamic forwarding database from the active Layer 2 topology. Each endpoint receives a stable locally administered MAC address unless a scenario supplies one. The table reports the VLAN, learned MAC, dynamic entry type, local egress port, and endpoint.
+Switches learn endpoint source MAC addresses when traffic crosses a Layer 2 segment. Each endpoint receives a stable locally administered MAC address unless a scenario supplies one. A frame is learned on the ingress port at each switch along the active forwarding tree; a response teaches the reverse direction. The table reports the VLAN, learned MAC, dynamic entry type, ingress port, and endpoint.
 
-Use `show mac address-table dynamic` to inspect learned endpoints. Entries are recalculated from the current topology and VLAN state, so moving a cable or changing a port's VLAN changes the forwarding view.
+Use `show mac address-table dynamic` to inspect learned endpoints. Entries are populated by traffic rather than pre-filled from the topology. Clear dynamic entries with `clear mac address-table dynamic` after a cabling or VLAN change.
 
 Per-VLAN Spanning Tree Protocol (STP) elects the switch with the lowest bridge priority as root (device ID breaks ties). A deterministic spanning tree selects root and designated ports; redundant links receive an alternate/blocking role. Blocking is enforced at both ends of the link in the Layer 2 forwarding model.
 
