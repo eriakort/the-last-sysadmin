@@ -209,7 +209,7 @@ Switches learn endpoint source MAC addresses when traffic crosses a Layer 2 segm
 
 Use `show mac address-table dynamic` to inspect learned endpoints. Entries are populated by traffic rather than pre-filled from the topology. Clear dynamic entries with `clear mac address-table dynamic` after a cabling or VLAN change.
 
-Per-VLAN Spanning Tree Protocol (STP) elects the switch with the lowest bridge priority as root (device ID breaks ties). A deterministic spanning tree selects root and designated ports; redundant links receive an alternate/blocking role. Blocking is enforced at both ends of the link in the Layer 2 forwarding model.
+Per-VLAN Spanning Tree Protocol (STP) elects the switch with the lowest bridge priority as root (device ID breaks ties). A deterministic shortest-hop spanning tree selects root and designated ports; redundant links receive an alternate/blocking role. Blocking is enforced at both ends of the link in the Layer 2 forwarding model. This is an educational STP model: it does not simulate BPDU timers, convergence delays, path-cost tuning, or the full IEEE state machine.
 
 Configure a bridge priority in increments of 4096:
 
