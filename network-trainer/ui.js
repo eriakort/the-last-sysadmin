@@ -30,7 +30,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '' }; } catch (e) { return { done: {}, xp: 0, theme: '' }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {} }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -115,7 +115,65 @@ function renderTopo() {
 }
 
 /* ---------- panels ---------- */
-function updateHud() { $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+function updateHud() { const q = $('#queueOpenCount'); if (q) q.textContent = allTickets().filter(t => t.status !== 'resolved').length; $('#xp').textContent = PROG.xp; $('#rank').textContent = rankFor(PROG.xp); const n = chapters.filter(c => PROG.done[c.id]).length; $('#prog').textContent = `${n}/${chapters.length}`; }
+/* ---------- service desk / ticket workflow ---------- */
+const TICKET_STATES = ['new', 'acknowledged', 'investigating', 'resolved'];
+const SLA_TARGET = { P1: '1 hour', P2: '4 hours', P3: '1 business day', P4: '3 business days' };
+function ticketRecord(m, index) {
+  const t = m.ticket || {};
+  const id = t.id || ('NET-' + String(index + 1).padStart(4, '0'));
+  const state = PROG.tickets[id] || {};
+  const resolved = !!PROG.done[m.id];
+  return {
+    id, missionId: m.id, index, title: m.title, chapter: m.chapter,
+    priority: t.priority || 'P3', from: t.from || 'Network Operations',
+    symptom: t.symptom || m.objective, status: resolved ? 'resolved' : (state.status || 'new'),
+    impact: t.impact || (t.priority === 'P1' ? 'Multiple users / critical service' : 'Single user or team'),
+    service: t.service || (m.title.match(/DNS|DHCP|VLAN|routing|firewall|internet|server/i) || ['Network connectivity'])[0],
+    assigned: state.assigned || 'Unassigned', updatedAt: state.updatedAt || null,
+    sla: SLA_TARGET[t.priority] || SLA_TARGET.P3
+  };
+}
+function allTickets() { return chapters.map((m, i) => ticketRecord(m, i)); }
+function setTicketState(id, status, assigned) {
+  if (!TICKET_STATES.includes(status)) return;
+  PROG.tickets = PROG.tickets || {};
+  PROG.tickets[id] = { ...(PROG.tickets[id] || {}), status, assigned: assigned || (status === 'new' ? 'Unassigned' : 'You'), updatedAt: new Date().toISOString() };
+  saveProg();
+}
+function openTicketQueue() {
+  const tickets = allTickets();
+  const counts = TICKET_STATES.reduce((o, st) => (o[st] = tickets.filter(t => t.status === st).length, o), {});
+  const rows = tickets.map(t => `<article class="queue-ticket" data-ticket="${esc(t.id)}">
+    <div class="qt-main"><div class="qt-top"><b>${esc(t.id)}</b><span class="tk-pri tk-${esc(t.priority.toLowerCase())}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></div>
+    <h3>${esc(t.title)}</h3><p>${esc(t.symptom)}</p><div class="qt-meta"><span>◈ ${esc(t.service)}</span><span>Impact: ${esc(t.impact)}</span><span>SLA target: ${esc(t.sla)}</span><span>Assigned: ${esc(t.assigned)}</span></div></div>
+    <div class="qt-actions">${t.status === 'new' ? `<button class="btn sm primary" data-ack="${esc(t.id)}">Acknowledge</button>` : ''}
+    ${t.status !== 'resolved' ? `<button class="btn sm" data-work="${esc(t.id)}">${t.status === 'investigating' ? 'Continue work' : 'Investigate'}</button>` : `<button class="btn sm" data-review="${esc(t.id)}">Review</button>`}</div>
+  </article>`).join('');
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide ticket-desk"><div class="modal-head"><div><div class="eyebrow">Service desk · shift ${new Date().toLocaleDateString()}</div><h2>Incident queue</h2><p class="dim">Prioritize the impact, acknowledge ownership, investigate with evidence and resolve only after verification.</p></div><span class="help-key">NOC / L1</span></div>
+  <div class="queue-metrics"><div><b>${counts.new}</b><span>New</span></div><div><b>${counts.acknowledged}</b><span>Acknowledged</span></div><div><b>${counts.investigating}</b><span>In progress</span></div><div><b>${counts.resolved}</b><span>Resolved</span></div></div>
+  <div class="queue-toolbar"><label for="queueFilter">Filter tickets</label><select id="queueFilter"><option value="all">All tickets</option><option value="open">Open tickets</option><option value="new">New</option><option value="acknowledged">Acknowledged</option><option value="investigating">In progress</option><option value="resolved">Resolved</option></select><span class="dim">${tickets.length} incidents in this training shift</span></div>
+  <div class="queue-list" id="queueList">${rows || '<p class="dim">No tickets in the queue.</p>'}</div>
+  <div class="help-note"><b>Shift discipline:</b> Acknowledge first. Read the symptom and impact. Gather evidence before changing configuration. Verify the affected service, then add a resolution note to your work journal.</div>
+  <div class="row"><button class="btn" id="closeS">Close queue</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  const filter = () => { const value = wrap.querySelector('#queueFilter').value; wrap.querySelectorAll('.queue-ticket').forEach(row => { const t = tickets.find(x => x.id === row.dataset.ticket); row.hidden = value === 'open' ? t.status === 'resolved' : value !== 'all' && t.status !== value; }); };
+  wrap.querySelector('#queueFilter').addEventListener('change', filter);
+  wrap.querySelectorAll('[data-ack]').forEach(btn => btn.addEventListener('click', () => {
+    const t = tickets.find(x => x.id === btn.dataset.ack); setTicketState(t.id, 'acknowledged', 'You');
+    addJournalEntry({ type: 'ticket acknowledged', ticket: t.id, text: 'Accepted ownership. Reviewing impact and beginning triage.' });
+    wrap.remove(); openTicketQueue();
+  }));
+  wrap.querySelectorAll('[data-work],[data-review]').forEach(btn => btn.addEventListener('click', () => {
+    const t = tickets.find(x => x.id === (btn.dataset.work || btn.dataset.review));
+    if (t.status !== 'resolved') setTicketState(t.id, 'investigating', 'You');
+    closeModal(); MODE = 'play'; reloadMission(t.index);
+    if (t.status !== 'resolved') addJournalEntry({ type: 'investigation started', ticket: t.id, text: 'Started investigation from the incident queue.' });
+  }));
+}
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
   const pc = 'tk-' + String(t.priority || '').toLowerCase();
@@ -240,7 +298,7 @@ function renderConfig() {
 
 /* ---------- actions ---------- */
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
-function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); }
+function refresh() { $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig(); wireTopo(); wireConfig(); const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE'; }
 function runMission(m, solvedKey) { RUN = startMission(m); SEL = RUN.mission.console; HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); HIST = []; HISTI = -1; startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear(); termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`); }
 function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; runMission(chapters[i], chapters[i].id); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
@@ -264,10 +322,12 @@ function doCheck() {
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
+      addJournalEntry({ type: 'ticket resolved', device: SEL || '', text: `Resolved ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
       msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
@@ -445,10 +505,46 @@ function wireConfig() {
   const addacl = $('#addacl'); if (addacl) addacl.addEventListener('click', () => { const g = s => $('#config ' + s).value.trim(); const rule = { dir: 'in', dev: g('.aif') || undefined, action: g('.aact') }; if (g('.aproto')) rule.proto = g('.aproto'); if (g('.adport')) rule.dport = +g('.adport'); if (/^\d+\.\d+\.\d+\.\d+$/.test(g('.asrc'))) rule.src = M.ip(g('.asrc')); const dv = g('.adst'); if (dv.includes('/')) rule.dstnet = M.cidr(dv); else if (/^\d+\.\d+\.\d+\.\d+$/.test(dv)) rule.dst = M.ip(dv); d.acls = d.acls || []; d.acls.push(rule); refresh(); });
   document.querySelectorAll('#config [data-acl]').forEach(b => b.addEventListener('click', () => { d.acls.splice(+b.dataset.acl, 1); refresh(); }));
 }
+function addJournalEntry(entry) {
+  PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
+  PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
+  PROG.journal = PROG.journal.slice(0, 250); saveProg();
+}
+function openJournal() {
+  const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b>${e.result ? `<span class="journal-result ${esc(e.result)}">${esc(e.result)}</span>` : ''}<time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide"><div class="modal-head"><div><div class="eyebrow">Personal engineering record</div><h2>Work journal</h2><p class="dim">Your commands, investigation notes and ticket outcomes stay in this browser.</p></div><button class="btn" id="exportJournal">Export</button></div><div class="journal-compose"><label for="journalNote">Add an investigation note</label><textarea id="journalNote" class="wide" rows="3" placeholder="What did you observe? What did you rule out? What would you check next time?"></textarea><div class="row"><button class="btn primary" id="saveJournalNote">Save note</button></div></div><div class="journal-list">${rows || '<p class="dim">No activity recorded yet. Run commands or add a note to start your work journal.</p>'}</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#saveJournalNote').addEventListener('click', () => { const note = wrap.querySelector('#journalNote').value.trim(); if (!note) return; addJournalEntry({ type: 'engineer note', device: SEL || '', text: note }); wrap.remove(); openJournal(); });
+  wrap.querySelector('#exportJournal').addEventListener('click', () => {
+    const lines = ['# Network engineering work journal', '', ...(PROG.journal || []).slice().reverse().map(e => `## ${e.type || 'Activity'} — ${new Date(e.at).toLocaleString()}\n${[e.ticket, e.mission, e.device].filter(Boolean).join(' · ')}\n${e.command ? `\n\`${e.command}\`\n` : ''}${e.text || ''}${e.output ? `\n\n\`\`\`text\n${e.output}\n\`\`\`` : ''}`)];
+    const blob = new Blob([lines.join('\n\n')], { type: 'text/markdown;charset=utf-8' }), url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'network-work-journal.md'; a.click(); URL.revokeObjectURL(url);
+  });
+}
+function openHelp() {
+  const groups = [
+    { name: 'Start here', items: [['help', 'List commands available on the selected device.'], ['man <command>', 'Open the built-in manual for a supported command.'], ['ip addr', 'Inspect interface state and IPv4 addressing.'], ['ip route', 'Inspect the routing table.'], ['ping <host|ip>', 'Test end-to-end reachability.'], ['traceroute <host|ip>', 'Identify the path and the hop where traffic stops.'], ['arp', 'Inspect the ARP neighbour table.'], ['tcpdump', 'Inspect simulated packet evidence.']] },
+    { name: 'Cisco-style switching', items: [['vlan 20', 'Create VLAN 20 on a switch.'], ['interface <port>', 'Select a switch interface for configuration.'], ['switchport mode access', 'Make the selected port an access port.'], ['switchport access vlan 20', 'Assign the access port to VLAN 20.'], ['switchport mode trunk', 'Configure a trunk link.'], ['switchport trunk allowed vlan 10,20', 'Restrict the trunk to selected VLANs.'], ['show vlan brief', 'Verify VLANs and access-port membership.'], ['show interfaces trunk', 'Verify operational trunk state.'], ['show spanning-tree vlan 10', 'Inspect STP roles and states for VLAN 10.'], ['show mac address-table dynamic', 'Inspect dynamically learned MAC addresses.']] },
+    { name: 'Routing and troubleshooting', items: [['ip route add default via <gateway>', 'Add a default route on a supported host or router.'], ['ospf <interface> area <id>', 'Enable the simulator OSPF process on an interface.'], ['ospf neighbor', 'Inspect discovered OSPF neighbours.'], ['bgp asn <number>', 'Set the local BGP autonomous system number.'], ['bgp neighbor <ip> remote-as <asn>', 'Configure a BGP peer.'], ['bgp summary', 'Inspect BGP session state.'], ['bgp network <prefix>', 'Advertise a configured network.']] },
+    { name: 'Work safely', items: [['clear mac address-table dynamic', 'Clear learned switch entries after a topology change.'], ['exit', 'Leave the current interface configuration context.'], ['help', 'List the commands currently available in this simulator.']] }
+  ];
+  const selectedKind = RUN && RUN.net.devices[SEL] ? RUN.net.devices[SEL].kind : 'no device selected';
+  const all = groups.flatMap(g => g.items.map(([cmd, desc]) => ({ group: g.name, cmd, desc })));
+  const render = q => { const term = q.trim().toLowerCase(), found = all.filter(x => !term || (x.cmd + ' ' + x.desc + ' ' + x.group).toLowerCase().includes(term)); return found.length ? found.map(x => `<button class="help-command" data-help-cmd="${esc(x.cmd)}"><span><b>${esc(x.cmd)}</b><small>${esc(x.group)}</small></span><span>${esc(x.desc)}</span></button>`).join('') : '<p class="dim">No matching help entry. Try a protocol, command or symptom.</p>'; };
+  const wrap = document.createElement('div'); wrap.id = 'modal';
+  wrap.innerHTML = `<div class="sheet sheet-wide help-sheet"><div class="eyebrow">Field guide · selected device: ${esc(SEL || 'none')} (${esc(selectedKind)})</div><div class="modal-head"><div><h2>Engineering help desk</h2><p class="dim">Search command examples and procedures. Select a command to place it in the terminal.</p></div><span class="help-key">? HELP</span></div><input id="helpSearch" class="wide" type="search" placeholder="Search commands, VLANs, routing, interfaces, symptoms…"/><div class="help-groups" id="helpResults">${render('')}</div><div class="help-note"><b>Learning note:</b> This reference distinguishes commands modelled by the current simulator from advanced Cisco IOS/IOS XE commands planned for later releases. If a command is not implemented yet, the device will report that clearly rather than pretending it worked.</div><div class="row"><button class="btn" id="closeS">Close</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('#helpSearch').addEventListener('input', e => { wrap.querySelector('#helpResults').innerHTML = render(e.target.value); });
+  wrap.querySelector('#helpResults').addEventListener('click', e => { const b = e.target.closest('[data-help-cmd]'); if (!b) return; const inp = $('#tin'); inp.value = b.dataset.helpCmd; wrap.remove(); inp.focus(); });
+}
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; termEcho(`${SEL}:~$ ${line}`); const r = RUN.cli.on(SEL).run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); }
   });
@@ -701,6 +797,9 @@ function boot() {
         </nav>
       </div>
       <div class="hud"><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
+        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" title="Stats">📊</button>
@@ -708,10 +807,14 @@ function boot() {
     </header>
     <div id="cols">
       <aside id="brief"></aside>
-      <main><div id="topoWrap"></div><div id="flows"></div><div id="term"><pre id="tout"></pre><div class="tline"><span>$</span><input id="tin" autocomplete="off" placeholder="type a command — ping, ip addr, ip route add…"/></div></div></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div class="term-head"><b>DEVICE CONSOLE</b><span>CLI · command history enabled</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>`;
   wireTerm();
+  $('#btnHelp').addEventListener('click', openHelp);
+  $('#btnQueue').addEventListener('click', openTicketQueue);
+  $('#termHelp').addEventListener('click', openHelp);
+  $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
   $('#btnBuild').addEventListener('click', enterBuild);
