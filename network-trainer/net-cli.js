@@ -72,7 +72,7 @@ function ciscoMaskPrefix(mask) {
   return bits.indexOf('0') < 0 ? 32 : bits.indexOf('0');
 }
 function ospfAreaId(value) {
-  if (/^\\d+$/.test(String(value))) { const n = Number(value); return n >= 0 && n <= 4294967295 ? String(n) : null; }
+  if (/^\d+$/.test(String(value))) { const n = Number(value); return n >= 0 && n <= 4294967295 ? String(n) : null; }
   const n = parseIPv4(value); return n == null ? null : String(n);
 }
 function applyOspfNetworks(dev) {
