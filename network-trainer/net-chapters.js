@@ -760,7 +760,7 @@ const chapters = [
     ticket: { id: 'SEC-3117', from: 'Security operations · access review', priority: 'P1', symptom: 'The vendor portal must remain available to the approved partner subnet, but the guest network must not reach it and partners must not use SSH or HTTP. Make the policy maintainable so approved server and service members can be updated centrally.' },
     diagnose: { q: 'What is the safest way to make this policy reusable without broadening access?', options: ['Use separate network object-groups for approved sources and portal servers, plus a TCP/443 service group', 'Permit any source to any destination and rely on the server firewall', 'Create one permit rule per address and leave the old broad rule in place'], answer: 0, because: 'Object-groups centralise related addresses and services. The ACL still applies first-match ordering and an implicit deny, so a precise group-based permit is easier to audit than broad or duplicated rules.' },
     console: 'asa',
-    hints: ['Enter enable and configure terminal. Create object-group network APPROVED_PARTNERS with network-object 203.0.113.0 255.255.255.240, and PORTAL_SERVERS with network-object host 10.0.2.10.', 'Create object-group service PORTAL_TCP and add service-object tcp destination eq 443. Exit each group context before creating the ACL.', 'Create PARTNER_IN line 10 to permit tcp between the two network groups using PORTAL_TCP, then line 20 to permit icmp any any. Apply it inbound on outside. Test partner HTTPS, guest HTTPS, partner SSH and HTTP; inspect counters and save.'],
+    hints: ['Enter enable and configure terminal. Set eth0 to nameif outside / security-level 0 and eth1 to nameif inside / security-level 100. Create object-group network APPROVED_PARTNERS with network-object 203.0.113.0 255.255.255.240, and PORTAL_SERVERS with network-object host 10.0.2.10.', 'Create object-group service PORTAL_TCP and add service-object tcp destination eq 443. Exit each group context before creating the ACL.', 'Create PARTNER_IN line 10 to permit tcp between the two network groups using PORTAL_TCP, then line 20 to permit icmp any any. Apply it inbound on outside. Test partner HTTPS, guest HTTPS, partner SSH and HTTP; inspect counters and save.'],
     build: () => ({
       devices: {
         partner: H('partner', '203.0.113.10', 24, '203.0.113.1'),
@@ -780,6 +780,8 @@ const chapters = [
     ],
     solution: [
       ['asa','enable'], ['asa','configure terminal'],
+      ['asa','interface eth0'], ['asa','nameif outside'], ['asa','security-level 0'], ['asa','exit'],
+      ['asa','interface eth1'], ['asa','nameif inside'], ['asa','security-level 100'], ['asa','exit'],
       ['asa','object-group network APPROVED_PARTNERS'], ['asa','network-object 203.0.113.0 255.255.255.240'], ['asa','exit'],
       ['asa','object-group network PORTAL_SERVERS'], ['asa','network-object host 10.0.2.10'], ['asa','exit'],
       ['asa','object-group service PORTAL_TCP'], ['asa','service-object tcp destination eq 443'], ['asa','exit'],
