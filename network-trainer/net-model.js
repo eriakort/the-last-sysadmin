@@ -238,13 +238,38 @@ function routeLookupReachable(net, devId, addr) {
   for (const r of cands) {
     const gwIface = directIface(dev, r.via);
     if (!gwIface) continue;
-    const gw = l2Domain(net, devId, gwIface).find(([d, i]) => net.devices[d].ifaces[i].ip === r.via && net.devices[d].ifaces[i].up !== false);
+    const gw = l2Domain(net, devId, gwIface).find(([d, i]) => (net.devices[d].ifaces[i].ip === r.via || ownsVirtualIp(net, d, r.via)) && net.devices[d].ifaces[i].up !== false);
     if (gw) return r;
   }
   return null;
 }
+function hsrpStatus(net, devId, ifaceName) {
+  const dev = net.devices[devId], port = dev && dev.ifaces && dev.ifaces[ifaceName], cfg = port && port.hsrp;
+  if (!cfg || cfg.virtualIp == null) return null;
+  const peers = [[devId, ifaceName], ...l2Domain(net, devId, ifaceName)]
+    .filter(([id, name]) => {
+      const d = net.devices[id], p = d && d.ifaces && d.ifaces[name], h = p && p.hsrp;
+      return d && d.kind === 'router' && p && p.up !== false && h &&
+        h.group === cfg.group && h.virtualIp === cfg.virtualIp;
+    });
+  const candidates = peers.map(([id, name]) => {
+    const p = net.devices[id].ifaces[name], h = p.hsrp;
+    const decrement = (h.track || []).filter(t => !net.devices[id].ifaces[t.iface] || net.devices[id].ifaces[t.iface].up === false)
+      .reduce((sum, t) => sum + t.decrement, 0);
+    return { id, iface: name, priority: Math.max(0, Number(h.priority || 100) - decrement), ip: p.ip || 0 };
+  }).sort((a,b) => b.priority - a.priority || a.ip - b.ip || a.id.localeCompare(b.id));
+  const active = candidates[0];
+  const local = candidates.find(x => x.id === devId && x.iface === ifaceName);
+  return { group: cfg.group, virtualIp: cfg.virtualIp, state: active && active.id === devId && active.iface === ifaceName ? 'Active' : 'Standby',
+    active: active ? active.id : null, priority: local ? local.priority : 0, activePriority: active ? active.priority : 0 };
+}
+function ownsVirtualIp(net, devId, addr) {
+  const dev = net.devices[devId]; if (!dev || dev.kind !== 'router') return false;
+  return Object.entries(dev.ifaces || {}).some(([name, p]) => p.hsrp && p.hsrp.virtualIp === addr &&
+    hsrpStatus(net, devId, name)?.state === 'Active');
+}
 function deviceOwning(net, addr) {
-  for (const id in net.devices) if (ownsIp(net.devices[id], addr)) return id;
+  for (const id in net.devices) if (ownsIp(net.devices[id], addr) || ownsVirtualIp(net, id, addr)) return id;
   return null;
 }
 
@@ -459,7 +484,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
     path.push(cur);
     if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
     const dst = pkt.dst;
-    if (ownsIp(dev, dst)) return { ok: true, path, reason: 'delivered', pkt };
+    if (ownsIp(dev, dst) || ownsVirtualIp(net, cur, dst)) return { ok: true, path, reason: 'delivered', pkt };
 
     // choose the egress interface: directly connected, else via a (failover-aware) route
     let eg = directIface(dev, dst), targetIp = dst, viaRoute = null;
@@ -644,7 +669,7 @@ module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
-  ospfNeighbors, ospfLearned, ospfAdvertised,
+  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
