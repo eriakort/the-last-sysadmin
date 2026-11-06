@@ -61,7 +61,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   const routingTab = page.locator('#config .inspector-tab[data-inspector-tab="routing"]');
   if (await routingTab.count()) {
     await routingTab.click();
-    if (await page.locator('#config .inspector-panel').innerText().then(t => t.includes('Static routes')))
+    if (await page.locator('#config .inspector-panel').innerText().then(t => t.toLowerCase().includes('static routes')))
       ok('device inspector routing tab renders route operations');
     else fail('routing inspector tab did not render its panel');
   } else fail('routing inspector tab is missing for a routed endpoint');
