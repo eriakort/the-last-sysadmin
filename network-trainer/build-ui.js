@@ -177,6 +177,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 .journal-list{max-height:48vh;overflow:auto;display:grid;gap:7px}
 .journal-entry{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:rgba(8,19,24,.35)}
 .journal-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.journal-result{font:9px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.06em}.journal-result.success{color:var(--good)}.journal-result.error{color:var(--bad)}
 .journal-meta b{color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-size:10px}
 .journal-meta time,.journal-context{color:var(--muted);font-size:10.5px}
 .journal-context{margin:3px 0 6px}
