@@ -472,8 +472,10 @@ function sourceIpToward(net, devId, dst) {
 // `resolver` (a DNS server IP); that server holds a `dns` zone of name -> ipInt.
 // Returns { ok, ip?, reason? } — every failure is a teachable one.
 function resolveName(net, srcDev, name) {
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return { ok: true, ip: ip(name), name };   // already an address
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(name)) return { ok: true, ip: ip(name), name };
   const dev = net.devices[srcDev];
+  const local = dev && dev.hosts && dev.hosts[String(name).toLowerCase()];
+  if (local != null) return { ok: true, ip: local, name, source: 'local' };
   const res = dev && dev.resolver;
   if (res == null) return { ok: false, reason: 'no DNS resolver configured' };
   const q = ping(net, srcDev, res, { proto: 'udp', dport: 53 });                    // can we reach the resolver?
@@ -491,7 +493,14 @@ function resolveName(net, srcDev, name) {
 function dhcpServerFor(net, hostId, ifaceName) {
   for (const [d, i] of l2Domain(net, hostId, ifaceName)) {
     const dev = net.devices[d];
-    if (dev.dhcp && dev.dhcp.iface === i) return { id: d, pool: dev.dhcp };
+    if (dev.dhcp && dev.dhcp.iface === i) return { id: d, pool: dev.dhcp, relayed: false };
+    if (dev.kind === 'router' || dev.kind === 'firewall') {
+      const helper = dev.ifaces[i] && dev.ifaces[i].helperAddress;
+      if (helper != null) {
+        const serverId = deviceOwning(net, helper), server = serverId && net.devices[serverId];
+        if (server && server.dhcp) return { id: serverId, pool: server.dhcp, relayed: true, relay: d };
+      }
+    }
   }
   return null;
 }
@@ -502,20 +511,72 @@ function dhclient(net, hostId, ifaceName) {
   if (!host || !host.ifaces[ifaceName]) return { ok: false, reason: 'no such interface ' + ifaceName };
   const srv = dhcpServerFor(net, hostId, ifaceName);
   if (!srv) return { ok: false, reason: 'no DHCP server responded on the segment' };
-  const p = srv.pool;
+  const p = srv.pool, prefix = Number(p.prefix ?? p.network?.prefix ?? 24);
+  const first = p.range ? p.range[0] : (p.network.net + 1) >>> 0;
+  const last = p.range ? p.range[1] : (p.network.net + Math.pow(2, 32 - prefix) - 2) >>> 0;
+  const excluded = new Set((p.excluded || []).flatMap(x => x.end == null ? [x.start] : Array.from({ length: Math.max(0, x.end - x.start + 1) }, (_,i)=>x.start+i)));
+  p.bindings = p.bindings || {};
   let addr = null;
-  for (let a = p.range[0]; a <= p.range[1]; a++) {
-    if (a === p.gw) continue;
+  for (let a = first; a <= last; a++) {
+    if (a === p.gw || excluded.has(a)) continue;
     const owner = deviceOwning(net, a);
-    if (owner && owner !== hostId) continue;        // taken by someone else
+    const leased = Object.entries(p.bindings).some(([id, lease]) => id !== hostId && lease.ip === a);
+    if ((owner && owner !== hostId) || leased) continue;
     addr = a; break;
   }
   if (addr == null) return { ok: false, reason: 'DHCP pool exhausted — no free address' };
-  host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: p.prefix, up: true };
-  host.routes = (host.routes || []).filter(r => r.mask !== 0);     // replace any old default
-  if (p.gw != null) host.routes.push({ dest: 0, mask: 0, via: p.gw });
-  if (p.dns != null) host.resolver = p.dns;
-  return { ok: true, ip: addr, gw: p.gw, dns: p.dns, prefix: p.prefix };
+  host.ifaces[ifaceName] = { ...host.ifaces[ifaceName], ip: addr, mask: prefix, up: true };
+  host.routes = (host.routes || []).filter(r => r.mask !== 0);
+  const gw = p.gw ?? p.defaultRouter ?? null, dns = p.dns ?? p.dnsServer ?? null;
+  if (gw != null) host.routes.push({ dest: 0, mask: 0, via: gw });
+  if (dns != null) host.resolver = dns;
+  if (p.domainName) host.domainName = p.domainName;
+  p.bindings[hostId] = { ip: addr, iface: ifaceName, prefix, gateway: gw, dns, domainName: p.domainName || null, leaseDays: p.leaseDays || 1 };
+  return { ok: true, ip: addr, gw, dns, prefix, domainName: p.domainName || null, relayed: srv.relayed };
+}
+
+
+// NTP is deliberately small: a configured peer must be reachable on UDP/123
+// and advertise itself as an NTP master before a client reports synchronization.
+function ntpStatus(net, devId) {
+  const dev = net.devices[devId], cfg = dev && dev.ntp || {};
+  if (!dev) return { synchronized: false, reason: 'device not found', associations: [] };
+  if (cfg.master) return { synchronized: true, stratum: Number(cfg.stratum || 8), source: 'local clock', associations: [] };
+  const associations = (cfg.servers || []).map(address => {
+    const id = deviceOwning(net, address), peer = id && net.devices[id];
+    const reachable = !!(peer && ping(net, devId, address, { proto: 'udp', dport: 123 }).ok);
+    const master = !!(peer && peer.ntp && peer.ntp.master && peer.services && peer.services[123]);
+    return { address, peer: id, reachable, synchronized: reachable && master, stratum: master ? Number(peer.ntp.stratum || 8) : null };
+  });
+  const active = associations.find(x => x.synchronized);
+  return active
+    ? { synchronized: true, stratum: Math.min(15, active.stratum + 1), source: ipStr(active.address), associations }
+    : { synchronized: false, stratum: 16, source: null, reason: associations.length ? 'no reachable NTP master' : 'no NTP servers configured', associations };
+}
+
+// Record a local operational event and forward it to configured, reachable collectors.
+function recordSyslog(net, devId, message, severity = 6) {
+  const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
+  dev.syslog = dev.syslog || { enabled: true, hosts: [], severity: 6, local: [], forwarded: 0 };
+  const cfg = dev.syslog, event = { sequence: (cfg.local.length ? cfg.local[cfg.local.length - 1].sequence : 0) + 1,
+    device: dev.hostname || dev.id || devId, message: String(message), severity, timestamp: new Date().toISOString() };
+  cfg.local.push(event); if (cfg.local.length > 100) cfg.local.shift();
+  let forwarded = 0;
+  if (cfg.enabled !== false && severity <= Number(cfg.severity ?? 6)) for (const address of cfg.hosts || []) {
+    const collectorId = deviceOwning(net, address), collector = collectorId && net.devices[collectorId];
+    if (!collector || !ping(net, devId, address, { proto: 'udp', dport: 514 }).ok) continue;
+    if (!(collector.syslogCollector || (collector.services && collector.services[514]))) continue;
+    collector.syslogEvents = collector.syslogEvents || [];
+    collector.syslogEvents.push({ ...event, sourceIp: primaryAddress(dev) });
+    if (collector.syslogEvents.length > 500) collector.syslogEvents.shift();
+    forwarded++;
+  }
+  cfg.forwarded = (cfg.forwarded || 0) + forwarded;
+  return { recorded: true, forwarded };
+}
+function primaryAddress(dev) {
+  const f = Object.values(dev.ifaces || {}).find(x => x.up !== false && x.ip != null);
+  return f ? ipStr(f.ip) : 'unassigned';
 }
 
 // A full round trip (like ICMP echo): request must arrive AND the reply must come back.
@@ -540,5 +601,5 @@ module.exports = {
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
   bgpSessions, bgpLearned,
-  resolveName, dhclient, dhcpServerFor
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
