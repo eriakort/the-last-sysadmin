@@ -1999,7 +1999,7 @@ const chapters = [
       { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
       { type: 'acl_blocks', src: 'finance', dst: '10.0.2.10', proto: 'tcp', dport: 80 }
     ],
-    solution: [['r1', 'enable'], ['r1', 'show access-lists FINANCE-IN'], ['r1', 'show ip interface eth0'], ['r1', 'configure terminal'], ['r1', 'ip access-list extended FINANCE-IN'], ['r1', 'no 10'], ['r1', 'no 20'], ['r1', '10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443'], ['r1', '20 deny ip any any'], ['r1', 'end'], ['finance', 'ping app'], ['r1', 'write memory']]
+    solution: [['r1', 'enable'], ['r1', 'show access-lists FINANCE-IN'], ['r1', 'show ip interface eth0'], ['r1', 'configure terminal'], ['r1', 'ip access-list extended FINANCE-IN'], ['r1', 'no 10'], ['r1', 'no 20'], ['r1', '10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 443'], ['r1', '20 deny ip any any'], ['r1', 'end'], ['finance', 'nmap app'], ['r1', 'write memory']]
   },
 
   { id: 'renew-the-lease', chapter: 'DHCP',
