@@ -39,8 +39,8 @@ const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >=
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) this.contextIface = null; this.cur = id; return this; } };
-  cli.run = line => dispatch(cli, String(line).trim());
+  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosMode = 'user'; } this.cur = id; return this; } };
+  cli.run = line => runCisco(cli, String(line).trim());
   return cli;
 }
 
@@ -51,6 +51,218 @@ function dispatch(cli, line) {
   const H = COMMANDS[cmd];
   if (!H) return err(`${cmd}: command not found (try 'help')`);
   return H(cli, a.slice(1));
+}
+
+
+/* ---------------- Cisco IOS-style operational CLI ----------------
+ * This is a deliberately bounded command-language layer over the same
+ * network model. It is not an IOS image; only commands implemented here
+ * mutate the simulator. Legacy Linux commands remain available as a bridge.
+ */
+function ciscoMaskPrefix(mask) {
+  const parts = String(mask || '').split('.');
+  if (parts.length !== 4 || parts.some(x => !/^\d{1,3}$/.test(x) || Number(x) > 255)) return null;
+  const bits = parts.map(x => Number(x).toString(2).padStart(8, '0')).join('');
+  if (!/^1*0*$/.test(bits)) return null;
+  return bits.indexOf('0') < 0 ? 32 : bits.indexOf('0');
+}
+function ciscoIface(dev, token) {
+  if (!token) return null;
+  if (dev.ifaces[token]) return token;
+  const norm = x => String(x).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wanted = norm(token);
+  const keys = Object.keys(dev.ifaces);
+  const alias = value => norm(value).replace(/^gigabitethernet/, 'gi').replace(/^tengigabitethernet/, 'te').replace(/^fastethernet/, 'fa').replace(/^ethernet/, 'e');
+  return keys.find(k => norm(k) === wanted || alias(k) === wanted || norm(k) === alias(token))
+    || keys.find(k => norm(k).startsWith(wanted) && wanted.length >= 2)
+    || keys.find(k => alias(k).startsWith(wanted) && wanted.length >= 2)
+    || null;
+}
+function ciscoRunConfig(dev) {
+  const lines = ['hostname ' + (dev.hostname || dev.id || 'Router')];
+  for (const [name, p] of Object.entries(dev.ifaces || {})) {
+    lines.push('!', 'interface ' + name);
+    if (p.description) lines.push(' description ' + p.description);
+    if (dev.kind === 'switch') {
+      lines.push(' switchport');
+      if (p.mode) lines.push(' switchport mode ' + p.mode);
+      if (p.mode === 'trunk') {
+        lines.push(' switchport trunk native vlan ' + Number(p.nativeVlan ?? 1));
+        if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
+      } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
+    } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
+    lines.push(p.up === false ? ' shutdown' : ' no shutdown');
+  }
+  for (const id of dev.vlans || []) if (id !== 1) lines.push('!', 'vlan ' + id + ((dev.vlanNames || {})[id] ? '\n name ' + dev.vlanNames[id] : ''));
+  for (const r of dev.routes || []) lines.push('ip route ' + (r.mask === 0 ? '0.0.0.0 0.0.0.0' : M.ipStr(r.dest) + ' ' + ciscoPrefixMask(r.mask)) + ' ' + M.ipStr(r.via));
+  for (const r of dev.acls || []) lines.push('access-list ' + (r.list || 101) + ' ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + (r.proto || 'ip') + ' ' + (r.src == null ? 'any' : M.ipStr(r.src)) + ' ' + (r.dst == null ? 'any' : M.ipStr(r.dst)));
+  return lines.join('\n') + '\n';
+}
+function ciscoPrefixMask(prefix) {
+  const n = Number(prefix);
+  const bits = '1'.repeat(n) + '0'.repeat(32 - n);
+  return [0, 8, 16, 24].map(i => parseInt(bits.slice(i, i + 8), 2)).join('.');
+}
+function ciscoShow(cli, words) {
+  const dev = cli.net.devices[cli.cur], q = words.join(' ').toLowerCase();
+  if (q === 'running-config' || q === 'run') return ok('Building configuration...\n!\n' + ciscoRunConfig(dev) + 'end');
+  if (q === 'startup-config' || q === 'start') return ok(dev.startupConfig || '% startup-config is not saved; use copy running-config startup-config');
+  if (q === 'version') return ok('Network Operations Simulator\nIOS-style command profile (implemented subset)\nDevice: ' + (dev.hostname || dev.id) + '\nModel: ' + dev.kind + '\nConfiguration register: 0x2102');
+  if (q === 'ip interface brief' || q === 'ip int brief' || q === 'interfaces' || q === 'ip interface') {
+    const rows = Object.entries(dev.ifaces || {}).map(([n,p]) => {
+      const ip = p.ip == null ? 'unassigned' : M.ipStr(p.ip);
+      const status = p.up === false ? 'administratively down' : 'up';
+      return n.padEnd(24) + ip.padEnd(16) + ' YES manual ' + status.padEnd(12) + (p.up === false ? 'down' : 'up');
+    });
+    return ok('Interface               IP-Address      OK? Method Status                Protocol\n' + rows.join('\n'));
+  }
+  if (q === 'ip route' || q === 'route') {
+    const connected = Object.entries(dev.ifaces || {}).filter(([,p]) => p.ip != null && p.up !== false)
+      .map(([n,p]) => 'C    ' + M.ipStr(M.networkOf(p.ip,p.mask)) + '/' + p.mask + ' is directly connected, ' + n);
+    const statics = (dev.routes || []).map(r => 'S    ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' [1/0] via ' + M.ipStr(r.via));
+    return ok('Codes: C - connected, S - static\n' + (connected.concat(statics).join('\n') || '% No routes'));
+  }
+  if (q === 'vlan brief' || q === 'vlan') {
+    if (dev.kind !== 'switch') return err('% VLAN database is available on switches only');
+    const ids = [...new Set([1, ...(dev.vlans || [])])].sort((a,b)=>a-b);
+    return ok('VLAN Name                             Status    Ports\n' + ids.map(id => {
+      const ports = Object.entries(dev.ifaces).filter(([,p]) => p.mode !== 'trunk' && Number(p.accessVlan ?? p.vlan ?? 1) === id).map(([n])=>n).join(',');
+      return String(id).padEnd(5) + String((dev.vlanNames || {})[id] || ('VLAN' + id)).padEnd(33) + 'active    ' + (ports || '');
+    }).join('\n'));
+  }
+  if (q === 'interfaces status' || q === 'int status') {
+    if (dev.kind !== 'switch') return err('% Port status is available on switches only');
+    return ok('Port        Name                 Status       VLAN  Duplex Speed Type\n' + Object.entries(dev.ifaces).map(([n,p]) =>
+      n.padEnd(12) + String(p.description || '').slice(0,20).padEnd(21) + (p.up === false ? 'disabled' : 'connected').padEnd(13) +
+      String(p.mode === 'trunk' ? 'trunk' : Number(p.accessVlan ?? p.vlan ?? 1)).padEnd(6) + 'auto   auto  10/100/1000').join('\n'));
+  }
+  if (q === 'interfaces trunk' || q === 'int trunk') {
+    if (dev.kind !== 'switch') return err('% Trunk status is available on switches only');
+    const rows = Object.entries(dev.ifaces).filter(([,p])=>p.mode==='trunk').map(([n,p]) =>
+      n.padEnd(12) + 'on'.padEnd(8) + String(p.nativeVlan ?? 1).padEnd(12) + (Array.isArray(p.allowedVlans) ? p.allowedVlans.join(',') : 'all'));
+    return ok('Port        Mode    Native VLAN  Vlans allowed on trunk\n' + (rows.join('\n') || '(no trunk ports)'));
+  }
+  if (q === 'mac address-table dynamic' || q === 'mac address-table') {
+    if (dev.kind !== 'switch') return err('% MAC address table is available on switches only');
+    const rows = M.switchMacTable(cli.net, cli.cur).map(e => e.vlan + '    ' + e.mac + '    DYNAMIC     ' + e.port);
+    return ok('          Mac Address Table\n-------------------------------------------\n' + (rows.join('\n') || '(no dynamically learned entries)'));
+  }
+  if (q === 'spanning-tree' || q === 'spanning-tree vlan 1' || /^spanning-tree vlan \d+$/.test(q)) {
+    if (dev.kind !== 'switch') return err('% Spanning tree is available on switches only');
+    const id = Number((q.match(/vlan (\d+)/) || [,'1'])[1]), tree = M.spanningTree(cli.net,id), state = tree.switches[cli.cur];
+    if (!state) return err('% VLAN ' + id + ' is not active on this switch');
+    const rows = Object.entries(state.ports).map(([p,x])=>p.padEnd(16)+x.role.padEnd(14)+x.state);
+    return ok('VLAN' + id + ' spanning tree\nRoot ID    Priority ' + tree.switches[state.root].priority + ', Address ' + state.root +
+      '\nBridge ID  Priority ' + state.priority + ', Address ' + cli.cur + '\nInterface        Role          Sts\n' + rows.join('\n'));
+  }
+  if (q === 'interfaces' || q === 'interface') {
+    return ok(Object.entries(dev.ifaces).map(([n,p]) => n + ' is ' + (p.up === false ? 'down' : 'up') +
+      ', line protocol is ' + (p.up === false ? 'down' : 'up') + (p.ip == null ? '' : ', Internet address is ' + M.ipStr(p.ip) + '/' + p.mask)).join('\n'));
+  }
+  return err('% Invalid input detected at show command — supported: show version, show running-config, show startup-config, show ip interface brief, show ip route, show vlan brief, show interfaces status|trunk, show mac address-table dynamic, show spanning-tree');
+}
+function runCisco(cli, line) {
+  if (!line) return ok('');
+  const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
+  if (!dev) return dispatch(cli, raw);
+  if (lower === 'enable' || lower === 'en') {
+    if (cli.iosMode === 'user') { cli.iosMode = 'privileged'; return ok(''); }
+    return ok('% Already in privileged EXEC mode');
+  }
+  if (lower === 'disable') { cli.iosMode = 'user'; cli.iosIface = null; return ok(''); }
+  if (lower === 'configure terminal' || lower === 'conf t' || lower === 'config t') {
+    if (cli.iosMode === 'user') return err('% Privileged EXEC required — enter enable first');
+    cli.iosMode = 'config'; cli.iosIface = null; return ok('Enter configuration commands, one per line. End with CNTL/Z.');
+  }
+  if (lower === 'end' || lower === 'end\n') { cli.iosMode = 'privileged'; cli.iosIface = null; cli.contextIface = null; return ok(''); }
+  if (lower === 'exit') {
+    if (cli.iosMode === 'interface' || cli.iosMode === 'vlan') { cli.iosMode = 'config'; cli.iosIface = null; return ok(''); }
+    if (cli.iosMode === 'config') { cli.iosMode = 'privileged'; return ok(''); }
+    if (cli.iosMode === 'privileged') { cli.iosMode = 'user'; return ok(''); }
+  }
+  if (words[0] === 'show') {
+    const query = words.slice(1).join(' ');
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','interfaces status','int status'];
+    return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
+  }
+  if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
+    if (cli.iosMode === 'user') return err('% Privileged EXEC required');
+    dev.startupConfig = ciscoRunConfig(dev);
+    return ok('Building configuration...\n[OK]');
+  }
+  if (lower === 'copy startup-config running-config') {
+    if (!dev.startupConfig) return err('% No startup-config saved');
+    return err('% Restore is not available in this simulator profile; use the scenario reset to return to the baseline');
+  }
+  if (cli.iosMode === 'config') {
+    if (words[0] === 'hostname' && words[1]) { dev.hostname = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'interface' && words[1]) {
+      const name = ciscoIface(dev, raw.split(/\s+/)[1]);
+      if (!name) return err('% Invalid interface — use show ip interface brief');
+      cli.iosIface = name; cli.iosMode = 'interface'; return ok('Enter interface configuration commands.');
+    }
+    if (words[0] === 'vlan' && words[1] && dev.kind === 'switch') {
+      const id = parseVlanId(words[1]); if (id == null) return err('% VLAN must be between 1 and 4094');
+      dev.vlans = [...new Set([1, ...(dev.vlans || []), id])].sort((a,b)=>a-b);
+      cli.iosMode = 'vlan'; cli.iosVlan = id; return ok('VLAN configuration mode');
+    }
+    if (words[0] === 'ip' && words[1] === 'route' && words.length === 5) {
+      if (!['router','firewall'].includes(dev.kind)) return err('% Static routes can only be configured on routers/firewalls');
+      const dest = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]), via = parseIPv4(words[4]);
+      if (dest == null || prefix == null || via == null) return err('% Invalid static route address or mask');
+      const gwIf = M.directIface(dev,via);
+      if (!gwIf || dev.ifaces[gwIf].up === false || Object.values(dev.ifaces).some(p=>p.ip===via)) return err('% Next hop must be another address on an active connected subnet');
+      const network = M.networkOf(dest,prefix);
+      dev.routes = (dev.routes || []).filter(r=>!(r.dest===network && r.mask===prefix));
+      dev.routes.push({dest:network,mask:prefix,via});
+      return ok('');
+    }
+    return err('% Invalid input in global configuration mode');
+  }
+  if (cli.iosMode === 'interface') {
+    const p = dev.ifaces[cli.iosIface];
+    if (!p) return err('% Interface context no longer exists');
+    if (lower === 'shutdown') { p.up = false; return ok(''); }
+    if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
+    if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    if (words[0] === 'ip' && words[1] === 'address' && words.length === 4 && dev.kind !== 'switch') {
+      const address = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]);
+      if (address == null || prefix == null) return err('% Invalid IP address or subnet mask');
+      for (const [id, other] of Object.entries(cli.net.devices)) for (const [n,f] of Object.entries(other.ifaces || {}))
+        if (f.up !== false && f.ip === address && !(id === cli.cur && n === cli.iosIface)) return err('% Address already in use');
+      p.ip = address; p.mask = prefix; return ok('');
+    }
+    if (words[0] === 'switchport' && dev.kind === 'switch') {
+      if (words[1] === 'mode' && ['access','trunk'].includes(words[2])) {
+        p.mode = words[2]; if (p.mode === 'access') { p.accessVlan = Number(p.accessVlan ?? p.vlan ?? 1); p.vlan = p.accessVlan; } return ok('');
+      }
+      if (words[1] === 'access' && words[2] === 'vlan') {
+        const id = parseVlanId(words[3]); if (id == null || !(dev.vlans || [1]).includes(id)) return err('% Access VLAN must exist first');
+        p.mode = 'access'; p.accessVlan = id; p.vlan = id; return ok('');
+      }
+      if (words[1] === 'trunk' && words[2] === 'native' && words[3] === 'vlan') {
+        const id = parseVlanId(words[4]); if (id == null || !(dev.vlans || [1]).includes(id)) return err('% Native VLAN must exist first');
+        p.mode = 'trunk'; p.nativeVlan = id; return ok('');
+      }
+      if (words[1] === 'trunk' && words[2] === 'allowed' && words[3] === 'vlan') {
+        const list = words[4] === 'all' ? null : words[4].split(',').map(parseVlanId);
+        if (words.length !== 5 || (list && (list.some(x=>x==null) || list.some(x=>!(dev.vlans || [1]).includes(x))))) return err('% Invalid allowed VLAN list');
+        p.mode = 'trunk'; if (list) p.allowedVlans = [...new Set(list)].sort((a,b)=>a-b); else delete p.allowedVlans; return ok('');
+      }
+    }
+    return err('% Invalid input in interface configuration mode');
+  }
+  if (cli.iosMode === 'vlan') {
+    if (words[0] === 'name' && words[1]) { dev.vlanNames = dev.vlanNames || {}; dev.vlanNames[cli.iosVlan] = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
+    return err('% Invalid input in VLAN configuration mode');
+  }
+  // User EXEC and privileged EXEC keep the original Linux-like operational
+  // commands available for the existing missions while IOS coverage grows.
+  if (cli.iosMode === 'user' && ['ping','traceroute','arp','tcpdump','iptables','nmap','dig','dhclient','resolvectl','ip','vlan','interface','switchport','spanning-tree','clear','bgp','ospf','fault','review','help','man'].includes(words[0]))
+    return dispatch(cli, raw);
+  if (cli.iosMode === 'privileged' && ['ping','traceroute','arp','tcpdump','iptables','nmap','dig','dhclient','resolvectl','ip','vlan','interface','switchport','spanning-tree','clear','bgp','ospf','fault','review','help','man'].includes(words[0]))
+    return dispatch(cli, raw);
+  return dispatch(cli, raw);
 }
 
 /* ---------------- commands ---------------- */
@@ -153,7 +365,7 @@ const COMMANDS = {
       const vlans = [...new Set([1, ...(dev.vlans || []), ...Object.values(dev.ifaces).filter(p => p.mode !== 'trunk').map(p => Number(p.accessVlan ?? p.vlan ?? 1))])].sort((x,y)=>x-y);
       const rows = vlans.map(id => {
         const ports = Object.entries(dev.ifaces).filter(([,p]) => p.mode !== 'trunk' && Number(p.accessVlan ?? p.vlan ?? 1) === id).map(([n])=>n);
-        return id + '  VLAN' + id + '  active  ' + (ports.join(', ') || '(none)');
+        return id + '  VLAN' + id + ((dev.vlanNames || {})[id] ? ' [' + dev.vlanNames[id] + ']' : '') + '  active  ' + (ports.join(', ') || '(none)');
       });
       return ok('VLAN  Name    Status  Ports\n' + rows.join('\n'));
     }

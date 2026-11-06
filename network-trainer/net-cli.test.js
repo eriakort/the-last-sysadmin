@@ -228,6 +228,77 @@ test('CLI refuses to attach to an unknown device', () => {
   eq(threw, true, 'unknown console rejected');
 });
 
+
+// Cisco IOS-style command-mode workflow shares the exact forwarding model.
+test('IOS EXEC and global/interface configuration modes build a switch access port', () => {
+  const net = world(), cli = makeCLI(net, 'sw1');
+  eq(cli.run('configure terminal').code, 1, 'user EXEC cannot enter config mode');
+  eq(cli.run('enable').code, 0, 'enable');
+  eq(cli.run('conf t').code, 0, 'global config');
+  eq(cli.iosMode, 'config', 'global config mode');
+  eq(cli.run('vlan 10').code, 0, 'create VLAN');
+  eq(cli.run('name STAFF').code, 0, 'name VLAN');
+  eq(cli.run('exit').code, 0, 'leave VLAN context');
+  eq(cli.run('interface p1').code, 0, 'select interface');
+  eq(cli.iosMode, 'interface', 'interface config mode');
+  eq(cli.run('switchport mode access').code, 0, 'access mode');
+  eq(cli.run('switchport access vlan 10').code, 0, 'assign access VLAN');
+  eq(cli.run('description Finance workstation').code, 0, 'interface description');
+  eq(cli.run('end').code, 0, 'return to privileged EXEC');
+  eq(cli.iosMode, 'privileged', 'privileged mode');
+  eq(net.devices.sw1.ifaces.p1.accessVlan, 10, 'same switch model updated');
+  has(cli.run('show vlan brief').out, 'STAFF', 'VLAN verification');
+  has(cli.run('show interfaces status').out, 'Finance workstation', 'port verification');
+});
+test('IOS trunk configuration validates VLANs and reports native and allowed VLANs', () => {
+  const net = world(), cli = makeCLI(net, 'sw1');
+  cli.run('enable'); cli.run('configure terminal'); cli.run('vlan 10'); cli.run('exit'); cli.run('vlan 20'); cli.run('exit');
+  cli.run('interface p1');
+  eq(cli.run('switchport mode trunk').code, 0, 'trunk mode');
+  eq(cli.run('switchport trunk native vlan 10').code, 0, 'native VLAN');
+  eq(cli.run('switchport trunk allowed vlan 10,20').code, 0, 'allowed VLAN list');
+  eq(cli.run('switchport trunk allowed vlan 10,999').code, 1, 'reject VLAN not created');
+  cli.run('end');
+  const out = cli.run('show interfaces trunk').out;
+  has(out, '10', 'native VLAN shown'); has(out, '10,20', 'allowed VLANs shown');
+  eq(net.devices.sw1.ifaces.p1.nativeVlan, 10, 'native VLAN applied to model');
+});
+test('IOS router interface addressing and static routes immediately affect reachability', () => {
+  const net = world(), cli = makeCLI(net, 'r1');
+  cli.run('enable'); cli.run('configure terminal');
+  cli.run('interface eth0');
+  eq(cli.run('ip address 10.0.1.1 255.255.255.0').code, 0, 'interface address');
+  cli.run('exit');
+  eq(cli.run('ip route 10.0.2.0 255.255.255.0 10.0.9.254').code, 1, 'reject off-link next hop');
+  eq(cli.run('ip route 10.0.2.0 255.255.255.0 10.0.1.1').code, 1, 'reject own interface address as next hop');
+  eq(cli.run('ip route 10.0.3.0 255.255.255.0 10.0.2.254').code, 0, 'install static route through connected next hop');
+  cli.run('end');
+  has(cli.run('show ip interface brief').out, '10.0.1.1', 'interface summary');
+  has(cli.run('show ip route').out, '10.0.1.0/24', 'connected route');
+  has(cli.run('show ip route').out, '10.0.3.0/24', 'static route');
+});
+test('IOS startup configuration is saved explicitly and remains a snapshot', () => {
+  const net = world(), cli = makeCLI(net, 'sw1');
+  cli.run('enable'); cli.run('configure terminal'); cli.run('hostname access-01'); cli.run('vlan 30'); cli.run('exit');
+  cli.run('interface p1'); cli.run('description Uplink'); cli.run('end');
+  eq(cli.run('write memory').code, 0, 'save startup config');
+  const saved = net.devices.sw1.startupConfig;
+  has(saved, 'hostname access-01', 'hostname persisted');
+  has(saved, 'vlan 30', 'VLAN persisted');
+  has(saved, 'description Uplink', 'interface description persisted');
+  cli.run('configure terminal'); cli.run('hostname changed-after-save');
+  eq(net.devices.sw1.startupConfig, saved, 'startup config is a saved snapshot, not a live alias');
+  has(cli.run('show startup-config').out, 'hostname access-01', 'startup config displayed');
+});
+test('IOS command mode resets when the console changes devices', () => {
+  const cli = makeCLI(world(), 'sw1');
+  cli.run('enable'); cli.run('configure terminal');
+  eq(cli.iosMode, 'config', 'in config mode');
+  cli.on('h1');
+  eq(cli.iosMode, 'user', 'new console starts in user EXEC');
+  eq(cli.run('configure terminal').code, 1, 'privilege required on new device');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
