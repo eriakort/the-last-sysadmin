@@ -966,7 +966,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await checkLearningStages('Read a kernel setting', 'write', ['sysctl', 'net.ipv4.ip_forward', 'current value']);
   await proveAnswerMission('Read a kernel setting', 'Change it live', 'read', [
     'sysctl net.ipv4.ip_forward'
-  ], '0', 'Correct. sysctl displays the current value');
+  ], '0', 'Correct. Without an assignment, sysctl displays the current value.');
 
   await checkLearningStages('Change it live', 'yes', ['sysctl -w', 'runtime', 'temporary']);
   await proveMission('Change it live', 'Make it stick', 'no', [
