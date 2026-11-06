@@ -148,6 +148,8 @@ test('MAC table CLI exposes dynamic VLAN, MAC, and learned switch port', () => {
   assert(connected(net), 'ping should trigger dynamic MAC learning');
   const output = command(cli,'sw1','show mac address-table dynamic');
   assert(output.includes('VLAN  MAC Address') && output.includes('h1/eth0') && output.includes('srv/eth0'), 'MAC table should show local and remote endpoint records');
+  command(cli,'sw1','clear mac address-table dynamic');
+  assert(M.switchMacTable(net,'sw1',10).length === 0, 'clear should remove learned entries from the selected switch');
 });
 
 test('STP priority validates VLAN existence and 4096-step bridge priority values', () => {
