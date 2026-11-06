@@ -1174,7 +1174,9 @@ function renderChangeManagement() {
   if (selected) CHANGE_SELECTED = selected.id;
   const stateCounts = CHANGE_STATES.map(state => [state, records.filter(x=>x.status===state).length]);
   const list = records.map(x => `<button class="change-list-item ${selected&&selected.id===x.id?'selected':''}" data-change-select="${esc(x.id)}"><span class="change-list-top"><b>${esc(x.id)}</b><em class="change-state state-${esc(x.status)}">${esc(changeStateLabel(x.status))}</em></span><strong>${esc(x.title)}</strong><small>${esc(x.affected||'Scope not specified')} · ${esc(x.risk)} risk</small></button>`).join('');
+  const deviceOptions = RUN && RUN.net ? Object.entries(RUN.net.devices || {}).map(([id,d]) => `<label class="change-device-option"><input type="checkbox" name="deviceIds" value="${esc(id)}"><span><b>${esc(id)}</b><small>${esc(d.kind)} · ${esc(primaryIp(d) || 'no IP')}</small></span></label>`).join('') : '';
   const detail = selected ? `<div class="change-detail-head"><div><div class="eyebrow">Change record · ${esc(selected.id)}</div><h2>${esc(selected.title)}</h2><p>${esc(selected.reason)}</p></div><em class="change-state state-${esc(selected.status)}">${esc(changeStateLabel(selected.status))}</em></div>
+    ${Array.isArray(selected.deviceIds)&&selected.deviceIds.length?'<section class="change-device-links"><h3>Linked simulator devices</h3><div>'+selected.deviceIds.map(id=>'<button type="button" class="btn sm" data-change-device="'+esc(id)+'">Open '+esc(id)+' in Workbench →</button>').join('')+'</div></section>':''}
     <div class="change-facts"><div><small>Risk</small><b>${esc(selected.risk)}</b></div><div><small>Affected services / devices</small><b>${esc(selected.affected)}</b></div><div><small>Maintenance window</small><b>${esc(selected.window)}</b></div><div><small>Created</small><b>${esc(new Date(selected.createdAt).toLocaleString())}</b></div></div>
     <div class="change-plan-grid"><section><h3>Pre-change checks</h3><p>${esc(selected.prechecks)}</p></section><section><h3>Implementation plan</h3><p>${esc(selected.steps)}</p></section><section><h3>Rollback plan</h3><p>${esc(selected.rollback)}</p></section><section><h3>Success criteria</h3><p>${esc(selected.successCriteria)}</p></section></div>
     ${selected.validation?'<section class="change-validation"><h3>Post-change verification</h3><p>'+esc(selected.validation)+'</p></section>':''}
@@ -1188,6 +1190,7 @@ function renderChangeManagement() {
       <label>Change title<input name="title" required maxlength="120" placeholder="e.g. Add VLAN 30 to the access switch"></label>
       <div class="change-form-row"><label>Change category<select name="category"><option>Configuration</option><option>Firmware / maintenance</option><option>Routing</option><option>Switching</option><option>Firewall / security</option><option>Service change</option></select></label><label>Risk<select name="risk"><option>Low</option><option selected>Medium</option><option>High</option></select></label></div>
       <label>Reason and expected outcome<textarea name="reason" required rows="2"></textarea></label><label>Affected devices / services<input name="affected" required placeholder="e.g. SW-CORE, VLAN 30, Finance endpoints"></label>
+      ${deviceOptions?'<fieldset class="change-device-picker"><legend>Link affected simulator devices (optional)</legend><div>'+deviceOptions+'</div><small>Links let you jump directly to the selected device during implementation.</small></fieldset>':''}
       <label>Maintenance window<input name="window" required placeholder="e.g. 2026-11-08 20:00–20:30 CET"></label>
       <label>Pre-change checks<textarea name="prechecks" required rows="3" placeholder="Current state, backups, reachability, baseline outputs…"></textarea></label>
       <label>Implementation steps<textarea name="steps" required rows="3" placeholder="Ordered commands and actions…"></textarea></label>
@@ -1199,12 +1202,13 @@ function renderChangeManagement() {
   root.querySelector('#changeForm').addEventListener('submit',e=>{
     e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget).entries());
     const id='CHG-'+String((PROG.changeSequence||0)+1).padStart(4,'0');PROG.changeSequence=(PROG.changeSequence||0)+1;
-    const record={...data,id,status:'draft',createdAt:new Date().toISOString(),history:[{at:new Date().toISOString(),status:'draft',note:'Change request created as a draft.'}]};
+    const record={...data,deviceIds:new FormData(e.currentTarget).getAll('deviceIds'),id,status:'draft',createdAt:new Date().toISOString(),history:[{at:new Date().toISOString(),status:'draft',note:'Change request created as a draft.'}]};
     PROG.changes.unshift(record);CHANGE_SELECTED=id;saveProg();addJournalEntry({type:'change created',text:id+' — '+record.title});renderChangeManagement();
   });
   root.querySelectorAll('[data-change-select]').forEach(b=>b.addEventListener('click',()=>{CHANGE_SELECTED=b.dataset.changeSelect;renderChangeManagement();}));
   const transition=(status,note,extra={})=>{const item=PROG.changes.find(x=>x.id===CHANGE_SELECTED);if(!item)return;Object.assign(item,extra,{status});item.history=item.history||[];item.history.push({at:new Date().toISOString(),status,note});saveProg();addJournalEntry({type:'change '+status,ticket:'',text:item.id+' — '+note});renderChangeManagement();};
   const bind=(id,fn)=>{const el=root.querySelector('#'+id);if(el)el.addEventListener('click',fn);};
+  root.querySelectorAll('[data-change-device]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.changeDevice;if(RUN&&RUN.net.devices[id]){showWorkspaceView('workbench');selectDevice(id);}}));
   bind('changeSubmit',()=>transition('submitted','Submitted for peer / change-owner review.'));
   bind('changeApprove',()=>transition('approved','Change approved for the stated maintenance window.'));
   bind('changeStart',()=>transition('implementing','Implementation started; record evidence before completing.'));

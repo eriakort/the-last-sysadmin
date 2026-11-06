@@ -268,6 +268,10 @@ The Incidents destination is a dedicated service-desk workspace rather than only
 
 The Infrastructure destination is a live inventory of the active training scenario, not a static device catalogue. It supports device-type and health filtering, search by device or IP, and per-device detail for interfaces, addresses, link state, access/trunk VLANs, spanning-tree state, static routes, ACL policy, configured services/protocols and local engineering journal activity. Selecting a device opens that exact device in the Workbench. Service rows are labelled as configured state from the simulator model; the page does not claim external polling or production monitoring.
 
+### Change execution handoff
+
+Change requests can optionally link directly to devices in the active simulator scenario. The structured device links are saved with the local change record and appear in its detail view; opening one returns to the Workbench with that exact device selected in the explorer, inspector and console session. The free-text affected-services field remains available for VLANs, services and systems outside the current simulated topology. This is a navigation handoff only: it does not execute configuration or claim that a change has been applied.
+
 ### Help desk and work journal
 
 - The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.
