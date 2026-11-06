@@ -138,3 +138,8 @@ Natural next steps:
 - **DNS/DHCP** in the engine → unlocks `dig` / `dhclient` and the naming chapter.
 - **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
 - **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
+
+
+## Workbench topology inspection
+
+The topology canvas supports pointer-anchored wheel zoom, drag-to-pan, selected-device focus, fit-to-view and automatic arrangement. Toggle **Ports** to reveal the interface endpoints on each simulated link. These controls inspect the active local scenario; they do not connect to physical network devices.
