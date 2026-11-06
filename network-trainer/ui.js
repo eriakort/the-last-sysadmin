@@ -493,6 +493,9 @@ function describeCheck(s) {
     case 'bgp_session': return `${s.dev} BGP session with ${s.peer}`;
     case 'bgp_route': return `${s.dev} learns ${s.cidr} (BGP)`;
     case 'port_forward': return `${s.from} reaches ${s.server} via ${s.public}:${s.dport}`;
+    case 'mac_entry': return `${s.dev} learns ${s.device} on ${s.port} (VLAN ${s.vlan})`;
+    case 'stp_root': return `${s.root} is root for VLAN ${s.vlan}`;
+    case 'stp_blocked': return `${s.dev}/${s.port} blocks in VLAN ${s.vlan}`;
     default: return s.type;
   }
 }
