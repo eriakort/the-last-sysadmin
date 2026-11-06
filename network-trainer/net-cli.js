@@ -133,7 +133,7 @@ const COMMANDS = {
               return err('ip addr: address already in use by ' + id + '/' + otherIf);
           }
         }
-        dev.ifaces[ifn] = { ...dev.ifaces[ifn], ip: address, mask: parsed.prefix, up: true };
+        dev.ifaces[ifn] = { ...dev.ifaces[ifn], ip: address, mask: parsed.prefix };
         return ok(ifn + ': ' + M.ipStr(address) + '/' + parsed.prefix);
       }
       if (a[1] === 'del' || a[1] === 'delete') {
@@ -164,7 +164,10 @@ const COMMANDS = {
         if (Object.values(dev.ifaces).some(f => f.ip === via && f.up !== false))
           return err('ip route: gateway cannot be this device own address');
         dev.routes = dev.routes || [];
-        dev.routes = dev.routes.filter(r => !(r.mask === target.prefix && r.dest === target.net));
+        const samePrefix = r => r.mask === target.prefix && r.dest === target.net;
+        if (a[1] === 'replace') dev.routes = dev.routes.filter(r => !samePrefix(r));
+        else if (dev.routes.some(r => samePrefix(r) && r.via === via))
+          return err('ip route: identical route already exists');
         dev.routes.push({ dest: target.net, mask: target.prefix, via });
         return ok('route ' + (target.prefix === 0 ? 'default' : M.ipStr(target.net) + '/' + target.prefix) + ' via ' + a[vi + 1]);
       }
