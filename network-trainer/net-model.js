@@ -171,7 +171,8 @@ function switchMacTable(net, switchId, vlan) {
   for (const vid of vlans) {
     for (const entry of Object.values(table[vid] || {})) {
       const sw = net.devices[switchId], port = sw && sw.ifaces[entry.port];
-      if (!port || port.up === false || !switchVlanExists(sw, vid)) continue;
+      const state = spanningTree(net, vid).switches[switchId];
+      if (!port || port.up === false || !switchVlanExists(sw, vid) || (state && state.ports[entry.port] && state.ports[entry.port].state === 'blocking')) continue;
       if (port.mode === 'trunk' ? !switchPortAllowsVlan(port, vid) : switchAccessVlan(port) !== vid) continue;
       entries.push({ ...entry });
     }
