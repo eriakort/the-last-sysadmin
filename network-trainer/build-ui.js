@@ -231,8 +231,8 @@ const css = css + '\n' + read('workstation.css');
 
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Networking Trainer — prototype</title><style>${css}</style></head>
-<body><div id="app"></div><script>${bundle}</script></body></html>`;
+<title>Networking Trainer — prototype</title><style>${css}</style><link rel="stylesheet" href="./workstation.css"></head>
+<body><div id="app"></div><script>${bundle}</script><script src="./workstation-shell.js"></script></body></html>`;
 
 // index.html so GitHub Pages serves it cleanly at /network-trainer/
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);
