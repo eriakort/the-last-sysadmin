@@ -920,11 +920,7 @@ const chapters = [
       ['isp','show ip bgp'],['isp','show ip route'],['hq','ping remote'],
       ['edge','enable'],['edge','write memory'],['isp','enable'],['isp','write memory']
     ]
-  }
-];
-
-
-  ,
+  },
   { id: 'wan-gateway-failover', chapter: 'Enterprise WAN · gateway redundancy',
     title: 'Keep the branch online when its primary WAN fails',
     story: 'The branch has two edge routers. R1 is preferred, but its WAN circuit is unstable. Users currently depend on a single first-hop gateway, so an R1 uplink failure strands the entire office even though R2 and its carrier path remain healthy. The NOC wants a shared gateway on both the user and WAN segments, with the LAN-side election tracking R1’s uplink.',
@@ -965,5 +961,6 @@ const chapters = [
       ['r1','enable'],['r1','write memory'],['r2','enable'],['r2','write memory']
     ]
   }
+];
 
 module.exports = { chapters };
