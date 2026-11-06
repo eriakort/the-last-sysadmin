@@ -122,7 +122,7 @@ and the grader can't tell the difference (there's a test for exactly this). Supp
 
 - `ip addr` / `ip addr add|del <A>/<p> dev <if>` — show, assign, or remove interface addresses (strict IPv4/prefix validation; interface must exist; duplicate live addresses are rejected)
 - `ip link set <if> up|down` — change interface state and immediately affect forwarding
-- `ip route` / `ip route add|replace <default|cidr> via <ip>` / `ip route del <default|cidr>` — validated route changes; gateways must be on an active connected subnet, matching prefixes are replaced rather than duplicated, and missing deletes are reported
+- `ip route` / `ip route add|replace <default|cidr> via <ip>` / `ip route del <default|cidr>` — validated route changes; gateways must be on an active connected subnet, exact duplicate routes are rejected, alternate next hops are supported, `replace` replaces a prefix, and missing deletes are reported
 - `ping <host|ip>` — round-trip, reports the path and where a packet died
 - `traceroute <host|ip>` — the hops toward a target
 - `arp` / `ip neigh` — neighbours on the L2 segment
