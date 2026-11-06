@@ -107,6 +107,13 @@ function ciscoRunConfig(dev) {
         if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
       } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
     } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
+    if (p.hsrp) {
+      const h = p.hsrp;
+      lines.push(' standby ' + h.group + ' ip ' + M.ipStr(h.virtualIp));
+      if (h.priority != null && h.priority !== 100) lines.push(' standby ' + h.group + ' priority ' + h.priority);
+      if (h.preempt) lines.push(' standby ' + h.group + ' preempt');
+      for (const t of h.track || []) lines.push(' standby ' + h.group + ' track ' + t.iface + ' decrement ' + t.decrement);
+    }
     for (const dir of ['in','out']) {
       const acl = p.accessGroups && p.accessGroups[dir];
       if (acl) lines.push(' ip access-group ' + acl + ' ' + dir);
@@ -261,6 +268,16 @@ function ciscoShow(cli, words) {
     const ospf = M.ospfLearned(cli.net, cli.cur).map(r => 'O    ' + M.ipStr(r.dest) + '/' + r.mask + ' [110/' + (r.hops || 1) + '] via ' + M.ipStr(r.via) + ', OSPF');
     const bgp = M.bgpLearned(cli.net, cli.cur).map(r => 'B    ' + M.ipStr(r.dest) + '/' + r.mask + ' [20/0] via ' + M.ipStr(r.via) + ', BGP');
     return ok('Codes: C - connected, S - static, O - OSPF, B - BGP\\n' + (connected.concat(statics, ospf, bgp).join('\\n') || '% No routes'));
+  }
+  if (q === 'standby brief' || q === 'standby') {
+    const rows = [];
+    for (const [name, p] of Object.entries(dev.ifaces || {})) if (p.hsrp) {
+      const s = M.hsrpStatus(cli.net, cli.cur, name);
+      rows.push(String(p.hsrp.group).padEnd(7) + M.ipStr(p.hsrp.virtualIp).padEnd(17) +
+        String(s && s.state || 'Unknown').padEnd(10) + String(s && s.priority || 0).padEnd(10) +
+        (s && s.active || 'none') + ' (' + name + ')');
+    }
+    return ok('Grp    Virtual IP       State     Priority  Active router\n' + (rows.join('\n') || '(no HSRP groups configured)'));
   }
   if (q === 'ip bgp summary') {
     const sessions = M.bgpSessions(cli.net, cli.cur);
@@ -583,6 +600,7 @@ function runASA(cli, line) {
         if (f.up !== false && f.ip === address && !(id===cli.cur && n===cli.asaIface)) return err('% Address already in use');
       p.ip = address; p.mask = prefix; return ok('');
     }
+
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'shutdown') { p.up = false; return ok(''); }
     if (words[0] === 'no' && words[1] === 'shutdown') { p.up = true; return ok(''); }
@@ -649,7 +667,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -846,6 +864,35 @@ function runCisco(cli, line) {
     if (!p) return err('% Interface context no longer exists');
     if (lower === 'shutdown') { p.up = false; return ok(''); }
     if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
+    if (words[0] === 'standby' && words[1] && words[2] === 'ip' && words.length === 4) {
+      const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
+      if (!Number.isInteger(group) || group < 0 || group > 255 || virtualIp == null) return err('% Use standby <0-255> ip <virtual-ip>');
+      if (dev.kind !== 'router' || p.ip == null || M.sameNet(p.ip, virtualIp, p.mask) === false) return err('% HSRP requires a router interface and a virtual IP in its connected subnet');
+      p.hsrp = { ...(p.hsrp || {}), group, virtualIp, priority: p.hsrp && p.hsrp.priority || 100, preempt: !!(p.hsrp && p.hsrp.preempt), track: p.hsrp && p.hsrp.track || [] };
+      return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'priority' && words.length === 4) {
+      const group = Number(words[1]), priority = Number(words[3]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!Number.isInteger(priority) || priority < 0 || priority > 255) return err('% HSRP priority must be 0-255');
+      p.hsrp.priority = priority; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'preempt' && words.length === 3) {
+      const group = Number(words[1]); if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      p.hsrp.preempt = true; return ok('');
+    }
+    if (words[0] === 'standby' && words[1] && words[2] === 'track' && words.length === 6 && words[4] === 'decrement') {
+      const group = Number(words[1]), tracked = ciscoIface(dev, words[3]), decrement = Number(words[5]);
+      if (!p.hsrp || p.hsrp.group !== group) return err('% Configure standby <group> ip first');
+      if (!tracked || !Number.isInteger(decrement) || decrement < 1 || decrement > 255) return err('% Use standby <group> track <interface> decrement <1-255>');
+      p.hsrp.track = (p.hsrp.track || []).filter(t => t.iface !== tracked).concat([{ iface: tracked, decrement }]); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'standby' && words.length >= 3) {
+      const group = Number(words[2]);
+      if (p.hsrp && p.hsrp.group === group) delete p.hsrp;
+      return ok('');
+    }
+
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'ip' && words[1] === 'helper-address' && words[2] && words.length === 3) {
       const address = parseIPv4(words[2]); if (address == null) return err('% Invalid helper address');
