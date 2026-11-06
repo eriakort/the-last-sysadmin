@@ -313,7 +313,8 @@ test('IOS named extended ACLs enforce sequence order, wildcard matches and impli
   fw.run('end');
   eq(C.reachable(net, 'h1', 'h2', { proto: 'tcp', dport: 80 }).ok, false, 'first deny shadows permit');
   fw.run('configure terminal'); fw.run('ip access-list extended OFFICE-IN');
-  eq(fw.run('no 10').code, 0, 'remove sequence');
+  eq(fw.run('no 10').code, 0, 'remove sequence 10');
+  eq(fw.run('no 20').code, 0, 'remove sequence 20');
   eq(fw.run('10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 80').code, 0, 'permit first');
   eq(fw.run('20 deny ip any any').code, 0, 'deny remainder');
   fw.run('end');
