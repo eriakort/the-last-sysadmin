@@ -230,7 +230,7 @@ const cidr = s => { const [a, p] = String(s).split('/'); return { net: networkOf
 // Is a device interface present and up?
 function ifaceUp(net, dev, name) {
   const d = net.devices[dev]; const f = d && d.ifaces && d.ifaces[name];
-  return !!(f && f.up !== false);
+  return !!(f && f.up !== false && f.errDisabled !== true);
 }
 // The interface on the other end of the link from (dev, name), if the link and both ends are up.
 function neighbor(net, dev, name) {
@@ -359,6 +359,21 @@ function learnMacOnSegment(net, devId, ifaceName) {
     if (visited.has(key)) continue; visited.add(key);
     const current = net.devices[swId], state = stp.switches[swId];
     if (!current || !state || (state.ports[ingress] && state.ports[ingress].state === 'blocking')) continue;
+    const ingressPort = current.ifaces[ingress], security = ingressPort && ingressPort.portSecurity;
+    if (security && security.enabled) {
+      security.secureMacs = security.secureMacs || [];
+      security.stickyMacs = security.stickyMacs || [];
+      if (!security.secureMacs.includes(mac)) {
+        const maximum = Number(security.maximum || 1);
+        if (security.secureMacs.length >= maximum) {
+          security.violations = Number(security.violations || 0) + 1;
+          if ((security.violation || 'shutdown') === 'shutdown') ingressPort.errDisabled = true;
+          return false;
+        }
+        security.secureMacs.push(mac);
+        if (security.sticky) security.stickyMacs.push(mac);
+      }
+    }
     net.macTables = net.macTables || {};
     net.macTables[swId] = net.macTables[swId] || {};
     net.macTables[swId][vlan] = net.macTables[swId][vlan] || {};
@@ -377,6 +392,7 @@ function learnMacOnSegment(net, devId, ifaceName) {
       queue.push([nextId, nextPort]);
     }
   }
+  return true;
 }
 function switchMacTable(net, switchId, vlan) {
   const table = net.macTables && net.macTables[switchId];
@@ -727,7 +743,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
       }
     }
     if (dev.nat && !reverse) pkt = applySnat(dev, pkt, eg, ct);   // masquerade on egress
-    learnMacOnSegment(net, cur, eg);
+    if (learnMacOnSegment(net, cur, eg) === false) return { ok: false, path, reason: 'switch port-security violation', at: cur };
 
     const ep = l2Domain(net, cur, eg).find(([d, i]) => (net.devices[d].ifaces[i].ip === targetIp || ownsVirtualIp(net, d, targetIp)) && net.devices[d].ifaces[i].up !== false);
     if (!ep) return { ok: false, path, reason: viaRoute ? 'gateway ' + ipStr(viaRoute.via) + ' unreachable' : 'no host with that address on the segment', at: cur };
@@ -1143,6 +1159,13 @@ function ciscoRunConfig(dev) {
         lines.push(' switchport trunk native vlan ' + Number(p.nativeVlan ?? 1));
         if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
       } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
+      if (p.portSecurity && p.portSecurity.enabled) {
+        lines.push(' switchport port-security');
+        if (p.portSecurity.maximum !== 1) lines.push(' switchport port-security maximum ' + p.portSecurity.maximum);
+        if (p.portSecurity.violation && p.portSecurity.violation !== 'shutdown') lines.push(' switchport port-security violation ' + p.portSecurity.violation);
+        if (p.portSecurity.sticky) lines.push(' switchport port-security mac-address sticky');
+        for (const mac of p.portSecurity.stickyMacs || []) lines.push(' switchport port-security mac-address ' + mac);
+      }
     } else if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
     if (p.hsrp) {
       const h = p.hsrp;
@@ -1267,6 +1290,13 @@ function ciscoShow(cli, words) {
       '\n  Inbound access list is ' + (groups.in || 'not set') +
       '\n  Outbound access list is ' + (groups.out || 'not set') +
       '\n  DHCP relay is ' + (dev.ifaces[name].helperAddress == null ? 'not configured' : M.ipStr(dev.ifaces[name].helperAddress)));
+  }
+  if (q === 'port-security' || q.startsWith('port-security interface ')) {
+    if (dev.kind !== 'switch') return err('% Port security is available on switches only');
+    const wanted=q.startsWith('port-security interface ')?ciscoIface(dev,words[2]):null;
+    if(q.startsWith('port-security interface ')&&!wanted)return err('% Invalid interface');
+    const rows=Object.entries(dev.ifaces).filter(([n,p])=>(!wanted||n===wanted)&&p.portSecurity&&p.portSecurity.enabled).map(([n,p])=>{const x=p.portSecurity;return n+'  '+(p.errDisabled?'err-disabled':'secure-up')+'  max '+Number(x.maximum||1)+'  current '+(x.secureMacs||[]).length+'  violation '+(x.violation||'shutdown')+'  count '+Number(x.violations||0)+'  MACs '+((x.secureMacs||[]).join(', ')||'(none)');});
+    return ok('Port                 Status        Max  Current  Violation  Count  Secure MACs\\n'+(rows.join('\\n')||'(no port-security configuration)'));
   }
   if (q === 'hosts') {
     const rows = Object.entries(dev.hosts || {}).map(([n,a]) => n.padEnd(22) + M.ipStr(a).padEnd(16) + 'static');
@@ -1704,8 +1734,8 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
-    if (query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
   if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
@@ -1901,6 +1931,13 @@ function runCisco(cli, line) {
     if (!p) return err('% Interface context no longer exists');
     if (lower === 'shutdown') { p.up = false; return ok(''); }
     if (lower === 'no shutdown' || lower === 'no shut') { p.up = true; return ok(''); }
+    if (words[0] === 'switchport' && words[1] === 'port-security' && dev.kind === 'switch') {
+      if (words.length === 2) { p.portSecurity = { ...(p.portSecurity || {}), enabled: true, maximum: Number(p.portSecurity && p.portSecurity.maximum || 1), violation: p.portSecurity && p.portSecurity.violation || 'shutdown', sticky: !!(p.portSecurity && p.portSecurity.sticky), secureMacs: p.portSecurity && p.portSecurity.secureMacs || [], stickyMacs: p.portSecurity && p.portSecurity.stickyMacs || [], violations: Number(p.portSecurity && p.portSecurity.violations || 0) }; return ok('Port security enabled'); }
+      if (words[2] === 'maximum' && words.length === 4) { const n=Number(words[3]); if(!Number.isInteger(n)||n<1||n>50)return err('% Port-security maximum must be 1-50'); p.portSecurity=p.portSecurity||{enabled:true,violation:'shutdown',secureMacs:[],stickyMacs:[],violations:0}; p.portSecurity.enabled=true; p.portSecurity.maximum=n; return ok('Maximum secure MAC addresses: '+n); }
+      if (words[2] === 'violation' && words.length === 4 && ['protect','restrict','shutdown'].includes(words[3])) { p.portSecurity=p.portSecurity||{enabled:true,maximum:1,secureMacs:[],stickyMacs:[],violations:0}; p.portSecurity.enabled=true; p.portSecurity.violation=words[3]; return ok('Violation mode: '+words[3]); }
+      if (words[2] === 'mac-address' && words[3] === 'sticky' && words.length === 4) { p.portSecurity=p.portSecurity||{enabled:true,maximum:1,violation:'shutdown',secureMacs:[],stickyMacs:[],violations:0}; p.portSecurity.enabled=true; p.portSecurity.sticky=true; return ok('Sticky secure MAC learning enabled'); }
+    }
+    if (words[0] === 'no' && words[1] === 'switchport' && words[2] === 'port-security' && dev.kind === 'switch') { delete p.portSecurity; p.errDisabled=false; return ok('Port security removed'); }
     if (words[0] === 'standby' && words[1] && words[2] === 'ip' && words.length === 4) {
       const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
       if (!Number.isInteger(group) || group < 0 || group > 255 || virtualIp == null) return err('% Use standby <0-255> ip <virtual-ip>');
@@ -2479,7 +2516,7 @@ const MAN = {
   services: 'IOS service operations: ip dhcp excluded-address LOW [HIGH]; ip dhcp pool NAME; network NET MASK; default-router IP; dns-server IP; domain-name NAME; lease DAYS. Configure DHCP relay under the client-facing interface with ip helper-address SERVER. Configure DNS with ip name-server IP and ip host NAME IP. Configure time with ntp server IP (or ntp master STRATUM on a time source); verify show ntp status and show ntp associations. Configure remote logging with logging host IP, logging trap informational, logging source-interface IF; verify show logging on sender and collector. This is an educational IOS-style subset, not a full IOS implementation.',
   mac: 'show mac address-table dynamic — inspect learned endpoint MAC addresses, VLANs, and switch ports. Entries are derived from the current Layer 2 topology.',
   'spanning-tree': 'spanning-tree vlan ID priority N — set a switch bridge priority (0–61440 in steps of 4096). Lower priority wins root bridge election.\n  show spanning-tree [vlan ID] — inspect the elected root, root/designated/alternate port roles, and forwarding/blocking state.',
-  vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
+  vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  switchport port-security — enable access-port MAC security; maximum N, violation protect|restrict|shutdown, mac-address sticky.\n  show port-security [interface PORT] — inspect secure MACs and violation counters.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
 module.exports = { makeCLI, resolve, primaryIp };

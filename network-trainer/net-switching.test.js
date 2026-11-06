@@ -206,3 +206,51 @@ test('STP and MAC learning also work on switch-to-switch access links', () => {
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total.');
 if (failed) process.exit(1);
+
+
+test('port security learns sticky MACs, enforces maximum, and err-disables a violating access port', () => {
+  const net = { devices: { h1: host('h1','10.0.0.10'), rogue: host('rogue','10.0.0.20'), srv: host('srv','10.0.0.30'), sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{accessVlan:10}]]) }, links: [link('h1','eth0','sw1','p1'),link('srv','eth0','sw1','p2')] };
+  net.devices.sw1.vlans=[1,10];
+  const cli=makeCLI(net,'sw1');
+  command(cli,'sw1','enable'); command(cli,'sw1','configure terminal'); command(cli,'sw1','interface p1');
+  command(cli,'sw1','switchport port-security'); command(cli,'sw1','switchport port-security maximum 1'); command(cli,'sw1','switchport port-security mac-address sticky');
+  command(cli,'sw1','end');
+  assert(M.ping(net,'h1',ip('10.0.0.30')).ok,'baseline endpoint should remain usable');
+  const learned=net.devices.sw1.ifaces.p1.portSecurity;
+  assert(learned.stickyMacs.length===1 && learned.secureMacs.length===1,'first endpoint MAC should become sticky and secure');
+  net.links=[link('rogue','eth0','sw1','p1'),link('srv','eth0','sw1','p2')];
+  const result=M.ping(net,'rogue',ip('10.0.0.30'));
+  assert(!result.ok && /port-security/.test(result.reason),'new MAC should be blocked by port security');
+  assert(net.devices.sw1.ifaces.p1.errDisabled===true,'shutdown violation mode should err-disable the port');
+  const status=command(cli,'sw1','show port-security interface p1');
+  assert(status.includes('err-disabled') && status.includes('count 1'),'show port-security should expose violation state');
+  command(cli,'sw1','enable'); command(cli,'sw1','configure terminal'); command(cli,'sw1','interface p1'); command(cli,'sw1','no shutdown');
+  assert(net.devices.sw1.ifaces.p1.errDisabled===false,'manual no shutdown should recover an err-disabled port');
+});
+
+
+test('port-security validation and restrict mode reject violations without err-disabling the port', () => {
+  const net = { devices: { h1: host('h1','10.0.0.10'), rogue: host('rogue','10.0.0.20'), srv: host('srv','10.0.0.30'), sw1: sw('sw1',[['p1',{accessVlan:10}],['p2',{accessVlan:10}]]) }, links: [link('h1','eth0','sw1','p1'),link('srv','eth0','sw1','p2')] };
+  net.devices.sw1.vlans=[1,10]; const cli=makeCLI(net,'sw1');
+  command(cli,'sw1','enable'); command(cli,'sw1','configure terminal'); command(cli,'sw1','interface p1');
+  command(cli,'sw1','switchport port-security maximum 0',1);
+  command(cli,'sw1','switchport port-security violation disable',1);
+  command(cli,'sw1','switchport port-security violation restrict');
+  command(cli,'sw1','switchport port-security maximum 1'); command(cli,'sw1','end');
+  assert(M.ping(net,'h1',ip('10.0.0.30')).ok,'first MAC should be learned');
+  net.links=[link('rogue','eth0','sw1','p1'),link('srv','eth0','sw1','p2')];
+  const result=M.ping(net,'rogue',ip('10.0.0.30'));
+  assert(!result.ok && /port-security/.test(result.reason),'restrict mode should drop the violating frame');
+  assert(net.devices.sw1.ifaces.p1.errDisabled!==true,'restrict mode must leave the port enabled');
+  assert(net.devices.sw1.ifaces.p1.portSecurity.violations===1,'restrict mode should increment the violation counter');
+});
+
+test('port-security settings and sticky addresses appear in running configuration', () => {
+  const net={devices:{sw1:sw('sw1',[['p1',{}]])},links:[]},cli=makeCLI(net,'sw1');
+  command(cli,'sw1','enable'); command(cli,'sw1','configure terminal'); command(cli,'sw1','interface p1');
+  command(cli,'sw1','switchport port-security'); command(cli,'sw1','switchport port-security maximum 2');
+  command(cli,'sw1','switchport port-security violation restrict'); command(cli,'sw1','switchport port-security mac-address sticky');
+  command(cli,'sw1','end');
+  const config=command(cli,'sw1','show running-config');
+  assert(config.includes('switchport port-security maximum 2') && config.includes('switchport port-security violation restrict') && config.includes('switchport port-security mac-address sticky'),'running config should preserve the operational security policy');
+});
