@@ -1174,7 +1174,7 @@ function asaShow(cli, words) {
   }
   if (q === 'nat' || q === 'nat detail') {
     const rows = (dev.nat || []).filter(r=>r.asaObject).map(r =>
-      '1 (inside) to (outside) source static ' + r.asaObject + ' interface service ' + r.proto + ' ' + r.publicPort + ' ' + r.privatePort);
+      '1 (' + r.insideName + ') to (' + r.outsideName + ') source static ' + r.asaObject + ' interface service ' + r.proto + ' ' + r.publicPort + ' ' + r.privatePort);
     return ok(rows.join('\n') || '(no ASA object NAT rules configured)');
   }
   if (q === 'route' || q === 'route detail') {
@@ -1240,6 +1240,9 @@ function runASA(cli, line) {
       if (dev.acls.some(r=>r.aclName===name && r.seq===entry.seq)) return err('% ACL line already exists');
       dev.acls.push(entry); return ok('');
     }
+    if (words[0] === 'no' && words[1] === 'access-list' && words[2] && words[3] === 'line' && /^\d+$/.test(words[4] || '')) {
+      const seq = Number(words[4]); dev.acls = (dev.acls || []).filter(r=>!(r.aclName === words[2].toUpperCase() && r.seq === seq)); return ok('');
+    }
     if (words[0] === 'no' && words[1] === 'access-list' && words[2]) {
       dev.acls = (dev.acls || []).filter(r=>r.aclName !== words[2].toUpperCase()); return ok('');
     }
@@ -1260,8 +1263,24 @@ function runASA(cli, line) {
       dev.asaObjects = dev.asaObjects || {}; dev.asaObjects[words[2].toUpperCase()] = dev.asaObjects[words[2].toUpperCase()] || {};
       cli.asaObject = words[2].toUpperCase(); cli.asaMode = 'object'; return ok('Network object configuration mode');
     }
-    if (words[0] === 'route') {
-      return err('% Static route configuration is not enabled in this ASA simulator profile yet');
+    if (words[0] === 'route' && (words.length === 5 || words.length === 6)) {
+      const phys = asaPhysical(dev, words[1]), dest = parseIPv4(words[2]), prefix = ciscoMaskPrefix(words[3]), via = parseIPv4(words[4]);
+      const metric = words[5] == null ? 1 : Number(words[5]);
+      const gwIf = via == null ? null : M.directIface(dev,via);
+      if (!phys || dest == null || prefix == null || via == null || gwIf !== phys ||
+          Object.values(dev.ifaces).some(p=>p.ip===via) || !Number.isInteger(metric) || metric < 1 || metric > 255)
+        return err('% Invalid ASA route — use route <nameif> <network> <mask> <next-hop> [1-255]');
+      const network = M.networkOf(dest,prefix);
+      dev.routes = (dev.routes || []).filter(r=>!(r.dest===network && r.mask===prefix && r.iface===phys));
+      dev.routes.push({dest:network,mask:prefix,via,iface:phys,metric});
+      return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'route' && words.length === 5) {
+      const phys = asaPhysical(dev, words[2]), dest = parseIPv4(words[3]), prefix = ciscoMaskPrefix(words[4]);
+      if (!phys || dest == null || prefix == null) return err('% Invalid ASA route removal');
+      const network = M.networkOf(dest,prefix), before = (dev.routes || []).length;
+      dev.routes = (dev.routes || []).filter(r=>!(r.dest===network && r.mask===prefix && r.iface===phys));
+      return before === dev.routes.length ? err('% Route not found') : ok('');
     }
     return err('% Invalid input in ASA global configuration mode');
   }
