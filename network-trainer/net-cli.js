@@ -42,7 +42,7 @@ function makeCLI(net, cur) {
   const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, iosOspf: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosOspf = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
   cli.run = line => {
     const command = String(line).trim(), result = runCisco(cli, command);
-    if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|router ospf|network |no network|router-id |passive-interface |no passive-interface|write memory|copy running-config)/i.test(command))
+    if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|router ospf|network |no network|router-id |passive-interface |no passive-interface|bgp |write memory|copy running-config)/i.test(command))
       M.recordSyslog(cli.net, cli.cur, 'CONFIG: ' + command, 5);
     return result;
   };
@@ -121,6 +121,19 @@ function ciscoRunConfig(dev) {
     if (dev.ospf.routerId != null) lines.push(' router-id ' + M.ipStr(dev.ospf.routerId));
     for (const n of dev.ospf.networks || []) lines.push(' network ' + M.ipStr(n.address) + ' ' + M.ipStr(n.wildcard) + ' area ' + n.area);
     for (const name of dev.ospf.passiveInterfaces || []) lines.push(' passive-interface ' + name);
+  }
+  if (dev.bgp && dev.bgp.asn != null) {
+    lines.push('!', 'bgp asn ' + dev.bgp.asn);
+    for (const n of dev.bgp.networks || []) lines.push('bgp network ' + n);
+    for (const [name, entries] of Object.entries(dev.bgp.prefixLists || {}))
+      for (const entry of entries.slice().sort((a,b) => a.seq - b.seq))
+        lines.push('bgp prefix-list ' + name + ' seq ' + entry.seq + ' ' + entry.action + ' ' +
+          M.ipStr(entry.dest) + '/' + entry.mask + (entry.ge == null ? '' : ' ge ' + entry.ge) + (entry.le == null ? '' : ' le ' + entry.le));
+    for (const n of dev.bgp.neighbors || []) {
+      lines.push('bgp neighbor ' + M.ipStr(n.ip) + ' remote-as ' + n.remoteAs);
+      if (n.inPrefixList) lines.push('bgp neighbor ' + M.ipStr(n.ip) + ' prefix-list ' + n.inPrefixList + ' in');
+      if (n.outPrefixList) lines.push('bgp neighbor ' + M.ipStr(n.ip) + ' prefix-list ' + n.outPrefixList + ' out');
+    }
   }
   if (dev.dhcp && dev.dhcp.name) {
     for (const x of dev.dhcp.excluded || []) lines.push('ip dhcp excluded-address ' + M.ipStr(x.start) + (x.end != null && x.end !== x.start ? ' ' + M.ipStr(x.end) : ''));
@@ -246,7 +259,32 @@ function ciscoShow(cli, words) {
       .map(([n,p]) => 'C    ' + M.ipStr(M.networkOf(p.ip,p.mask)) + '/' + p.mask + ' is directly connected, ' + n);
     const statics = (dev.routes || []).map(r => 'S    ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' [1/0] via ' + M.ipStr(r.via));
     const ospf = M.ospfLearned(cli.net, cli.cur).map(r => 'O    ' + M.ipStr(r.dest) + '/' + r.mask + ' [110/' + (r.hops || 1) + '] via ' + M.ipStr(r.via) + ', OSPF');
-    return ok('Codes: C - connected, S - static, O - OSPF\n' + (connected.concat(statics, ospf).join('\n') || '% No routes'));
+    const bgp = M.bgpLearned(cli.net, cli.cur).map(r => 'B    ' + M.ipStr(r.dest) + '/' + r.mask + ' [20/0] via ' + M.ipStr(r.via) + ', BGP');
+    return ok('Codes: C - connected, S - static, O - OSPF, B - BGP\\n' + (connected.concat(statics, ospf, bgp).join('\\n') || '% No routes'));
+  }
+  if (q === 'ip bgp summary') {
+    const sessions = M.bgpSessions(cli.net, cli.cur);
+    return ok('BGP router identifier ' + (dev.bgp && dev.bgp.routerId != null ? M.ipStr(dev.bgp.routerId) : 'not set') +
+      ', local AS number ' + (dev.bgp && dev.bgp.asn != null ? dev.bgp.asn : 'not configured') +
+      '\\nNeighbor        V    AS       State/PfxRcd\\n' +
+      (sessions.map(s => M.ipStr(s.ip).padEnd(16) + '4    ' + String(s.remoteAs).padEnd(9) +
+        (s.up ? 'Established / ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length + ' prefixes' : s.reason)).join('\\n') || '(no BGP neighbors configured)'));
+  }
+  if (q === 'ip bgp' || q === 'ip bgp ipv4 unicast') {
+    const rows = M.bgpLearned(cli.net, cli.cur).map(r => M.ipStr(r.dest) + '/' + r.mask + '     ' + M.ipStr(r.via) + '     ' + (r.asPath || []).join(' '));
+    return ok('Network              Next Hop        Path\\n' + (rows.join('\\n') || '(no BGP routes received)'));
+  }
+  if (q === 'ip bgp neighbors') {
+    const sessions = M.bgpSessions(cli.net, cli.cur);
+    return ok(sessions.map(s => 'Neighbor ' + M.ipStr(s.ip) + ' remote AS ' + s.remoteAs +
+      '\\n  Type: ' + s.type + '\\n  State: ' + (s.up ? 'Established' : s.reason) +
+      '\\n  Inbound prefix-list: ' + (s.localNeighbor.inPrefixList || 'none') +
+      '\\n  Outbound prefix-list: ' + (s.localNeighbor.outPrefixList || 'none')).join('\\n\\n') || '(no BGP neighbors configured)');
+  }
+  if (q.startsWith('ip bgp advertised-routes')) {
+    const peerIp = words[3] ? parseIPv4(words[3]) : null;
+    const rows = M.bgpAdvertised(cli.net, cli.cur, peerIp).map(r => M.ipStr(r.dest) + '/' + r.mask);
+    return ok('Advertised prefixes' + (peerIp == null ? '' : ' to ' + M.ipStr(peerIp)) + ':\\n' + (rows.join('\\n') || '(none)'));
   }
   if (q === 'ip ospf neighbor') {
     const ns = M.ospfNeighbors(cli.net, cli.cur);
@@ -611,8 +649,8 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip ospf neighbor','ip ospf interface brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
-    if (query.startsWith('access-lists ') || query.startsWith('ip interface ')) return ciscoShow(cli, words.slice(1));
+    const iosOnly = ['version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    if (query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
   if (lower === 'write memory' || lower === 'wr mem' || lower === 'copy running-config startup-config') {
@@ -1000,23 +1038,87 @@ const COMMANDS = {
   },
   bgp: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
-    dev.bgp = dev.bgp || { asn: null, neighbors: [], networks: [] };
-    if (a[0] === 'asn' && a[1]) { dev.bgp.asn = Number(a[1]); return ok('BGP ASN ' + a[1]); }
-    if (a[0] === 'neighbor' && a[1] && a[2] === 'remote-as') {
-      const ip = M.ip(a[1]);
-      dev.bgp.neighbors = dev.bgp.neighbors.filter(n => n.ip !== ip).concat([{ ip, remoteAs: Number(a[3]) }]);
-      return ok(`BGP neighbor ${a[1]} remote-as ${a[3]}`);
+    const ensure = () => { dev.bgp = dev.bgp || { asn: null, neighbors: [], networks: [], prefixLists: {} }; dev.bgp.neighbors = dev.bgp.neighbors || []; dev.bgp.networks = dev.bgp.networks || []; dev.bgp.prefixLists = dev.bgp.prefixLists || {}; return dev.bgp; };
+    if (a[0] === 'asn' && a.length === 2) {
+      const asn = Number(a[1]); if (!Number.isInteger(asn) || asn < 1 || asn > 4294967295) return err('bgp: ASN must be an integer from 1 to 4294967295');
+      ensure().asn = asn; return ok('BGP ASN ' + asn);
     }
-    if (a[0] === 'network' && a[1]) {
-      if (!dev.bgp.networks.includes(a[1])) dev.bgp.networks.push(a[1]);
-      return ok('BGP network ' + a[1]);
+    if (a[0] === 'neighbor' && a[1] && a[2] === 'remote-as' && a.length === 4) {
+      const ip = parseIPv4(a[1]), remoteAs = Number(a[3]);
+      if (ip == null || !Number.isInteger(remoteAs) || remoteAs < 1 || remoteAs > 4294967295) return err('usage: bgp neighbor <IPv4> remote-as <1-4294967295>');
+      const cfg = ensure(); cfg.neighbors = cfg.neighbors.filter(n => n.ip !== ip).concat([{ ip, remoteAs }]);
+      return ok('BGP neighbor ' + a[1] + ' remote-as ' + remoteAs);
+    }
+    if (a[0] === 'neighbor' && a[1] && a[2] === 'prefix-list' && a.length === 5 && ['in','out'].includes(a[4])) {
+      const ip = parseIPv4(a[1]), name = a[3].toUpperCase(), cfg = dev.bgp;
+      if (ip == null || !cfg || !(cfg.prefixLists && cfg.prefixLists[name])) return err('bgp: create the prefix-list before attaching it');
+      const n = cfg.neighbors.find(x => x.ip === ip); if (!n) return err('bgp: neighbor is not configured');
+      n[a[4] === 'in' ? 'inPrefixList' : 'outPrefixList'] = name; return ok('BGP ' + a[4] + ' prefix-list ' + name + ' attached to ' + a[1]);
+    }
+    if (a[0] === 'prefix-list' && a[1] && a[2] === 'seq' && a[3] && a[4] && a[5]) {
+      const cfg = ensure(), name = a[1].toUpperCase(), seq = Number(a[3]), action = a[4], network = parseCIDR(a[5]);
+      if (!Number.isInteger(seq) || seq < 1 || seq > 65535 || !['permit','deny'].includes(action) || !network) return err('usage: bgp prefix-list <name> seq <1-65535> permit|deny <CIDR> [ge <n>] [le <n>]');
+      const opts = a.slice(6); let ge = null, le = null;
+      if (opts.length && opts.length !== 2 && opts.length !== 4) return err('bgp prefix-list: invalid ge/le options');
+      for (let i=0;i<opts.length;i+=2) { const n=Number(opts[i+1]); if (!['ge','le'].includes(opts[i]) || !Number.isInteger(n) || n < network.prefix || n > 32) return err('bgp prefix-list: invalid ge/le value'); if(opts[i]==='ge')ge=n;else le=n; }
+      if (ge != null && le != null && ge > le) return err('bgp prefix-list: ge cannot exceed le');
+      const list = cfg.prefixLists[name] = cfg.prefixLists[name] || [];
+      if (list.some(x=>x.seq===seq)) return err('bgp prefix-list: sequence already exists');
+      list.push({ seq, action, dest: network.net, mask: network.prefix, ge, le }); list.sort((x,y)=>x.seq-y.seq);
+      return ok('BGP prefix-list ' + name + ' sequence ' + seq + ' added');
+    }
+    if (a[0] === 'prefix-list' && a[1] && ['permit','deny'].includes(a[2]) && a[3]) {
+      const cfg = ensure(), name = a[1].toUpperCase(), network = parseCIDR(a[3]);
+      if (!network) return err('bgp prefix-list: invalid IPv4 CIDR');
+      const opts = a.slice(4); let ge = null, le = null;
+      if (opts.length && opts.length !== 2 && opts.length !== 4) return err('bgp prefix-list: invalid ge/le options');
+      for (let i=0;i<opts.length;i+=2) { const n=Number(opts[i+1]); if (!['ge','le'].includes(opts[i]) || !Number.isInteger(n) || n < network.prefix || n > 32) return err('bgp prefix-list: invalid ge/le value'); if(opts[i]==='ge')ge=n;else le=n; }
+      if (ge != null && le != null && ge > le) return err('bgp prefix-list: ge cannot exceed le');
+      const list = cfg.prefixLists[name] = cfg.prefixLists[name] || [], seq = Math.max(0,...list.map(x=>x.seq))+10;
+      list.push({seq,action:a[2],dest:network.net,mask:network.prefix,ge,le}); return ok('BGP prefix-list ' + name + ' sequence ' + seq + ' added');
+    }
+    if (a[0] === 'no' && a[1] === 'prefix-list' && a[2]) {
+      const cfg = dev.bgp, name = a[2].toUpperCase();
+      if (!cfg || !cfg.prefixLists || !cfg.prefixLists[name]) return err('bgp: prefix-list not found');
+      if (a[3] === 'seq' && a[4]) { const seq=Number(a[4]), before=cfg.prefixLists[name].length; cfg.prefixLists[name]=cfg.prefixLists[name].filter(x=>x.seq!==seq); return before===cfg.prefixLists[name].length?err('bgp: sequence not found'):ok(''); }
+      if ((cfg.neighbors||[]).some(n=>n.inPrefixList===name||n.outPrefixList===name)) return err('bgp: prefix-list is attached to a neighbor; detach it first');
+      delete cfg.prefixLists[name]; return ok('');
+    }
+    if (a[0] === 'no' && a[1] === 'neighbor' && a[2] && a.length === 3) {
+      const cfg=dev.bgp, ip=parseIPv4(a[2]); if(!cfg||ip==null)return err('bgp: invalid or unknown neighbor');
+      const before=cfg.neighbors.length; cfg.neighbors=cfg.neighbors.filter(n=>n.ip!==ip);
+      return before===cfg.neighbors.length?err('bgp: neighbor not found'):ok('');
+    }
+    if (a[0] === 'no' && a[1] === 'neighbor' && a[2] && a[3] === 'prefix-list' && a[4] && ['in','out'].includes(a[5])) {
+      const cfg=dev.bgp, ip=parseIPv4(a[2]), n=cfg&&(cfg.neighbors||[]).find(x=>x.ip===ip);
+      if(!n)return err('bgp: neighbor not found'); const key=a[5]==='in'?'inPrefixList':'outPrefixList';
+      if(n[key]!==a[4].toUpperCase())return err('bgp: matching prefix-list is not attached');
+      delete n[key]; return ok('');
+    }
+    if (a[0] === 'network' && a[1] && a.length === 2) {
+      const network = parseCIDR(a[1]); if (!network) return err('bgp: use a valid IPv4 CIDR');
+      const cfg=ensure(); if (!cfg.networks.includes(a[1])) cfg.networks.push(a[1]); return ok('BGP network ' + a[1]);
+    }
+    if (a[0] === 'no' && a[1] === 'network' && a[2]) {
+      const cfg=dev.bgp, before=cfg?(cfg.networks||[]).length:0;
+      if(cfg)cfg.networks=cfg.networks.filter(x=>x!==a[2]);
+      return before===(cfg?(cfg.networks||[]).length:0)?err('bgp: network statement not found'):ok('');
+    }
+    if (a[0] === 'advertised') {
+      const peer = a[1] ? parseIPv4(a[1]) : null;
+      if (a[1] && peer == null) return err('bgp: invalid neighbor address');
+      return ok('Advertised prefixes:\\n' + (M.bgpAdvertised(cli.net,cli.cur,peer).map(r=>M.ipStr(r.dest)+'/'+r.mask).join('\\n') || '(none)'));
+    }
+    if (a[0] === 'received') {
+      const rows=M.bgpLearned(cli.net,cli.cur).map(r=>M.ipStr(r.dest)+'/'+r.mask+' via '+M.ipStr(r.via)+' AS path '+(r.asPath||[]).join(' '));
+      return ok('Received prefixes:\\n'+(rows.join('\\n')||'(none)'));
     }
     if (a[0] === 'summary' || a[0] === 'neighbor' && !a[1]) {
       const ss = M.bgpSessions(cli.net, cli.cur);
       if (!ss.length) return ok('BGP: no neighbors configured');
-      return ok('BGP sessions:\n' + ss.map(s => `  ${M.ipStr(s.ip)}  AS${s.remoteAs}  ${s.up ? 'Established' : s.reason}`).join('\n'));
+      return ok('BGP sessions:\\n' + ss.map(s => '  ' + M.ipStr(s.ip) + '  AS' + s.remoteAs + '  ' + s.type + '  ' + (s.up ? 'Established' : s.reason) + '  prefixes ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length).join('\\n'));
     }
-    return err('usage: bgp asn <n> | bgp neighbor <ip> remote-as <n> | bgp network <cidr> | bgp summary');
+    return err('usage: bgp asn <n> | bgp neighbor <ip> remote-as <n> | bgp neighbor <ip> prefix-list <name> in|out | bgp network <cidr> | bgp prefix-list <name> permit|deny <cidr> | bgp summary|advertised|received');
   },
   ospf: (cli, a) => {
     const dev = cli.net.devices[cli.cur];
@@ -1032,7 +1134,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  IOS routing: router ospf <process-id> · router-id <id> · network <address> <wildcard> area <id> · passive-interface <if>\n  OSPF verification: show ip ospf neighbor · show ip ospf interface brief · show ip protocols · show ip route (C/S/O)\n  IOS services: ip dhcp pool · ip helper-address · ip name-server · ip host · ntp server|master · logging host|trap\n  show ip dhcp pool|binding|server statistics · show hosts · show ntp status|associations · show logging\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  IOS routing: router ospf <process-id> · router-id <id> · network <address> <wildcard> area <id> · passive-interface <if>\n  OSPF verification: show ip ospf neighbor · show ip ospf interface brief · show ip protocols · show ip route (C/S/O/B)\n  BGP operations: bgp asn · bgp neighbor · bgp network · bgp prefix-list · bgp advertised|received|summary\\n  BGP verification: show ip bgp summary · show ip bgp · show ip bgp neighbors · show ip bgp advertised-routes\\n  IOS services: ip dhcp pool · ip helper-address · ip name-server · ip host · ntp server|master · logging host|trap\n  show ip dhcp pool|binding|server statistics · show hosts · show ntp status|associations · show logging\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 

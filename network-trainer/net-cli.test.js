@@ -609,6 +609,47 @@ test('IOS OSPF rejects invalid networks and supports removing a network statemen
   eq(c.run('show ip ospf interface brief').out.includes('eth0'),false,'interface no longer enabled');
 });
 
+
+test('BGP prefix-lists filter advertisements and received routes per neighbor direction', () => {
+  const net={devices:{
+    customer:{id:'customer',kind:'router',ifaces:{lan:{ip:ip('10.10.10.1'),mask:24,up:true},dmz:{ip:ip('198.51.100.1'),mask:24,up:true},wan:{ip:ip('203.0.113.2'),mask:30,up:true}},routes:[],bgp:{asn:65010,neighbors:[{ip:ip('203.0.113.1'),remoteAs:64500}],networks:['10.10.10.0/24','198.51.100.0/24'],prefixLists:{}}},
+    provider:{id:'provider',kind:'router',ifaces:{wan:{ip:ip('203.0.113.1'),mask:30,up:true},internet:{ip:ip('192.0.2.1'),mask:24,up:true}},routes:[],bgp:{asn:64500,neighbors:[{ip:ip('203.0.113.2'),remoteAs:65010}],networks:['192.0.2.0/24'],prefixLists:{}}}
+  },links:[link('customer','wan','provider','wan')]};
+  const edge=makeCLI(net,'customer'), isp=makeCLI(net,'provider');
+  eq(M.bgpSessions(net,'customer')[0].up,true,'eBGP session established');
+  eq(C.bgpRoute(net,'provider','10.10.10.0/24').ok,true,'unfiltered private route is initially leaked');
+  eq(edge.run('bgp prefix-list CUSTOMER-OUT permit 198.51.100.0/24').code,0,'permit customer public DMZ');
+  eq(edge.run('bgp prefix-list CUSTOMER-OUT deny 10.10.10.0/24').code,0,'deny customer private LAN');
+  eq(edge.run('bgp neighbor 203.0.113.1 prefix-list CUSTOMER-OUT out').code,0,'attach outbound policy');
+  eq(C.bgpRoute(net,'provider','198.51.100.0/24').ok,true,'public route remains advertised');
+  eq(C.bgpRouteAbsent(net,'provider','10.10.10.0/24').ok,true,'private route withdrawn');
+  eq(isp.run('bgp prefix-list PROVIDER-IN permit 198.51.100.0/24').code,0,'permit provider service prefix');
+  eq(isp.run('bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in').code,0,'attach inbound policy');
+  eq(C.bgpRoute(net,'customer','192.0.2.0/24').ok,true,'permitted provider route received');
+  has(edge.run('show ip bgp summary').out,'Established','summary reports session state');
+  has(edge.run('show ip bgp advertised-routes 203.0.113.1').out,'198.51.100.0/24','advertised route view');
+  has(edge.run('show ip route').out,'B    192.0.2.0/24','BGP route in routing table');
+  edge.run('enable'); edge.run('write memory');
+  has(net.devices.customer.startupConfig,'bgp prefix-list CUSTOMER-OUT','prefix-list persisted');
+  has(net.devices.customer.startupConfig,'prefix-list CUSTOMER-OUT out','neighbor policy persisted');
+});
+
+test('BGP prefix-list sequence order, ge/le matching, implicit deny and invalid input are deterministic', () => {
+  const net={devices:{
+    a:{id:'a',kind:'router',ifaces:{wan:{ip:ip('203.0.113.1'),mask:30,up:true}},routes:[],bgp:{asn:65001,neighbors:[],networks:[],prefixLists:{}}},
+  },links:[]};
+  const cli=makeCLI(net,'a');
+  eq(cli.run('bgp prefix-list FILTER seq 20 deny 10.0.0.0/8').code,0,'add deny sequence');
+  eq(cli.run('bgp prefix-list FILTER seq 10 permit 10.0.0.0/8 ge 16 le 24').code,0,'add earlier more-specific permit');
+  eq(cli.run('bgp prefix-list FILTER seq 10 permit 10.0.0.0/8').code,1,'duplicate sequence rejected');
+  eq(cli.run('bgp prefix-list BAD permit 10.0.0.0/33').code,1,'invalid prefix rejected');
+  eq(M.bgpPrefixListAllows(net.devices.a,'FILTER',ip('10.1.0.0'),16),true,'ge/le permits /16');
+  eq(M.bgpPrefixListAllows(net.devices.a,'FILTER',ip('10.1.0.0'),25),false,'/25 denied by later broader deny');
+  eq(M.bgpPrefixListAllows(net.devices.a,'FILTER',ip('172.16.0.0'),16),false,'implicit deny applies');
+  eq(cli.run('bgp no prefix-list FILTER seq 10').code,0,'remove one sequence');
+  eq(M.bgpPrefixListAllows(net.devices.a,'FILTER',ip('10.1.0.0'),16),false,'remaining deny now matches');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

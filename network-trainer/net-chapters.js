@@ -877,6 +877,50 @@ const chapters = [
       ['h1','ping 10.3.3.10']
     ]
   }
+,
+  { id: 'bgp-stop-the-route-leak', chapter: 'Enterprise routing · BGP policy',
+    title: 'Stop leaking the office network to the ISP',
+    story: 'A customer edge router peers with an upstream provider. During a route-policy change, the ISP began learning the office RFC1918 prefix alongside the customer public DMZ. The provider route to the internet is present, but the NOC has raised a route-leak incident and wants the customer advertisement set tightened without breaking the DMZ or outbound reachability.',
+    objective: 'Apply outbound prefix filtering on the customer edge so only the public DMZ prefix is advertised, apply inbound filtering on the provider-facing peer, verify the leaked private prefix is withdrawn, and confirm users can still reach the external service.',
+    ticket: { id: 'INC-3520', from: 'NOC · ISP peering', priority: 'P1', symptom: 'Our provider says they are receiving 10.10.10.0/24 from our edge router. That is an internal office subnet and must never leave our AS. The public DMZ and internet access must remain online while we correct the advertisements.' },
+    diagnose: { q: 'The BGP session is Established and the ISP has learned both 10.10.10.0/24 and 198.51.100.0/24. What is the safest correction?', options: ['Apply an outbound prefix-list to the customer neighbor that permits the public DMZ prefix and denies the private office prefix', 'Shut down the BGP session and remove every network statement', 'Change the office subnet to a public address'], answer: 0, because: 'The peering session is healthy; the fault is route policy. Filter advertisements per neighbor so the required public prefix remains available while the private prefix is withdrawn. A broad session shutdown would cause an avoidable outage.' },
+    console: 'edge',
+    hints: ['Run show ip bgp summary on edge and isp, then show ip bgp on the ISP. Separate a healthy session from an incorrect advertised prefix.', 'Build CUSTOMER-OUT on edge. Permit 198.51.100.0/24; explicitly deny 10.10.10.0/24. Attach it outbound to neighbor 203.0.113.1.', 'Build PROVIDER-IN on isp to permit the customer DMZ prefix 198.51.100.0/24 and attach it inbound to 203.0.113.2. Verify the ISP no longer learns 10.10.10.0/24, still learns the DMZ, and hq can ping remote.'],
+    build: () => ({
+      devices: {
+        hq: H('hq','10.10.10.10',24,'10.10.10.1'),
+        dmz: SRV('dmz','198.51.100.10',24,'198.51.100.1',{443:'https',80:'http'}),
+        remote: H('remote','192.0.2.10',24,'192.0.2.1'),
+        edge: Object.assign(R('edge','router',{eth0:iface('10.10.10.1',24),eth1:iface('203.0.113.2',30),eth2:iface('198.51.100.1',24)}),{
+          bgp:{asn:65010,neighbors:[{ip:ip('203.0.113.1'),remoteAs:64500}],networks:['10.10.10.0/24','198.51.100.0/24'],prefixLists:{}}
+        }),
+        isp: Object.assign(R('isp','router',{eth0:iface('203.0.113.1',30),eth1:iface('192.0.2.1',24)},
+          [{dest:ip('10.10.10.0'),mask:24,via:ip('203.0.113.2')}]),{
+          bgp:{asn:64500,neighbors:[{ip:ip('203.0.113.2'),remoteAs:65010}],networks:['192.0.2.0/24'],prefixLists:{}}
+        })
+      },
+      links:[L('hq','eth0','edge','eth0'),L('edge','eth1','isp','eth0'),L('edge','eth2','dmz','eth0'),L('isp','eth1','remote','eth0')]
+    }),
+    success:[
+      {type:'bgp_session',dev:'edge',peer:'isp'},
+      {type:'bgp_route',dev:'edge',cidr:'192.0.2.0/24'},
+      {type:'bgp_route',dev:'isp',cidr:'198.51.100.0/24'},
+      {type:'bgp_route_absent',dev:'isp',cidr:'10.10.10.0/24'},
+      {type:'reachable',a:'hq',b:'remote'}
+    ],
+    solution:[
+      ['edge','enable'],
+      ['edge','bgp prefix-list CUSTOMER-OUT permit 198.51.100.0/24'],
+      ['edge','bgp prefix-list CUSTOMER-OUT deny 10.10.10.0/24'],
+      ['edge','bgp neighbor 203.0.113.1 prefix-list CUSTOMER-OUT out'],
+      ['isp','enable'],
+      ['isp','bgp prefix-list PROVIDER-IN permit 198.51.100.0/24'],
+      ['isp','bgp neighbor 203.0.113.2 prefix-list PROVIDER-IN in'],
+      ['edge','show ip bgp summary'],['edge','show ip bgp advertised-routes 203.0.113.1'],
+      ['isp','show ip bgp'],['isp','show ip route'],['hq','ping remote'],
+      ['edge','enable'],['edge','write memory'],['isp','enable'],['isp','write memory']
+    ]
+  }
 ];
 
 module.exports = { chapters };

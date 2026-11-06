@@ -313,23 +313,49 @@ function allRoutes(net, devId) {
 }
 
 
-/* ---------- BGP (minimal: ASN, neighbors, network statements, session + learned routes) ---------- */
-function bgpConfig(dev) { return dev.bgp || null; }
+/* ---------- BGP (bounded eBGP/iBGP peering and prefix-list policy) ---------- */
+function bgpConfig(dev) { return dev && dev.bgp || null; }
+function bgpPrefixListAllows(dev, name, dest, mask) {
+  if (!name) return true;
+  const entries = dev.bgp && dev.bgp.prefixLists && dev.bgp.prefixLists[String(name).toUpperCase()];
+  if (!Array.isArray(entries)) return false; // a referenced but missing list fails closed
+  for (const entry of entries.slice().sort((a,b) => a.seq - b.seq)) {
+    const min = entry.ge == null ? entry.mask : entry.ge;
+    const max = entry.le == null ? (entry.ge == null ? entry.mask : 32) : entry.le;
+    if (mask >= min && mask <= max && sameNet(dest, entry.dest, entry.mask))
+      return entry.action === 'permit';
+  }
+  return false; // prefix-list implicit deny
+}
+function bgpNetworkValid(dev, network) {
+  const c = cidr(network);
+  const connected = Object.values(dev.ifaces || {}).some(f => f.up !== false && f.ip != null
+    && f.mask === c.prefix && networkOf(f.ip, f.mask) === c.net);
+  const routed = (dev.routes || []).some(r => r.dest === c.net && r.mask === c.prefix);
+  return connected || routed;
+}
+function bgpAdvertised(net, devId, neighborIp) {
+  const dev = net.devices[devId], cfg = bgpConfig(dev);
+  if (!cfg) return [];
+  const peer = neighborIp == null ? null : (cfg.neighbors || []).find(n => n.ip === neighborIp);
+  const list = peer && peer.outPrefixList;
+  return (cfg.networks || []).filter(n => bgpNetworkValid(dev, n)).map(n => {
+    const c = cidr(n); return { dest: c.net, mask: c.prefix, network: n, proto: 'bgp', from: devId };
+  }).filter(r => bgpPrefixListAllows(dev, list, r.dest, r.mask));
+}
 function bgpSessions(net, devId) {
-  const dev = net.devices[devId]; const cfg = bgpConfig(dev);
+  const dev = net.devices[devId], cfg = bgpConfig(dev);
   if (!cfg || cfg.asn == null) return [];
   const out = [];
   for (const n of cfg.neighbors || []) {
-    const peerId = deviceOwning(net, n.ip);
-    const peer = peerId && net.devices[peerId];
-    const pc = peer && bgpConfig(peer);
-    const back = pc && (pc.neighbors || []).some(x => {
-      const mine = sourceIpToward(net, devId, n.ip);
-      return x.ip === mine;
-    });
-    const reachable = peer && ping(net, devId, n.ip).ok;
-    const up = !!(peer && pc && pc.asn === n.remoteAs && back && reachable);
-    out.push({ ip: n.ip, remoteAs: n.remoteAs, peer: peerId, up, reason: !peer ? 'no such neighbor' : !pc ? 'peer has no BGP' : pc.asn !== n.remoteAs ? 'ASN mismatch' : !back ? 'peer has no matching neighbor' : !reachable ? 'neighbor unreachable' : 'Established' });
+    const peerId = deviceOwning(net, n.ip), peer = peerId && net.devices[peerId], pc = bgpConfig(peer);
+    const localIp = sourceIpToward(net, devId, n.ip);
+    const peerNeighbor = pc && (pc.neighbors || []).find(x => x.ip === localIp);
+    const reachable = !!(peer && ping(net, devId, n.ip).ok);
+    const up = !!(peer && pc && pc.asn === n.remoteAs && peerNeighbor && reachable);
+    out.push({ ip: n.ip, remoteAs: n.remoteAs, peer: peerId, peerNeighbor: peerNeighbor || null,
+      localNeighbor: n, type: pc && pc.asn === cfg.asn ? 'iBGP' : 'eBGP', up,
+      reason: !peer ? 'no such neighbor' : !pc ? 'peer has no BGP' : pc.asn !== n.remoteAs ? 'ASN mismatch' : !peerNeighbor ? 'peer has no matching neighbor' : !reachable ? 'neighbor unreachable' : 'Established' });
   }
   return out;
 }
@@ -338,9 +364,9 @@ function bgpLearned(net, devId) {
   for (const s of bgpSessions(net, devId)) {
     if (!s.up) continue;
     const peer = net.devices[s.peer];
-    for (const netw of (peer.bgp.networks || [])) {
-      const c = cidr(netw);
-      learned.push({ dest: c.net, mask: c.prefix, via: s.ip, proto: 'bgp', from: s.peer });
+    for (const route of bgpAdvertised(net, s.peer, sourceIpToward(net, devId, s.ip))) {
+      if (!bgpPrefixListAllows(net.devices[devId], s.localNeighbor.inPrefixList, route.dest, route.mask)) continue;
+      learned.push({ dest: route.dest, mask: route.mask, via: s.ip, proto: 'bgp', from: s.peer, asPath: [peer.bgp.asn] });
     }
   }
   return learned;
@@ -619,6 +645,6 @@ module.exports = {
   neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised,
-  bgpSessions, bgpLearned,
+  bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
