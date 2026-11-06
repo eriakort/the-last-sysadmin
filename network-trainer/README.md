@@ -201,3 +201,24 @@ show interfaces switchport
 VLAN IDs must be integers from 1 through 4094. Access/native VLANs and explicit trunk allow-lists must reference VLANs created on that switch. The `all` trunk allow-list option removes the explicit restriction. Switch port configuration is persistent in the scenario state.
 
 The switching pilot adds two practical tickets: correcting mismatched access VLANs and restoring a VLAN excluded from an inter-switch trunk. Tests cover access isolation, multi-switch trunk forwarding, native VLAN mismatches, invalid configuration, verification output, loop-safe traversal, and a browser-driven configuration workflow.
+
+
+## Switching: MAC learning and Spanning Tree
+
+Switches now derive a dynamic forwarding database from the active Layer 2 topology. Each endpoint receives a stable locally administered MAC address unless a scenario supplies one. The table reports the VLAN, learned MAC, dynamic entry type, local egress port, and endpoint.
+
+Use `show mac address-table dynamic` to inspect learned endpoints. Entries are recalculated from the current topology and VLAN state, so moving a cable or changing a port's VLAN changes the forwarding view.
+
+Per-VLAN Spanning Tree Protocol (STP) elects the switch with the lowest bridge priority as root (device ID breaks ties). A deterministic spanning tree selects root and designated ports; redundant links receive an alternate/blocking role. Blocking is enforced at both ends of the link in the Layer 2 forwarding model.
+
+Configure a bridge priority in increments of 4096:
+
+```text
+spanning-tree vlan 10 priority 4096
+show spanning-tree vlan 10
+show mac address-table dynamic
+```
+
+The switch configuration panel also shows the active VLAN's root bridge, bridge priority, blocked ports, and learned MAC entries. The STP incident mission uses a three-switch triangle to practise root election, redundant-link blocking, MAC-table verification, and end-to-end reachability.
+
+Regression coverage includes stable local/remote MAC learning, root election and priority validation, alternate-port blocking, loop-free reachability, a non-redundant topology, mission solvability, and browser-driven verification.
