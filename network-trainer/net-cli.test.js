@@ -405,6 +405,13 @@ test('ASA command parser rejects bad interfaces, ports, levels and unsupported I
   cli.run('exit');
   eq(cli.run('access-group MISSING in interface outside').code,1,'reject missing ACL');
   eq(cli.run('access-list BAD extended permit tcp any host 192.0.2.1 eq 70000').code,1,'reject invalid port');
+  eq(cli.run('access-list TEST line 5 extended deny tcp any any eq 22').code,0,'add numbered ASA ACL line');
+  eq(cli.run('access-list TEST extended permit tcp any any eq 443').code,0,'append ASA ACL line');
+  eq(cli.run('no access-list TEST line 5').code,0,'remove selected ASA ACL line');
+  has(cli.run('show access-list TEST').out,'permit tcp','remaining ACL line shown');
+  eq(cli.run('route outside 203.0.113.0 255.255.255.0 192.0.2.254 1').code,0,'add ASA static route');
+  has(cli.run('show route').out,'203.0.113.0/24','static route visible');
+  eq(cli.run('no route outside 203.0.113.0 255.255.255.0').code,0,'remove ASA static route');
   eq(cli.run('ip access-list extended IOS-SYNTAX').code,1,'IOS ACL syntax not accepted on ASA');
   eq(cli.run('object network BAD').code,0,'enter object');
   eq(cli.run('nat (inside,outside) static interface service tcp 443 80').code,1,'reject unsupported port translation');
