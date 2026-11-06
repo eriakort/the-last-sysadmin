@@ -344,7 +344,8 @@ test('IOS ACL parser rejects malformed entries and unknown bindings', () => {
   cli.run('exit'); cli.run('interface eth0');
   eq(cli.run('ip access-group MISSING in').code, 1, 'unknown ACL');
 });
-\nlet failed = 0;
+
+let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
 if (failed) process.exit(1);
