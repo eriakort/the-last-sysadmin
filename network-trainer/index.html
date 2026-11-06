@@ -3872,6 +3872,7 @@ let WIRE = null;                                   // first endpoint picked whil
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null; // topology interaction state
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
+let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
 function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
 const $ = s => document.querySelector(s);
@@ -3986,16 +3987,17 @@ function dashboardSnapshot() {
   };
 }
 function showWorkspaceView(view) {
-  const overview = $('#overview'), cols = $('#cols');
-  if (!overview || !cols) return;
-  const isOverview = view === 'overview';
-  overview.hidden = !isOverview;
-  cols.hidden = isOverview;
+  const overview = $('#overview'), incidents = $('#incidentsView'), cols = $('#cols');
+  if (!overview || !incidents || !cols) return;
+  overview.hidden = view !== 'overview';
+  incidents.hidden = view !== 'incidents';
+  cols.hidden = view !== 'workbench';
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
-  if (!isOverview && view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
+  if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
+  if (view === 'incidents') renderIncidentCenter();
 }
 function renderOverview() {
   const root = $('#overview'); if (!root || !RUN) return;
@@ -4036,7 +4038,7 @@ function renderOverview() {
     </div>`;
   const click = (id, fn) => { const el = root.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
   ['overviewWorkbench','healthWorkbench','trafficWorkbench'].forEach(id => click(id, () => showWorkspaceView('workbench')));
-  ['overviewIncidents','allIncidents'].forEach(id => click(id, openTicketQueue));
+  ['overviewIncidents','allIncidents'].forEach(id => click(id, () => showWorkspaceView('incidents')));
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
   click('progressStats', openStats);
@@ -4073,7 +4075,7 @@ function setTicketState(id, status, assigned) {
   if (!TICKET_STATES.includes(status)) return;
   PROG.tickets = PROG.tickets || {};
   PROG.tickets[id] = { ...(PROG.tickets[id] || {}), status, assigned: assigned || (status === 'new' ? 'Unassigned' : 'You'), updatedAt: new Date().toISOString() };
-  saveProg(); refreshOverview();
+  saveProg(); refreshOverview(); refreshIncidentCenter();
 }
 function openTicketQueue() {
   const tickets = allTickets();
@@ -4108,6 +4110,74 @@ function openTicketQueue() {
     if (t.status !== 'resolved') addJournalEntry({ type: 'investigation started', ticket: t.id, text: 'Started investigation from the incident queue.' });
   }));
 }
+function incidentPriorityRank(p) { return ({ P1:0, P2:1, P3:2, P4:3 })[p] ?? 9; }
+function renderIncidentCenter() {
+  const root = $('#incidentsView'); if (!root) return;
+  const tickets = allTickets().sort((a,b) => incidentPriorityRank(a.priority)-incidentPriorityRank(b.priority) || a.index-b.index);
+  const counts = TICKET_STATES.reduce((o, state) => (o[state] = tickets.filter(t => t.status === state).length, o), {});
+  const matches = tickets.filter(t => {
+    const q = INCIDENT_FILTERS.query.toLowerCase();
+    const text = [t.id,t.title,t.symptom,t.service,t.assigned].join(' ').toLowerCase();
+    return (!q || text.includes(q)) &&
+      (INCIDENT_FILTERS.status === 'all' || (INCIDENT_FILTERS.status === 'open' ? t.status !== 'resolved' : t.status === INCIDENT_FILTERS.status)) &&
+      (INCIDENT_FILTERS.priority === 'all' || t.priority === INCIDENT_FILTERS.priority);
+  });
+  let selected = matches.find(t => t.id === INCIDENT_SELECTED) || matches[0] || null;
+  INCIDENT_SELECTED = selected ? selected.id : null;
+  const list = matches.map(t => `<button type="button" class="incident-row${selected && selected.id === t.id ? ' active' : ''}" data-incident-select="${esc(t.id)}">
+    <span class="incident-row-top"><b>${esc(t.id)}</b><span class="tk-pri tk-${esc(t.priority.toLowerCase())}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></span>
+    <strong>${esc(t.title)}</strong><small>${esc(t.service)} · ${esc(t.assigned)}</small>
+  </button>`).join('');
+  const timeline = selected ? (PROG.journal || []).filter(e => e.ticket === selected.id).slice(0,8).map(e => `<article class="incident-timeline-item"><i></i><div><b>${esc(e.type || 'Activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time><p>${esc(e.text || e.command || e.output || 'Recorded activity')}</p>${e.command ? `<code>${esc(e.command)}</code>` : ''}</div></article>`).join('') : '';
+  const detail = selected ? `
+    <div class="incident-detail-head"><div><div class="eyebrow">Incident record · ${esc(selected.id)}</div><h2>${esc(selected.title)}</h2><div class="incident-detail-badges"><span class="tk-pri tk-${esc(selected.priority.toLowerCase())}">${esc(selected.priority)}</span><span class="ticket-state state-${esc(selected.status)}">${esc(selected.status)}</span></div></div><span class="incident-sla">SLA target <b>${esc(selected.sla)}</b></span></div>
+    <div class="incident-symptom"><span class="label2">Reported symptom</span><p>${esc(selected.symptom)}</p></div>
+    <div class="incident-facts"><div><small>Service</small><b>${esc(selected.service)}</b></div><div><small>Impact</small><b>${esc(selected.impact)}</b></div><div><small>Reported by</small><b>${esc(selected.from)}</b></div><div><small>Assigned to</small><b>${esc(selected.assigned)}</b></div><div><small>Last updated</small><b>${selected.updatedAt ? esc(new Date(selected.updatedAt).toLocaleString()) : 'Not updated'}</b></div><div><small>Training scenario</small><b>${esc(selected.chapter)}</b></div></div>
+    <div class="incident-assignment"><label for="incidentAssignee">Ownership</label><select id="incidentAssignee"><option${selected.assigned === 'You' ? ' selected' : ''}>You</option><option${selected.assigned === 'Network Operations' ? ' selected' : ''}>Network Operations</option><option${selected.assigned === 'L2 Network Engineering' ? ' selected' : ''}>L2 Network Engineering</option></select><button class="btn sm" id="incidentAssignSave">Update owner</button></div>
+    <div class="incident-actions">${selected.status === 'new' ? '<button class="btn primary" id="incidentAcknowledge">Acknowledge</button>' : ''}
+      ${selected.status === 'resolved' ? '<button class="btn" id="incidentReview">Review in Workbench</button>' : '<button class="btn primary" id="incidentInvestigate">Investigate in Workbench →</button>'}
+    </div>
+    <div class="incident-timeline"><div class="label2">Investigation timeline</div>${timeline || '<p class="dim">No ticket-linked activity yet. Acknowledge the incident or start an investigation to create the first record.</p>'}</div>`
+    : '<div class="incident-detail-empty"><b>No incidents match these filters</b><p>Adjust the filters to see more of the queue.</p></div>';
+  root.innerHTML = `
+    <div class="incident-page-heading"><div><div class="eyebrow">Network operations · service desk</div><h1>Incident management</h1><p>Own the ticket lifecycle: prioritize, acknowledge, investigate with evidence and verify before resolution.</p></div><button class="btn" id="incidentOverviewBack">← Operations overview</button></div>
+    <div class="incident-summary"><article><b>${counts.new}</b><span>New</span></article><article><b>${counts.acknowledged}</b><span>Acknowledged</span></article><article><b>${counts.investigating}</b><span>Investigating</span></article><article><b>${counts.resolved}</b><span>Resolved</span></article><article class="incident-summary-open"><b>${tickets.filter(t => t.status !== 'resolved').length}</b><span>Open incidents</span></article></div>
+    <div class="incident-workspace">
+      <section class="incident-queue-panel"><div class="incident-queue-heading"><div><span class="eyebrow">Service desk queue</span><h2>All incidents <small>${matches.length} shown</small></h2></div></div>
+        <div class="incident-filters"><input id="incidentSearch" type="search" value="${esc(INCIDENT_FILTERS.query)}" placeholder="Search ID, symptom, service…"/><div><select id="incidentStatus"><option value="open"${INCIDENT_FILTERS.status==='open'?' selected':''}>Open incidents</option><option value="all"${INCIDENT_FILTERS.status==='all'?' selected':''}>All statuses</option><option value="new"${INCIDENT_FILTERS.status==='new'?' selected':''}>New</option><option value="acknowledged"${INCIDENT_FILTERS.status==='acknowledged'?' selected':''}>Acknowledged</option><option value="investigating"${INCIDENT_FILTERS.status==='investigating'?' selected':''}>Investigating</option><option value="resolved"${INCIDENT_FILTERS.status==='resolved'?' selected':''}>Resolved</option></select><select id="incidentPriority"><option value="all"${INCIDENT_FILTERS.priority==='all'?' selected':''}>All priorities</option><option value="P1"${INCIDENT_FILTERS.priority==='P1'?' selected':''}>P1 · Critical</option><option value="P2"${INCIDENT_FILTERS.priority==='P2'?' selected':''}>P2 · High</option><option value="P3"${INCIDENT_FILTERS.priority==='P3'?' selected':''}>P3 · Medium</option><option value="P4"${INCIDENT_FILTERS.priority==='P4'?' selected':''}>P4 · Low</option></select></div></div>
+        <div class="incident-list" id="incidentList">${list || '<div class="overview-empty">No incidents match your filters.</div>'}</div>
+      </section>
+      <section class="incident-detail-panel" id="incidentDetail">${detail}</section>
+    </div>`;
+  root.querySelector('#incidentOverviewBack').addEventListener('click', () => showWorkspaceView('overview'));
+  root.querySelector('#incidentSearch').addEventListener('input', e => { INCIDENT_FILTERS.query = e.target.value; renderIncidentCenter(); const el=$('#incidentSearch'); el.focus(); el.setSelectionRange(el.value.length,el.value.length); });
+  root.querySelector('#incidentStatus').addEventListener('change', e => { INCIDENT_FILTERS.status=e.target.value; renderIncidentCenter(); });
+  root.querySelector('#incidentPriority').addEventListener('change', e => { INCIDENT_FILTERS.priority=e.target.value; renderIncidentCenter(); });
+  root.querySelectorAll('[data-incident-select]').forEach(b => b.addEventListener('click', () => { INCIDENT_SELECTED=b.dataset.incidentSelect; renderIncidentCenter(); }));
+  const acknowledge = root.querySelector('#incidentAcknowledge');
+  if (acknowledge) acknowledge.addEventListener('click', () => {
+    setTicketState(selected.id, 'acknowledged', 'You');
+    addJournalEntry({ type:'ticket acknowledged', ticket:selected.id, text:'Accepted ownership and began incident triage.' });
+    renderIncidentCenter();
+  });
+  const assign = root.querySelector('#incidentAssignSave');
+  if (assign) assign.addEventListener('click', () => {
+    const owner = root.querySelector('#incidentAssignee').value;
+    setTicketState(selected.id, selected.status, owner);
+    addJournalEntry({ type:'ownership updated', ticket:selected.id, text:'Assigned to '+owner+'.' });
+    renderIncidentCenter();
+  });
+  const investigate = root.querySelector('#incidentInvestigate');
+  if (investigate) investigate.addEventListener('click', () => {
+    setTicketState(selected.id, 'investigating', 'You');
+    addJournalEntry({ type:'investigation started', ticket:selected.id, text:'Opened the incident scenario in the Workbench.' });
+    MODE='play'; reloadMission(selected.index);
+  });
+  const review = root.querySelector('#incidentReview');
+  if (review) review.addEventListener('click', () => { MODE='play'; reloadMission(selected.index); });
+}
+function refreshIncidentCenter() { if ($('#incidentsView') && !$('#incidentsView').hidden) renderIncidentCenter(); }
+
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
   const pc = 'tk-' + String(t.priority || '').toLowerCase();
@@ -4526,7 +4596,7 @@ function wireConfig() {
 function addJournalEntry(entry) {
   PROG.journal = Array.isArray(PROG.journal) ? PROG.journal : [];
   PROG.journal.unshift({ at: new Date().toISOString(), ticket: RUN && RUN.mission ? RUN.mission.ticket && RUN.mission.ticket.id : '', mission: RUN && RUN.mission ? RUN.mission.title : '', ...entry });
-  PROG.journal = PROG.journal.slice(0, 250); saveProg(); refreshOverview();
+  PROG.journal = PROG.journal.slice(0, 250); saveProg(); refreshOverview(); refreshIncidentCenter();
 }
 function openJournal() {
   const rows = (PROG.journal || []).map(e => `<article class="journal-entry"><div class="journal-meta"><b>${esc(e.type || 'activity')}</b>${e.result ? `<span class="journal-result ${esc(e.result)}">${esc(e.result)}</span>` : ''}<time>${esc(new Date(e.at).toLocaleString())}</time></div><div class="journal-context">${esc([e.ticket, e.mission, e.device].filter(Boolean).join(' · '))}</div>${e.command ? `<code class="journal-command">${esc(e.command)}</code>` : ''}${e.text ? `<p>${esc(e.text)}</p>` : ''}${e.output ? `<pre>${esc(e.output)}</pre>` : ''}</article>`).join('');
@@ -4814,7 +4884,7 @@ function boot() {
         <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
         <div class="nav-section">Workspace</div>
         <button class="nav-item" id="navOverview" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
-        <button class="nav-item" id="navIncidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
+        <button class="nav-item" id="navIncidents" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
         <button class="nav-item" id="navWorkbench" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
         <button class="nav-item" type="button" disabled title="Infrastructure inventory is in a later implementation phase"><span class="nav-glyph">▤</span>Infrastructure<span class="nav-soon">Next</span></button>
         <div class="nav-section">Reference & records</div>
@@ -4841,6 +4911,7 @@ function boot() {
         <button id="btnSet" class="btn" title="Settings">⚙</button></div>
     </header>
     <section id="overview" aria-label="Operations overview"></section>
+    <section id="incidentsView" aria-label="Incident management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
       <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><span class="session-label">DEVICE SESSIONS</span><div id="sessionTabs"></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termHelp">Command help</button></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
@@ -4851,7 +4922,7 @@ function boot() {
   wireTerm();
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
-  $('#navIncidents').addEventListener('click', openTicketQueue);
+  $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navJournal').addEventListener('click', openJournal);
   $('#topoZoomIn').addEventListener('click', () => zoomTopology(0.8));
   $('#topoZoomOut').addEventListener('click', () => zoomTopology(1.25));

@@ -34,9 +34,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('implemented navigation actions are disabled');
 
   await page.locator('#navIncidents').click();
-  if (await page.locator('#modal .ticket-desk').isVisible()) ok('Incidents navigation opens the existing ticket queue');
-  else fail('Incidents navigation did not open the ticket queue');
-  await page.locator('#modal #closeS').click();
+  if (await page.locator('#incidentsView').isVisible() && await page.locator('#incidentList .incident-row').count() > 0)
+    ok('Incidents navigation opens the dedicated incident workspace');
+  else fail('Incidents navigation did not open the incident workspace');
+  await page.locator('#navOverview').click();
 
   await page.locator('#navJournal').click();
   if (await page.locator('#modal .journal-list').isVisible()) ok('Journal navigation opens the existing work journal');

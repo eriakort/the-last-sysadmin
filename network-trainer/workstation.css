@@ -209,3 +209,60 @@ aside{scrollbar-color:#344a60 transparent}
  #sessionTabs{width:100%}
  .inspector-head{align-items:flex-start;flex-direction:column}
 }
+
+
+/* Dedicated incident management workspace */
+#incidentsView{display:block;flex:1;min-height:0;overflow:auto;padding:26px clamp(18px,3vw,42px) 36px;background:radial-gradient(ellipse at 85% 0%,rgba(145,83,65,.12),transparent 40%),var(--bg)}
+#incidentsView[hidden]{display:none!important}
+.incident-page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.incident-page-heading h1{font-size:26px;letter-spacing:-.035em;margin:5px 0 7px}
+.incident-page-heading p{margin:0;color:var(--muted);font-size:13px;max-width:720px}
+.incident-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-bottom:13px}
+.incident-summary article{padding:12px 14px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+.incident-summary b{display:block;font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}
+.incident-summary span{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-top:4px}
+.incident-summary-open b{color:var(--amber)}
+.incident-workspace{display:grid;grid-template-columns:minmax(290px,370px) minmax(0,1fr);gap:12px;align-items:start}
+.incident-queue-panel,.incident-detail-panel{min-width:0;border:1px solid var(--line);border-radius:10px;background:linear-gradient(155deg,var(--panel),color-mix(in srgb,var(--panel) 92%,var(--bg)));padding:15px}
+.incident-queue-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}
+.incident-queue-heading h2{font-size:15px;margin:3px 0 0}
+.incident-queue-heading h2 small{font:10px ui-monospace,monospace;color:var(--muted);margin-left:5px}
+.incident-filters{display:grid;gap:7px;padding-bottom:11px;border-bottom:1px solid var(--line)}
+.incident-filters>input,.incident-filters select,.incident-assignment select{min-width:0;width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:11px inherit}
+.incident-filters>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.incident-list{display:grid;gap:6px;padding-top:10px;max-height:680px;overflow:auto}
+.incident-row{width:100%;display:block;text-align:left;padding:10px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--ink);cursor:pointer}
+.incident-row:hover{background:var(--raise);border-color:var(--line)}
+.incident-row.active{background:color-mix(in srgb,var(--amber) 9%,var(--raise));border-color:color-mix(in srgb,var(--amber) 42%,var(--line));box-shadow:inset 2px 0 var(--amber)}
+.incident-row-top{display:flex;align-items:center;gap:6px;margin-bottom:7px}
+.incident-row-top>b{font:700 10px ui-monospace,monospace;color:var(--amber)}
+.incident-row>strong{display:block;font-size:11px;line-height:1.35}
+.incident-row>small{display:block;margin-top:5px;color:var(--muted);font-size:9px}
+.incident-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:2px 0 13px;border-bottom:1px solid var(--line)}
+.incident-detail-head h2{font-size:19px;line-height:1.25;letter-spacing:-.02em;margin:4px 0 8px}
+.incident-detail-badges{display:flex;align-items:center;gap:7px}
+.incident-sla{display:block;padding:7px 9px;border:1px solid var(--line);border-radius:7px;color:var(--muted);font-size:9px;white-space:nowrap}
+.incident-sla b{display:block;color:var(--amber);font:700 11px ui-monospace,monospace;margin-top:3px}
+.incident-symptom{padding:13px 0;border-bottom:1px solid var(--line)}
+.incident-symptom p{margin:5px 0 0;font-size:12px;line-height:1.55}
+.incident-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}
+.incident-facts>div{min-width:0}
+.incident-facts small{display:block;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.incident-facts b{display:block;font-size:10px;overflow-wrap:anywhere}
+.incident-assignment{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+.incident-assignment label{font-size:10px;color:var(--muted);white-space:nowrap}
+.incident-assignment select{max-width:230px}
+.incident-actions{display:flex;gap:8px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.incident-timeline{padding:14px 0 4px}
+.incident-timeline-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}
+.incident-timeline-item>i{flex:none;width:8px;height:8px;margin:5px 0 0;border-radius:50%;background:var(--host);box-shadow:0 0 7px color-mix(in srgb,var(--host) 55%,transparent)}
+.incident-timeline-item>div{min-width:0;flex:1}
+.incident-timeline-item b{font-size:10px;text-transform:capitalize}
+.incident-timeline-item time{float:right;color:var(--muted);font:9px ui-monospace,monospace}
+.incident-timeline-item p{margin:4px 0;color:var(--muted);font-size:10px;line-height:1.45}
+.incident-timeline-item code{display:inline-block;padding:3px 5px;border-radius:4px;background:var(--bg);color:#c4d7e8;font:9px ui-monospace,monospace}
+.incident-detail-empty{padding:42px 15px;text-align:center;color:var(--muted)}
+.incident-detail-empty b{display:block;color:var(--ink);font-size:13px}
+.incident-detail-empty p{font-size:11px}
+@media(max-width:1080px){.incident-workspace{grid-template-columns:minmax(250px,.85fr) minmax(0,1.15fr)}.incident-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){#incidentsView{padding:18px 12px 26px}.incident-page-heading{display:block}.incident-page-heading h1{font-size:22px}.incident-page-heading>.btn{margin-top:12px}.incident-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.incident-workspace{grid-template-columns:1fr}.incident-list{max-height:360px}.incident-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.incident-detail-head{display:block}.incident-sla{display:inline-block;margin-top:10px}.incident-assignment{align-items:flex-start;flex-wrap:wrap}.incident-assignment select{flex:1;max-width:none}}

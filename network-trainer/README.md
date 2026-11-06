@@ -260,6 +260,10 @@ The Network Sysadmin workspace opens on a shift dashboard before entering the Wo
 - **Topology navigation:** zoom in/out, fit the complete topology, auto-arrange nodes, and pan the canvas independently of dragging devices. Device drag and link wiring remain supported.
 - The session buffers are scoped to the active mission/build session and are not presented as durable audit records; command activity continues to be written to the engineering journal.
 
+### Incident Management workspace
+
+The Incidents destination is a dedicated service-desk workspace rather than only a modal queue. It provides state counts, search, status and priority filters, a selectable incident detail record, SLA target and impact context, ownership updates, and a ticket-linked investigation timeline. New incidents can be acknowledged, active incidents hand off to their matching Workbench scenario, and resolved incidents can be reviewed. Resolution remains tied to scenario verification rather than a manual status shortcut. The top-bar Tickets action retains the compact queue for quick access.
+
 ### Help desk and work journal
 
 - The persistent **Help** action opens a searchable command field guide from anywhere in the workbench. Selecting an example places it in the device console for practice.
