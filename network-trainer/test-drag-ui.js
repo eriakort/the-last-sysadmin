@@ -2,7 +2,7 @@
 // and confirm the node moved and its connected links followed it.
 const path = require('path');
 const { chromium } = require('playwright');
-const URL = 'file://' + path.join(process.cwd(), 'index.html');
+const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
 const xformOf = t => { const m = /translate\(([-\d.]+),\s*([-\d.]+)\)/.exec(t || ''); return m ? [parseFloat(m[1]), parseFloat(m[2])] : null; };
 
