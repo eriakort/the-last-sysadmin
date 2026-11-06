@@ -35,9 +35,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await run('show mac address-table dynamic');
   output = await page.locator('#tout').innerText();
   if (!output.includes('srv/eth0')) throw new Error('remote server MAC was not learned through the forwarding path');
+  await page.waitForTimeout(180);
   const panel = await page.locator('#config').innerText();
   if (!panel.includes('Spanning Tree') || !panel.includes('Learned MAC addresses')) {
-    throw new Error('switch panel is missing STP or MAC learning details');
+    throw new Error('switch panel is missing STP or MAC learning details; panel=' + panel + '; pageErrors=' + errors.join(' | '));
   }
   await page.click(node('h1'));
   await run('ping srv');
