@@ -906,6 +906,33 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'echo "# All clear - halcyon-web01 stable on v2.4.0, backups scheduled, firewall reviewed." > ~/incident/ALL_CLEAR.md'
   ], 'Correct. Share verified operational facts');
 
+
+  // Chapter 21: turn text-processing tools into precise, readable answers.
+  await checkLearningStages('Beyond simple grep', 'end', ['grep -cE', 'escaped dots', 'beginning of the line']);
+  await proveAnswerMission('Beyond simple grep', 'Make it readable', 'start', [
+    "grep -cE '^203\\.0\\.113\\.' /var/log/halcyon/access.log.1"
+  ], '93', 'Correct. ^ anchors the match');
+
+  await checkLearningStages('Make it readable', 'f', ['cut -d:', 'field selection', 'column -t']);
+  await proveMission('Make it readable', 'Fields and conditions', 'd', [
+    'cut -d: -f1,7 /etc/passwd | column -t -s:'
+  ], 'Correct. -d: sets the colon delimiter');
+
+  await checkLearningStages('Fields and conditions', 'one', ['awk -F:', '$3', 'UID']);
+  await proveAnswerMission('Fields and conditions', 'Capture and rearrange', 'three', [
+    "awk -F: '$3 >= 1000 {print $1}' /etc/passwd | sort"
+  ], 'dana', 'Correct. The third colon-separated field');
+
+  await checkLearningStages('Capture and rearrange', 'line', ['sed -E', 'capture groups', '\\1', '\\3']);
+  await proveAnswerMission('Capture and rearrange', 'Number the script', 'third', [
+    "echo 2026-10-28 | sed -E 's|(....)-(..)-(..)|\\3/\\2/\\1|'"
+  ], '28/10/2026', 'Correct. \\3 inserts the text captured');
+
+  await checkLearningStages('Number the script', 'yes', ['nl', 'line numbers', 'does not modify']);
+  await proveMission('Number the script', 'Names to addresses', 'no', [
+    'nl ~/backup.sh'
+  ], 'Correct. nl prints numbered output');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
