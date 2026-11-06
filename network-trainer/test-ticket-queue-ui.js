@@ -78,6 +78,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('ticket lifecycle persists across browser reloads');
   else fail('ticket lifecycle did not persist');
 
+  // Dismiss the queue modal before opening the work journal in the page header.
+  await page.locator('#closeS').click();
   await page.locator('#btnJournal').click();
   const journal = await page.locator('.journal-list').innerText();
   if (/ticket acknowledged/i.test(journal) && /investigation started/i.test(journal) && /ticket resolved/i.test(journal))
