@@ -933,6 +933,33 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     'nl ~/backup.sh'
   ], 'Correct. nl prints numbered output');
 
+
+  // Chapter 22: understand, inspect, change, persist, and diagnose kernel settings.
+  await checkLearningStages('Which kernel?', 'a', ['uname -r', 'kernel release', 'compatibility']);
+  await proveAnswerMission('Which kernel?', 'Read a kernel setting', 'r', [
+    'uname -r'
+  ], '6.8.0-45-generic', 'Correct. -r reports the running kernel release');
+
+  await checkLearningStages('Read a kernel setting', 'write', ['sysctl', 'net.ipv4.ip_forward', 'current value']);
+  await proveAnswerMission('Read a kernel setting', 'Change it live', 'read', [
+    'sysctl net.ipv4.ip_forward'
+  ], '0', 'Correct. sysctl displays the current value');
+
+  await checkLearningStages('Change it live', 'yes', ['sysctl -w', 'runtime', 'temporary']);
+  await proveMission('Change it live', 'Make it stick', 'no', [
+    'sudo sysctl -w net.ipv4.ip_forward=1'
+  ], 'Correct. -w changes the live value');
+
+  await checkLearningStages('Make it stick', 'hosts', ['/etc/sysctl.conf', 'KEY = VALUE', 'persistent']);
+  await proveMission('Make it stick', 'What the kernel saw', 'sysctl', [
+    'echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf'
+  ], 'Correct. /etc/sysctl.conf stores persistent kernel parameters');
+
+  await checkLearningStages('What the kernel saw', 'journal', ['dmesg', 'kernel ring buffer', 'hardware']);
+  await proveMission('What the kernel saw', 'Make a shortcut', 'dmesg', [
+    'dmesg | tail'
+  ], 'Correct. dmesg reads messages from the kernel ring buffer');
+
   await browser.close();
   if (errors.length) { console.error('\nLEARNING FLOW TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nLEARNING FLOW OK.');
