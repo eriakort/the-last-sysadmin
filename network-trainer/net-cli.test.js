@@ -530,6 +530,7 @@ test('IOS local DNS host entries resolve without an upstream resolver', () => {
   const cli=makeCLI(net,'r1'); cli.run('enable'); cli.run('configure terminal');
   eq(cli.run('ip host portal.branch.local 10.0.2.20').code,0,'configure local host');
   has(cli.run('show hosts').out,'portal.branch.local','host table entry');
+  cli.run('end');
   const resolved=cli.run('dig portal.branch.local');
   eq(resolved.code,0,'local name resolves without resolver'); has(resolved.out,'10.0.2.20','local address');
   has(cli.run('show running-config').out,'ip host portal.branch.local 10.0.2.20','local host persists');
