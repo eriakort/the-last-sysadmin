@@ -231,6 +231,7 @@ function asaPhysical(dev, nameif) {
   return Object.keys(dev.ifaces || {}).find(n => dev.ifaces[n].nameif === nameif) || null;
 }
 function asaAddress(words, at) {
+  if (words[at] === 'object-group' && words[at + 1]) return { value: null, wildcard: null, group: words[at + 1].toUpperCase(), next: at + 2 };
   if (words[at] === 'any') return { value: null, wildcard: null, next: at + 1 };
   if (words[at] === 'host') {
     const value = parseIPv4(words[at + 1]);
@@ -241,7 +242,7 @@ function asaAddress(words, at) {
   if (value == null || mask == null || prefix == null) return null;
   return { value: M.networkOf(value, prefix), wildcard: (~mask) >>> 0, next: at + 2 };
 }
-function asaAclEntry(words, name, seq) {
+function asaAclEntry(words, name, seq, dev) {
   let at = 0;
   if (words[at] === 'line') { if (!/^\d+$/.test(words[at + 1] || '')) return null; seq = Number(words[at + 1]); at += 2; }
   if (words[at++] !== 'extended') return null;
@@ -249,15 +250,17 @@ function asaAclEntry(words, name, seq) {
   if (!['permit','deny'].includes(action) || !['ip','tcp','udp','icmp'].includes(proto)) return null;
   const src = asaAddress(words, at); if (!src) return null; at = src.next;
   const dst = asaAddress(words, at); if (!dst) return null; at = dst.next;
-  let dport = null;
-  if (words[at] === 'eq' && ['tcp','udp'].includes(proto)) {
+  for (const groupName of [src.group,dst.group].filter(Boolean)) if (!dev.asaObjectGroups || !dev.asaObjectGroups[groupName] || dev.asaObjectGroups[groupName].type !== 'network') return null;
+  let dport = null, serviceGroup = null;
+  if (words[at] === 'object-group' && words[at + 1]) { serviceGroup = words[at + 1].toUpperCase(); at += 2; const group = dev.asaObjectGroups && dev.asaObjectGroups[serviceGroup]; if (!group || group.type !== 'service' || group.protocol !== proto) return null; }
+  else if (words[at] === 'eq' && ['tcp','udp'].includes(proto)) {
     const services = { www: 80, http: 80, https: 443, ssh: 22, domain: 53, smtp: 25 };
     dport = services[words[at + 1]] || Number(words[at + 1]);
     if (!Number.isInteger(dport) || dport < 1 || dport > 65535 || at + 2 !== words.length) return null;
     at += 2;
   }
   if (at !== words.length) return null;
-  return { aclName: name, seq, action: action === 'deny' ? 'deny' : 'allow', proto, src: src.value, srcWildcard: src.wildcard, dst: dst.value, dstWildcard: dst.wildcard, dport };
+  return { aclName: name, seq, action: action === 'deny' ? 'deny' : 'allow', proto, src: src.value, srcWildcard: src.wildcard, srcGroup: src.group || null, dst: dst.value, dstWildcard: dst.wildcard, dstGroup: dst.group || null, dport, serviceGroup };
 }
 function asaRunConfig(dev) {
   const lines = ['hostname ' + (dev.hostname || dev.id || 'ASA'), '!', 'interface configuration'];
@@ -268,11 +271,17 @@ function asaRunConfig(dev) {
     if (p.ip != null) lines.push(' ip address ' + M.ipStr(p.ip) + ' ' + ciscoPrefixMask(p.mask));
     lines.push(p.up === false ? ' shutdown' : ' no shutdown');
   }
+  for (const [name, group] of Object.entries(dev.asaObjectGroups || {})) {
+    lines.push('object-group ' + group.type + ' ' + name);
+    if (group.type === 'network') for (const member of group.members || []) { if (member.host != null) lines.push(' network-object host ' + M.ipStr(member.host)); else if (member.network) lines.push(' network-object ' + M.ipStr(member.network.net) + ' ' + ciscoPrefixMask(member.network.prefix)); }
+    if (group.type === 'service') for (const port of group.ports || []) lines.push(' service-object ' + group.protocol + ' destination eq ' + port);
+  }
   for (const name of [...new Set((dev.acls || []).map(r => r.aclName).filter(Boolean))]) {
     for (const r of (dev.acls || []).filter(x => x.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))) {
       const address = (v,w) => v == null ? 'any' : (w === 0 ? 'host ' + M.ipStr(v) : M.ipStr(v) + ' ' + M.ipStr((~w) >>> 0));
       lines.push('access-list ' + name + ' extended ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto + ' ' +
-        address(r.src,r.srcWildcard) + ' ' + address(r.dst,r.dstWildcard) + (r.dport == null ? '' : ' eq ' + r.dport));
+        (r.srcGroup ? 'object-group ' + r.srcGroup : address(r.src,r.srcWildcard)) + ' ' + (r.dstGroup ? 'object-group ' + r.dstGroup : address(r.dst,r.dstWildcard)) +
+        (r.serviceGroup ? ' object-group ' + r.serviceGroup : (r.dport == null ? '' : ' eq ' + r.dport)));
     }
   }
   for (const [name,p] of Object.entries(dev.ifaces || {})) if (p.accessGroups && p.accessGroups.in)
@@ -303,8 +312,13 @@ function asaShow(cli, words) {
     return ok(names.map(name => 'access-list ' + name + '\n' +
       (dev.acls || []).filter(r => r.aclName === name).sort((a,b)=>(a.seq||0)-(b.seq||0))
         .map(r => ' ' + (r.seq || 10) + ': ' + (r.action === 'deny' ? 'deny' : 'permit') + ' ' + r.proto + ' ' +
-          addr(r.src,r.srcWildcard) + ' ' + addr(r.dst,r.dstWildcard) + (r.dport == null ? '' : ' eq ' + r.dport) +
+          (r.srcGroup ? 'object-group ' + r.srcGroup : addr(r.src,r.srcWildcard)) + ' ' + (r.dstGroup ? 'object-group ' + r.dstGroup : addr(r.dst,r.dstWildcard)) + (r.serviceGroup ? ' object-group ' + r.serviceGroup : (r.dport == null ? '' : ' eq ' + r.dport)) +
           ' (' + (r.hits || 0) + matchesText(r.hits) + ')').join('\n')).join('\n') || '% No access lists configured');
+  }
+  if (q === 'object-group' || q.startsWith('object-group ')) {
+    const wanted = words[1] && words[1].toUpperCase();
+    const groups = Object.entries(dev.asaObjectGroups || {}).filter(([name])=>!wanted || name===wanted);
+    return ok(groups.map(([name,g]) => 'object-group ' + g.type + ' ' + name + '\n' + (g.type === 'network' ? (g.members || []).map(x=>x.host != null ? ' network-object host ' + M.ipStr(x.host) : ' network-object ' + M.ipStr(x.network.net) + ' ' + ciscoPrefixMask(x.network.prefix)).join('\n') : (g.ports || []).map(port=>' service-object '+g.protocol+' destination eq '+port).join('\n'))).join('\n') || '% No object groups configured');
   }
   if (q === 'access-group') {
     const rows = Object.entries(dev.ifaces).filter(([,p])=>p.accessGroups && p.accessGroups.in)
@@ -337,13 +351,13 @@ function runASA(cli, line) {
   }
   if (words[0] === 'end') { cli.asaMode = 'privileged'; cli.asaIface = null; cli.asaObject = null; return ok(''); }
   if (words[0] === 'exit') {
-    if (cli.asaMode === 'interface' || cli.asaMode === 'object') { cli.asaMode = 'config'; cli.asaIface = null; cli.asaObject = null; return ok(''); }
+    if (cli.asaMode === 'interface' || cli.asaMode === 'object' || cli.asaMode === 'object-group') { cli.asaMode = 'config'; cli.asaIface = null; cli.asaObject = null; cli.asaObjectGroup = null; return ok(''); }
     if (cli.asaMode === 'config') { cli.asaMode = 'privileged'; return ok(''); }
     if (cli.asaMode === 'privileged') { cli.asaMode = 'user'; return ok(''); }
   }
   if (words[0] === 'show') {
     const q = words.slice(1);
-    if (q[0] === 'access-list' || q[0] === 'access-group' || q[0] === 'nat' || q[0] === 'route' || q[0] === 'interface' || q[0] === 'version' || q[0] === 'running-config' || q[0] === 'run')
+    if (q[0] === 'access-list' || q[0] === 'access-group' || q[0] === 'object-group' || q[0] === 'nat' || q[0] === 'route' || q[0] === 'interface' || q[0] === 'version' || q[0] === 'running-config' || q[0] === 'run')
       return asaShow(cli,q);
   }
   if (words[0] === 'packet-tracer' && words[1] === 'input') {
@@ -359,6 +373,10 @@ function runASA(cli, line) {
     return ok('Phase: ACCESS-LIST / NAT / ROUTE\nInput interface: ' + words[2] + '\n' +
       'Result: ' + (trace.ok ? 'ALLOW' : 'DROP') + '\nReason: ' + trace.reason + '\nPath: ' + trace.path.join(' -> '));
   }
+  if (words[0] === 'clear' && words[1] === 'access-list' && (words.length===2 || words.length===3)) {
+    if(cli.asaMode==='user')return err('% Enable mode required'); const name=words[2]&&words[2].toUpperCase(); let count=0;
+    for(const rule of dev.acls||[])if(rule.aclName&&(!name||rule.aclName===name)){rule.hits=0;count++;} return ok('Cleared hit counters on '+count+' ACL entries');
+  }
   if (words[0] === 'write' && words[1] === 'memory') {
     if (cli.asaMode === 'user') return err('% Enable mode required');
     dev.startupConfig = asaRunConfig(dev); return ok('Cryptochecksum: simulated\n[OK]');
@@ -373,7 +391,7 @@ function runASA(cli, line) {
     if (words[0] === 'access-list' && words[1]) {
       const name = words[1].toUpperCase(); let at = 2;
       let seq = Math.max(0,...(dev.acls || []).filter(r=>r.aclName===name).map(r=>r.seq || 0)) + 10;
-      const entry = asaAclEntry(words.slice(at),name,seq);
+      const entry = asaAclEntry(words.slice(at),name,seq,dev);
       if (!entry) return err('% Invalid ASA ACL — use access-list NAME extended permit|deny ip|tcp|udp|icmp source destination [eq port]');
       dev.acls = dev.acls || [];
       if (dev.acls.some(r=>r.aclName===name && r.seq===entry.seq)) return err('% ACL line already exists');
@@ -397,6 +415,16 @@ function runASA(cli, line) {
       const groups = dev.ifaces[phys].accessGroups || {};
       if (groups.in === words[2].toUpperCase()) delete groups.in;
       return ok('');
+    }
+    if (words[0] === 'object-group' && ['network','service'].includes(words[1]) && words[2]) {
+      const name = words[2].toUpperCase(), type = words[1]; dev.asaObjectGroups = dev.asaObjectGroups || {};
+      if (dev.asaObjectGroups[name] && dev.asaObjectGroups[name].type !== type) return err('% Object-group type cannot be changed');
+      dev.asaObjectGroups[name] = dev.asaObjectGroups[name] || {type,members:[],ports:[],protocol:type==='service'?'tcp':null};
+      cli.asaObjectGroup = name; cli.asaMode = 'object-group'; return ok('Object-group configuration mode');
+    }
+    if (words[0] === 'no' && words[1] === 'object-group' && words[2]) {
+      const name=words[2].toUpperCase(); if ((dev.acls||[]).some(r=>r.srcGroup===name||r.dstGroup===name||r.serviceGroup===name)) return err('% Object-group is referenced by an ACL');
+      delete (dev.asaObjectGroups||{})[name]; return ok('');
     }
     if (words[0] === 'object' && words[1] === 'network' && words[2]) {
       dev.asaObjects = dev.asaObjects || {}; dev.asaObjects[words[2].toUpperCase()] = dev.asaObjects[words[2].toUpperCase()] || {};
@@ -444,6 +472,13 @@ function runASA(cli, line) {
     if (words[0] === 'shutdown') { p.up = false; return ok(''); }
     if (words[0] === 'no' && words[1] === 'shutdown') { p.up = true; return ok(''); }
     return err('% Invalid ASA interface command');
+  }
+  if (cli.asaMode === 'object-group') {
+    const group=dev.asaObjectGroups && dev.asaObjectGroups[cli.asaObjectGroup]; if (!group) return err('% Object-group context no longer exists');
+    if (group.type==='network' && words[0]==='network-object' && words[1]==='host' && words.length===3) { const host=parseIPv4(words[2]); if(host==null)return err('% Invalid host address'); if(!group.members.some(x=>x.host===host))group.members.push({host}); return ok(''); }
+    if (group.type==='network' && words[0]==='network-object' && words.length===3) { const address=parseIPv4(words[1]),prefix=ciscoMaskPrefix(words[2]); if(address==null||prefix==null)return err('% Invalid network-object subnet'); const network={net:M.networkOf(address,prefix),prefix}; if(!group.members.some(x=>x.network&&x.network.net===network.net&&x.network.prefix===prefix))group.members.push({network}); return ok(''); }
+    if (group.type==='service' && words[0]==='service-object' && words.length===5 && ['tcp','udp'].includes(words[1]) && words[2]==='destination' && words[3]==='eq') { const port=Number(words[4]); if(!Number.isInteger(port)||port<1||port>65535)return err('% Invalid service port'); if(group.ports.length&&group.protocol!==words[1])return err('% A service group uses one protocol'); group.protocol=words[1]; if(!group.ports.includes(port))group.ports.push(port); return ok(''); }
+    return err(group.type==='network'?'% Use network-object host <ip> or network-object <network> <mask>':'% Use service-object tcp|udp destination eq <port>');
   }
   if (cli.asaMode === 'object') {
     const obj = dev.asaObjects[cli.asaObject];
