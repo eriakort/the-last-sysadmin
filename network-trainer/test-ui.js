@@ -8,7 +8,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const browser = await chromium.launch();
   const page = await browser.newPage();
   const errors = [];
-  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+  page.on('pageerror', e => { console.error('BROWSER PAGEERROR:', e.stack || e.message); errors.push('pageerror: ' + e.message); });
+  page.on('console', msg => { if (msg.type() === 'error') console.error('BROWSER CONSOLE:', msg.text()); });
   const ok = m => console.log('  ✓ ' + m);
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
   // Clear the diagnosis gate by clicking options until Check appears (the correct
@@ -25,6 +26,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(400);
+  console.log('BOOT DIAGNOSTIC:', JSON.stringify({ url: page.url(), overviewHidden: await page.locator('#overview').evaluate(e => e.hidden).catch(() => null), incidentsPresent: await page.locator('#incidentsView').count(), infrastructurePresent: await page.locator('#infrastructureView').count(), colsHidden: await page.locator('#cols').evaluate(e => e.hidden).catch(() => null), briefText: (await page.locator('#brief').innerText().catch(() => '')).slice(0,120), topologyCount: await page.locator('#topo .node').count() }));
 
   // topology rendered for mission 1 (first-contact: h1, srv, sw1)
   const nodes = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
