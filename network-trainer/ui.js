@@ -1954,8 +1954,9 @@ function collectPaletteResults(query) {
 }
 function renderPaletteResults() {
   const list=$('#paletteResults'); if(!list)return;
-  list.innerHTML=PALETTE_RESULTS.length?PALETTE_RESULTS.map((r,i)=>'<button type="button" class="palette-result'+(i===PALETTE_ACTIVE?' active':'')+'" data-palette-index="'+i+'" role="option" aria-selected="'+(i===PALETTE_ACTIVE)+'"><span class="palette-result-kind">'+esc(r.kind)+'</span><span class="palette-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.detail)+'</small></span><span class="palette-result-enter">↵</span></button>').join(''):'<div class="palette-empty">No matching devices, incidents, changes or commands.</div>';
+  list.innerHTML=PALETTE_RESULTS.length?PALETTE_RESULTS.map((r,i)=>'<button type="button" class="palette-result'+(i===PALETTE_ACTIVE?' active':'')+'" data-palette-index="'+i+'" id="palette-option-'+i+'" role="option" aria-selected="'+(i===PALETTE_ACTIVE)+'"><span class="palette-result-kind">'+esc(r.kind)+'</span><span class="palette-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.detail)+'</small></span><span class="palette-result-enter">↵</span></button>').join(''):'<div class="palette-empty">No matching devices, incidents, changes or commands.</div>';
   list.querySelectorAll('[data-palette-index]').forEach(b=>b.addEventListener('click',()=>activatePaletteResult(Number(b.dataset.paletteIndex))));
+  const input=$('#paletteSearch');if(input){if(PALETTE_RESULTS.length)input.setAttribute('aria-activedescendant','palette-option-'+PALETTE_ACTIVE);else input.removeAttribute('aria-activedescendant');}
 }
 function activatePaletteResult(index) {
   const item=PALETTE_RESULTS[index]; if(!item)return;
@@ -1977,6 +1978,7 @@ function openPalette() {
     else if(e.key==='Escape'){e.preventDefault();closePalette();}
   });
   modal.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();closePalette();return;}
     if(e.key!=='Tab')return;
     const items=focusables();if(!items.length){e.preventDefault();dialog.focus();return;}
     if(e.shiftKey&&(document.activeElement===items[0]||!modal.contains(document.activeElement))){e.preventDefault();items[items.length-1].focus();}
