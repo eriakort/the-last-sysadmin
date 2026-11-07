@@ -79,10 +79,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#fsExplorerPreview')).includes('Permission denied')) ok('filesystem explorer respects simulated file read permissions');
   else fail('filesystem explorer exposed a protected file');
   await page.click('[data-fs-nav="/var/log"]');
-  if ((await page.textContent('#fsExplorerList')).includes('app.log')) ok('filesystem explorer navigates to operational logs');
-  else fail('filesystem explorer did not show the simulated log directory');
+  if ((await page.textContent('#fsExplorerList')).includes('halcyon')) ok('filesystem explorer navigates to the simulated system log directory');
+  else fail('filesystem explorer did not show the simulated system log directory');
+  await page.click('[data-fs-open="/var/log/halcyon"]');
+  if ((await page.textContent('#fsExplorerList')).includes('app.log')) ok('filesystem explorer opens the application log subdirectory');
+  else fail('filesystem explorer did not show the application log files');
   await page.click('#fsExplorerUp');
-  if ((await page.textContent('#fsExplorerPath')) === '/var') ok('filesystem explorer supports parent-directory navigation');
+  if ((await page.textContent('#fsExplorerPath')) === '/var/log') ok('filesystem explorer supports parent-directory navigation');
   else fail('filesystem explorer parent navigation failed');
 
   const journey = await page.$('#journey');
