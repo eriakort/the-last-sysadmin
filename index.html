@@ -97,6 +97,22 @@ button{font:inherit;cursor:pointer}
 .learning-feedback.bad{color:var(--red)}
 /* A visible curriculum map makes the 35-chapter journey feel navigable without
    replacing the incident-driven terminal experience. */
+/* Read-only companion view of the simulated filesystem. */
+.fs-explorer{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.fs-explorer-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fs-explorer h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
+.fs-explorer-head p{font-size:11.5px;color:var(--muted);margin:2px 0 0}
+.fs-crumbs{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font:11px var(--f-mono);color:var(--muted)}
+.fs-crumbs button{border:0;background:transparent;color:var(--blue);padding:2px;cursor:pointer;font:inherit}
+.fs-list{display:flex;flex-direction:column;gap:3px;max-height:230px;overflow:auto}
+.fs-entry{display:flex;align-items:center;gap:7px;width:100%;text-align:left;padding:6px 8px;border:1px solid transparent;border-radius:5px;background:var(--raise);color:var(--ink);font:11.5px var(--f-mono)}
+.fs-entry:hover,.fs-entry[aria-current="true"]{border-color:var(--blue)}
+.fs-entry:disabled{opacity:.5;cursor:not-allowed}
+.fs-entry .fs-kind{width:15px;color:var(--blue);flex:none}
+.fs-entry .fs-name{min-width:0;overflow-wrap:anywhere;flex:1}
+.fs-entry .fs-meta{color:var(--muted);font-size:10px;white-space:nowrap}
+.fs-preview{background:var(--term);border:1px solid var(--line);border-radius:5px;padding:8px;color:var(--term-ink);font:10.5px/1.6 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto;min-height:35px}
+.fs-empty{font-size:11.5px;color:var(--muted);padding:8px}
 /* First-session orientation: short, dismissible, and tied to the real terminal. */
 .first-run{background:var(--raise);border:1px solid color-mix(in srgb,var(--blue) 45%,var(--line));border-radius:8px;padding:13px;display:flex;flex-direction:column;gap:9px}
 .first-run-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -367,6 +383,13 @@ body.practicing{padding-top:40px}
         <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
       </section>
       <section class="journey" id="journey" aria-label="Linux learning journey"></section>
+      <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
+        <div class="fs-explorer-head"><div><h2 id="fsExplorerTitle">Filesystem explorer</h2><p>Browse the simulated server without leaving your ticket.</p></div><button class="btn" id="fsExplorerHome" type="button">Home</button></div>
+        <nav class="fs-crumbs" id="fsExplorerPath" aria-label="Filesystem location"></nav>
+        <div class="fs-list" id="fsExplorerList" role="list" aria-label="Directory contents"></div>
+        <div class="fs-preview" id="fsExplorerPreview" aria-live="polite">Select a file to inspect its contents. Filesystem changes made in the terminal appear here.</div>
+      </section>
+
       <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
       <div class="objective">
         <div class="label">Objective</div>
@@ -6061,6 +6084,62 @@ function renderJourney() {
     '<div class="journey-now">' + esc(now) + '</div>' + levelMarkup;
   root.dataset.initialized = 'true';
 }
+let fsExplorerPath = '/home/rookie';
+let fsExplorerSelected = null;
+function renderFilesystemExplorer() {
+  const root = $('#fsExplorerList'), crumbs = $('#fsExplorerPath'), preview = $('#fsExplorerPreview');
+  if (!root || !crumbs || !preview) return;
+  const location = lookup(fsExplorerPath);
+  if (location.err || location.node.type !== 'dir') fsExplorerPath = '/';
+  const current = lookup(fsExplorerPath);
+  const segments = fsExplorerPath.split('/').filter(Boolean);
+  crumbs.innerHTML = '<button type="button" data-fs-dir="/">/</button>' +
+    segments.map((part, index) => '<span aria-hidden="true">/</span><button type="button" data-fs-dir="' +
+      esc('/' + segments.slice(0, index + 1).join('/')) + '">' + esc(part) + '</button>').join('');
+  const parent = parentOf(fsExplorerPath);
+  const entries = Object.keys(current.node.children).sort((a, b) => {
+    const an = current.node.children[a], bn = current.node.children[b];
+    return (an.type === 'dir' ? 0 : 1) - (bn.type === 'dir' ? 0 : 1) || a.localeCompare(b);
+  });
+  root.innerHTML = (fsExplorerPath !== '/' ? '<button type="button" class="fs-entry" data-fs-dir="' + esc(parent) + '"><span class="fs-kind">↰</span><span class="fs-name">..</span><span class="fs-meta">parent</span></button>' : '') +
+    entries.map(name => {
+      const node = current.node.children[name], path = joinAbs(fsExplorerPath, name);
+      const readable = canRead(node), enterable = node.type === 'dir' && canEnter(node);
+      const selected = fsExplorerSelected === path;
+      const kind = node.type === 'dir' ? '▸' : '·';
+      const meta = node.type === 'dir' ? 'directory' : (readable ? (node.size || byteLen(node.content)) + ' B' : 'restricted');
+      return '<button type="button" class="fs-entry" role="listitem" data-fs-' + (node.type === 'dir' ? 'dir' : 'file') + '="' + esc(path) + '"' +
+        (node.type === 'dir' && !enterable ? ' disabled' : '') + (selected ? ' aria-current="true"' : '') +
+        '><span class="fs-kind" aria-hidden="true">' + kind + '</span><span class="fs-name">' + esc(name) +
+        (name.startsWith('.') ? ' <span class="fs-meta">hidden</span>' : '') + '</span><span class="fs-meta">' + meta + '</span></button>';
+    }).join('') || '<div class="fs-empty">This directory is empty.</div>';
+  if (fsExplorerSelected) {
+    const file = lookup(fsExplorerSelected);
+    if (file.err || file.node.type !== 'file') fsExplorerSelected = null;
+    else if (!canRead(file.node)) preview.textContent = fsExplorerSelected + '\nPermission denied — the current user cannot read this file.';
+    else {
+      const content = file.node.content || '';
+      preview.textContent = fsExplorerSelected + '\n' + (content.length > 1200 ? content.slice(0, 1200) + '\n… preview truncated' : (content || '(empty file)'));
+    }
+  }
+  if (!fsExplorerSelected) preview.textContent = 'Select a file to inspect its contents. This view is read-only; use the terminal to make changes.';
+}
+function initFilesystemExplorer() {
+  const root = $('#fsExplorerList'), crumbs = $('#fsExplorerPath'), home = $('#fsExplorerHome');
+  if (!root || root.dataset.bound) return;
+  root.dataset.bound = 'true';
+  root.addEventListener('click', event => {
+    const dir = event.target.closest('[data-fs-dir]'), file = event.target.closest('[data-fs-file]');
+    if (dir) { fsExplorerPath = dir.dataset.fsDir; fsExplorerSelected = null; renderFilesystemExplorer(); }
+    else if (file) { fsExplorerSelected = file.dataset.fsFile; renderFilesystemExplorer(); }
+  });
+  crumbs.addEventListener('click', event => {
+    const dir = event.target.closest('[data-fs-dir]');
+    if (dir) { fsExplorerPath = dir.dataset.fsDir; fsExplorerSelected = null; renderFilesystemExplorer(); }
+  });
+  if (home) home.addEventListener('click', () => { fsExplorerPath = HOME; fsExplorerSelected = null; renderFilesystemExplorer(); });
+  renderFilesystemExplorer();
+}
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6117,6 +6196,8 @@ function render() {
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
   renderJourney();
+  initFilesystemExplorer();
+  renderFilesystemExplorer();
   if (RACE.active) {
     show('#learningPath', false);
     renderBoard();
