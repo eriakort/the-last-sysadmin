@@ -1782,10 +1782,11 @@ function wireModalDialog(wrap, preferredFocus) {
   wrap.addEventListener('keydown',e=>{
     if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeModal();return;}
     if(e.key!=='Tab')return;
-    const items=modalFocusable(wrap),first=items[0],last=items[items.length-1];
-    if(!items.length){e.preventDefault();dialog.focus();}
-    else if(e.shiftKey&&(document.activeElement===first||!wrap.contains(document.activeElement))){e.preventDefault();last.focus();}
-    else if(!e.shiftKey&&(document.activeElement===last||!wrap.contains(document.activeElement))){e.preventDefault();first.focus();}
+    const items=modalFocusable(wrap);
+    if(!items.length){e.preventDefault();dialog.focus();return;}
+    const index=items.indexOf(document.activeElement);
+    const next=e.shiftKey?(index<=0?items.length-1:index-1):(index<0||index===items.length-1?0:index+1);
+    e.preventDefault();items[next].focus();
   });
   wrap.addEventListener('focusout',()=>queueMicrotask(()=>{if(wrap.isConnected&&!wrap.contains(document.activeElement)){const items=modalFocusable(wrap);(items[0]||dialog).focus();}}));
 }
