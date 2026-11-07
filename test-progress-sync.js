@@ -31,8 +31,8 @@ const state = (overrides = {}) => ({
 }
 
 {
-  const local = state({ fs: dir({ home: dir({ local.txt: file('local', 10) }) }) });
-  const remote = state({ fs: dir({ home: dir({ remote.txt: file('remote', 12) }) }) });
+  const local = state({ fs: dir({ home: dir({ 'local.txt': file('local', 10) }) }) });
+  const remote = state({ fs: dir({ home: dir({ 'remote.txt': file('remote', 12) }) }) });
   const merged = context.mergeProgressStates(local, remote);
   assert.equal(merged.fs.children.home.children['local.txt'].content, 'local');
   assert.equal(merged.fs.children.home.children['remote.txt'].content, 'remote');
