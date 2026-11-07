@@ -363,3 +363,8 @@ The Workbench device inspector includes an **Interfaces** view for every selecte
 ## Multi-device console sessions
 
 Workbench console sessions are available per simulated device. Switch using the session tabs, the previous/next controls, or `Alt` + left/right arrow while the command field is focused. Clear output resets only the visible transcript; command history remains available with the up/down arrows. The active session is brought into view automatically when switching across a long tab strip.
+
+
+## Workbench checkpoint history
+
+Open **History** in the device console to review every saved configuration checkpoint for the selected simulator device. Each entry shows when it was captured and its configuration size. Choose any historical checkpoint to compare the current running configuration against that snapshot, rather than being limited to the latest baseline. Comparisons remain read-only; checkpoints are browser-local and are not restored or applied to devices.
