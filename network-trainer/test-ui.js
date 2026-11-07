@@ -130,10 +130,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     else fail('saved command evidence was not linked to the selected incident');
     await page.click('#navIncidents'); await page.waitForTimeout(120);
     await page.selectOption('#incidentStatus', 'all'); await page.waitForTimeout(80);
-    await page.locator('[data-incident-select="'+incidentId+'"]').click(); await page.waitForTimeout(80);
+    await page.locator('#incidentList [data-incident-select="'+incidentId+'"]').click(); await page.waitForTimeout(80);
     const timeline = await page.locator('#incidentDetail').innerText();
     if (timeline.includes('command evidence') && timeline.includes('ip addr')) ok('linked command evidence appears in the incident timeline');
-    else fail('incident timeline did not show linked command evidence');
+    else {
+      const linkedEntries = await page.evaluate(id => (PROG.journal || []).filter(e => e.ticket === id).map(e => ({type:e.type,command:e.command,text:e.text,at:e.at})), incidentId);
+      fail('incident timeline did not show linked command evidence for '+incidentId+'; timeline='+timeline+'; linkedEntries='+JSON.stringify(linkedEntries));
+    }
   } else fail('incident selector did not populate ticket options');
 
   await browser.close();
