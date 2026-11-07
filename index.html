@@ -135,6 +135,12 @@ button{font:inherit;cursor:pointer}
 .command-coach .coach-part small{color:var(--muted);font-size:9px;text-transform:uppercase}
 .command-coach code{display:inline-block;margin-top:3px}
 .command-coach .coach-pitfall{color:var(--amber)}
+.coach-drill{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.coach-drill p{font-size:11px;margin:6px 0}
+#commandCoachDrillTask{color:var(--ink);font-weight:600}
+#commandCoachDrillFeedback[data-result="success"]{color:var(--green)}
+#commandCoachDrillFeedback[data-result="retry"]{color:var(--amber)}
+#commandCoachDrillProgress{color:var(--muted);font-size:10px}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -449,6 +455,12 @@ body.practicing{padding-top:40px}
           <div class="coach-label">Try next</div><code id="commandCoachExample"></code>
           <p class="coach-pitfall" id="commandCoachPitfall"></p>
           <button class="btn" id="commandCoachUse" type="button">Use this example</button>
+          <div class="coach-drill">
+            <button class="btn" id="commandCoachDrillStart" type="button">Practice this skill</button>
+            <p id="commandCoachDrillTask" hidden></p>
+            <p id="commandCoachDrillFeedback" role="status" aria-live="polite" hidden></p>
+            <p id="commandCoachDrillProgress">Session practice: 0/7 completed</p>
+          </div>
         </section>
         <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
       </div>
@@ -3750,9 +3762,40 @@ const COMMAND_COACH = {
   dig: { summary: 'Queries DNS records and shows how a name resolves.', example: 'dig halcyon-web01', pitfall: 'A DNS answer is not proof that the application port is reachable.' }
 };
 const COACH_ACTIONS = new Set(['systemctl', 'apt', 'apt-get', 'ufw', 'mount', 'umount', 'git']);
+const COMMAND_DRILLS = {
+  whoami: { task: 'Confirm which account is running this shell.', command: 'whoami', args: [], success: 'Correct — whoami prints the current account name.' },
+  ls: { task: 'List all entries, including hidden dotfiles, in the current directory.', command: 'ls', args: ['-a'], success: 'Correct — -a includes hidden entries.' },
+  grep: { task: 'Find lines containing “error” in the system log, ignoring letter case.', command: 'grep', args: ['-i', 'error', '/var/log/syslog'], success: 'Correct — grep -i matches error regardless of letter case.' },
+  df: { task: 'Show filesystem space in human-readable units.', command: 'df', args: ['-h'], success: 'Correct — -h displays sizes in readable units.' },
+  systemctl: { task: 'Check the current status of the halcyon service without changing it.', command: 'systemctl', args: ['status', 'halcyon'], success: 'Correct — systemctl status inspects the service without restarting it.' },
+  journalctl: { task: 'Read the latest 20 journal entries for the halcyon service.', command: 'journalctl', args: ['-u', 'halcyon', '-n', '20'], success: 'Correct — -u filters by unit and -n limits the number of entries.' },
+  ss: { task: 'List listening TCP and UDP sockets using numeric ports.', command: 'ss', args: ['-tuln'], success: 'Correct — -tuln shows TCP/UDP listeners with numeric addresses.' }
+};
 const commandCoachSeen = new Set();
+const completedCommandDrills = new Set();
+let activeCommandDrill = null;
 let commandCoachLastExample = '';
 function updateCommandCoach(name, args) {
+  if (activeCommandDrill) {
+    const drill = COMMAND_DRILLS[activeCommandDrill];
+    if (drill && name === drill.command) {
+      const passed = drill.args.every(token => args.includes(token));
+      const feedback = document.getElementById('commandCoachDrillFeedback');
+      if (passed) {
+        completedCommandDrills.add(activeCommandDrill);
+        feedback.textContent = drill.success;
+        feedback.dataset.result = 'success';
+        activeCommandDrill = null;
+        document.getElementById('commandCoachDrillTask').hidden = true;
+        document.getElementById('commandCoachDrillStart').textContent = 'Practise another skill';
+      } else {
+        feedback.textContent = 'Not quite yet. Check the task for the required option or argument, then try again.';
+        feedback.dataset.result = 'retry';
+      }
+      feedback.hidden = false;
+      document.getElementById('commandCoachDrillProgress').textContent = 'Session practice: ' + completedCommandDrills.size + '/7 completed';
+    }
+  }
   const panel = document.getElementById('commandCoach');
   const toggle = document.getElementById('commandCoachToggle');
   if (!panel || !toggle || GAME_CMDS.includes(name)) return;
@@ -3770,6 +3813,13 @@ function updateCommandCoach(name, args) {
     return '<span class="coach-part"><small>' + kind + '</small><code>' + esc(token) + '</code></span>';
   }).join('');
   document.getElementById('commandCoachSummary').textContent = summary;
+  document.getElementById('commandCoachSummary').dataset.command = name;
+  const drillButton = document.getElementById('commandCoachDrillStart');
+  if (drillButton) {
+    drillButton.hidden = !COMMAND_DRILLS[name];
+    drillButton.textContent = completedCommandDrills.has(name) ? 'Practise this skill again' : 'Practice this skill';
+  }
+  document.getElementById('commandCoachDrillProgress').textContent = 'Session practice: ' + completedCommandDrills.size + '/7 completed';
   document.getElementById('commandCoachParts').innerHTML = parts || '<span class="empty">No arguments</span>';
   document.getElementById('commandCoachExample').textContent = example;
   document.getElementById('commandCoachPitfall').textContent = 'Watch out: ' + pitfall;
@@ -6114,6 +6164,18 @@ if (coachUse) coachUse.addEventListener('click', () => {
   tin.value = commandCoachLastExample;
   tin.focus({ preventScroll: true });
   tin.setSelectionRange(tin.value.length, tin.value.length);
+});
+const coachDrillStart = $('#commandCoachDrillStart');
+if (coachDrillStart) coachDrillStart.addEventListener('click', () => {
+  const name = $('#commandCoachSummary').dataset.command;
+  const drill = COMMAND_DRILLS[name];
+  if (!drill) return;
+  activeCommandDrill = name;
+  $('#commandCoachDrillTask').textContent = 'Your task: ' + drill.task;
+  $('#commandCoachDrillTask').hidden = false;
+  $('#commandCoachDrillFeedback').hidden = true;
+  $('#commandCoachDrillStart').textContent = 'Drill in progress…';
+  tin.focus({ preventScroll: true });
 });
 tin.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
