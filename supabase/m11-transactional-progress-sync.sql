@@ -99,8 +99,6 @@ begin
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(coalesce(v_local_time,'-infinity'::timestamptz),coalesce(v_remote_time,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
@@ -138,8 +136,6 @@ grant execute on function public.merge_progress(jsonb) to authenticated;
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
@@ -169,8 +165,6 @@ grant execute on function public.merge_progress(jsonb) to authenticated;
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
@@ -208,8 +202,6 @@ grant execute on function public.merge_progress(jsonb) to authenticated;
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
@@ -238,8 +230,6 @@ grant execute on function public.merge_progress(jsonb) to authenticated;
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
@@ -277,8 +267,6 @@ grant execute on function public.merge_progress(jsonb) to authenticated;
   end if;
   v_merged:=jsonb_set(v_merged,'{syncTombstones}',coalesce(v_tombstones,'[]'::jsonb),true);
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(coalesce(nullif(greatest(
-    coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
-    coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz)),'-infinity'::timestamptz),now())::text),true);
   update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
