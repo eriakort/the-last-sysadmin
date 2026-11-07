@@ -68,6 +68,21 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (!(await page.locator('#firstRunGuide').isVisible())) ok('dismissed orientation stays dismissed on return');
   else fail('dismissed orientation reappeared after reload');
 
+  const fsExplorer = page.locator('#fsExplorer');
+  if (await fsExplorer.isVisible()) ok('interactive filesystem explorer is visible beside the learning journey');
+  else fail('filesystem explorer is missing');
+  if (await page.locator('#fsExplorerList [data-fs-dir="/home/rookie/halcyon-app"]').count()) ok('filesystem explorer lists the learner workspace');
+  else fail('filesystem explorer does not show the learner workspace');
+  await page.click('[data-fs-dir="/etc"]');
+  if (await page.locator('#fsExplorerPath').textContent().then(t => t.includes('/etc'))) ok('directory navigation updates the filesystem location');
+  else fail('directory navigation did not update the location');
+  await page.click('[data-fs-file="/etc/hostname"]');
+  if ((await page.textContent('#fsExplorerPreview')).includes('halcyon-web01')) ok('file selection previews simulated file contents');
+  else fail('file preview did not show the selected file contents');
+  await page.click('#fsExplorerHome');
+  if (await page.locator('#fsExplorerPath').textContent().then(t => t.includes('/home/rookie'))) ok('home shortcut returns to the learner home directory');
+  else fail('home shortcut did not return to the learner home directory');
+
   const journey = await page.$('#journey');
   if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible');
   else fail('structured Linux learning journey is missing or hidden');
