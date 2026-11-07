@@ -93,6 +93,22 @@ button{font:inherit;cursor:pointer}
 .first-run-actions{display:flex;gap:6px;flex-wrap:wrap}
 .first-run-actions .btn{font-size:11.5px;padding:5px 8px}
 .first-run-note{color:var(--muted)!important;font-size:11.5px!important}
+.fs-explorer{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.fs-explorer-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fs-explorer h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
+.fs-explorer-path{font:12px var(--f-mono);color:var(--blue);overflow-wrap:anywhere}
+.fs-explorer-shortcuts{display:flex;flex-wrap:wrap;gap:5px}
+.fs-explorer-shortcuts button,.fs-explorer-entry{font:11.5px var(--f-mono);border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:5px;padding:5px 7px}
+.fs-explorer-shortcuts button:hover,.fs-explorer-entry:hover{border-color:var(--blue)}
+.fs-explorer-list{display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
+.fs-explorer-entry{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;width:100%;cursor:pointer}
+.fs-explorer-entry .fs-name{overflow-wrap:anywhere}
+.fs-explorer-entry .fs-meta{color:var(--muted);font-size:10px;white-space:nowrap}
+.fs-explorer-preview{border-top:1px solid var(--line);padding-top:8px;min-width:0}
+.fs-explorer-preview strong{font-size:12px;color:var(--blue)}
+.fs-explorer-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:var(--term);padding:8px;border-radius:5px;font:11px/1.5 var(--f-mono);color:var(--term-ink);margin:6px 0 0}
+.fs-explorer-help{font-size:11px;color:var(--muted);margin:0}
+.fs-explorer-entry:focus-visible,.fs-explorer-shortcuts button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -352,6 +368,16 @@ body.practicing{padding-top:40px}
         <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
       </section>
       <section class="journey" id="journey" aria-label="Linux learning journey"></section>
+      <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
+        <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
+        <div class="fs-explorer-path" id="fsExplorerPath" aria-live="polite">/</div>
+        <p class="fs-explorer-help">Explore the same simulated files used by terminal commands. Choose a folder to open it or a file to inspect it.</p>
+        <nav class="fs-explorer-shortcuts" aria-label="Common Linux locations">
+          <button type="button" data-fs-nav="/">/</button><button type="button" data-fs-nav="/etc">/etc</button><button type="button" data-fs-nav="/var/log">/var/log</button><button type="button" data-fs-nav="/home/rookie">/home/rookie</button><button type="button" data-fs-nav="/srv">/srv</button><button type="button" data-fs-nav="/tmp">/tmp</button>
+        </nav>
+        <div class="fs-explorer-list" id="fsExplorerList" role="group" aria-label="Directory contents"></div>
+        <div class="fs-explorer-preview" id="fsExplorerPreview" aria-live="polite"><p class="fs-explorer-help">Select a file to inspect its contents and permissions.</p></div>
+      </section>
       <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
       <div class="objective">
         <div class="label">Objective</div>
@@ -6046,6 +6072,70 @@ function renderJourney() {
     '<div class="journey-now">' + esc(now) + '</div>' + levelMarkup;
   root.dataset.initialized = 'true';
 }
+let fsExplorerPath = '/', fsExplorerSelected = '';
+function renderFilesystemExplorer() {
+  const root = $('#fsExplorer');
+  if (!root) return;
+  const pathLabel = $('#fsExplorerPath'), list = $('#fsExplorerList'), preview = $('#fsExplorerPreview'), up = $('#fsExplorerUp');
+  const current = lookup(fsExplorerPath);
+  if (pathLabel) pathLabel.textContent = fsExplorerPath;
+  if (up) up.disabled = fsExplorerPath === '/';
+  if (!list || !preview) return;
+  if (current.err || !current.node || current.node.type !== 'dir') {
+    list.innerHTML = '<p class="empty">' + esc(current.err || 'Not a directory') + '</p>';
+    preview.innerHTML = '<p class="fs-explorer-help">This location cannot be opened by the current simulated user.</p>';
+    return;
+  }
+  if (!canRead(current.node) || !canEnter(current.node)) {
+    list.innerHTML = '<p class="empty">Permission denied: you cannot list or enter this directory.</p>';
+    preview.innerHTML = '<p class="fs-explorer-help">Use terminal commands to investigate permissions, or explore another location.</p>';
+    return;
+  }
+  const entries = Object.entries(current.node.children || {}).sort((a,b) => {
+    if (a[1].type !== b[1].type) return a[1].type === 'dir' ? -1 : 1;
+    return a[0].localeCompare(b[0]);
+  });
+  list.innerHTML = entries.map(([name,node]) => {
+    const abs = joinAbs(fsExplorerPath,name), dir = node.type === 'dir';
+    const label = (dir ? '📁 ' : '📄 ') + name;
+    const meta = dir ? 'directory' : human(sizeOf(node));
+    return '<button type="button" class="fs-explorer-entry" ' + (dir ? 'data-fs-open="' : 'data-fs-file="') + esc(abs) + '">' +
+      '<span class="fs-name">' + esc(label) + '</span><span class="fs-meta">' + meta + '</span></button>';
+  }).join('') || '<p class="empty">This directory is empty.</p>';
+  const selected = fsExplorerSelected ? lookup(fsExplorerSelected) : null;
+  if (!selected || selected.err || !selected.node || selected.node.type !== 'file') {
+    preview.innerHTML = '<p class="fs-explorer-help">Select a file to inspect its contents and permissions. Directory changes made in the terminal appear here too.</p>';
+    return;
+  }
+  const n = selected.node;
+  const meta = permStr(n) + ' · ' + n.owner + ':' + n.group + ' · ' + human(sizeOf(n));
+  if (!canRead(n)) {
+    preview.innerHTML = '<strong>' + esc(fsExplorerSelected) + '</strong><p class="fs-explorer-help">' + esc(meta) + ' · Permission denied</p>';
+    return;
+  }
+  const content = String(n.content || '');
+  const display = content.startsWith('(binary file:') || content.startsWith('(binary core dump:')
+    ? '[Binary file — use file, ls -l, or other inspection commands.]'
+    : content.slice(0, 2400) + (content.length > 2400 ? '\n… preview truncated …' : '');
+  preview.innerHTML = '<strong>' + esc(fsExplorerSelected) + '</strong><p class="fs-explorer-help">' + esc(meta) + '</p><pre>' + esc(display) + '</pre>';
+}
+function initFilesystemExplorer() {
+  const root = $('#fsExplorer');
+  if (!root || root.dataset.wired) return;
+  root.dataset.wired = 'true';
+  root.addEventListener('click', ev => {
+    const nav = ev.target.closest('[data-fs-nav]');
+    const open = ev.target.closest('[data-fs-open]');
+    const file = ev.target.closest('[data-fs-file]');
+    if (nav) { fsExplorerPath = norm(nav.dataset.fsNav, '/'); fsExplorerSelected = ''; renderFilesystemExplorer(); }
+    else if (open) { fsExplorerPath = open.dataset.fsOpen; fsExplorerSelected = ''; renderFilesystemExplorer(); }
+    else if (file) { fsExplorerSelected = file.dataset.fsFile; renderFilesystemExplorer(); }
+  });
+  const up = $('#fsExplorerUp');
+  if (up) up.addEventListener('click', () => {
+    if (fsExplorerPath !== '/') { fsExplorerPath = parentOf(fsExplorerPath); fsExplorerSelected = ''; renderFilesystemExplorer(); }
+  });
+}
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6102,6 +6192,7 @@ function render() {
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
   renderJourney();
+  renderFilesystemExplorer();
   if (RACE.active) {
     show('#learningPath', false);
     renderBoard();
@@ -6204,6 +6295,7 @@ function initFirstRunGuide(restored) {
 }
 function boot(restored) {
   initFirstRunGuide(restored);
+  initFilesystemExplorer();
   motd(restored);
   if (restored) { const fixed = repairWorld(); if (fixed) { S.checkpoint = JSON.stringify(S.fs); emitSys(`Restored ${fixed} game file${fixed === 1 ? '' : 's'} that had been deleted, so you can keep going.`, 'hint'); } }
   if (restored && S.finished && S.mission < MISSIONS.length) {

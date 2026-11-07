@@ -68,6 +68,26 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (!(await page.locator('#firstRunGuide').isVisible())) ok('dismissed orientation stays dismissed on return');
   else fail('dismissed orientation reappeared after reload');
 
+  await page.click('[data-fs-nav="/etc"]');
+  if ((await page.textContent('#fsExplorerPath')) === '/etc' && (await page.textContent('#fsExplorerList')).includes('passwd')) ok('filesystem explorer opens /etc and lists its simulated configuration files');
+  else fail('filesystem explorer did not list /etc');
+  await page.click('[data-fs-file="/etc/hosts"]');
+  const hostsPreview = await page.textContent('#fsExplorerPreview');
+  if (hostsPreview.includes('halcyon-web01') && hostsPreview.includes('/etc/hosts')) ok('filesystem explorer previews readable file contents and metadata');
+  else fail('filesystem explorer did not preview /etc/hosts');
+  await page.click('[data-fs-file="/etc/shadow"]');
+  if ((await page.textContent('#fsExplorerPreview')).includes('Permission denied')) ok('filesystem explorer respects simulated file read permissions');
+  else fail('filesystem explorer exposed a protected file');
+  await page.click('[data-fs-nav="/var/log"]');
+  if ((await page.textContent('#fsExplorerList')).includes('halcyon')) ok('filesystem explorer navigates to the simulated system log directory');
+  else fail('filesystem explorer did not show the simulated system log directory');
+  await page.click('[data-fs-open="/var/log/halcyon"]');
+  if ((await page.textContent('#fsExplorerList')).includes('app.log')) ok('filesystem explorer opens the application log subdirectory');
+  else fail('filesystem explorer did not show the application log files');
+  await page.click('#fsExplorerUp');
+  if ((await page.textContent('#fsExplorerPath')) === '/var/log') ok('filesystem explorer supports parent-directory navigation');
+  else fail('filesystem explorer parent navigation failed');
+
   const journey = await page.$('#journey');
   if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible');
   else fail('structured Linux learning journey is missing or hidden');
