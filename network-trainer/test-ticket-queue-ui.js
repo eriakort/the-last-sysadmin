@@ -39,6 +39,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     ok('investigating a ticket loads its linked network scenario');
   else fail('ticket did not launch its linked scenario');
 
+  // The floating device terminal is minimized by default; restore it before entering commands.
+  await page.locator('#terminalRestore').click();
+  await page.waitForSelector('#terminalWindow:not([hidden])');
+
   // This incident requires a diagnosis before the configuration check is unlocked.
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
