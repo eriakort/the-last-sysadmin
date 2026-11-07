@@ -564,3 +564,25 @@ aside{scrollbar-color:#344a60 transparent}
   outline-offset:3px;
   border-radius:3px;
 }
+
+
+/* Persistent floating device terminal: remains mounted while workspaces change. */
+.terminal-window{position:fixed;z-index:1000;left:auto;top:auto;right:22px;bottom:18px;width:min(900px,calc(100vw - 36px));height:min(470px,62vh);min-width:min(360px,calc(100vw - 20px));min-height:230px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);display:flex;flex-direction:column;resize:both;overflow:hidden;border:1px solid #3c647c;border-radius:12px;background:#08121d;box-shadow:0 22px 70px #000b}
+.terminal-window[hidden],.terminal-restore[hidden]{display:none!important}
+.terminal-window-titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:8px 12px;background:linear-gradient(110deg,#123047,#101d2b);border-bottom:1px solid #31536b;color:#dff7ff;font:700 10px ui-monospace,monospace;letter-spacing:.12em;cursor:move;user-select:none;touch-action:none}
+.terminal-window-titlebar>span{display:flex;align-items:center;gap:9px}
+.terminal-window-titlebar>span>i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px color-mix(in srgb,var(--good) 55%,transparent)}
+.terminal-window-titlebar small{color:#7895ab;font-size:8px;letter-spacing:.1em}
+.terminal-window-titlebar button{cursor:pointer}
+.terminal-window-content{flex:1;min-height:0;overflow:hidden}
+.terminal-window-content #term{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;border:0;border-radius:0;box-shadow:none}
+.terminal-window-content #sessionBar{flex:none}
+.terminal-window-content .term-head{flex:none;max-height:84px;overflow:auto;flex-wrap:wrap}
+.terminal-window-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
+.terminal-window-content .tline{flex:none}
+.terminal-restore{position:fixed;z-index:1001;right:18px;bottom:18px;box-shadow:0 8px 28px #0009}
+@media(max-width:760px){
+ .terminal-window{left:8px!important;right:8px!important;top:auto!important;bottom:8px!important;width:auto;height:54vh;min-width:0;min-height:220px;resize:vertical}
+ .terminal-window-content .term-head{max-height:76px}
+ .terminal-window-titlebar{padding:6px 10px}
+}
