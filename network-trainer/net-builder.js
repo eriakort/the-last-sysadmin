@@ -75,6 +75,20 @@ function removeLink(topo, index) {
   topo.links.splice(index, 1); return true;
 }
 
+// Duplicate a device's configuration without copying its physical links.
+// The new device receives a unique id and a nearby canvas position.
+function cloneDevice(topo, id) {
+  const source = topo.devices[id]; if (!source) throw new Error('no such device: ' + id);
+  const kind = source.services ? 'server' : source.kind;
+  const newId = uniqueId(topo, PREFIX[kind] || PREFIX.host);
+  const copy = JSON.parse(JSON.stringify(source));
+  copy.id = newId;
+  if (copy.hostname === id) copy.hostname = newId;
+  topo.devices[newId] = copy;
+  if (topo.pos && topo.pos[id]) topo.pos[newId] = [topo.pos[id][0] + 32, topo.pos[id][1] + 32];
+  return newId;
+}
+
 // Set (or clear) an interface address. Empty ip clears it.
 function setAddress(topo, id, iface, ipStr, prefix) {
   const dev = topo.devices[id]; if (!dev || !dev.ifaces[iface]) throw new Error('no such interface');
@@ -83,4 +97,4 @@ function setAddress(topo, id, iface, ipStr, prefix) {
   else { dev.ifaces[iface].ip = M.ip(ipStr); dev.ifaces[iface].mask = Number(prefix); dev.ifaces[iface].up = true; }
 }
 
-module.exports = { KINDS, blank, addDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
+module.exports = { KINDS, blank, addDevice, cloneDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };

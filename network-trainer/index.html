@@ -3670,6 +3670,20 @@ function removeLink(topo, index) {
   topo.links.splice(index, 1); return true;
 }
 
+// Duplicate a device's configuration without copying its physical links.
+// The new device receives a unique id and a nearby canvas position.
+function cloneDevice(topo, id) {
+  const source = topo.devices[id]; if (!source) throw new Error('no such device: ' + id);
+  const kind = source.services ? 'server' : source.kind;
+  const newId = uniqueId(topo, PREFIX[kind] || PREFIX.host);
+  const copy = JSON.parse(JSON.stringify(source));
+  copy.id = newId;
+  if (copy.hostname === id) copy.hostname = newId;
+  topo.devices[newId] = copy;
+  if (topo.pos && topo.pos[id]) topo.pos[newId] = [topo.pos[id][0] + 32, topo.pos[id][1] + 32];
+  return newId;
+}
+
 // Set (or clear) an interface address. Empty ip clears it.
 function setAddress(topo, id, iface, ipStr, prefix) {
   const dev = topo.devices[id]; if (!dev || !dev.ifaces[iface]) throw new Error('no such interface');
@@ -3678,7 +3692,7 @@ function setAddress(topo, id, iface, ipStr, prefix) {
   else { dev.ifaces[iface].ip = M.ip(ipStr); dev.ifaces[iface].mask = Number(prefix); dev.ifaces[iface].up = true; }
 }
 
-module.exports = { KINDS, blank, addDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
+module.exports = { KINDS, blank, addDevice, cloneDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
 
 });
 __def("./net-scenario", function(module, exports, require){
@@ -3769,6 +3783,7 @@ function toMission(scn) {
 function fromTopology(topo) {
   const out = { devices: clone(topo.devices), links: clone(topo.links) };
   if (topo.pos && Object.keys(topo.pos).length) out.pos = clone(topo.pos);
+  if (Array.isArray(topo.notes) && topo.notes.length) out.notes = clone(topo.notes);
   return out;
 }
 
@@ -3870,7 +3885,7 @@ let MODE = 'play';                                 // 'play' | 'build' (authorin
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
-let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false; // topology interaction state
+let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null; // topology interaction state
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -3956,8 +3971,9 @@ function renderTopo() {
   const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   const view = TOPO_VIEW || [0, 0, maxX, maxY];
-  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology">`;
-  for (const l of net.links) { const x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
+  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology" tabindex="0">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)"/>' : ''}`;
+  for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
+  for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
   for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
@@ -4780,10 +4796,20 @@ function svgPoint(svg, clientX, clientY) {
   const p = pt.matrixTransform(m.inverse()); return [p.x, p.y];
 }
 const nodePos = id => (RUN.net.pos && RUN.net.pos[id]) || LASTPOS[id] || [90, 50];
-function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; RUN.net.pos[id] = [Math.max(4, x), Math.max(4, y)]; }
+function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; const snap = v => TOPO_SNAP ? Math.round(v / 24) * 24 : v; RUN.net.pos[id] = [Math.max(4, snap(x)), Math.max(4, snap(y))]; }
 
 function wireTopo() {
   const svg = $('#topo');
+  if (svg) svg.addEventListener('click', e => {
+    const target = e.target;
+    const note = target && target.closest ? target.closest('.topo-note') : null;
+    if (note && canBuild()) { const i=Number(note.dataset.noteIndex), current=RUN.net.notes[i]; const value=prompt('Edit topology note (leave blank to remove):',current && current.text || ''); if(value===null)return; if(!value.trim())RUN.net.notes.splice(i,1); else current.text=value.trim().slice(0,120); refresh(); return; }
+  });
+  if (svg) svg.querySelectorAll('.edge').forEach(edge => edge.addEventListener('click', () => {
+    if (!canBuild()) return;
+    LINK_SEL = Number(edge.getAttribute('data-link-index'));
+    refresh();
+  }));
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || WIRE || e.button !== 0) return;
@@ -4897,13 +4923,19 @@ function wireConfig() {
   document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; input.focus(); } }));
   document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
-    const id = B.addDevice(RUN.net, b.dataset.add); selectDevice(id); WIRE = null; refresh();
+    const id = B.addDevice(RUN.net, b.dataset.add); LINK_SEL=null; selectDevice(id); WIRE = null; refresh();
   }));
+  const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{const id=B.cloneDevice(RUN.net,SEL);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
+  const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
+  const gridBtn=$('#gridBtn');if(gridBtn)gridBtn.addEventListener('click',()=>{TOPO_GRID=!TOPO_GRID;refresh();});
+  const snapBtn=$('#snapBtn');if(snapBtn)snapBtn.addEventListener('click',()=>{TOPO_SNAP=!TOPO_SNAP;refresh();});
+  const portsBtn=$('#portsBtn');if(portsBtn)portsBtn.addEventListener('click',()=>toggleTopologyPorts());
+  const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
     if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
     refresh();
   });
-  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; refresh(); } });
+  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; LINK_SEL=null; refresh(); } });
   const ab = $('#arrangeBtn'); if (ab) ab.addEventListener('click', autoArrange);
   function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
@@ -5072,10 +5104,11 @@ function renderPalette() {
   if (!canBuild()) return '';
   const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
-  return `<div class="builder"><div class="label">Build</div>
+  return `<div class="builder"><div class="label">Build · topology designer</div>
     <div class="pal-row">${add}</div>
-    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button>` : ''}<button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button>${wiring}</div>
-    <div class="pal-hint dim">Drag any device to reposition it; links follow.</div></div>`;
+    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
+    <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
+    <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · click a link to select it, then remove it · click a note to edit.</div></div>`;
 }
 function describeCheck(s) {
   switch (s.type) {
@@ -5383,7 +5416,7 @@ function openPalette() {
 }
 function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remove();}
 function wireGlobalPalette() {
-  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();}else if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;} if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='d'&&SEL){e.preventDefault();try{const id=B.cloneDevice(RUN.net,SEL);selectDevice(id);refresh();}catch(err){flashStatus(err.message);}return;}if(e.key==='Delete'&&LINK_SEL!=null){e.preventDefault();B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();return;}}if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
 }
 
 /* ---------- boot ---------- */
