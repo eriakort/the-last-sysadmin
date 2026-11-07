@@ -21,7 +21,7 @@ jobs:
         run: npm ci
 
       - name: Install Chromium for browser tests
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run Supabase schema and RLS tests
         run: |
@@ -35,7 +35,7 @@ jobs:
       - name: Linux browser smoke test
         run: npm run smoke
 
-      - name: Linux classroom UI tests
+      - name: Firefox browser compatibility tests\n        run: npm run test:ui:firefox\n\n      - name: WebKit browser compatibility tests\n        run: npm run test:ui:webkit\n\n      - name: Linux classroom UI tests
         run: npm run test:ui
 
       - name: Linux authored-mission playback tests
