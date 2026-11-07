@@ -141,6 +141,15 @@ button{font:inherit;cursor:pointer}
 .skill-progress-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .skill-progress-state{margin-left:auto;color:var(--muted);font-size:9px;white-space:nowrap}
 .skill-progress-item[data-complete="true"] .skill-progress-state{color:var(--green)}
+.incident-challenge{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.incident-challenge h2{font:600 15px var(--f-display);color:var(--blue);margin:0}
+.incident-challenge p{font-size:11.5px;color:var(--muted);margin:0}
+.incident-challenge-task{background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:9px;font-size:12px;color:var(--ink)}
+.incident-challenge-progress{font:11px var(--f-mono);color:var(--muted)}
+.incident-challenge-feedback{font-size:12px;color:var(--muted);min-height:18px}
+.incident-challenge-feedback[data-result="success"]{color:var(--green)}
+.incident-challenge-feedback[data-result="retry"]{color:var(--amber)}
+
 @media(max-width:700px){.skill-progress-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
@@ -405,6 +414,14 @@ body.practicing{padding-top:40px}
         <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Practise core commands and keep your progress between visits.</p></div><span id="commandSkillCount">0/7</span></div>
         <div class="skill-progress-track" role="progressbar" aria-label="Command skills practised" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0"><span></span></div>
         <div class="skill-progress-grid" id="commandSkillGrid"></div>
+      </section>
+      <section class="incident-challenge" id="commandIncidentChallenge" aria-labelledby="commandIncidentTitle">
+        <h2 id="commandIncidentTitle">Apply · Service outage</h2>
+        <p>A web service is unavailable. Investigate safely before recommending a change. This exercise uses read-only commands in the simulator.</p>
+        <div class="incident-challenge-task" id="commandIncidentTask">Start the challenge when you're ready. You'll inspect service state, recent logs, and listening sockets.</div>
+        <div class="incident-challenge-progress" id="commandIncidentProgress" aria-live="polite">0/3 investigation steps</div>
+        <p class="incident-challenge-feedback" id="commandIncidentFeedback" role="status" aria-live="polite">No changes are made to the simulated server.</p>
+        <button class="btn" id="commandIncidentStart" type="button">Start investigation</button>
       </section>
       <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
         <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
@@ -3769,6 +3786,41 @@ const COMMAND_COACH = {
   dig: { summary: 'Queries DNS records and shows how a name resolves.', example: 'dig halcyon-web01', pitfall: 'A DNS answer is not proof that the application port is reachable.' }
 };
 const COACH_ACTIONS = new Set(['systemctl', 'apt', 'apt-get', 'ufw', 'mount', 'umount', 'git']);
+const COMMAND_INCIDENT_STEPS = [
+  { command: 'systemctl', args: ['status', 'halcyon'], task: '1 · Inspect the service. Check the current status of halcyon without changing it.', success: 'Service state checked. Now inspect its recent logs.' },
+  { command: 'journalctl', args: ['-u', 'halcyon', '-n', '20'], task: '2 · Review recent logs. Read the latest 20 journal entries for halcyon.', success: 'Recent service logs reviewed. Now check whether the expected ports are listening.' },
+  { command: 'ss', args: ['-tuln'], task: '3 · Check network listeners. List listening TCP and UDP sockets with numeric ports.', success: 'Listener state checked. Investigation complete — you have gathered service, log, and socket evidence.' }
+];
+let commandIncidentActive = false;
+let commandIncidentStep = 0;
+function renderCommandIncident() {
+  const task = document.getElementById('commandIncidentTask');
+  const progress = document.getElementById('commandIncidentProgress');
+  const start = document.getElementById('commandIncidentStart');
+  if (task) task.textContent = commandIncidentActive
+    ? COMMAND_INCIDENT_STEPS[commandIncidentStep]?.task || 'Investigation complete. Summarise what the evidence tells you.'
+    : 'Start the challenge when you\'re ready. You\'ll inspect service state, recent logs, and listening sockets.';
+  if (progress) progress.textContent = commandIncidentStep + '/3 investigation steps';
+  if (start) start.textContent = commandIncidentActive ? 'Restart investigation' : commandIncidentStep === 3 ? 'Run it again' : 'Start investigation';
+}
+function updateCommandIncident(name, args) {
+  if (!commandIncidentActive) return;
+  const step = COMMAND_INCIDENT_STEPS[commandIncidentStep];
+  if (!step || name !== step.command) return;
+  const feedback = document.getElementById('commandIncidentFeedback');
+  if (!step.args.every(token => args.includes(token))) {
+    if (feedback) { feedback.textContent = 'Not quite. This step is read-only; check the required action and options, then try again.'; feedback.dataset.result = 'retry'; }
+    return;
+  }
+  commandIncidentStep += 1;
+  if (feedback) {
+    feedback.textContent = step.success;
+    feedback.dataset.result = 'success';
+  }
+  if (commandIncidentStep === COMMAND_INCIDENT_STEPS.length) commandIncidentActive = false;
+  renderCommandIncident();
+}
+
 const COMMAND_DRILLS = {
   whoami: { task: 'Confirm which account is running this shell.', command: 'whoami', args: [], success: 'Correct — whoami prints the current account name.' },
   ls: { task: 'List all entries, including hidden dotfiles, in the current directory.', command: 'ls', args: ['-a'], success: 'Correct — -a includes hidden entries.' },
@@ -3804,6 +3856,7 @@ function renderCommandSkills() {
   }).join('');
 }
 function updateCommandCoach(name, args) {
+  updateCommandIncident(name, args);
   if (activeCommandDrill) {
     const drill = COMMAND_DRILLS[activeCommandDrill];
     if (drill && name === drill.command) {
@@ -6179,6 +6232,16 @@ function histMove(dir) {
   else { if (hIdx === null) return; hIdx++; if (hIdx >= S.history.length) { hIdx = null; tin.value = hDraft; } else tin.value = S.history[hIdx]; }
   const p = tin.value.length; requestAnimationFrame(() => tin.setSelectionRange(p, p));
 }
+const commandIncidentStart = $('#commandIncidentStart');
+if (commandIncidentStart) commandIncidentStart.addEventListener('click', () => {
+  commandIncidentStep = 0;
+  commandIncidentActive = true;
+  const feedback = $('#commandIncidentFeedback');
+  if (feedback) { feedback.textContent = 'Investigation started. Enter the requested command in the terminal, then press Enter.'; feedback.dataset.result = ''; }
+  renderCommandIncident();
+  tin.focus({ preventScroll: true });
+});
+renderCommandIncident();
 const coachToggle = $('#commandCoachToggle'), coachPanel = $('#commandCoach');
 if (coachToggle) coachToggle.addEventListener('click', () => {
   const open = coachPanel.hidden;
