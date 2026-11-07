@@ -161,7 +161,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await drawAt('arrow', .49, .62, .58, .68);
   await drawAt('rect', .64, .62, .73, .72);
   await drawAt('ellipse', .78, .62, .87, .72);
-  await drawAt('freehand', .34, .78, .43, .88);
+  // Keep the freehand path to the right of the h2 node; Playwright clicks its
+  // center later to verify selection and removal, so it must not sit beneath a node.
+  await drawAt('freehand', .84, .78, .94, .88);
   if (await page.locator('#topo .topo-drawing').count() === 5) ok('arrow, rectangle, ellipse and freehand drawings are supported');
   else fail('not all drawing primitives were created');
   await page.reload({ waitUntil: 'load' });
