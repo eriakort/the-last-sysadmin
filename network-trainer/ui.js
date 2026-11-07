@@ -24,7 +24,8 @@ let WIRE = null;                                   // first endpoint picked whil
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
-let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true };
+let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true };
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null;
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -100,18 +101,61 @@ function renderFlows() {
   }).join('');
   return `<div id="flows"><div class="fl-h">Flows <span class="dim">${flows.length}</span></div>${rows}</div>`;
 }
+function drawingMarkup(d, index) {
+  const selected = DRAWING_SEL === index ? ' selected' : '';
+  const color = esc(d.color || '#e5b85c');
+  const common = `class="topo-drawing${selected}" data-drawing-index="${index}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
+  if (d.type === 'freehand') return `<path ${common} d="${(d.points||[]).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ')}"/>`;
+  const x1=Number(d.x1)||0,y1=Number(d.y1)||0,x2=Number(d.x2)||0,y2=Number(d.y2)||0;
+  if (d.type === 'rect') return `<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`;
+  if (d.type === 'ellipse') return `<ellipse ${common} cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" rx="${Math.abs(x2-x1)/2}" ry="${Math.abs(y2-y1)/2}"/>`;
+  return `<line ${common} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${d.type==='arrow'?'marker-end="url(#topoArrow)"':''}/>`;
+}
+function updateDrawingPreview(d) {
+  const el=d.el, x1=d.start[0],y1=d.start[1],p=d.current||d.start,x2=p[0],y2=p[1];
+  if(d.type==='freehand') el.setAttribute('d',d.points.map((q,i)=>(i?'L':'M')+q[0]+' '+q[1]).join(' '));
+  else if(d.type==='rect'){el.setAttribute('x',Math.min(x1,x2));el.setAttribute('y',Math.min(y1,y2));el.setAttribute('width',Math.abs(x2-x1));el.setAttribute('height',Math.abs(y2-y1));}
+  else if(d.type==='ellipse'){el.setAttribute('cx',(x1+x2)/2);el.setAttribute('cy',(y1+y2)/2);el.setAttribute('rx',Math.abs(x2-x1)/2);el.setAttribute('ry',Math.abs(y2-y1)/2);}
+  else {el.setAttribute('x1',x1);el.setAttribute('y1',y1);el.setAttribute('x2',x2);el.setAttribute('y2',y2);}
+}
+function beginTopologyDrawing(svg, e) {
+  const p=svgPoint(svg,e.clientX,e.clientY), type=DRAW_TOOL;
+  const tag=type==='rect'?'rect':type==='ellipse'?'ellipse':type==='freehand'?'path':'line';
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  el.setAttribute('class','topo-drawing draft');el.setAttribute('stroke','#e5b85c');el.setAttribute('stroke-width','2.5');el.setAttribute('fill','none');el.setAttribute('stroke-linecap','round');el.setAttribute('stroke-linejoin','round');el.setAttribute('vector-effect','non-scaling-stroke');
+  if(type==='arrow')el.setAttribute('marker-end','url(#topoArrow)');
+  svg.appendChild(el);DRAWING={type,start:p,current:p,points:[p],before:topologySnapshot(),el};
+  try{svg.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault();
+}
+function updateTopologyDrawing(e) {
+  if(!DRAWING)return;
+  const p=svgPoint($('#topo'),e.clientX,e.clientY);DRAWING.current=p;
+  if(DRAWING.type==='freehand'&&Math.hypot(p[0]-DRAWING.points[DRAWING.points.length-1][0],p[1]-DRAWING.points[DRAWING.points.length-1][1])>=2)DRAWING.points.push(p);
+  updateDrawingPreview(DRAWING);
+}
+function finishTopologyDrawing() {
+  if(!DRAWING)return;
+  const d=DRAWING;DRAWING=null;if(d.el)d.el.remove();
+  const p=d.current||d.start;if(Math.hypot(p[0]-d.start[0],p[1]-d.start[1])<4)return;
+  const saved={type:d.type,color:'#e5b85c'};
+  if(d.type==='freehand')saved.points=d.points;
+  else {saved.x1=d.start[0];saved.y1=d.start[1];saved.x2=p[0];saved.y2=p[1];}
+  rememberTopology(d.before);RUN.net.drawings=RUN.net.drawings||[];RUN.net.drawings.push(saved);DRAWING_SEL=RUN.net.drawings.length-1;refresh();
+}
 function renderTopo() {
   const net = RUN.net;
   const layers = Object.assign({}, TOPO_LAYERS, net.layerVisibility || {});
-  if (!Object.keys(net.devices).length) return '<div class="canvas-empty">Empty canvas — add a device from the <b>Build</b> panel on the right.</div>';
-  const auto = layout(net);
-  const pos = {};                                    // hand-placed position wins; otherwise auto-layout
-  for (const id in net.devices) pos[id] = (net.pos && net.pos[id]) ? net.pos[id] : auto[id];
+  const deviceIds = Object.keys(net.devices || {});
+  if (!deviceIds.length && !(net.drawings || []).length && !(net.notes || []).length && !(net.zones || []).length) return '<div class="canvas-empty">Empty canvas — add a device or choose a drawing tool from the <b>Build</b> panel.</div>';
+  const auto = deviceIds.length ? layout(net) : {};
+  const pos = {};
+  for (const id of deviceIds) pos[id] = (net.pos && net.pos[id]) ? net.pos[id] : auto[id];
   LASTPOS = pos;
-  const maxX = Math.max(...Object.values(pos).map(p => p[0])) + 100, maxY = Math.max(...Object.values(pos).map(p => p[1])) + 80;
+  const maxX = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[0])) + 100 : 800, maxY = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[1])) + 80 : 600;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   const view = TOPO_VIEW || [0, 0, maxX, maxY];
-  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology" tabindex="0">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)"/>' : ''}`;
+  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology" tabindex="0">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
+  if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
   if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
   if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
@@ -984,10 +1028,12 @@ function pasteTopologySelection() {
 function wireTopo() {
   const svg = $('#topo');
   if (svg) svg.addEventListener('click', e => {
+    if (DRAW_TOOL !== 'select' && canBuild()) return;
     const target = e.target;
     const note = target && target.closest ? target.closest('.topo-note') : null;
     if (note && canBuild()) { const i=Number(note.dataset.noteIndex), current=RUN.net.notes[i]; const value=prompt('Edit topology note (leave blank to remove):',current && current.text || ''); if(value===null)return; rememberTopology();if(!value.trim())RUN.net.notes.splice(i,1); else current.text=value.trim().slice(0,120); refresh(); return; }
   });
+  if (svg) svg.querySelectorAll('.topo-drawing').forEach(shape => shape.addEventListener('click', e => { if(!canBuild())return; e.stopPropagation(); DRAWING_SEL=Number(shape.dataset.drawingIndex); refresh(); }));
   if (svg) svg.querySelectorAll('.edge').forEach(edge => edge.addEventListener('click', () => {
     if (!canBuild()) return;
     LINK_SEL = Number(edge.getAttribute('data-link-index'));
@@ -996,6 +1042,7 @@ function wireTopo() {
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || WIRE || e.button !== 0) return;
+    if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
     if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
     PAN = { x:e.clientX, y:e.clientY, view:[vb.x,vb.y,vb.width,vb.height], width:rect.width, height:rect.height };
@@ -1022,6 +1069,7 @@ function wireTopo() {
 }
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
+  if (DRAWING) { updateTopologyDrawing(e); return; }
   if (BOX) { const p=svgPoint(svg,e.clientX,e.clientY);BOX.current=p;const x=Math.min(BOX.start[0],p[0]),y=Math.min(BOX.start[1],p[1]);BOX.el.setAttribute('x',x);BOX.el.setAttribute('y',y);BOX.el.setAttribute('width',Math.abs(p[0]-BOX.start[0]));BOX.el.setAttribute('height',Math.abs(p[1]-BOX.start[1]));return; }
   if (PAN) {
     const dx = (e.clientX - PAN.x) * PAN.view[2] / Math.max(1, PAN.width);
@@ -1039,6 +1087,7 @@ function onDragMove(e) {
   DRAG.ids.forEach(id=>{const start=DRAG.starts[id]||nodePos(id);setPos(id,start[0]+dx,start[1]+dy);const p=nodePos(id),cx=p[0]+24,cy=p[1]+18;const g=document.querySelector(`#topo .node[data-dev="${id}"]`);if(g)g.setAttribute('transform',`translate(${p[0]},${p[1]})`);document.querySelectorAll(`#topo line[data-a="${id}"]`).forEach(l=>{l.setAttribute('x1',cx);l.setAttribute('y1',cy);});document.querySelectorAll(`#topo line[data-b="${id}"]`).forEach(l=>{l.setAttribute('x2',cx);l.setAttribute('y2',cy);});});
 }
 function onDragUp() {
+  if(DRAWING){finishTopologyDrawing();return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
@@ -1118,6 +1167,8 @@ function wireConfig() {
   const gridBtn=$('#gridBtn');if(gridBtn)gridBtn.addEventListener('click',()=>{TOPO_GRID=!TOPO_GRID;refresh();});
   const snapBtn=$('#snapBtn');if(snapBtn)snapBtn.addEventListener('click',()=>{TOPO_SNAP=!TOPO_SNAP;refresh();});
   const portsBtn=$('#portsBtn');if(portsBtn)portsBtn.addEventListener('click',()=>toggleTopologyPorts());
+  document.querySelectorAll('#config [data-draw-tool]').forEach(b=>b.addEventListener('click',()=>{DRAW_TOOL=b.dataset.drawTool;DRAWING_SEL=null;refresh();}));
+  const delDrawing=$('#delDrawing');if(delDrawing)delDrawing.addEventListener('click',()=>{if(DRAWING_SEL==null||!RUN.net.drawings||!RUN.net.drawings[DRAWING_SEL])return;rememberTopology();RUN.net.drawings.splice(DRAWING_SEL,1);DRAWING_SEL=null;refresh();});
   const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;rememberTopology();B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
   const ub=$('#topoUndo');if(ub)ub.addEventListener('click',undoTopology);const rb=$('#topoRedo');if(rb)rb.addEventListener('click',redoTopology);const cp=$('#topoCopy');if(cp)cp.addEventListener('click',copyTopologySelection);const ps=$('#topoPaste');if(ps)ps.addEventListener('click',pasteTopologySelection);
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
@@ -1294,11 +1345,13 @@ function renderPalette() {
   const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
   const layerState = Object.assign({}, TOPO_LAYERS, RUN.net.layerVisibility || {});
+  const drawingTools = [['select','Select'],['line','Line'],['arrow','Arrow'],['rect','Rectangle'],['ellipse','Ellipse'],['freehand','Freehand']];
   return `<div class="builder"><div class="label">Build · topology designer</div>
     <div class="pal-row"><button class="btn sm" id="topoUndo" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
     <div class="pal-row">${add}</div>
     <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button><button class="btn sm" id="labelDev">Label</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="zoneBtn" ${TOPO_SELECTED.size||SEL?'':'disabled'}>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
     <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
+    <div class="label2">Drawing tools</div><div class="pal-row">${drawingTools.map(([k,n])=>`<button class="btn sm draw-tool${DRAW_TOOL===k?' active':''}" data-draw-tool="${k}" aria-pressed="${DRAW_TOOL===k}">${n}</button>`).join('')}<button class="btn sm" id="delDrawing" ${DRAWING_SEL==null?'disabled':''}>Remove drawing</button></div>
     <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(layerState).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${layerState[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · layer visibility changes presentation only.</div></div>`;
 }
 function describeCheck(s) {
