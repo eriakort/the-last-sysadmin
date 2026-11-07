@@ -5102,6 +5102,11 @@ function wireTopo() {
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
     });
+    n.addEventListener('dblclick', e => {
+      e.preventDefault(); e.stopPropagation();
+      selectDevice(n.dataset.dev);
+      openTerminalWindow(true);
+    });
   });
 }
 function onDragMove(e) {
@@ -5350,6 +5355,61 @@ function exportJournal() {
 }
 function openJournal() { showWorkspaceView('journal'); }
 function openHelp() { showWorkspaceView('knowledge'); }
+function mountTerminalWindow() {
+  const term = $('#term');
+  if (!term || $('#terminalWindow')) return;
+  const win = document.createElement('section');
+  win.id = 'terminalWindow';
+  win.className = 'terminal-window';
+  win.setAttribute('role', 'region');
+  win.setAttribute('aria-label', 'Floating device terminal');
+  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
+  win.querySelector('.terminal-window-content').appendChild(term);
+  document.body.appendChild(win);
+  const restore = document.createElement('button');
+  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
+  restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
+  restore.hidden = true; document.body.appendChild(restore);
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
+  if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+    win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
+    win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
+    win.style.right = 'auto'; win.style.bottom = 'auto';
+  }
+  const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
+  $('#terminalMinimize').addEventListener('click', minimize);
+  restore.addEventListener('click', () => openTerminalWindow(true));
+  const bar = win.querySelector('.terminal-window-titlebar');
+  let drag = null;
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('button') || e.button !== 0) return;
+    const rect = win.getBoundingClientRect();
+    drag = { x:e.clientX, y:e.clientY, left:rect.left, top:rect.top };
+    bar.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  bar.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const left = Math.max(0, Math.min(window.innerWidth - 220, drag.left + e.clientX - drag.x));
+    const top = Math.max(0, Math.min(window.innerHeight - 90, drag.top + e.clientY - drag.y));
+    win.style.left = left + 'px'; win.style.top = top + 'px'; win.style.right = 'auto'; win.style.bottom = 'auto';
+  });
+  const finishDrag = () => {
+    if (!drag) return;
+    drag = null;
+    const rect = win.getBoundingClientRect();
+    try { localStorage.setItem('network-terminal-window-v1', JSON.stringify({ left:rect.left, top:rect.top })); } catch (_) {}
+  };
+  bar.addEventListener('pointerup', finishDrag);
+  bar.addEventListener('pointercancel', finishDrag);
+}
+function openTerminalWindow(focusInput = false) {
+  const win = $('#terminalWindow'), restore = $('#terminalRestore');
+  if (!win) return;
+  win.hidden = false;
+  if (restore) restore.hidden = true;
+  win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
+  if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
+}
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
@@ -5763,6 +5823,7 @@ function boot() {
     </div>
       </div>
     </div>`;
+  mountTerminalWindow();
   wireTerm();
   wireEvidenceTools();
   wireConfigArchiveTools();
