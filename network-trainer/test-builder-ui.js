@@ -27,6 +27,29 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(400);
 
+  // --- workspace routes survive refresh and support browser history ---
+  await page.click('#navIncidents');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'incidents');
+  if (await page.locator('#incidentsView').isVisible()) ok('incident workspace updates the shareable URL');
+  else fail('incident workspace did not become visible after navigation');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'incidents');
+  await page.waitForTimeout(120);
+  if (await page.locator('#incidentsView').isVisible()) ok('refresh restores the active incident workspace and URL');
+  else fail('refresh returned to a different workspace');
+  await page.click('#navKnowledge');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'knowledge');
+  await page.goBack();
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'incidents');
+  if (await page.locator('#incidentsView').isVisible()) ok('browser Back restores the previous workspace');
+  else fail('browser Back did not restore the previous workspace');
+  await page.goForward();
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'knowledge');
+  if (await page.locator('#knowledgeView').isVisible()) ok('browser Forward restores the next workspace');
+  else fail('browser Forward did not restore the next workspace');
+  await page.click('#navWorkbench');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'workbench');
+
   // --- enter build mode ---
   await page.click('#btnBuild'); await page.waitForTimeout(150);
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
