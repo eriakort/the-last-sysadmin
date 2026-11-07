@@ -98,8 +98,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#noteBtn'); await page.waitForTimeout(70);
   if ((await page.locator('#topo .topo-note').textContent()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
   // --- device labels and logical network zones ---
-  await page.click('#labelDev');
   page.once('dialog', dialog => dialog.accept('Core Router'));
+  await page.click('#labelDev');
   await page.waitForTimeout(60);
   if ((await page.locator('#topo .node[data-dev="h2"] .n-id').textContent()) === 'Core Router') ok('selected device supports a custom display label');
   else fail('custom device label was not rendered');
