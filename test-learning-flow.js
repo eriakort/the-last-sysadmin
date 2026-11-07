@@ -1,4 +1,4 @@
-// Browser regression for the first guided-learning pilot (Linux Chapter 1).
+// Browser regression for guided learning, curriculum coverage and mastery gates.
 const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
@@ -25,11 +25,15 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     const start = missionStarts[i].line;
     const end = i + 1 < missionStarts.length ? missionStarts[i + 1].line : missionLines.length;
     const missionBlock = missionLines.slice(start, end).join('\n');
-    if (!missionBlock.includes('learning:')) continue;
+    // Only inspect mission metadata before its story; later application code can
+    // contain unrelated "learning:" strings after the final mission definition.
+    const storyStart = missionBlock.search(/^\\s{4}story\\s*:/m);
+    const missionHeader = storyStart >= 0 ? missionBlock.slice(0, storyStart) : missionBlock;
+    if (!/^\\s{4}learning\\s*:\\s*\\{/m.test(missionHeader)) continue;
     const chapter = missionStarts[i].chapter;
     guidedChapters.add(chapter);
     for (const field of requiredGuideFields) {
-      if (!missionBlock.includes(field + ':') && !missionBlock.includes('"' + field + '":')) fail('chapter ' + (chapter + 1) + ' guide is missing ' + field);
+      if (!missionHeader.includes(field + ':') && !missionHeader.includes('"' + field + '":')) fail('chapter ' + (chapter + 1) + ' guide is missing ' + field);
     }
   }
   if (guidedChapters.size === 35) ok('all 35 chapters have at least one complete six-part learning guide');
@@ -228,6 +232,15 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await run('sudo usermod -s /usr/sbin/nologin jmorrow');
   if ((await page.textContent('#pTitle')) === 'Survey the machine') ok('Chapter 5 starts after the Chapter 4 access lockdown');
   else fail('did not reach the first Chapter 5 mission');
+
+  // The process-survey guide now has its own mastery gate. Prove the PID
+  // concept before completing the existing incident ticket.
+  await page.click('[data-learning-choice="user"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('Chapter 5 rejects confusing process owner with process ID');
+  else fail('Chapter 5 accepted an incorrect process-survey answer');
+  await page.click('[data-learning-choice="pid"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. The PID')) ok('Chapter 5 explains the process identifier');
+  else fail('Chapter 5 process-survey answer did not show its explanation');
 
   await run('ps aux');
   await run('submit 2447');
