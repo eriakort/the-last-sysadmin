@@ -80,6 +80,35 @@ button{font:inherit;cursor:pointer}
 .learning-feedback{font-size:12px;color:var(--muted);min-height:18px;margin-top:7px}
 .learning-feedback.ok{color:var(--green)}
 .learning-feedback.bad{color:var(--red)}
+/* A visible curriculum map makes the 35-chapter journey feel navigable without
+   replacing the incident-driven terminal experience. */
+.journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.journey-summary strong{font:600 15px var(--f-display);color:var(--amber)}
+.journey-summary p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.journey-level-count{font:600 11px var(--f-mono);color:var(--muted);white-space:nowrap}
+.journey-track{height:7px;background:var(--led-off);border-radius:5px;overflow:hidden}
+.journey-track span{display:block;height:100%;background:var(--green);border-radius:5px;transition:width .25s}
+.journey-now{font-size:12px;color:var(--muted);padding:7px 9px;background:var(--raise);border-radius:6px}
+.journey-level{border:1px solid var(--line);border-radius:7px;background:var(--raise);overflow:hidden}
+.journey-level summary{display:flex;align-items:center;gap:8px;padding:9px 10px;cursor:pointer;list-style:none;font-size:12.5px;font-weight:600}
+.journey-level summary::-webkit-details-marker{display:none}
+.journey-level summary::before{content:"›";font:700 17px var(--f-mono);color:var(--muted);transition:transform .15s}
+.journey-level[open] summary::before{transform:rotate(90deg)}
+.journey-level summary:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+.journey-level-name{flex:1}
+.journey-chapters{display:flex;flex-direction:column;gap:4px;padding:0 7px 7px}
+.journey-chapter{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 8px;border-radius:5px;font-size:12px}
+.journey-chapter[data-status="current"]{background:color-mix(in srgb,var(--amber) 13%,var(--raise));outline:1px solid color-mix(in srgb,var(--amber) 45%,transparent)}
+.journey-chapter[data-status="complete"] .journey-chapter-mark{color:var(--green)}
+.journey-chapter-mark{font:600 11px var(--f-mono);color:var(--muted);text-align:center}
+.journey-chapter-name{min-width:0}
+.journey-chapter-name strong{display:block;font-weight:600;color:var(--ink)}
+.journey-chapter-name span{display:block;color:var(--muted);font-size:11px}
+.journey-chapter-status{font-size:10px;color:var(--muted);white-space:nowrap}
+.journey-chapter[data-status="current"] .journey-chapter-status{color:var(--amber);font-weight:600}
+.journey-chapter[data-status="complete"] .journey-chapter-status{color:var(--green)}
+@media(max-width:700px){.journey{padding:10px}.journey-chapter{grid-template-columns:22px minmax(0,1fr) auto}}
 @media(max-width:700px){.learning-grid{grid-template-columns:1fr}}
 .label{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px}
 .label span{letter-spacing:.04em;text-transform:none;font-weight:400}
@@ -295,6 +324,7 @@ body.practicing{padding-top:40px}
         <h1 id="pTitle"></h1>
       </div>
       <p class="story" id="pStory"></p>
+      <section class="journey" id="journey" aria-label="Linux learning journey"></section>
       <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
       <div class="objective">
         <div class="label">Objective</div>
@@ -3659,6 +3689,13 @@ const CHAPTERS = [
   { label: 'Chapter 34', name: 'Incident File: The Service That Keeps Dying', topic: 'The OOM killer' },
   { label: 'Chapter 35', name: 'Incident File: The Ghost Load', topic: 'I/O wait & stuck processes' }
 ];
+const LEARNING_LEVELS = [
+  { title: 'Linux foundations', first: 0, last: 3, description: 'Get comfortable with the shell, files, logs and accounts.' },
+  { title: 'Everyday administration', first: 4, last: 9, description: 'Manage processes, networking, storage, backups and system security.' },
+  { title: 'Automation and services', first: 10, last: 14, description: 'Use scripts, service managers, logs, containers and deployment workflows.' },
+  { title: 'Advanced operations', first: 15, last: 29, description: 'Connect the concepts through reviews, deeper system work and a capstone.' },
+  { title: 'Incident response lab', first: 30, last: 34, description: 'Investigate complex failures using evidence and a repeatable method.' }
+];
 CHAPTERS[0].outro = "**Chapter 1 complete.** You know where everything lives. Now the clean-up.";
 CHAPTERS[1].outro = "**Chapter 2 complete.** The disk has room again and the script is out of the public folder. Time to find out what really happened.";
 CHAPTERS[2].outro = "**Chapter 3 complete.** You've found what Dana found: a crash caused by a full disk, and a script nobody approved that published the customer list every hour to an address nobody knows. Priya has read your evidence. Her next question: who still has access?";
@@ -5931,6 +5968,50 @@ document.querySelectorAll('.key').forEach(b => b.addEventListener('click', () =>
 /* ---------- side panel ---------- */
 const RANKS = [[0, 'Intern'], [4, 'Junior Admin'], [9, 'Sysadmin'], [14, 'Incident Lead'], [21, 'Security Lead'], [27, 'Platform Engineer'], [33, 'Reliability Lead'], [41, 'Staff SRE'], [53, 'Principal SRE'], [63, 'Automation Lead'], [73, 'Distinguished Engineer'], [84, 'Systems Architect'], [100, 'Kernel Whisperer'], [120, 'Grandmaster Admin'], [140, 'Legend of Halcyon'], [160, 'Incident Commander'], [180, 'Chief Incident Commander']];
 const rankName = () => RANKS.filter(r => S.done.length >= r[0]).pop()[1];
+function renderJourney() {
+  const root = $('#journey');
+  if (!root) return;
+  root.hidden = !!RACE.active;
+  if (RACE.active) return;
+  const completedMissions = MISSIONS.filter(m => S.done.includes(m.id)).length;
+  const totalMissions = MISSIONS.length;
+  const completedChapters = CHAPTERS.filter((_, ci) => {
+    const chapterMissions = MISSIONS.filter(m => m.ch === ci);
+    return chapterMissions.length > 0 && chapterMissions.every(m => S.done.includes(m.id));
+  }).length;
+  const currentMission = MISSIONS[S.mission];
+  const currentChapter = currentMission ? currentMission.ch : CHAPTERS.length - 1;
+  const currentLevel = LEARNING_LEVELS.findIndex(level => currentChapter >= level.first && currentChapter <= level.last);
+  const pct = Math.round(completedMissions / totalMissions * 100);
+  const openLevels = new Set([...root.querySelectorAll('details[open]')].map(el => Number(el.dataset.journeyLevel)));
+  if (!root.dataset.initialized) openLevels.add(currentLevel);
+  const levelMarkup = LEARNING_LEVELS.map((level, li) => {
+    const chapterRows = CHAPTERS.map((chapter, ci) => {
+      if (ci < level.first || ci > level.last) return '';
+      const chapterMissions = MISSIONS.filter(m => m.ch === ci);
+      const done = chapterMissions.filter(m => S.done.includes(m.id)).length;
+      const complete = done === chapterMissions.length;
+      const status = complete ? 'complete' : ci === currentChapter ? 'current' : ci === currentChapter + 1 ? 'next' : 'locked';
+      const statusText = complete ? 'Complete' : status === 'current' ? 'You are here' : status === 'next' ? 'Up next' : 'Later';
+      return '<div class="journey-chapter" data-journey-chapter="' + (ci + 1) + '" data-status="' + status + '">' +
+        '<span class="journey-chapter-mark" aria-hidden="true">' + (complete ? '✓' : String(ci + 1).padStart(2, '0')) + '</span>' +
+        '<span class="journey-chapter-name"><strong>' + esc(chapter.name) + '</strong><span>' + esc(chapter.topic) + ' · ' + done + '/' + chapterMissions.length + ' missions</span></span>' +
+        '<span class="journey-chapter-status">' + statusText + '</span></div>';
+    }).join('');
+    const levelDone = CHAPTERS.slice(level.first, level.last + 1).filter((_, offset) => {
+      const chapterMissions = MISSIONS.filter(m => m.ch === level.first + offset);
+      return chapterMissions.length > 0 && chapterMissions.every(m => S.done.includes(m.id));
+    }).length;
+    return '<details class="journey-level" data-journey-level="' + li + '"' + (openLevels.has(li) ? ' open' : '') + '>' +
+      '<summary><span class="journey-level-name">Level ' + (li + 1) + ' · ' + esc(level.title) + '</span><span class="journey-level-count">' + levelDone + '/' + (level.last - level.first + 1) + '</span></summary>' +
+      '<div class="journey-chapters"><p class="empty">' + esc(level.description) + '</p>' + chapterRows + '</div></details>';
+  }).join('');
+  const now = currentMission ? 'Now learning: Chapter ' + (currentChapter + 1) + ' · ' + CHAPTERS[currentChapter].name : 'All chapters complete — excellent work.';
+  root.innerHTML = '<div class="journey-summary"><div><strong>Your Linux learning journey</strong><p id="journeyProgress">' + completedMissions + ' of ' + totalMissions + ' missions complete · ' + completedChapters + ' of ' + CHAPTERS.length + ' chapters</p></div><span class="journey-level-count">LEVEL ' + (currentLevel + 1) + ' / ' + LEARNING_LEVELS.length + '</span></div>' +
+    '<div class="journey-track" role="progressbar" aria-label="Overall Linux learning progress" aria-valuemin="0" aria-valuemax="' + totalMissions + '" aria-valuenow="' + completedMissions + '"><span style="width:' + pct + '%"></span></div>' +
+    '<div class="journey-now">' + esc(now) + '</div>' + levelMarkup;
+  root.dataset.initialized = 'true';
+}
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -5986,6 +6067,7 @@ function render() {
   if (cbtn) cbtn.hidden = sorted.length <= CHIPS_DEFAULT;
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
+  renderJourney();
   if (RACE.active) {
     show('#learningPath', false);
     renderBoard();
