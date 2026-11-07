@@ -4,29 +4,36 @@ create or replace function public.sync_merge_node(p_local jsonb,p_remote jsonb,p
 returns jsonb language plpgsql immutable set search_path=pg_catalog,public as $$
 declare
   v_result jsonb; v_children jsonb := '{}'::jsonb; v_name text; v_child jsonb;
+  v_local_children jsonb := '{}'::jsonb; v_remote_children jsonb := '{}'::jsonb;
   v_deleted_at timestamptz; v_mtime timestamptz;
 begin
   if p_local is null then v_result:=p_remote;
   elsif p_remote is null then v_result:=p_local;
-  elsif p_local->>'type'='dir' and p_remote->>'type'='dir' then
-    v_result:=p_local||p_remote;
+  elsif p_local->>'type'='dir' and p_remote->>'type'='dir' then v_result:=p_local||p_remote;
+  elsif coalesce((p_remote->>'mtime')::numeric,0)>=coalesce((p_local->>'mtime')::numeric,0) then v_result:=p_remote;
+  else v_result:=p_local;
+  end if;
+  if v_result is null then return null; end if;
+
+  if v_result->>'type'='dir' then
+    if p_local->>'type'='dir' then v_local_children:=coalesce(p_local->'children','{}'::jsonb); end if;
+    if p_remote->>'type'='dir' then v_remote_children:=coalesce(p_remote->'children','{}'::jsonb); end if;
     for v_name in
       select key from (
-        select jsonb_object_keys(coalesce(p_local->'children','{}'::jsonb)) key
-        union select jsonb_object_keys(coalesce(p_remote->'children','{}'::jsonb)) key
+        select jsonb_object_keys(v_local_children) key
+        union select jsonb_object_keys(v_remote_children) key
       ) names
     loop
-      v_child:=public.sync_merge_node(p_local->'children'->v_name,p_remote->'children'->v_name,p_tombstones,
+      v_child:=public.sync_merge_node(v_local_children->v_name,v_remote_children->v_name,p_tombstones,
         case when p_path='/' then '/'||v_name else p_path||'/'||v_name end);
       if v_child is not null then v_children:=v_children||jsonb_build_object(v_name,v_child); end if;
     end loop;
     v_result:=jsonb_set(v_result,'{children}',v_children,true);
-    v_result:=jsonb_set(v_result,'{mtime}',to_jsonb(greatest(coalesce((p_local->>'mtime')::numeric,0),coalesce((p_remote->>'mtime')::numeric,0))),true);
-  else
-    if coalesce((p_remote->>'mtime')::numeric,0)>=coalesce((p_local->>'mtime')::numeric,0) then v_result:=p_remote;
-    else v_result:=p_local; end if;
+    v_result:=jsonb_set(v_result,'{mtime}',to_jsonb(greatest(
+      coalesce((p_local->>'mtime')::numeric,0),coalesce((p_remote->>'mtime')::numeric,0)
+    )),true);
   end if;
-  if v_result is null then return null; end if;
+
   select max((item->>'deletedAt')::timestamptz) into v_deleted_at
     from jsonb_array_elements(coalesce(p_tombstones,'[]'::jsonb)) item
     where item->>'path'=p_path;
@@ -55,7 +62,8 @@ begin
   select data,updated_at into v_existing,v_existing_updated_at
     from public.progress where user_id=v_uid for update;
   if v_existing is null or v_existing->'fs' is null then
-    v_merged:=p_data; v_tombstones:=coalesce(p_data->'syncTombstones','[]'::jsonb);
+    v_tombstones:=coalesce(p_data->'syncTombstones','[]'::jsonb);
+    v_merged:=jsonb_set(p_data,'{fs}',public.sync_merge_node(null,p_data->'fs',v_tombstones,'/'),true);
   else
     v_local_time:=nullif(v_existing->>'syncUpdatedAt','')::timestamptz;
     v_remote_time:=nullif(p_data->>'syncUpdatedAt','')::timestamptz;
@@ -95,5 +103,6 @@ end; $$;
 drop policy if exists "users insert their own progress" on public.progress;
 drop policy if exists "users update their own progress" on public.progress;
 revoke insert,update on public.progress from anon,authenticated;
+revoke all on function public.sync_merge_node(jsonb,jsonb,jsonb,text) from public;
 revoke all on function public.merge_progress(jsonb) from public;
 grant execute on function public.merge_progress(jsonb) to authenticated;
