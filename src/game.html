@@ -1908,6 +1908,7 @@ CMDS.rmdir = (a, ctx) => {
     if (L.node.type !== 'dir') { fail('Not a directory'); continue; }
     if (Object.keys(L.node.children).length) { fail('Directory not empty'); continue; }
     if (!canWrite(L.abs)) { fail('Permission denied'); continue; }
+    syncRecordDeletion(L.abs, L.node);
     delete getNode(parentOf(L.abs)).children[baseName(L.abs)];
   }
   return st;
@@ -1926,6 +1927,7 @@ CMDS.rm = (a, ctx) => {
     if (L.err) { if (!f.f) { ctx.err(`rm: cannot remove '${t}': ${L.err}\n`); st = 1; } continue; }
     if (L.node.type === 'dir' && !rec) { ctx.err(`rm: cannot remove '${t}': Is a directory\n`); st = 1; continue; }
     if (!canWrite(L.abs)) { ctx.err(`rm: cannot remove '${t}': Permission denied\n`); st = 1; continue; }
+    syncRecordDeletion(L.abs, L.node);
     delete getNode(parentOf(L.abs)).children[baseName(L.abs)];
     if (f.v) ctx.out(`removed ${L.node.type === 'dir' ? 'directory ' : ''}'${t}'\n`);
   }
@@ -1973,6 +1975,7 @@ CMDS.mv = (a, ctx) => {
     if (!canWrite(L.abs)) { ctx.err(`mv: cannot move '${s}' to '${dst}': Permission denied\n`); st = 1; continue; }
     const e = place(target, L.node);
     if (e) { ctx.err(`mv: cannot move '${s}' to '${dst}': ${e}\n`); st = 1; continue; }
+    syncRecordDeletion(L.abs, L.node);
     delete getNode(parentOf(L.abs)).children[baseName(L.abs)];
     if (f.v) ctx.out(`renamed '${s}' -> '${target}'\n`);
   }
@@ -2044,7 +2047,7 @@ CMDS.find = (a, ctx) => {
     for (const m of matches.slice().reverse()) {
       if (!canWrite(m.abs)) { ctx.err(`find: cannot delete '${m.disp}': Permission denied\n`); st = 1; continue; }
       if (m.node.type === 'dir' && Object.keys(m.node.children).length) { ctx.err(`find: cannot delete '${m.disp}': Directory not empty\n`); st = 1; continue; }
-      const par = getNode(parentOf(m.abs)); if (par) delete par.children[baseName(m.abs)];
+      const par = getNode(parentOf(m.abs)); if (par) { syncRecordDeletion(m.abs, m.node); delete par.children[baseName(m.abs)]; }
       if (m.abs.startsWith('/var/lib/php/sessions/')) S.inodeBad = false;
     }
   } else {
@@ -3192,7 +3195,7 @@ CMDS.userdel = (a, ctx) => {
   const name = rest[0];
   if (!pwEntries().find(x => x[0] === name)) { ctx.err(`userdel: user '${name}' does not exist\n`); return 6; }
   for (const fp of ['/etc/passwd', '/etc/shadow', '/etc/group']) { const nn = getNode(fp); nn.content = splitLines(nn.content).map(l => { if (fp === '/etc/group') { const ff = l.split(':'); ff[3] = (ff[3] || '').split(',').filter(x => x && x !== name).join(','); return ff.join(':'); } return l; }).filter(l => !(fp !== '/etc/group' && l.split(':')[0] === name)).join('\n') + '\n'; }
-  if (f.r) { const home = getNode('/home'); if (home) delete home.children[name]; }
+  if (f.r) { const home = getNode('/home'); if (home && home.children[name]) { syncRecordDeletion('/home/' + name, home.children[name]); delete home.children[name]; } }
   return 0;
 };
 CMDS['ssh-keygen'] = (a, ctx) => {
@@ -6567,6 +6570,33 @@ async function onLogin() {
 // Merge independently changed devices instead of choosing the device with the
 // largest ticket count. File mtimes resolve same-path edits; directory children
 // are merged recursively so work in separate parts of the simulated filesystem survives.
+function syncRecordDeletion(path, node) {
+  const root = norm(path, S.cwd);
+  const deletedAt = new Date().toISOString();
+  if (!Array.isArray(S.syncTombstones)) S.syncTombstones = [];
+  const record = abs => {
+    S.syncTombstones = S.syncTombstones.filter(t => t && t.path !== abs);
+    S.syncTombstones.push({ path: abs, deletedAt });
+  };
+  const walk = (abs, current) => {
+    record(abs);
+    if (current && current.type === 'dir') {
+      for (const [name, child] of Object.entries(current.children || {})) {
+        walk(abs === '/' ? '/' + name : abs + '/' + name, child);
+      }
+    }
+  };
+  walk(root, node);
+}
+function syncMergeTombstones(local, remote) {
+  const latest = new Map();
+  [...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])].forEach(item => {
+    if (!item || typeof item.path !== 'string' || !item.path.startsWith('/') || typeof item.deletedAt !== 'string') return;
+    const previous = latest.get(item.path);
+    if (!previous || Date.parse(item.deletedAt) > Date.parse(previous.deletedAt)) latest.set(item.path, item);
+  });
+  return [...latest.values()];
+}
 function syncMergeNode(local, remote) {
   if (!local) return remote ? JSON.parse(JSON.stringify(remote)) : local;
   if (!remote) return JSON.parse(JSON.stringify(local));
@@ -6605,6 +6635,7 @@ function mergeProgressStates(local, remote, remoteUpdatedAt) {
   }
   merged.times = syncMergeList(local.times, remote.times, item => item && (item.id || item.startedAt || item.mission) ? JSON.stringify([item.id, item.startedAt, item.mission, item.ms]) : JSON.stringify(item));
   merged.hints = { ...(local.hints || {}), ...(remote.hints || {}) };
+  merged.syncTombstones = syncMergeTombstones(local.syncTombstones, remote.syncTombstones);
   merged.xp = Math.max(Number(local.xp) || 0, Number(remote.xp) || 0);
   merged.mission = Math.max(Number(local.mission) || 0, Number(remote.mission) || 0);
   merged.finished = !!(local.finished || remote.finished);
@@ -6615,7 +6646,7 @@ async function syncPull() {
   const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
   let row = null;
   try {
-    const result = await sb.from('progress').select('data,tickets,updated_at').eq('user_id', authUser.id).maybeSingle();
+    const result = await sb.from('progress').select('data,updated_at').eq('user_id', authUser.id).maybeSingle();
     if (result.error) return;
     row = result.data;
   } catch (e) { return; }
@@ -6635,17 +6666,31 @@ async function syncPull() {
 let pushTimer = null;
 function syncPushSoon() { if (!authUser || RACE.active) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncPushNow, 1500); }
 let syncPushInFlight = false;
+let syncPushRequested = false;
 async function syncPushNow() {
-  const sb = await getSB(); if (!sb || !authUser || RACE.active || syncPushInFlight) return;
+  const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
+  if (syncPushInFlight) { syncPushRequested = true; return; }
   syncPushInFlight = true;
   try {
-    S.syncUpdatedAt = new Date().toISOString();
-    const { error } = await sb.from('progress').upsert({ user_id: authUser.id, data: S, tickets: (S.done || []).length, updated_at: S.syncUpdatedAt });
-    if (error) throw error;
+    do {
+      syncPushRequested = false;
+      S.syncUpdatedAt = new Date().toISOString();
+      const snapshot = JSON.parse(JSON.stringify(S));
+      const beforeRequest = JSON.stringify(snapshot);
+      const { data, error } = await sb.rpc('merge_progress', { p_data: snapshot });
+      if (error) throw error;
+      if (data && data.v === 1 && data.fs) {
+        const changedDuringRequest = JSON.stringify(S) !== beforeRequest;
+        S = mergeProgressStates(S, data);
+        try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+        if (changedDuringRequest) syncPushRequested = true;
+      }
+    } while (syncPushRequested);
   } catch (e) {
     // Keep the local copy; the next save or sign-in will retry synchronization.
   } finally {
     syncPushInFlight = false;
+    if (syncPushRequested) syncPushSoon();
   }
 }
 function reloadUI(note) {
