@@ -119,14 +119,14 @@ test('drawing primitives, zones and layer visibility survive scenario export and
     layerVisibility: { zones: true, drawings: false }
   };
   const start = S.fromTopology(topo);
-  assert(start.drawings, JSON.stringify(topo.drawings) === JSON.stringify(start.drawings), 'drawing geometry is retained');
-  assert(start.zones, JSON.stringify(topo.zones) === JSON.stringify(start.zones), 'zone metadata is retained');
-  assert(start.layerVisibility, JSON.stringify(topo.layerVisibility) === JSON.stringify(start.layerVisibility), 'layer visibility is retained');
+  assert(JSON.stringify(start.drawings) === JSON.stringify(topo.drawings), 'drawing geometry is retained');
+  assert(JSON.stringify(start.zones) === JSON.stringify(topo.zones), 'zone metadata is retained');
+  assert(JSON.stringify(start.layerVisibility) === JSON.stringify(topo.layerVisibility), 'layer visibility is retained');
   const decoded = S.fromJSON(S.toJSON({ title: 'Diagram', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
   const mission = S.toMission(decoded);
-  assert(mission.build().drawings, JSON.stringify(topo.drawings) === JSON.stringify(mission.build().drawings), 'authored mission keeps drawing geometry');
-  assert(mission.build().zones, JSON.stringify(topo.zones) === JSON.stringify(mission.build().zones), 'authored mission keeps zones');
-  assert(mission.build().layerVisibility, JSON.stringify(topo.layerVisibility) === JSON.stringify(mission.build().layerVisibility), 'authored mission keeps layer visibility');
+  assert(JSON.stringify(mission.build().drawings) === JSON.stringify(topo.drawings), 'authored mission keeps drawing geometry');
+  assert(JSON.stringify(mission.build().zones) === JSON.stringify(topo.zones), 'authored mission keeps zones');
+  assert(JSON.stringify(mission.build().layerVisibility) === JSON.stringify(topo.layerVisibility), 'authored mission keeps layer visibility');
 });
 test('hand-placed node positions survive fromTopology and toMission', () => {
   const topo = { devices: { h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } } } }, links: [], pos: { h1: [123, 45] } };
