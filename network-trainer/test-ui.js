@@ -132,6 +132,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.selectOption('#termEvidenceTicket', incidentId);
     await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
     await page.click('#termSaveEvidence'); await page.waitForTimeout(100);
+    // Hide the floating terminal before interacting with the incident list beneath it.
+    await page.click('#terminalMinimize'); await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
     const linked = await page.evaluate(id => (PROG.journal || []).some(e => e.type === 'command evidence' && e.ticket === id && e.output), incidentId);
     if (linked) ok('Workbench evidence is saved against the selected incident');
     else fail('saved command evidence was not linked to the selected incident');
