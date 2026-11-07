@@ -1,6 +1,8 @@
-# Networking Trainer — M1 engine + M2 CLI + M3 missions + M4 UI
+# Network Sysadmin — networking and operations simulator
 
-A prototype of the networking/security teaching game: the **network model**, the
+The Network Sysadmin module is part of The Last Sysadmin platform. It combines a simulated network model, CLI, mission runtime, topology builder and multi-workspace operations UI. It is an educational simulator, not a connection to physical equipment.
+
+A networking/security teaching environment: the **network model**, the
 **forwarding engine**, the **mission checks** (M1), the **command-line layer** (M2), the
 **mission/chapter layer** with the twenty-two missions (M3), and a playable
 browser **UI** — topology view, config panels, terminal, and Check (M4). The engine is
