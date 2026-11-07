@@ -1672,7 +1672,7 @@ function renderAuthor() {
       <label class="btn" style="cursor:pointer">⬆ Import<input id="importScn" type="file" accept="application/json,.json" style="display:none"></label>
       <button class="btn primary" id="playScn">▶ Play / test</button></div>
     <div class="row"><button class="btn" id="exitBuild">← Exit build</button>${AUTHUSER ? '<button class="btn" id="saveLib">💾 Save to class</button>' : ''}</div>
-    <div id="status"></div>`;
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>`;
 }
 function renderCheckArgs() {
   const sel = $('#chkType'); if (!sel) return;
