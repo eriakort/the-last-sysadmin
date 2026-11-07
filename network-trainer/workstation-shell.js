@@ -29,6 +29,54 @@
     app.insertBefore(shell, top);
     shell.append(rail, main);
     main.append(top, cols);
+
+    // Keep application-owned panel IDs intact; only add a presentation wrapper.
+    const panelStateKey = 'network-workbench-panels-v1';
+    let savedPanels = {};
+    try { savedPanels = JSON.parse(localStorage.getItem(panelStateKey) || '{}') || {}; } catch (_) {}
+    const compactLayout = window.matchMedia('(max-width: 760px)').matches;
+    const makePanel = (id, title, defaultCollapsed) => {
+      const aside = cols.querySelector('#' + id);
+      if (!aside) return;
+      const panel = document.createElement('section');
+      panel.className = 'side-panel';
+      panel.id = id + 'Panel';
+      panel.dataset.panel = id;
+      const heading = document.createElement('div');
+      heading.className = 'side-panel-head';
+      const label = document.createElement('strong');
+      label.textContent = title;
+      const toggle = document.createElement('button');
+      toggle.className = 'btn sm side-panel-toggle';
+      toggle.type = 'button';
+      toggle.setAttribute('aria-controls', id);
+      const body = document.createElement('div');
+      body.className = 'side-panel-body';
+      body.id = id + 'PanelBody';
+      aside.parentNode.replaceChild(panel, aside);
+      panel.append(heading, body);
+      heading.append(label, toggle);
+      body.append(aside);
+      const collapsed = typeof savedPanels[id] === 'boolean' ? savedPanels[id] : defaultCollapsed;
+      const apply = value => {
+        panel.dataset.collapsed = String(value);
+        body.hidden = value;
+        toggle.setAttribute('aria-expanded', String(!value));
+        toggle.setAttribute('aria-label', (value ? 'Expand ' : 'Collapse ') + title.toLowerCase() + ' panel');
+        toggle.title = (value ? 'Expand ' : 'Collapse ') + title.toLowerCase() + ' panel';
+        toggle.textContent = value ? '›' : '‹';
+        try {
+          const current = JSON.parse(localStorage.getItem(panelStateKey) || '{}') || {};
+          current[id] = value;
+          localStorage.setItem(panelStateKey, JSON.stringify(current));
+        } catch (_) {}
+      };
+      toggle.addEventListener('click', () => apply(panel.dataset.collapsed !== 'true'));
+      apply(collapsed);
+    };
+    makePanel('brief', 'WORKSPACE', compactLayout);
+    makePanel('config', 'INSPECTOR', compactLayout);
+
     rail.querySelector('#navIncidents').addEventListener('click', () => document.getElementById('btnQueue')?.click());
     rail.querySelector('#navJournal').addEventListener('click', () => document.getElementById('btnJournal')?.click());
     rail.querySelector('#navWorkbench').addEventListener('click', () => document.getElementById('tin')?.focus());
