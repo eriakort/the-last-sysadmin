@@ -50,7 +50,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (!panel.includes('spanning tree') || !panel.includes('learned mac addresses')) {
     throw new Error('switch panel is missing STP or MAC learning details; panel=' + panel + '; pageErrors=' + errors.join(' | '));
   }
-  await page.click(node('h1'));
+  await openDeviceConsole('h1');
   await run('ping srv');
   output = await page.locator('#tout').innerText();
   if (!output.includes('reply received')) throw new Error('STP should preserve endpoint reachability');
