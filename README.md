@@ -158,3 +158,8 @@ Use **Save checkpoint** to capture the selected simulator device's current `show
 ## Workbench incident-linked evidence
 
 The Workbench evidence toolbar lets an engineer choose an incident before saving a console transcript. The selected ticket ID is recorded with the device, command and output in the browser-local Engineering Journal, where it appears in that incident's investigation timeline. Evidence can remain unlinked when it is general lab work. This is local simulator training evidence, not a production ticketing-system integration.
+
+
+### Network workspace navigation
+
+Network Sysadmin workspaces are reflected in the page URL with a `view` query parameter. Navigation updates browser history, so refreshing or bookmarking a workspace restores that destination, and the browser Back/Forward controls move between recently visited workspaces. Supported destinations include Overview, Incidents, Workbench, Infrastructure, Knowledge, Journal, and Changes.
