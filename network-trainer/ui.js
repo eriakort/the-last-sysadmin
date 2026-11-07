@@ -1487,6 +1487,7 @@ function mountTerminalWindow() {
   const win = document.createElement('section');
   win.id = 'terminalWindow';
   win.className = 'terminal-window';
+  win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Floating device terminal');
   win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
