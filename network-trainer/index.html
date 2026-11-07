@@ -4909,7 +4909,7 @@ function wireTopo() {
   }));
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
-    if (e.target.closest('.node') || WIRE || e.button !== 0) return;
+    if (e.target.closest('.node') || (DRAW_TOOL === 'select' && e.target.closest('.topo-drawing')) || WIRE || e.button !== 0) return;
     if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
     if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
