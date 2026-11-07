@@ -15,8 +15,8 @@
     "test:net": "node network-trainer/net-engine.test.js && node network-trainer/net-cli.test.js && node network-trainer/net-mission.test.js && node network-trainer/net-scenario.test.js",
     "test:learning": "node test-learning-flow.js",
     "test:sync-db": "supabase/test/run.sh",
-    "test:ui:firefox": "PLAYWRIGHT_BROWSER=firefox node test-ui.js",
-    "test:ui:webkit": "PLAYWRIGHT_BROWSER=webkit node test-ui.js"
+    "test:ui:firefox": "PLAYWRIGHT_BROWSER=firefox node smoke.js",
+    "test:ui:webkit": "PLAYWRIGHT_BROWSER=webkit node smoke.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"
