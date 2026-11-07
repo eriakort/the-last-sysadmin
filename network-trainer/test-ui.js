@@ -57,6 +57,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.getAttribute('#status', 'class')) === 'bad') ok('Check shows unresolved before the fix');
   else fail('expected unresolved status before the fix');
 
+  // The floating console starts minimized; explicitly open it before using commands.
+  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
+
   // --- solve via the TERMINAL (console is h1 by default) ---
   await page.fill('#tin', 'ip addr add 10.0.1.10/24 dev eth0');
   await page.press('#tin', 'Enter'); await page.waitForTimeout(150);
@@ -92,6 +95,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   // --- progress persists across reload (localStorage) ---
   await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(400);
+  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
   if (/^2\/\d+$/.test(await page.textContent('#prog'))) ok('progress persists across reload');
   else fail('progress did not persist: ' + (await page.textContent('#prog')));
 
