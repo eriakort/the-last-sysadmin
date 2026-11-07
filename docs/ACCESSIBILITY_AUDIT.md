@@ -97,3 +97,12 @@ Implemented in the modal-focus remediation pull request:
 - Applied the same keyboard focus-containment and restoration behavior to the global workstation search palette; gave its search field and result list explicit accessible names and exposed the active result through `aria-activedescendant`.
 - Added Playwright regression coverage for dialog semantics, Tab wrapping, Escape, and focus restoration. These tests do not replace manual keyboard or assistive-technology validation.
 
+
+### Batch 5 — accessible names, status announcements, and automated scanning
+
+Implemented in the Batch 5 remediation pull request:
+
+- Added explicit accessible names to icon-only statistics/settings controls and topology zoom/session navigation controls; retained visible labels and descriptive titles on other actions.
+- Made the Network Trainer mission/build status region a polite, atomic status announcement so validation and completion results are announced without moving focus.
+- Added a Playwright + axe-core scan for the Linux Sysadmin initial workspace and Network Trainer workbench, settings dialog, and search palette. CI installs the pinned axe-core version and fails on serious or critical WCAG 2.1 A/AA and best-practice violations; lower-impact findings remain visible in the scan output for follow-up.
+- This automated gate is not a substitute for manual keyboard and screen-reader validation.
