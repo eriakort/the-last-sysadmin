@@ -14,6 +14,20 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
 
+  const journey = await page.$('#journey');
+  if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible');
+  else fail('structured Linux learning journey is missing or hidden');
+  const journeyText = await page.textContent('#journey').catch(() => '');
+  for (const level of ['Linux foundations', 'Everyday administration', 'Automation and services', 'Advanced operations', 'Incident response lab']) {
+    if (journeyText.includes(level)) ok('learning level present: ' + level);
+    else fail('learning level missing: ' + level);
+  }
+  const chapterCount = await page.locator('[data-journey-chapter]').count();
+  if (chapterCount === 35) ok('all 35 chapters are represented in the curriculum map');
+  else fail('expected 35 curriculum chapters, found ' + chapterCount);
+  if (await page.locator('[data-journey-chapter="1"][data-status="current"]').count()) ok('the current chapter is clearly highlighted');
+  else fail('the current chapter is not highlighted');
+
   const guide = await page.$('#learningPath');
   if (guide && await guide.isVisible()) ok('Chapter 1 learning guide is visible');
   else fail('Chapter 1 learning guide is missing or hidden');
@@ -65,6 +79,10 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
   if ((await page.textContent('#pTitle')) === 'Make a workspace') ok('Chapter 2 starts with Make a workspace');
   else fail('did not reach the first Chapter 2 mission');
+  if (await page.locator('[data-journey-chapter="1"][data-status="complete"]').count()) ok('completed chapters are marked complete in the journey');
+  else fail('Chapter 1 completion is not reflected in the journey');
+  if (await page.locator('[data-journey-chapter="2"][data-status="current"]').count()) ok('the journey follows the learner into Chapter 2');
+  else fail('the journey did not update the current chapter to Chapter 2');
   const ch2Guide = await page.textContent('#learningPath').catch(() => '');
   for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
     if (ch2Guide.includes(stage)) ok('Chapter 2 learning stage present: ' + stage);
