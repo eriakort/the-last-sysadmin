@@ -155,7 +155,7 @@ function renderTopo() {
   const maxX = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[0])) + 100 : 800, maxY = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[1])) + 80 : 600;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   const view = TOPO_VIEW || [0, 0, maxX, maxY];
-  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology" tabindex="0">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)" pointer-events="none"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
+  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="group" aria-label="Network topology">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)" pointer-events="none"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
   if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
@@ -577,14 +577,14 @@ function renderBrief() {
     <div class="label">Objective</div><p>${esc(m.objective)}</p>
     <div class="label">Hints</div><ol>${hints}</ol>
     <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>`;
-  return `<select id="pick">${opts}</select>
+  return `<select id="pick" aria-label="Select mission">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}${solved ? ' · <span class="done">solved</span>' : ''}</div>
     <h1>${esc(m.title)}</h1>
     ${renderTicket(m)}
     <div class="label">What you know</div><p class="story">${esc(m.story)}</p>
     ${renderDeviceExplorer()}
     ${body}
-    <div id="status"></div>`;
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>`;
 }
 function renderConfig() {
   const pal = renderPalette();
@@ -677,8 +677,8 @@ function renderConfig() {
   const tabs = panels.map(p => `<button type="button" class="inspector-tab${p.id === INSPECTOR_TAB ? ' active' : ''}" data-inspector-tab="${p.id}">${p.label}</button>`).join('');
   const panel = panels.find(p => p.id === INSPECTOR_TAB);
   return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
-    <div class="inspector-tabs" role="tablist" aria-label="Device inspector sections">${tabs}</div>
-    <section class="inspector-panel" role="tabpanel">${panel.html}</section>`;
+    <div class="inspector-tabs" role="group" aria-label="Device inspector sections">${tabs}</div>
+    <section class="inspector-panel" role="region" aria-label="${esc(panel.label)}">${panel.html}</section>`;
 }
 
 /* ---------- actions ---------- */
@@ -1672,7 +1672,7 @@ function renderAuthor() {
       <label class="btn" style="cursor:pointer">⬆ Import<input id="importScn" type="file" accept="application/json,.json" style="display:none"></label>
       <button class="btn primary" id="playScn">▶ Play / test</button></div>
     <div class="row"><button class="btn" id="exitBuild">← Exit build</button>${AUTHUSER ? '<button class="btn" id="saveLib">💾 Save to class</button>' : ''}</div>
-    <div id="status"></div>`;
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>`;
 }
 function renderCheckArgs() {
   const sel = $('#chkType'); if (!sel) return;
@@ -2027,8 +2027,8 @@ function boot() {
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
         <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
-        <button id="btnStats" class="btn" title="Stats">📊</button>
-        <button id="btnSet" class="btn" title="Settings">⚙</button></div>
+        <button id="btnStats" class="btn" type="button" title="Stats" aria-label="Open statistics">📊</button>
+        <button id="btnSet" class="btn" type="button" title="Settings" aria-label="Open settings">⚙</button></div>
     </header>
     <section id="overview" aria-label="Operations overview"></section>
     <section id="incidentsView" aria-label="Incident management" hidden></section>
@@ -2038,7 +2038,7 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><label class="term-evidence-ticket">Incident <select id="termEvidenceTicket" aria-label="Link evidence to incident"><option value="">Unlinked evidence</option></select></label><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" type="button" title="Zoom out" aria-label="Zoom out topology">−</button><button class="btn sm" id="topoZoomIn" type="button" title="Zoom in" aria-label="Zoom in topology">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" type="button" title="Previous device session" aria-label="Previous device session">‹</button><button class="btn sm" id="sessionNext" type="button" title="Next device session" aria-label="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><label class="term-evidence-ticket">Incident <select id="termEvidenceTicket" aria-label="Link evidence to incident"><option value="">Unlinked evidence</option></select></label><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>
