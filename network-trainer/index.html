@@ -4815,6 +4815,7 @@ function copyTopologySelection() {
   if(!ids.length)return;
   const set=new Set(ids), pos=RUN.net.pos||{};
   TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id)})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
+  refresh(); // update the Paste control immediately after the clipboard is populated
 }
 function pasteTopologySelection() {
   if(!canBuild()||!TOPO_CLIPBOARD||!TOPO_CLIPBOARD.devices.length)return;
