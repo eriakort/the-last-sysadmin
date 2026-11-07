@@ -69,6 +69,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
     else fail('routing inspector tab did not render its panel');
   } else fail('routing inspector tab is missing for a routed endpoint');
 
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
+
   const svg = page.locator('#topo');
   const before = await svg.getAttribute('viewBox');
   await page.locator('#topoZoomIn').click();
