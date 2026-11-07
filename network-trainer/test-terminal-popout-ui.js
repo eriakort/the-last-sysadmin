@@ -12,7 +12,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const fail = message => errors.push(message);
 
   await page.goto(URL, { waitUntil: 'load' });
-  await page.waitForSelector('#terminalWindow #term');
+  await page.waitForSelector('#terminalWindow #term', { state: 'attached' });
   await page.waitForSelector('#topo .node');
   const first = page.locator('#topo .node').first();
   const device = await first.getAttribute('data-dev');
