@@ -139,6 +139,43 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     }
   } else fail('incident selector did not populate ticket options');
 
+  // --- topology builder context menu: add, duplicate, connect, and toggle a link ---
+  await page.click('#btnBuild'); await page.waitForTimeout(160);
+  if (await page.locator('#topo').count()) ok('Build workspace opens its topology canvas');
+  else fail('Build workspace did not render a topology canvas');
+  await page.locator('#topo').click({ button: 'right', position: { x: 220, y: 180 } });
+  await page.waitForSelector('.topo-context-menu');
+  if ((await page.locator('.topo-context-menu').innerText()).includes('Add switch')) ok('empty-canvas context menu offers device creation');
+  else fail('empty-canvas context menu is missing device actions');
+  await page.click('.topo-context-menu [data-action="add:switch"]'); await page.waitForTimeout(100);
+  if (await page.locator('#topo .node').count() === 1) ok('context menu adds a switch');
+  else fail('context menu did not add a switch');
+  await page.locator('#topo .node').first().click({ button: 'right' });
+  await page.waitForSelector('.topo-context-menu');
+  if ((await page.locator('.topo-context-menu').innerText()).includes('Duplicate device')) ok('device context menu exposes editing actions');
+  else fail('device context menu is missing duplicate action');
+  await page.click('.topo-context-menu [data-action="duplicate"]'); await page.waitForTimeout(100);
+  if (await page.locator('#topo .node').count() === 2) ok('context menu duplicates a device');
+  else fail('context menu did not duplicate the device');
+  await page.locator('#topo .node').first().click({ button: 'right' });
+  await page.waitForSelector('.topo-context-menu');
+  await page.click('.topo-context-menu [data-action="connect"]');
+  await page.locator('#topo .node').nth(1).click(); await page.waitForTimeout(100);
+  if (await page.locator('#topo .edge').count() === 1) ok('context menu starts a connection between devices');
+  else fail('context-menu connection did not create a link');
+  await page.locator('#topo .edge').first().dispatchEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 150 });
+  await page.waitForSelector('.topo-context-menu');
+  await page.click('.topo-context-menu [data-action="toggle-link"]'); await page.waitForTimeout(100);
+  if (await page.locator('#topo .edge.down').count() === 1) ok('link context menu can take a connection down');
+  else fail('link context menu did not take the connection down');
+  await page.locator('#topo .edge').first().dispatchEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 150 });
+  await page.waitForSelector('.topo-context-menu');
+  await page.click('.topo-context-menu [data-action="toggle-link"]'); await page.waitForTimeout(100);
+  if (await page.locator('#topo .edge.down').count() === 0) ok('link context menu can restore a connection');
+  else fail('link context menu did not restore the connection');
+  if (await page.locator('#navWorkbench').getAttribute('title')) ok('workspace navigation includes explanatory tooltips');
+  else fail('workspace navigation tooltip is missing');
+
   await browser.close();
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nUI OK.');

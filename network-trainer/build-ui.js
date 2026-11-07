@@ -108,6 +108,13 @@ h1{font-size:20px;margin:6px 0}
 .wide{width:100%;box-sizing:border-box;background:var(--raise);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 8px;font:inherit;margin-top:2px}
 textarea.wide{resize:vertical;font-family:inherit}
 .canvas-empty{padding:48px 16px;text-align:center;color:var(--muted);font-size:13px}
+.topo-context-menu{position:fixed;z-index:1000;min-width:198px;max-width:260px;padding:5px;background:var(--panel);border:1px solid var(--amber);border-radius:9px;box-shadow:0 14px 38px rgba(0,0,0,.48);color:var(--ink)}
+.topo-context-menu .ctx-heading{padding:6px 9px 5px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.topo-context-menu button{display:block;width:100%;padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ink);text-align:left;font:inherit;font-size:12.5px;cursor:pointer}
+.topo-context-menu button:hover,.topo-context-menu button:focus-visible{outline:none;background:var(--raise);color:var(--amber)}
+.topo-context-menu button.danger{color:var(--bad)}
+.topo-context-menu button:disabled{opacity:.4;cursor:not-allowed}
+.topo-context-menu .ctx-separator{height:1px;margin:4px 2px;background:var(--line)}
 .cx-body{max-height:60vh;overflow:auto}
 .rlabel{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:12px 0 6px}
 .cx-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:7px;margin:4px 0;font-size:13px}
