@@ -999,10 +999,18 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
 
-  // Complete the existing DNS/network diagnostics chapter before entering kernel work.
+  // The new DNS guide adds a mastery gate before the existing objective can advance.
+  // Exercise the incorrect answer, prove the concept, then complete the original ticket.
+  await checkLearningStages('Names to addresses', 'port', ['forward lookup', 'IP address', 'dig +short']);
   await run('dig +short halcyon-db01');
   await run('submit 10.0.4.20');
-  if ((await page.textContent('#pTitle')) === 'Addresses to names') ok('DNS lookup advances to reverse lookup');
+  if ((await page.textContent('#pTitle')) === 'Names to addresses') ok('DNS objective cannot bypass the mastery gate');
+  else fail('DNS objective advanced before mastery was proven');
+  await page.click('[data-learning-choice="ip"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. DNS resolves')) ok('DNS mastery answer explains name resolution');
+  else fail('DNS mastery answer did not show its explanation');
+  await run('submit 10.0.4.20');
+  if ((await page.textContent('#pTitle')) === 'Addresses to names') ok('DNS lookup + mastery advances to reverse lookup');
   else fail('DNS lookup did not advance');
   await run('host 10.0.4.20');
   await run('submit halcyon-db01');
