@@ -1,6 +1,6 @@
 // Workbench console evidence capture and export controls.
 const path=require('path');const {chromium}=require('playwright');const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
-(async()=>{const browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1440,height:960}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(120);
+(async()=>{const browser=await chromium.launch();const page=await browser.newPage({viewport:{width:1440,height:960}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(120);await page.locator('#terminalRestore').click();await page.locator('#terminalWindow').waitFor({state:'visible'});
 const tabs=page.locator('#sessionTabs [data-session-device]');if(!(await tabs.count()))errors.push('no device session available');
 await page.locator('#tin').fill('show version');await page.keyboard.press('Enter');await page.waitForTimeout(40);
 if(!(await page.locator('#tout').textContent()).includes('show version'))errors.push('console output was not produced');
