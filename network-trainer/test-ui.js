@@ -117,6 +117,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#modal #closeS'); await page.waitForTimeout(100);
 
   // --- terminal command history (ArrowUp recalls last command) ---
+  // The terminal is minimized after reload; restore it before interacting with its input.
+  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
   await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
   await page.press('#tin', 'ArrowUp'); await page.waitForTimeout(60);
   if ((await page.inputValue('#tin')) === 'ip addr') ok('ArrowUp recalls the previous command');
