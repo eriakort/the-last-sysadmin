@@ -149,13 +149,16 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.mouse.up();
     await page.waitForTimeout(60);
   };
-  await drawAt('line', 300, 90, 390, 130);
+  // Keep all gestures in the lower-right empty canvas area. Earlier coordinates
+  // crossed the duplicated device nodes, whose pointer handlers correctly take
+  // precedence over drawing gestures.
+  await drawAt('line', 320, 390, 390, 425);
   if (await page.locator('#topo .topo-drawing').count() === 1) ok('line drawing is stored on the topology');
   else fail('line drawing was not created');
-  await drawAt('arrow', 300, 160, 390, 190);
-  await drawAt('rect', 430, 80, 520, 145);
-  await drawAt('ellipse', 430, 170, 520, 235);
-  await drawAt('freehand', 550, 100, 620, 160);
+  await drawAt('arrow', 410, 390, 480, 425);
+  await drawAt('rect', 500, 390, 570, 445);
+  await drawAt('ellipse', 590, 390, 660, 445);
+  await drawAt('freehand', 320, 470, 390, 510);
   if (await page.locator('#topo .topo-drawing').count() === 5) ok('arrow, rectangle, ellipse and freehand drawings are supported');
   else fail('not all drawing primitives were created');
   await page.reload({ waitUntil: 'load' });
