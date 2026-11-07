@@ -143,22 +143,25 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     // Tool selection refreshes the topology and may change its page position.
     // Resolve the current SVG bounds for every gesture rather than reusing a stale box.
     const svgBox = await page.locator('#topo').boundingBox();
-    await page.mouse.move(svgBox.x + x1, svgBox.y + y1);
+    // Use coordinates relative to the visible SVG viewport, not SVG viewBox units.
+    // This keeps every gesture inside the canvas even when its rendered size changes.
+    const px1 = svgBox.x + svgBox.width * x1, py1 = svgBox.y + svgBox.height * y1;
+    const px2 = svgBox.x + svgBox.width * x2, py2 = svgBox.y + svgBox.height * y2;
+    await page.mouse.move(px1, py1);
     await page.mouse.down();
-    await page.mouse.move(svgBox.x + x2, svgBox.y + y2, { steps: 5 });
+    await page.mouse.move(px2, py2, { steps: 5 });
     await page.mouse.up();
     await page.waitForTimeout(60);
   };
-  // Keep all gestures in the lower-right empty canvas area. Earlier coordinates
-  // crossed the duplicated device nodes, whose pointer handlers correctly take
-  // precedence over drawing gestures.
-  await drawAt('line', 320, 390, 390, 425);
+  // Keep gestures in the lower half of the rendered canvas, away from devices.
+  // Coordinates are normalized fractions of the current SVG bounding box.
+  await drawAt('line', .34, .62, .43, .68);
   if (await page.locator('#topo .topo-drawing').count() === 1) ok('line drawing is stored on the topology');
   else fail('line drawing was not created');
-  await drawAt('arrow', 410, 390, 480, 425);
-  await drawAt('rect', 500, 390, 570, 445);
-  await drawAt('ellipse', 590, 390, 660, 445);
-  await drawAt('freehand', 320, 470, 390, 510);
+  await drawAt('arrow', .49, .62, .58, .68);
+  await drawAt('rect', .64, .62, .73, .72);
+  await drawAt('ellipse', .78, .62, .87, .72);
+  await drawAt('freehand', .34, .78, .43, .88);
   if (await page.locator('#topo .topo-drawing').count() === 5) ok('arrow, rectangle, ellipse and freehand drawings are supported');
   else fail('not all drawing primitives were created');
   await page.reload({ waitUntil: 'load' });
