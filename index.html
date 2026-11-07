@@ -115,6 +115,7 @@ button{font:inherit;cursor:pointer}
 .journey-chapters{display:flex;flex-direction:column;gap:4px;padding:0 7px 7px}
 .journey-chapter{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 8px;border-radius:5px;font-size:12px}
 .journey-chapter[data-status="current"]{background:color-mix(in srgb,var(--amber) 13%,var(--raise));outline:1px solid color-mix(in srgb,var(--amber) 45%,transparent)}
+.journey-chapter[data-status="current"] .journey-chapter-mark,.journey-chapter[data-status="current"] .journey-chapter-name span{color:var(--ink)}
 .journey-chapter[data-status="complete"] .journey-chapter-mark{color:var(--green)}
 .journey-chapter-mark{font:600 11px var(--f-mono);color:var(--muted);text-align:center}
 .journey-chapter-name{min-width:0}
