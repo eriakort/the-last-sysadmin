@@ -96,6 +96,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.click('#delDev'); await page.waitForTimeout(60);
   } else fail('duplicate control missing for selected device');
   // Multi-select, clipboard and history controls.
+  // Avoid completing the browser's double-click gesture from the preceding device selection;
+  // double-click intentionally opens that device's floating terminal.
+  await page.waitForTimeout(450);
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await page.click('#topo .node[data-dev="h1"]');
   await page.click('#topo .node[data-dev="h2"]', { modifiers: ['Shift'] });
   await page.waitForTimeout(50);
