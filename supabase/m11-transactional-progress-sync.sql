@@ -69,6 +69,7 @@ begin
   else
     v_local_time:=case when v_existing->>'syncUpdatedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$' then (v_existing->>'syncUpdatedAt')::timestamptz else null end;
     v_remote_time:=case when p_data->>'syncUpdatedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$' then (p_data->>'syncUpdatedAt')::timestamptz else null end;
+    v_existing_tombstones:=case when jsonb_typeof(v_existing->'syncTombstones')='array' then v_existing->'syncTombstones' else '[]'::jsonb end;
     if coalesce(v_remote_time,'-infinity'::timestamptz)>=coalesce(v_local_time,v_existing_updated_at,'-infinity'::timestamptz) then v_preferred:=p_data;
     else v_preferred:=v_existing; end if;
     select coalesce(jsonb_agg(item order by item->>'path'),'[]'::jsonb) into v_tombstones
