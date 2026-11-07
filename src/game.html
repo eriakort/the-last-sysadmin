@@ -6609,7 +6609,7 @@ function syncApplyTombstones(node, path, tombstones) {
       const kept = syncApplyTombstones(child, childPath, tombstones);
       if (kept) children[name] = kept;
     }
-    if (!Object.keys(children).length && deletion >= (Number(node.mtime) || 0)) return null;
+    if (!Object.keys(children).length && deletion && deletion >= (Number(node.mtime) || 0)) return null;
     return { ...node, children };
   }
   if (deletion && deletion >= (Number(node.mtime) || 0)) return null;
