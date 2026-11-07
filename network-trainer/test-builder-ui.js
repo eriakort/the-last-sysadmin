@@ -55,6 +55,20 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
   if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
   if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas; topology=' + (await page.locator('#topoWrap').innerText().catch(() => '<unavailable>')));
+  const emptyCanvas = await page.locator('#topo').boundingBox();
+  await page.click('[data-draw-tool="rect"]');
+  await page.mouse.move(emptyCanvas.x + 110, emptyCanvas.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(emptyCanvas.x + 220, emptyCanvas.y + 190, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(60);
+  if (await page.locator('#topo .topo-drawing').count() === 1) ok('drawing can start on an empty topology');
+  else fail('cannot create the first drawing on an empty canvas');
+  await page.click('[data-draw-tool="select"]');
+  await page.click('#topo .topo-drawing');
+  await page.click('#delDrawing');
+  if (await page.locator('#topo .topo-drawing').count() === 0) ok('empty-canvas drawing can be removed cleanly');
+  else fail('empty-canvas drawing cleanup failed');
   if (errors.length) console.error('  Browser errors after entering build mode: ' + errors.join(' | '));
 
   // --- author: place the two endpoints the student will start with ---
