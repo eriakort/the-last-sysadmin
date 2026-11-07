@@ -385,3 +385,8 @@ Use **Fleet assurance** in the device console to scan every device in the active
 ## Incident investigation report export
 
 From an incident record, use **Export incident report** to download a Markdown handover containing the ticket summary, reported symptom, ownership and SLA context, plus the complete ticket-linked investigation timeline. Command evidence includes its device, command, result and captured output. The export is generated locally from this browser's simulator journal; it is not sent to an external ticketing or document system.
+
+
+## Topology editing productivity
+
+The Build canvas supports multi-device editing while authoring or working in a build-from-scratch scenario. **Shift-click** toggles individual devices in the selection; **Shift-drag** on empty canvas space draws a selection rectangle. Drag any selected device to move the whole selection while preserving relative spacing. Use **Copy** / **Paste** or Ctrl/Cmd+C and Ctrl/Cmd+V to duplicate the selected devices and any links whose two endpoints are both selected. New devices receive unique IDs and are offset from the originals. **Undo** / **Redo** and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (or Ctrl/Cmd+Y) track recent topology edits in the current Build session; the in-memory history is capped at 60 snapshots and is not an audit log. The simulator remains browser-native and deterministic.
