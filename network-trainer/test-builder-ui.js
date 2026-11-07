@@ -50,22 +50,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.textContent('#gridBtn')).includes('Grid off')) ok('canvas grid can be toggled'); else fail('grid toggle did not update');
   await page.click('#snapBtn'); await page.waitForTimeout(50);
   if ((await page.textContent('#snapBtn')).includes('Snap off')) ok('snap-to-grid can be disabled'); else fail('snap toggle did not update');
+  await clickNode('h2'); // place the note beside h2, away from the initial h1/h2 nodes
   page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
   await page.click('#noteBtn'); await page.waitForTimeout(70);
   if ((await page.locator('#topo .topo-note').textContent()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
-
-  // --- link selection and removal are authoring controls, so exercise them before Play mode ---
-  await wire('h1', 'h2');
-  if (await page.$eval('#topo .edge', es => es.length) === 1) {
-    const edge = page.locator('#topo .edge').first();
-    await edge.evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
-    await page.waitForTimeout(60);
-    if (await page.$('#delLink')) {
-      await page.click('#delLink'); await page.waitForTimeout(60);
-      if (await page.$eval('#topo .edge', es => es.length) === 0) ok('selected link can be removed independently');
-      else fail('selected link removal did not update topology');
-    } else fail('selecting a topology link did not expose remove action');
-  } else fail('temporary authoring link was not created');
 
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
@@ -95,6 +83,16 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const cls = await page.getAttribute('#status', 'class');
   const txt = await page.textContent('#status');
   if (cls === 'ok' && /complete/.test(txt)) ok('grader accepts the built network'); else fail('scenario not accepted: [' + cls + '] ' + txt);
+
+  // --- link selection and removal in the authored build scenario ---
+  const edge = page.locator('#topo .edge').first();
+  await edge.evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
+  await page.waitForTimeout(60);
+  if (await page.$('#delLink')) {
+    await page.click('#delLink'); await page.waitForTimeout(60);
+    if (await page.$eval('#topo .edge', es => es.length) === 1) ok('selected link can be removed independently');
+    else fail('selected link removal did not update topology');
+  } else fail('selecting a topology link did not expose remove action');
 
   // --- exit build returns to the campaign ---
   await browser.close();
