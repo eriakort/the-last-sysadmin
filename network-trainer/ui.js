@@ -165,7 +165,7 @@ function renderTopo() {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
-    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${id}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="78" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${esc(d.label||id)}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text>${d.label ? `<text x="24" y="73" text-anchor="middle" class="n-label" fill="var(--muted)" font-size="9">${esc(id)}</text>` : ''}</g>`;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="78" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${esc(d.label||id)}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text>${d.label ? `<text x="24" y="73" text-anchor="middle" class="n-label" fill="var(--muted)" font-size="9">${esc(id)}</text>` : ''}</g>`;
   }
   return s + '</svg>';
 }
@@ -1035,6 +1035,7 @@ function closeTopologyContextMenu() {
   document.removeEventListener('keydown', menu.dismissEscape, true);
   menu.remove();
   TOPO_CONTEXT_MENU = null;
+  if (menu.returnFocus && menu.returnFocus.isConnected) menu.returnFocus.focus();
 }
 function runTopologyContextAction(action, target) {
   if (!canBuild() || !RUN || !RUN.net) return;
@@ -1149,6 +1150,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const labels = groups[kind] || groups.canvas;
   const menu = document.createElement('div');
   menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
+  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : document.activeElement;
   TOPO_CONTEXT_MENU = menu;
   const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
   menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
@@ -1167,7 +1169,16 @@ function showTopologyContextMenu(e, kind, target = {}) {
     runTopologyContextAction(action, target);
   });
   menu.dismissOutside = event => { if (!menu.contains(event.target)) closeTopologyContextMenu(); };
-  menu.dismissEscape = event => { if (event.key === 'Escape') { event.preventDefault(); closeTopologyContextMenu(); } };
+  menu.dismissEscape = event => {
+    if (event.key === 'Escape') { event.preventDefault(); closeTopologyContextMenu(); }
+    else if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
+      const items = [...menu.querySelectorAll('[role="menuitem"]:not(:disabled)')];
+      if (!items.length) return;
+      const current = items.indexOf(document.activeElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      event.preventDefault(); items[next].focus();
+    }
+  };
   document.addEventListener('pointerdown', menu.dismissOutside, true);
   document.addEventListener('keydown', menu.dismissEscape, true);
   const first = menu.querySelector('button:not(:disabled)'); if (first) first.focus();
@@ -1214,6 +1225,14 @@ function wireTopo() {
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
   });
   document.querySelectorAll('#topo .node').forEach(n => {
+    n.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault(); selectDevice(n.dataset.dev);
+      } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        e.preventDefault(); const rect = n.getBoundingClientRect();
+        showTopologyContextMenu({ preventDefault(){}, stopPropagation(){}, clientX:rect.left + rect.width/2, clientY:rect.bottom }, 'device', { id:n.dataset.dev });
+      }
+    });
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
       if (e.shiftKey && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id))TOPO_SELECTED.delete(id);else TOPO_SELECTED.add(id); SEL=id; refresh(); return; }
