@@ -6086,8 +6086,8 @@ function renderFilesystemExplorer() {
     preview.innerHTML = '<p class="fs-explorer-help">This location cannot be opened by the current simulated user.</p>';
     return;
   }
-  if (!canRead(current.node)) {
-    list.innerHTML = '<p class="empty">Permission denied: you cannot list this directory.</p>';
+  if (!canRead(current.node) || !canEnter(current.node)) {
+    list.innerHTML = '<p class="empty">Permission denied: you cannot list or enter this directory.</p>';
     preview.innerHTML = '<p class="fs-explorer-help">Use terminal commands to investigate permissions, or explore another location.</p>';
     return;
   }
