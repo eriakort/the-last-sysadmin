@@ -189,15 +189,11 @@ Real TCP state machines, congestion/timing, and protocol convergence (OSPF/BGP).
 model is L3 reachability + ACLs + a readable path — which covers the whole beginner
 roadmap. See the architecture sketch for the fidelity discussion.
 
-## Next
+## Development status
 
-M1–M4 are done: a playable prototype with engine, CLI, missions, and a UI, all tested.
-Natural next steps:
+The module has grown beyond the original M1–M4 prototype. The current application includes the operations workspaces, incident workflows, topology editing, command evidence, configuration checkpoints, classroom integration, and browser UI regression suites described in the sections below.
 
-- **Polish the builder** — drag to reposition, add/remove devices and links (right now topology is given per mission and you configure it; the sketch's "build from scratch" capstone needs add/delete).
-- **Enterprise services** — deepen DHCP reservation/renewal behavior, DNS diagnostics, NTP failure modes, and syslog filtering / incident correlation.
-- **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
-- **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
+Use the repository root README for platform setup, test commands, architecture overview and Supabase deployment guidance. This module README documents Network Sysadmin behavior and simulator fidelity.
 
 
 ## Switching: VLANs and trunks
