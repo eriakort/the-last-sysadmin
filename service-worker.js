@@ -1,19 +1,61 @@
 /* The Last Sysadmin - offline service worker */
-const CACHE = 'last-sysadmin-v60';
+const CACHE_PREFIX = 'last-sysadmin-v';
+const CACHE = CACHE_PREFIX + '61';
 const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+
+self.addEventListener('install', (event) => {
+  // addAll is intentionally atomic: a partial precache must not replace a
+  // working offline release. A failed install leaves the previous worker active.
+  event.waitUntil(
+    caches.open(CACHE)
+      .then((cache) => cache.addAll(ASSETS))
+      .then(() => self.skipWaiting())
+  );
 });
-self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE)
+          .map((key) => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
 });
-self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      // the game is self-contained; only same-origin GETs are worth caching
-      try { if (res && res.ok && new URL(e.request.url).origin === self.location.origin) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); } } catch (_) {}
-      return res;
-    }).catch(() => caches.match('index.html')))
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  let url;
+  try { url = new URL(request.url); } catch (_) { return; }
+  if (url.origin !== self.location.origin) return;
+
+  const isNavigation = request.mode === 'navigate';
+  if (isNavigation) {
+    // Prefer the latest shell while online; use the precached app shell offline.
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          event.waitUntil(caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {}));
+        }
+        return response;
+      }).catch(() => caches.match(request).then((hit) => hit || caches.match('index.html')))
+    );
+    return;
+  }
+
+  // Static assets are cache-first. Do not return HTML for a missing script,
+  // stylesheet, image, API request, or other non-navigation resource.
+  event.respondWith(
+    caches.match(request).then((hit) => hit || fetch(request).then((response) => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        event.waitUntil(caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {}));
+      }
+      return response;
+    }))
   );
 });
