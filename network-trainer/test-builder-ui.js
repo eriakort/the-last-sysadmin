@@ -53,6 +53,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.textContent('.builder')).includes('2 selected')) ok('shift-click selects multiple devices');
   else fail('multi-select did not retain both devices');
   await page.click('#topoCopy');
+  if (!(await page.locator('#topoPaste').isDisabled())) ok('copy enables paste for the captured selection');
+  else fail('copy did not enable paste');
   await page.click('#topoPaste'); await page.waitForTimeout(80);
   if ((await page.locator('#topo .node').count()) === 4) ok('copy/paste duplicates the selected device group');
   else fail('copy/paste did not duplicate both selected devices');
