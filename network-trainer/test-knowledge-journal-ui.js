@@ -41,8 +41,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   // The floating terminal is mounted outside the Workbench layout. Focus the
   // actual command field and wait for its persisted journal record before
   // navigating away, rather than racing the view transition against the submit.
-  await page.locator('#tin').focus();
-  await page.keyboard.press('Enter');
+  await page.locator('#tin').press('Enter');
   await page.waitForFunction(() => {
     const progress = JSON.parse(localStorage.getItem('nettrainer') || '{}');
     return Array.isArray(progress.journal) && progress.journal.some(entry => entry.command === 'show vlan brief');
