@@ -158,7 +158,7 @@ function renderTopo() {
   if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
-  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
+  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" data-link-index="${li}" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
   if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
@@ -1026,8 +1026,168 @@ function pasteTopologySelection() {
   TOPO_CLIPBOARD.links.forEach(l=>{if(map[l.a[0]]&&map[l.b[0]])try{B.addLink(RUN.net,map[l.a[0]],map[l.b[0]],l.a[1],l.b[1]);}catch(e){}});
   rememberTopology(before); TOPO_SELECTED=new Set(Object.values(map)); SEL=Object.values(map)[0]||SEL; refresh();
 }
+let TOPO_CONTEXT_MENU = null;
+function closeTopologyContextMenu() {
+  const menu = TOPO_CONTEXT_MENU;
+  if (!menu) return;
+  document.removeEventListener('pointerdown', menu.dismissOutside, true);
+  document.removeEventListener('keydown', menu.dismissEscape, true);
+  menu.remove();
+  TOPO_CONTEXT_MENU = null;
+}
+function runTopologyContextAction(action, target) {
+  if (!canBuild() || !RUN || !RUN.net) return;
+  if (action.startsWith('add:')) {
+    rememberTopology();
+    const id = B.addDevice(RUN.net, action.slice(4));
+    TOPO_SELECTED = new Set([id]); SEL = id; LINK_SEL = null; WIRE = null;
+    selectDevice(id); return;
+  }
+  switch (action) {
+    case 'configure': if (target.id) selectDevice(target.id); break;
+    case 'connect': WIRE = target.id; SEL = target.id; TOPO_SELECTED = new Set([target.id]); refresh(); break;
+    case 'duplicate': {
+      if (!target.id || !RUN.net.devices[target.id]) break;
+      try { rememberTopology(); const id = B.cloneDevice(RUN.net, target.id); TOPO_SELECTED = new Set([id]); SEL = id; LINK_SEL = null; selectDevice(id); }
+      catch (err) { flashStatus(err.message); }
+      break;
+    }
+    case 'copy': copyTopologySelection(); break;
+    case 'rename': {
+      const d = RUN.net.devices[target.id]; if (!d) break;
+      const value = prompt('Device display label (leave blank to use its ID):', d.label || '');
+      if (value === null) break;
+      rememberTopology(); if (value.trim()) d.label = value.trim().slice(0, 32); else delete d.label;
+      refresh(); break;
+    }
+    case 'delete-device':
+      if (target.id && RUN.net.devices[target.id] && confirm('Delete device ' + target.id + ' and its connected links?')) {
+        rememberTopology(); B.removeDevice(RUN.net, target.id); TOPO_SELECTED.delete(target.id);
+        delete TERM_SESSIONS[target.id]; if (SEL === target.id) SEL = null;
+        if (WIRE === target.id) WIRE = null; LINK_SEL = null; refresh();
+      }
+      break;
+    case 'focus': focusSelectedTopology(); break;
+    case 'toggle-link': {
+      const link = RUN.net.links[target.index]; if (!link) break;
+      rememberTopology(); link.up = link.up === false; refresh(); break;
+    }
+    case 'delete-link':
+      if (Number.isInteger(target.index) && RUN.net.links[target.index] && confirm('Remove this connection?')) {
+        rememberTopology(); B.removeLink(RUN.net, target.index); LINK_SEL = null; refresh();
+      }
+      break;
+    case 'delete-drawing':
+      if (RUN.net.drawings && RUN.net.drawings[target.index]) {
+        rememberTopology(); RUN.net.drawings.splice(target.index, 1); DRAWING_SEL = null; refresh();
+      }
+      break;
+    case 'edit-note': {
+      const note = RUN.net.notes && RUN.net.notes[target.index]; if (!note) break;
+      const value = prompt('Edit topology note (leave blank to remove):', note.text || '');
+      if (value === null) break;
+      rememberTopology();
+      if (!value.trim()) RUN.net.notes.splice(target.index, 1);
+      else note.text = value.trim().slice(0, 120);
+      refresh(); break;
+    }
+    case 'delete-note':
+      if (RUN.net.notes && RUN.net.notes[target.index] && confirm('Remove this note?')) {
+        rememberTopology(); RUN.net.notes.splice(target.index, 1); refresh();
+      }
+      break;
+    case 'paste': pasteTopologySelection(); break;
+    case 'add-note': {
+      const value = prompt('Topology note (max 120 characters):', 'Network note');
+      if (value === null || !value.trim()) break;
+      const p = target.point || (SEL ? nodePos(SEL) : [60, 60]);
+      rememberTopology(); RUN.net.notes = RUN.net.notes || [];
+      RUN.net.notes.push({ text: value.trim().slice(0, 120), x: p[0], y: p[1] }); refresh(); break;
+    }
+    case 'select-all': TOPO_SELECTED = new Set(Object.keys(RUN.net.devices)); SEL = [...TOPO_SELECTED][0] || null; refresh(); break;
+    case 'fit': fitTopology(); break;
+    case 'toggle-grid': TOPO_GRID = !TOPO_GRID; refresh(); break;
+    case 'toggle-snap': TOPO_SNAP = !TOPO_SNAP; refresh(); break;
+  }
+}
+function showTopologyContextMenu(e, kind, target = {}) {
+  if (!canBuild()) return;
+  e.preventDefault(); e.stopPropagation();
+  if (kind === 'device') {
+    if (!TOPO_SELECTED.has(target.id)) TOPO_SELECTED = new Set([target.id]);
+    SEL = target.id; LINK_SEL = null; DRAWING_SEL = null;
+  } else if (kind === 'link') {
+    LINK_SEL = target.index; DRAWING_SEL = null;
+  } else if (kind === 'drawing') {
+    DRAWING_SEL = target.index; LINK_SEL = null;
+  } else if (kind === 'note') {
+    LINK_SEL = null; DRAWING_SEL = null;
+  } else {
+    LINK_SEL = null; DRAWING_SEL = null;
+  }
+  refresh();
+  closeTopologyContextMenu();
+  const groups = {
+    device: [
+      ['Configure / inspect', 'configure'], ['Connect to another device', 'connect'], ['Duplicate device', 'duplicate'],
+      ['Copy selection', 'copy'], ['Rename display label', 'rename'], ['Center on device', 'focus'], ['Delete device', 'delete-device', true]
+    ],
+    link: [
+      [RUN.net.links[target.index] && RUN.net.links[target.index].up === false ? 'Bring link up' : 'Take link down', 'toggle-link'],
+      ['Remove connection', 'delete-link', true]
+    ],
+    drawing: [['Remove drawing', 'delete-drawing', true]],
+    note: [['Edit note', 'edit-note'], ['Remove note', 'delete-note', true]],
+    canvas: [
+      ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
+      ['Add note here', 'add-note'], ['Paste selection', 'paste', false, !TOPO_CLIPBOARD],
+      ['Select all devices', 'select-all'], ['Fit topology', 'fit'], [TOPO_GRID ? 'Hide grid' : 'Show grid', 'toggle-grid'], [TOPO_SNAP ? 'Disable snap' : 'Enable snap', 'toggle-snap']
+    ]
+  };
+  const labels = groups[kind] || groups.canvas;
+  const menu = document.createElement('div');
+  menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
+  const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
+  menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
+    (action === 'add:host' || action === 'add-note' || action === 'paste' || action === 'select-all' || action === 'fit' || action === 'toggle-grid' ? '<div class="ctx-separator"></div>' : '') +
+    '<button type="button" role="menuitem" data-action="' + action + '"' + (danger ? ' class="danger"' : '') + (disabled ? ' disabled' : '') + '>' + esc(label) + '</button>'
+  ).join('');
+  document.body.appendChild(menu);
+  const x = Math.max(8, Math.min(e.clientX || 8, window.innerWidth - menu.offsetWidth - 8));
+  const y = Math.max(8, Math.min(e.clientY || 8, window.innerHeight - menu.offsetHeight - 8));
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  menu.addEventListener('click', event => {
+    const button = event.target.closest('button[data-action]');
+    if (!button || button.disabled) return;
+    const action = button.dataset.action;
+    closeTopologyContextMenu();
+    runTopologyContextAction(action, target);
+  });
+  menu.dismissOutside = event => { if (!menu.contains(event.target)) closeTopologyContextMenu(); };
+  menu.dismissEscape = event => { if (event.key === 'Escape') { event.preventDefault(); closeTopologyContextMenu(); } };
+  document.addEventListener('pointerdown', menu.dismissOutside, true);
+  document.addEventListener('keydown', menu.dismissEscape, true);
+  const first = menu.querySelector('button:not(:disabled)'); if (first) first.focus();
+}
+
 function wireTopo() {
   const svg = $('#topo');
+  if (svg) svg.addEventListener('contextmenu', e => {
+    if (!canBuild()) return;
+    const node = e.target.closest && e.target.closest('.node');
+    const edge = e.target.closest && (e.target.closest('.edge') || e.target.closest('.edge-label'));
+    const drawing = e.target.closest && e.target.closest('.topo-drawing');
+    const note = e.target.closest && e.target.closest('.topo-note');
+    if (node) showTopologyContextMenu(e, 'device', { id: node.dataset.dev });
+    else if (edge) showTopologyContextMenu(e, 'link', { index: Number(edge.dataset.linkIndex) });
+    else if (drawing) showTopologyContextMenu(e, 'drawing', { index: Number(drawing.dataset.drawingIndex) });
+    else if (note) showTopologyContextMenu(e, 'note', { index: Number(note.dataset.noteIndex) });
+    else {
+      const point = svgPoint(svg, e.clientX, e.clientY);
+      showTopologyContextMenu(e, 'canvas', { point });
+    }
+  });
+
   if (svg) svg.addEventListener('click', e => {
     if (DRAW_TOOL !== 'select' && canBuild()) return;
     const target = e.target;
@@ -1343,17 +1503,17 @@ function openStats() {
 const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
 function renderPalette() {
   if (!canBuild()) return '';
-  const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
+  const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}" title="Add a ${n.toLowerCase()} to the topology canvas">＋ ${n}</button>`).join('');
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
   const layerState = Object.assign({}, TOPO_LAYERS, RUN.net.layerVisibility || {});
   const drawingTools = [['select','Select'],['line','Line'],['arrow','Arrow'],['rect','Rectangle'],['ellipse','Ellipse'],['freehand','Freehand']];
   return `<div class="builder"><div class="label">Build · topology designer</div>
-    <div class="pal-row"><button class="btn sm" id="topoUndo" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
+    <div class="pal-row"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
     <div class="pal-row">${add}</div>
-    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button><button class="btn sm" id="labelDev">Label</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="zoneBtn" ${TOPO_SELECTED.size||SEL?'':'disabled'}>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
-    <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
-    <div class="label2">Drawing tools</div><div class="pal-row">${drawingTools.map(([k,n])=>`<button class="btn sm draw-tool${DRAW_TOOL===k?' active':''}" data-draw-tool="${k}" aria-pressed="${DRAW_TOOL===k}">${n}</button>`).join('')}<button class="btn sm" id="delDrawing" ${DRAWING_SEL==null?'disabled':''}>Remove drawing</button></div>
-    <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(layerState).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${layerState[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · layer visibility changes presentation only.</div></div>`;
+    <div class="pal-row"><button class="btn sm" id="wireBtn" title="Connect the selected device to another device">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ${TOPO_SELECTED.size||SEL?'':'disabled'}>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
+    <div class="pal-row"><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
+    <div class="label2">Drawing tools</div><div class="pal-row">${drawingTools.map(([k,n])=>`<button class="btn sm draw-tool${DRAW_TOOL===k?' active':''}" data-draw-tool="${k}" aria-pressed="${DRAW_TOOL===k}" title="${n} drawing tool">${n}</button>`).join('')}<button class="btn sm" id="delDrawing" title="Remove the selected drawing" ${DRAWING_SEL==null?'disabled':''}>Remove drawing</button></div>
+    <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(layerState).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${layerState[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Right-click a device, link or empty canvas for contextual actions · drag to move devices · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'}.</div></div>`;
 }
 function describeCheck(s) {
   switch (s.type) {
@@ -1686,14 +1846,14 @@ function boot() {
       <aside id="navRail" aria-label="Network workspace navigation">
         <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
         <div class="nav-section">Workspace</div>
-        <button class="nav-item" id="navOverview" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
-        <button class="nav-item" id="navIncidents" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
-        <button class="nav-item" id="navWorkbench" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
-        <button class="nav-item" id="navInfrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
+        <button class="nav-item" id="navOverview" title="Overview of the current lab and recent activity" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
+        <button class="nav-item" id="navIncidents" title="Review and work incident tickets" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
+        <button class="nav-item" id="navWorkbench" title="Operate the active network simulation" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
+        <button class="nav-item" id="navInfrastructure" title="Inspect devices, links and infrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
         <div class="nav-section">Reference & records</div>
-        <button class="nav-item" id="navKnowledge" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
-        <button class="nav-item" id="navJournal" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
-        <button class="nav-item" id="navChanges" data-view="changes" type="button"><span class="nav-glyph">⇄</span>Changes</button>
+        <button class="nav-item" id="navKnowledge" title="Browse command references and troubleshooting playbooks" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
+        <button class="nav-item" id="navJournal" title="Review saved investigation notes and evidence" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
+        <button class="nav-item" id="navChanges" title="Review configuration changes and history" data-view="changes" type="button"><span class="nav-glyph">⇄</span>Changes</button>
         <div class="nav-spacer"></div><div class="nav-foot">LAB STATUS · SIMULATED<br>LOCAL PROGRESS ENABLED</div>
       </aside>
       <div id="mainArea">
