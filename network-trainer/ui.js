@@ -1961,23 +1961,32 @@ function activatePaletteResult(index) {
   const item=PALETTE_RESULTS[index]; if(!item)return;
   closePalette(); item.action();
 }
+let PALETTE_RETURN_FOCUS=null;
 function openPalette() {
   if($('#workstationPalette')){const input=$('#paletteSearch');$('#workstationPalette').hidden=false;input.value='';PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();return;}
-  const modal=document.createElement('div');modal.id='workstationPalette';modal.className='palette-overlay';modal.innerHTML='<section class="palette-dialog" role="dialog" aria-modal="true" aria-label="Search workstation"><div class="palette-search-row"><span aria-hidden="true">⌕</span><input id="paletteSearch" type="search" autocomplete="off" placeholder="Search devices, incidents, changes, commands…"><kbd>ESC</kbd></div><div id="paletteResults" class="palette-results" role="listbox"></div><footer><span>↑ ↓ Navigate</span><span>↵ Open</span><span>Ctrl K Search</span></footer></section>';
+  const modal=document.createElement('div');modal.id='workstationPalette';modal.className='palette-overlay';modal.innerHTML='<section class="palette-dialog" role="dialog" aria-modal="true" aria-label="Search workstation"><div class="palette-search-row"><span aria-hidden="true">⌕</span><input id="paletteSearch" type="search" aria-label="Search devices, incidents, changes and commands" autocomplete="off" placeholder="Search devices, incidents, changes, commands…"><kbd>ESC</kbd></div><div id="paletteResults" class="palette-results" role="listbox" aria-label="Search results"></div><footer><span>↑ ↓ Navigate</span><span>↵ Open</span><span>Ctrl K Search</span></footer></section>';
+  PALETTE_RETURN_FOCUS=document.activeElement instanceof HTMLElement?document.activeElement:null;
   document.body.appendChild(modal);
-  const input=modal.querySelector('#paletteSearch');
+  const input=modal.querySelector('#paletteSearch'),dialog=modal.querySelector('.palette-dialog');
+  const focusables=()=>[...dialog.querySelectorAll('input:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el=>el.getClientRects().length);
   input.addEventListener('input',()=>{PALETTE_RESULTS=collectPaletteResults(input.value);PALETTE_ACTIVE=0;renderPaletteResults();});
   input.addEventListener('keydown',e=>{
-    if(e.key==='ArrowDown'){e.preventDefault();PALETTE_ACTIVE=Math.min(PALETTE_RESULTS.length-1,PALETTE_ACTIVE+1);renderPaletteResults();}
+    if(e.key==='ArrowDown'){e.preventDefault();PALETTE_ACTIVE=Math.min(Math.max(0,PALETTE_RESULTS.length-1),PALETTE_ACTIVE+1);renderPaletteResults();}
     else if(e.key==='ArrowUp'){e.preventDefault();PALETTE_ACTIVE=Math.max(0,PALETTE_ACTIVE-1);renderPaletteResults();}
     else if(e.key==='Enter'){e.preventDefault();activatePaletteResult(PALETTE_ACTIVE);}
     else if(e.key==='Escape'){e.preventDefault();closePalette();}
-    else if(e.key==='Tab'){const first=modal.querySelector('.palette-result');if(first){e.preventDefault();first.focus();}}
   });
+  modal.addEventListener('keydown',e=>{
+    if(e.key!=='Tab')return;
+    const items=focusables();if(!items.length){e.preventDefault();dialog.focus();return;}
+    if(e.shiftKey&&(document.activeElement===items[0]||!modal.contains(document.activeElement))){e.preventDefault();items[items.length-1].focus();}
+    else if(!e.shiftKey&&(document.activeElement===items[items.length-1]||!modal.contains(document.activeElement))){e.preventDefault();items[0].focus();}
+  });
+  modal.addEventListener('focusout',()=>queueMicrotask(()=>{if(modal.isConnected&&!modal.contains(document.activeElement))input.focus();}));
   modal.addEventListener('click',e=>{if(e.target===modal)closePalette();});
   PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();
 }
-function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remove();}
+function closePalette(){const modal=$('#workstationPalette');if(!modal)return;modal.remove();const target=PALETTE_RETURN_FOCUS;PALETTE_RETURN_FOCUS=null;if(target&&target.isConnected)target.focus();}
 function wireGlobalPalette() {
   document.addEventListener('keydown',e=>{if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){const mod=e.ctrlKey||e.metaKey;if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redoTopology():undoTopology();return;}if(mod&&e.key.toLowerCase()==='y'){e.preventDefault();redoTopology();return;}if(mod&&e.key.toLowerCase()==='c'){e.preventDefault();copyTopologySelection();return;}if(mod&&e.key.toLowerCase()==='v'){e.preventDefault();pasteTopologySelection();return;}}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;} if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='d'&&SEL){e.preventDefault();try{const id=B.cloneDevice(RUN.net,SEL);selectDevice(id);refresh();}catch(err){flashStatus(err.message);}return;}if(e.key==='Delete'&&LINK_SEL!=null){e.preventDefault();B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();return;}}if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
 }
