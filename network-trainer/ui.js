@@ -1073,7 +1073,7 @@ function wireBrief() {
     renderCheckArgs();
     $('#chkType').addEventListener('change', renderCheckArgs);
     $('#addChk').addEventListener('click', addCheckFromForm);
-    document.querySelectorAll('#brief [data-delchk]').forEach(b => b.addEventListener('click', () => { AUTHOR.success.splice(+b.dataset.delchk, 1); $('#brief').innerHTML = renderAuthor(); wireBrief(); }));
+    document.querySelectorAll('#brief [data-delchk]').forEach(b => b.addEventListener('click', () => { AUTHOR.success.splice(+b.dataset.delchk, 1); persistBuilderDraft(); $('#brief').innerHTML = renderAuthor(); wireBrief(); }));
     $('#aTitle').addEventListener('input', e => { AUTHOR.title = e.target.value; persistBuilderDraft(); });
     $('#aObj').addEventListener('input', e => { AUTHOR.objective = e.target.value; persistBuilderDraft(); });
     $('#exportScn').addEventListener('click', exportScenario);
@@ -1353,7 +1353,7 @@ function addCheckFromForm() {
   document.querySelectorAll('#chkArgs .chkarg').forEach(inp => { const v = inp.value.trim(); if (v) s[inp.dataset.arg] = /^\d+$/.test(v) ? Number(v) : v; });
   const missing = (S.CHECKS[type] || []).filter(f => s[f] == null);
   if (missing.length) { flashStatus('Missing: ' + missing.join(', ')); return; }
-  AUTHOR.success.push(s); $('#brief').innerHTML = renderAuthor(); wireBrief();
+  AUTHOR.success.push(s); persistBuilderDraft(); $('#brief').innerHTML = renderAuthor(); wireBrief();
 }
 function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { authored: true, mode: 'build' }, done: () => false, results: () => [] }; }
 const BUILDER_DRAFT_KEY = 'networkTrainerBuilderDraft';
