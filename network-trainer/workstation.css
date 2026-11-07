@@ -591,3 +591,7 @@ aside{scrollbar-color:#344a60 transparent}
 #topo .node[role="button"]{cursor:pointer}
 #topo .node[role="button"]:focus-visible{outline:none;filter:drop-shadow(0 0 4px var(--focus));}
 #topo .node[role="button"]:focus-visible .hit{stroke:var(--focus);stroke-width:2.5;stroke-dasharray:4 2;}
+
+/* Keyboard access for topology links, drawings and notes. */
+#topo .edge:focus-visible,#topo .topo-drawing:focus-visible,#topo .topo-note:focus-visible{outline:none;filter:drop-shadow(0 0 4px var(--amber));stroke:var(--amber);stroke-width:4;}
+#topo .topo-note:focus-visible rect{stroke:var(--amber);stroke-width:3;}

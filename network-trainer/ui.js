@@ -106,7 +106,7 @@ function drawingMarkup(d, index) {
   const selected = DRAWING_SEL === index ? ' selected' : '';
   const color = esc(d.color || '#e5b85c');
   const hitFill = d.type === "rect" || d.type === "ellipse" ? "transparent" : "none";
-  const common = `class="topo-drawing${selected}" data-drawing-index="${index}" fill="${hitFill}" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
+  const common = `class="topo-drawing${selected}" data-drawing-index="${index}" role="button" tabindex="0" aria-label="${esc((d.type || 'topology') + ' drawing ' + (index + 1))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" fill="${hitFill}" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
   if (d.type === 'freehand') { const points=Array.isArray(d.points)?d.points:[]; return `<path ${common} d="${points.map((p,i)=>(i?'L':'M')+(Number(p[0])||0)+' '+(Number(p[1])||0)).join(' ')}"/>`; }
   const x1=Number(d.x1)||0,y1=Number(d.y1)||0,x2=Number(d.x2)||0,y2=Number(d.y2)||0;
   if (d.type === 'rect') return `<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`;
@@ -159,8 +159,8 @@ function renderTopo() {
   if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
-  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" data-link-index="${li}" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
-  if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
+  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" role="button" tabindex="0" aria-label="${esc('Connection ' + l.a[0] + ' ' + l.a[1] + ' to ' + l.b[0] + ' ' + l.b[1] + (linkDown(net,l) ? ', down' : ', up'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" data-link-index="${li}" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
+  if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" role="button" tabindex="0" aria-label="${esc('Topology note: ' + (n.text || 'Note'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
@@ -1150,7 +1150,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const labels = groups[kind] || groups.canvas;
   const menu = document.createElement('div');
   menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
-  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : document.activeElement;
+  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : kind === 'link' ? document.querySelector('#topo .edge[data-link-index="' + target.index + '"]') : kind === 'drawing' ? document.querySelector('#topo .topo-drawing[data-drawing-index="' + target.index + '"]') : kind === 'note' ? document.querySelector('#topo .topo-note[data-note-index="' + target.index + '"]') : document.activeElement;
   TOPO_CONTEXT_MENU = menu;
   const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
   menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
@@ -1214,6 +1214,23 @@ function wireTopo() {
     LINK_SEL = Number(edge.getAttribute('data-link-index'));
     refresh();
   }));
+  if (svg) {
+    const menuFor=(el,kind,index)=>{const r=el.getBoundingClientRect();showTopologyContextMenu({preventDefault(){},stopPropagation(){},clientX:r.left+r.width/2,clientY:r.bottom},kind,{index});};
+    svg.querySelectorAll('.edge').forEach(el=>el.addEventListener('keydown',e=>{
+      if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menuFor(el,'link',Number(el.dataset.linkIndex));}
+      else if(e.key==='Enter'||e.key===' '){e.preventDefault();LINK_SEL=Number(el.dataset.linkIndex);refresh();const next=$('#topo .edge[data-link-index="'+LINK_SEL+'"]');if(next)next.focus();}
+    }));
+    svg.querySelectorAll('.topo-drawing').forEach(el=>el.addEventListener('keydown',e=>{
+      const index=Number(el.dataset.drawingIndex);
+      if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menuFor(el,'drawing',index);}
+      else if(e.key==='Enter'||e.key===' '){e.preventDefault();DRAWING_SEL=index;refresh();const next=$('#topo .topo-drawing[data-drawing-index="'+index+'"]');if(next)next.focus();}
+    }));
+    svg.querySelectorAll('.topo-note').forEach(el=>el.addEventListener('keydown',e=>{
+      const index=Number(el.dataset.noteIndex);
+      if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menuFor(el,'note',index);}
+      else if(e.key==='Enter'||e.key===' '){e.preventDefault();const note=RUN.net.notes[index];if(!note)return;const value=prompt('Edit topology note (leave blank to remove):',note.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.notes.splice(index,1);else note.text=value.trim().slice(0,120);refresh();const next=$('#topo .topo-note[data-note-index="'+index+'"]');if(next)next.focus();}
+    }));
+  }
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || (DRAW_TOOL === 'select' && e.target.closest('.topo-drawing')) || WIRE || e.button !== 0) return;
@@ -1226,11 +1243,21 @@ function wireTopo() {
   });
   document.querySelectorAll('#topo .node').forEach(n => {
     n.addEventListener('keydown', e => {
+      const id=n.dataset.dev, rect=n.getBoundingClientRect();
+      const openMenu=()=>showTopologyContextMenu({preventDefault(){},stopPropagation(){},clientX:rect.left+rect.width/2,clientY:rect.bottom},'device',{id});
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openMenu(); return; }
+      if (canBuild() && e.altKey && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+        e.preventDefault(); const p=nodePos(id), step=e.shiftKey?40:10, dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0, dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
+        rememberTopology(); setPos(id,p[0]+dx,p[1]+dy); refresh(); const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]'); if(next)next.focus(); flashStatus('Moved '+id+' with the keyboard.'); return;
+      }
+      if (canBuild() && (e.key==='c'||e.key==='C')) { e.preventDefault(); WIRE=id; flashStatus('Connection started from '+id+'. Focus another device and press Enter.'); return; }
       if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault(); selectDevice(n.dataset.dev);
-      } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-        e.preventDefault(); const rect = n.getBoundingClientRect();
-        showTopologyContextMenu({ preventDefault(){}, stopPropagation(){}, clientX:rect.left + rect.width/2, clientY:rect.bottom }, 'device', { id:n.dataset.dev });
+        e.preventDefault();
+        if (canBuild() && WIRE) {
+          if(WIRE!==id){try{rememberTopology();B.addLink(RUN.net,WIRE,id);flashStatus('Connected '+WIRE+' to '+id+'.');}catch(err){flashStatus(err.message);}}
+          WIRE=null;refresh();const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]');if(next)next.focus();return;
+        }
+        selectDevice(id); const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]');if(next)next.focus();
       }
     });
     n.addEventListener('pointerdown', e => {
