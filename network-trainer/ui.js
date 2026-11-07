@@ -675,11 +675,13 @@ function captureConfigCheckpoint(label,note='') {
   if(status)status.textContent='Configuration checkpoint "'+cleanLabel+'" saved locally.'+(record.baseline?' Marked as the known-good baseline.':'');
 }
 function setConfigBaseline(checkpointId) {
+  const old=$('#configHistoryModal');if(old)old.remove();
   const records=(PROG.configArchives||[]).filter(x=>x.device===SEL), target=records.find(x=>String(x.id)===String(checkpointId));if(!target)return;
   records.forEach(x=>{x.baseline=x===target;});saveProg();openConfigHistory();
   const status=$('#termEvidenceStatus');if(status)status.textContent='Known-good baseline set to "'+(target.label||target.hostname||target.device)+'".';
 }
 function deleteConfigCheckpoint(checkpointId) {
+  const old=$('#configHistoryModal');if(old)old.remove();
   const target=(PROG.configArchives||[]).find(x=>x.device===SEL&&String(x.id)===String(checkpointId));if(!target)return;
   if(target.baseline){const status=$('#termEvidenceStatus');if(status)status.textContent='Unpin this known-good baseline before deleting it.';return;}
   PROG.configArchives=PROG.configArchives.filter(x=>!(x.device===SEL&&String(x.id)===String(checkpointId)));saveProg();openConfigHistory();
