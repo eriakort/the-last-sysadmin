@@ -1,165 +1,139 @@
-# Networking Trainer — M1 engine + M2 CLI + M3 missions + M4 UI
+# The Last Sysadmin
 
-A prototype of the networking/security teaching game: the **network model**, the
-**forwarding engine**, the **mission checks** (M1), the **command-line layer** (M2), the
-**mission/chapter layer** with the ten beginner missions (M3), and a playable
-browser **UI** — topology view, config panels, terminal, and Check (M4). The engine is
-the single source of truth; the UI is just a layer that reads/writes the same model.
+The Last Sysadmin is a browser-based learning platform for practising Linux system administration and network operations through interactive simulations, guided missions, incident tickets, and classroom workflows.
 
-## Play it
+It combines two connected learning environments:
 
-Open **`index.html`** in a browser (self-contained, no server, no deps). Pick a
-mission, click a device to configure it or type in the terminal, then hit **Check**.
+- **Linux Sysadmin** — a simulated Linux terminal, filesystem and command-learning experience with guided missions, progress tracking, accounts, and classroom features.
+- **Network Sysadmin** — a network operations workstation and network simulator with incident management, a topology builder, device consoles, configuration and evidence workflows, knowledge references, and a separate networking learning path.
 
-**Game systems** (the sysadmin game's "feel"): saved progress (localStorage), XP
-and ranks (Cadet → Network Architect), a hints economy (each hint costs XP), a
-**per-ticket timer** and a **📊 Stats** view (per-ticket times/hints, averages,
-fastest), terminal **command history** (↑/↓), solved-ticket marks and a **Next
-ticket** flow, a graduation finale, a **⚙ Settings** panel with five themes (a
-distinct cyan "Network Ops" default), and a back-link to the Linux game. Progress
-persists across reloads.
+The project is designed for education and safe practice. The simulated environments do not connect to physical network equipment, launch virtual machines or containers, or provide real operating-system or vendor-device emulation.
 
-**Fourteen missions** across addressing, subnetting, switching, routing, static
-routing, security, **DHCP**, **DNS/naming**, and **NAT** — including
-**destination-based firewall rules** for DMZ segmentation ("stop the pivot"), a
-**DHCP lease** that hands out address + gateway + resolver in one step
-(`dhclient`), a **name-resolution** fault where the IP works but the name doesn't
-(`dig`, `resolvectl`), and **NAT**: a **port-forward** that exposes an inside
-server on a public IP (DNAT) and a **masquerade** that shares one public address
-for a whole office (SNAT), both via `iptables -t nat`.
+## Start here
 
-**Incident-ticket framing.** Every mission opens as an on-call ticket: a
-reporter, a priority (P1–P3), and a **symptom in the user's words** ("I can't
-open the shared drive — it worked Friday") rather than a task instruction. Before
-the fix is graded, a **diagnosis gate** makes the player locate the fault — a
-triage question answered by actually running `ping` / `traceroute` / `ip addr` /
-`nmap` first. A wrong pick is rejected with a nudge back to the tools; the right
-pick reveals *why*, then unlocks the objective and Check. This turns each mission
-from a tutorial step into on-call troubleshooting: investigate → diagnose → fix.
+### Requirements
 
-## Run the tests
+- Node.js and npm
+- A modern browser
+- Playwright and its browser dependencies for the browser test suites
+
+### Install and build
 
 ```bash
-node net-engine.test.js    # M1: engine scenario suite — 13 tests
-node net-cli.test.js       # M2: CLI suite — 10 tests
-node net-mission.test.js   # M3: every chapter is solvable — 8 tests
-node build-ui.js && node test-ui.js   # M4: build the page, then play it headlessly
-node net-mission-demo.js   # a full mission playthrough (briefing -> check -> fix)
+npm ci
+npm run build
+npm run build:net
 ```
 
-All plain Node; the UI test needs Playwright. 31 headless tests + the UI test.
+The application is published as static browser content. For local development, serve the repository root with a static HTTP server, for example:
 
-## What's here
+```bash
+python3 -m http.server 8000
+```
 
-| File | What it is |
-|------|-----------|
-| `net-model.js` | IP/subnet math, the topology model, and `forward()` — the one engine every command and check is built on. Plus `ping()` (round trip, so it catches asymmetric ACLs). |
-| `net-checks.js` | Pure `{ ok, reason }` checks: `reachable`, `notReachable`, `routeExists`, `subnetCorrect`, `aclBlocks`, `serviceUp`. A mission's success criteria. |
-| `net-cli.js` | **M2** — the CLI bound to a world + a current device: `ip addr`, `ip route`, `ping`, `traceroute`, `arp`, `tcpdump`, `iptables`, `nmap`, `man`, `help`. |
-| `net-mission.js` | **M3** — `evalCheck` (declarative check spec -> result) and `startMission` (build world, bind CLI, grade, explain what's unmet). |
-| `net-chapters.js` | **M3** — ten missions as data: a starting topology + `success` checks + a reference `solution`. |
-| `ui.js` | **M4** — the browser UI: layered topology layout, SVG render, config panels, terminal, briefing + Check. Uses `require()` of the modules above. |
-| `build-ui.js` | **M4** — inlines the tested modules (verbatim, via a tiny `require` shim) + `ui.js` into `index.html`. Zero drift: the page runs the code the tests cover. |
-| `index.html` | **M4** — the built, self-contained, playable page. |
-| `net-*.test.js`, `test-ui.js` | 31 headless tests + the UI test. |
-| `net-*-demo.js` | Printed demos. |
+Then open `http://localhost:8000/`. The Network Sysadmin environment is available under `/network-trainer/`.
 
-## The M3 mission layer
+### Run checks
 
-A mission is **data**: a `build()` that returns a starting topology, a `success` list of
-declarative checks, and (for authoring/testing) a reference `solution`. `startMission`
-builds the world, binds a CLI to the starting device, and exposes `done()` and `status()`
-— `status()` is the sysadmin game's `check` command: it names exactly which objective is
-unmet and why. Because missions are plain data in this shape, a **no-code mission editor**
-(like the sysadmin game's) can emit them directly.
+```bash
+npm run check          # build, unit tests, verification, generated-file freshness
+npm run smoke          # browser smoke test
+npm run test:ui        # Linux classroom UI tests
+npm run test:play      # authored-mission playback tests
+npm run test:learning  # guided-learning flow tests
+npm run test:net       # Network Trainer engine/CLI/mission/scenario tests
+npm run test:sync-db   # Supabase schema and RLS tests (requires local PostgreSQL)
+```
 
-The six starter missions walk the beginner arc: *First contact* (address a blank host),
-*The typo in the address* (subnetting), *Off the local network* (default gateway), *The
-missing route* (static routing), *Close the telnet port* (firewall), *Keep guests off the
-database* (segmentation / security). Every one is tested to start unsolved and be resolved
-by its solution — and a wrong move is tested **not** to pass, guarding against loose checks.
+For the full Network Trainer browser UI suite:
 
-## The M2 CLI
+```bash
+npm --prefix network-trainer run test:ui
+```
 
-The CLI is bound to a world and a **current device** (the console you're on), and every
-command reads or writes the same model the engine runs on — so **a mission is solvable
-two ways**: a beginner clicks in a config panel, a confident learner types `ip route add`,
-and the grader can't tell the difference (there's a test for exactly this). Supported:
+CI also runs Chromium, Firefox and WebKit smoke coverage, classroom tests, authored-mission playback, guided-learning tests, Network Trainer tests, generated-file checks, and the local PostgreSQL/RLS suite. Install Playwright browsers locally with:
 
-- `ip addr` / `ip addr add <A>/<p> dev <if>` — show / set interface addresses
-- `ip route` / `ip route add default via <ip>` / `ip route add <cidr> via <ip>` — the routing table
-- `ping <host|ip>` — round-trip, reports the path and where a packet died
-- `traceroute <host|ip>` — the hops toward a target
-- `arp` / `ip neigh` — neighbours on the L2 segment
-- `tcpdump` — the packets from the last ping
-- `iptables -L | -A INPUT -i <if> [-p tcp] [--dport N] -j DROP|ACCEPT | -F` — firewall rules (a recognisable subset)
-- `nmap <host|ip>` — **read-only, defensive**: list a host's exposed services ("see your own attack surface")
-- `dig <name>` — resolve a name via this host's configured DNS server (NXDOMAIN / no-resolver failures are teachable)
-- `dhclient <if>` — request a DHCP lease: address + gateway + resolver, in one step
-- `resolvectl dns <if> <ip>` / `resolvectl status` — set / show the host's DNS resolver
-- `ping` is **name-aware**: `ping intranet.corp.local` resolves through DNS first, so "the IP works but the name doesn't" is a real, visible split
-- `man <cmd>`, `help`
+```bash
+npx playwright install --with-deps chromium firefox webkit
+```
 
-The DNS model is **authoritative/static** (a resolver maps names→IPs); no recursion,
-caching, or TTLs — deliberately, since those add protocol machinery without teaching a
-beginner more than "names need a resolver, and a record."
+## Platform areas
 
-## What the tests prove
+### Linux Sysadmin
 
-- **Switching** — two hosts on one switch reach each other; a host in the wrong subnet doesn't.
-- **Routing** — a router joins two subnets; a host with no default gateway can't leave its own.
-- **Static routes** — two far subnets talk only when both routers have routes; removing one breaks it, and `routeExists` reports it.
-- **Firewalls** — telnet (tcp/23) blocked while web (tcp/80) and ping pass; rule **order** matters (an `allow any` shadows a later `deny`); an **asymmetric** ACL that drops the reply fails the round trip even though the request got through.
-- **VLANs** — same switch, different VLANs can't reach each other (L2 segmentation).
-- **Physical** — a downed link breaks the path.
-- **IP math** — addresses round-trip and subnet membership computes.
+The Linux learning environment provides a simulated command-line workspace, guided learning and practice flows, mission progression, saved local progress, and optional account-backed synchronization. It also includes classroom functionality for teachers and students, assignments, authored learning content, and related progress/attempt records.
 
-## How it works (the one idea)
+The terminal and filesystem are educational simulations. Commands operate on the simulated environment rather than the host operating system.
 
-Everything is one function: `forward(net, srcDevice, packet)` walks the packet hop
-by hop — same-subnet delivery → ARP/L2 domain (switches are transparent, VLAN-aware)
-→ default gateway → inbound ACL → longest-prefix route lookup → forward — and returns
-`{ ok, path, reason }`. `ping`, `traceroute`, every check, and every security scenario
-are thin callers of it. The `reason` string ("blocked by ACL", "no route to 10.0.2.10")
-is what makes a failed attempt a teaching moment.
+### Network Sysadmin
 
-## Deliberately out of scope (for beginners)
+The Network Sysadmin workspace is organised around the work of a junior network analyst or engineer:
 
-Real TCP state machines, congestion/timing, and protocol convergence (OSPF/BGP). The
-model is L3 reachability + ACLs + a readable path — which covers the whole beginner
-roadmap. See the architecture sketch for the fidelity discussion.
+- **Operations Overview** — lab health and recent activity.
+- **Incidents** — ticket queues, ownership, investigation timelines and report export.
+- **Workbench** — simulated device consoles, topology inspection, command output and evidence capture.
+- **Infrastructure** — inventory and interface inspection for the active simulated environment.
+- **Knowledge** — searchable command references and troubleshooting material.
+- **Journal** — local investigation notes and captured evidence.
+- **Changes** — configuration checkpoints, history and drift review.
+- **Build** — create and edit network topologies, devices, links, zones and diagram annotations.
+- **Classroom** — cloud-backed classroom and scenario workflows where configured.
 
-## Next
+The network simulator models selected networking concepts for learning, including switching, VLANs, routing, ACL/firewall behavior, DHCP, DNS, NAT and selected switching protocols. Command support is deliberately scoped; it should not be interpreted as a complete Cisco, Linux, or other vendor operating system.
 
-M1–M4 are done: a playable prototype with engine, CLI, missions, and a UI, all tested.
-Natural next steps:
+Topology drafts, journal evidence and configuration checkpoints described as browser-local are stored in the current browser profile. Export important work when it needs to be moved to another browser or device.
 
-- **Polish the builder** — drag to reposition, add/remove devices and links (right now topology is given per mission and you configure it; the sketch's "build from scratch" capstone needs add/delete).
-- **DNS/DHCP** in the engine → unlocks `dig` / `dhclient` and the naming chapter.
-- **Wire in the reused classroom layer** — assign these missions, record attempts, grade (the whole Supabase/RLS stack from The Last Sysadmin ports over).
-- **More chapters** toward the full roadmap, and the no-code mission editor (missions are already plain data).
+## Architecture and source map
 
+| Path | Responsibility |
+|---|---|
+| `src/game.html` | Main Linux Sysadmin application source (large, currently mostly single-file). |
+| `build.js` | Builds the deployable root `index.html` from application source and assets. |
+| `src/helpers.js` | Extracted pure helpers used by the Linux application. |
+| `src/service-worker.js` | Offline caching and service-worker lifecycle. |
+| `network-trainer/net-model.js` | Network model and packet-forwarding simulation. |
+| `network-trainer/net-checks.js` | Declarative mission checks. |
+| `network-trainer/net-cli.js` | Simulated device command-line interface. |
+| `network-trainer/net-mission.js`, `net-chapters.js` | Mission runtime and mission data. |
+| `network-trainer/net-builder.js` | Topology-building model and editing operations. |
+| `network-trainer/ui.js` | Network Sysadmin browser UI. |
+| `network-trainer/build-ui.js` | Generates the standalone `network-trainer/index.html` from tested sources. |
+| `supabase/` | SQL migrations and local PostgreSQL/RLS tests. |
+| `.github/workflows/` | CI verification and GitHub Pages deployment workflows. |
 
-## Workbench topology inspection
+The standalone Network Trainer page is generated from the JavaScript modules and UI source. Do not edit the generated `network-trainer/index.html` directly; run `npm run build:net` after changing its source files. The root `index.html` is likewise a build output; update its source and run `npm run build`.
 
-The topology canvas supports pointer-anchored wheel zoom, drag-to-pan, selected-device focus, fit-to-view and automatic arrangement. Toggle **Ports** to reveal the interface endpoints on each simulated link. These controls inspect the active local scenario; they do not connect to physical network devices.
+## Supabase setup and deployment
 
+Supabase is optional for browser-local practice, but is required for account-backed cloud progress and classroom workflows.
 
-## Workbench command evidence
+The SQL migration order and deployment requirements are documented in [supabase/README.md](supabase/README.md). Apply the base setup and migrations in the documented order. In particular, **M11 is required** for the transactional progress-sync implementation: it introduces the authenticated `merge_progress(jsonb)` RPC and revokes direct progress-table writes.
 
-The device console provides **Copy output**, **Save evidence**, and **Download** actions. Saving evidence records the selected simulator device, the most recent command, and the visible console transcript in the browser-local Engineering Journal. Use the journal to search and review captured output alongside investigation notes and ticket activity. Copy/download are local browser actions; evidence is not uploaded to a server or connected to physical network equipment.
+Deploy the matching frontend and database migration together. Older frontend builds that write directly to the progress table are incompatible after M11 is applied. The browser retains local progress during a cloud-sync outage, but this is not a substitute for applying and verifying the migration.
 
+Supabase project URL and anon key are configured by the application at runtime through its account/settings workflow. Never commit service-role keys or other privileged credentials. OAuth providers, redirect URLs and production authentication settings must be configured in the Supabase dashboard.
 
-## Workbench configuration checkpoints
+The repository's database tests run against a local PostgreSQL compatibility shim. Passing CI proves the migration and RLS tests against that local test environment; it does **not** prove that a particular production Supabase project has been migrated or configured correctly.
 
-Use **Save checkpoint** to capture the selected simulator device's current `show running-config` output in browser-local storage. **Review drift** compares the current running configuration with the latest checkpoint and lists added and removed lines; **Export archive** downloads saved checkpoints for the selected device as JSON. Checkpoints are retained locally (up to 100 records across devices) and recorded in the Engineering Journal. The comparison is read-only: it does not restore configuration, execute changes, or connect to physical equipment.
+## Testing and contribution workflow
 
+- Keep changes incremental and focused.
+- Add or update tests for behavior changes.
+- Run the relevant local checks before opening a pull request.
+- Keep generated HTML synchronized with its source.
+- Do not claim simulated functionality is connected to real infrastructure.
+- Merge only after all required CI checks pass.
 
-## Workbench incident-linked evidence
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance and [CHANGELOG.md](CHANGELOG.md) for recorded changes.
 
-The Workbench evidence toolbar lets an engineer choose an incident before saving a console transcript. The selected ticket ID is recorded with the device, command and output in the browser-local Engineering Journal, where it appears in that incident's investigation timeline. Evidence can remain unlinked when it is general lab work. This is local simulator training evidence, not a production ticketing-system integration.
+## Project scope and safety
 
+This is a learning simulator and static web application. It does not:
 
-### Network workspace navigation
+- launch hypervisors, virtual machines or containers;
+- bridge simulated networks to physical networks;
+- connect to or configure real routers, switches, firewalls or servers;
+- provide complete vendor operating-system emulation;
+- replace a production SIEM, ticketing platform, configuration-management system or network monitoring service.
 
-Network Sysadmin workspaces are reflected in the page URL with a `view` query parameter. Navigation updates browser history, so refreshing or bookmarking a workspace restores that destination, and the browser Back/Forward controls move between recently visited workspaces. Supported destinations include Overview, Incidents, Workbench, Infrastructure, Knowledge, Journal, and Changes.
+Use the simulator to learn concepts and practise workflows safely. Verify commands and operational procedures against the documentation for the real systems you administer.

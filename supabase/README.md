@@ -25,10 +25,10 @@ key, and RLS is what keeps tenants apart.
 > dashboard (**Authentication → Providers**), not in SQL. Email + magic-link work
 > with no extra setup.
 
-> **Authoring vs. delivery:** `authored_missions` and `scenarios` are author-only
-> by design today — a teacher can create and group missions, but there is not yet
-> a path that delivers them to students to *play*. That delivery step is a planned
-> follow-up; built-in missions are fully assignable now.
+> **Authoring and delivery:** Teachers can create and group authored missions in
+> `authored_missions` and `scenarios`. M10 adds `get_class_missions()` so enrolled
+> students can retrieve authored missions assigned directly or through a scenario.
+> Built-in missions remain assignable as well.
 
 ## Progress sync hardening (M11)
 
@@ -53,6 +53,7 @@ it should and nothing it shouldn't. It covers:
 - **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
+- **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
 recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
