@@ -390,3 +390,8 @@ From an incident record, use **Export incident report** to download a Markdown h
 ## Topology editing productivity
 
 The Build canvas supports multi-device editing while authoring or working in a build-from-scratch scenario. **Shift-click** toggles individual devices in the selection; **Shift-drag** on empty canvas space draws a selection rectangle. Drag any selected device to move the whole selection while preserving relative spacing. Use **Copy** / **Paste** or Ctrl/Cmd+C and Ctrl/Cmd+V to duplicate the selected devices and any links whose two endpoints are both selected. New devices receive unique IDs and are offset from the originals. **Undo** / **Redo** and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (or Ctrl/Cmd+Y) track recent topology edits in the current Build session; the in-memory history is capped at 60 snapshots and is not an audit log. The simulator remains browser-native and deterministic.
+
+
+## Topology zones and device labels
+
+The Build workspace supports named visual zones around selected devices and custom display labels for individual devices. Zones are stored with the scenario topology and render behind links and devices, so they provide logical grouping without changing connectivity or simulation behavior. Device IDs remain the stable identifiers used by the simulator, CLI, links, and mission checks; custom labels affect presentation only. Both changes participate in the topology undo/redo history.

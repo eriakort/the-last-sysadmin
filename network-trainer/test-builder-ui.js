@@ -97,6 +97,17 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
   await page.click('#noteBtn'); await page.waitForTimeout(70);
   if ((await page.locator('#topo .topo-note').textContent()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
+  // --- device labels and logical network zones ---
+  page.once('dialog', dialog => dialog.accept('Core Router'));
+  await page.click('#labelDev');
+  await page.waitForTimeout(60);
+  if ((await page.locator('#topo .node[data-dev="h2"] .n-id').textContent()) === 'Core Router') ok('selected device supports a custom display label');
+  else fail('custom device label was not rendered');
+  page.once('dialog', dialog => dialog.accept('Core LAN'));
+  await page.click('#zoneBtn'); await page.waitForTimeout(70);
+  if ((await page.locator('#topo .topo-zone text').textContent()) === 'Core LAN') ok('selected devices can be grouped in a named topology zone');
+  else fail('topology zone was not rendered');
+
 
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
