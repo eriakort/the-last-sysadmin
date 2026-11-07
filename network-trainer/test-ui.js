@@ -63,6 +63,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   // --- solve via the TERMINAL (console is h1 by default) ---
   await page.fill('#tin', 'ip addr add 10.0.1.10/24 dev eth0');
   await page.press('#tin', 'Enter'); await page.waitForTimeout(150);
+  // The floating console intentionally overlays the workspace while open; tuck it away before testing workspace controls.
+  await page.click('#terminalMinimize'); await page.waitForSelector('#terminalWindow[hidden]');
   await page.click('#check'); await page.waitForTimeout(100);
   if ((await page.getAttribute('#status', 'class')) === 'ok') ok('solved first-contact via the terminal');
   else fail('terminal solution did not resolve: ' + (await page.textContent('#status')));
@@ -95,7 +97,6 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   // --- progress persists across reload (localStorage) ---
   await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(400);
-  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
   if (/^2\/\d+$/.test(await page.textContent('#prog'))) ok('progress persists across reload');
   else fail('progress did not persist: ' + (await page.textContent('#prog')));
 
