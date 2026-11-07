@@ -54,6 +54,19 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#noteBtn'); await page.waitForTimeout(70);
   if ((await page.locator('#topo .topo-note').textContent()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
 
+  // --- link selection and removal are authoring controls, so exercise them before Play mode ---
+  await wire('h1', 'h2');
+  if (await page.$eval('#topo .edge', es => es.length) === 1) {
+    const edge = page.locator('#topo .edge').first();
+    await edge.evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
+    await page.waitForTimeout(60);
+    if (await page.$('#delLink')) {
+      await page.click('#delLink'); await page.waitForTimeout(60);
+      if (await page.$eval('#topo .edge', es => es.length) === 0) ok('selected link can be removed independently');
+      else fail('selected link removal did not update topology');
+    } else fail('selecting a topology link did not expose remove action');
+  } else fail('temporary authoring link was not created');
+
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
   await page.fill('#chkArgs .chkarg[data-arg="a"]', 'h1');
@@ -82,13 +95,6 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const cls = await page.getAttribute('#status', 'class');
   const txt = await page.textContent('#status');
   if (cls === 'ok' && /complete/.test(txt)) ok('grader accepts the built network'); else fail('scenario not accepted: [' + cls + '] ' + txt);
-
-  // --- link selection and removal are explicit and reversible by rewiring ---
-  const edge = page.locator('#topo .edge').first();
-  await edge.evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
-  await page.waitForTimeout(60);
-  if (await page.$('#delLink')) { await page.click('#delLink'); await page.waitForTimeout(60); if (await page.$eval('#topo .edge', es => es.length) === 1) ok('selected link can be removed independently'); else fail('selected link removal did not update topology'); }
-  else fail('selecting a topology link did not expose remove action');
 
   // --- exit build returns to the campaign ---
   await browser.close();
