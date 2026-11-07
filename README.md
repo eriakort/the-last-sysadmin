@@ -35,27 +35,24 @@ Then open `http://localhost:8000/`. The Network Sysadmin environment is availabl
 
 ### Run checks
 
+The root test commands are grouped by cost and prerequisites:
+
 ```bash
-npm run check          # build, unit tests, verification, generated-file freshness
-npm run smoke          # browser smoke test
-npm run test:ui        # Linux classroom UI tests
-npm run test:play      # authored-mission playback tests
-npm run test:learning  # guided-learning flow tests
-npm run test:net       # Network Trainer engine/CLI/mission/scenario tests
+npm run check          # Linux build, core unit tests, verification, generated-file freshness
+npm run test:all       # all non-database suites, including browser and Network Trainer UI tests
+npm run test:net       # complete Network Trainer engine/CLI/switching/mission/scenario/classroom unit suite
 npm run test:sync-db   # Supabase schema and RLS tests (requires local PostgreSQL)
 ```
 
-For the full Network Trainer browser UI suite:
-
-```bash
-npm --prefix network-trainer run test:ui
-```
-
-CI also runs Chromium, Firefox and WebKit smoke coverage, classroom tests, authored-mission playback, guided-learning tests, Network Trainer tests, generated-file checks, and the local PostgreSQL/RLS suite. Install Playwright browsers locally with:
+The complete local suite requires the Playwright package and Chromium, Firefox and WebKit browser binaries. Install them with:
 
 ```bash
 npx playwright install --with-deps chromium firefox webkit
 ```
+
+`npm run test:all` runs the root checks, cross-browser smoke tests, Linux classroom UI, authored-mission playback, guided-learning flow, and the complete Network Trainer unit and browser UI suites. It intentionally excludes `test:sync-db`, because that suite requires a locally running PostgreSQL service; run it separately when that prerequisite is available.
+
+CI additionally checks that generated Network Trainer HTML is unchanged after its build and runs the PostgreSQL/RLS suite. The CI workflow remains the authoritative full merge gate.
 
 ## Platform areas
 
