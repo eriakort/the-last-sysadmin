@@ -5153,12 +5153,13 @@ function renderPalette() {
   if (!canBuild()) return '';
   const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
+  const layerState = Object.assign({}, TOPO_LAYERS, RUN.net.layerVisibility || {});
   return `<div class="builder"><div class="label">Build · topology designer</div>
     <div class="pal-row"><button class="btn sm" id="topoUndo" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
     <div class="pal-row">${add}</div>
     <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button><button class="btn sm" id="labelDev">Label</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="zoneBtn" ${TOPO_SELECTED.size||SEL?'':'disabled'}>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
     <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
-    <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(TOPO_LAYERS).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${TOPO_LAYERS[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · layer visibility changes presentation only.</div></div>`;
+    <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(layerState).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${layerState[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · layer visibility changes presentation only.</div></div>`;
 }
 function describeCheck(s) {
   switch (s.type) {
