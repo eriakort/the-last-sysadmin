@@ -765,7 +765,7 @@ function scanConfigFleet() {
     const removed=[...before].filter(line=>line.trim()&&!after.has(line));
     const added=[...after].filter(line=>line.trim()&&!before.has(line));
     return {id,hostname:device.hostname||id,kind:device.kind||'device',state:added.length||removed.length?'drift':'clean',baseline,snapshots,current,added,removed};
-  }).sort((a,b)=>({drift:0,'no-baseline':1,unavailable:2,clean:3}[a.state]-({drift:0,'no-baseline':1,unavailable:2,clean:3}[b.state])||a.hostname.localeCompare(b.hostname));
+  }).sort((a,b)=>{const order={drift:0,'no-baseline':1,unavailable:2,clean:3};return order[a.state]-order[b.state]||a.hostname.localeCompare(b.hostname);});
 }
 function openConfigFleetAssurance() {
   if(!RUN){const status=$('#termEvidenceStatus');if(status)status.textContent='Start a simulator scenario before scanning configuration.';return;}
