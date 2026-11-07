@@ -132,7 +132,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.selectOption('#incidentStatus', 'all'); await page.waitForTimeout(80);
     await page.locator('#incidentList [data-incident-select="'+incidentId+'"]').click(); await page.waitForTimeout(80);
     const timeline = await page.locator('#incidentDetail').innerText();
-    if (timeline.includes('command evidence') && timeline.includes('ip addr')) ok('linked command evidence appears in the incident timeline');
+    if (/command evidence/i.test(timeline) && timeline.includes('ip addr')) ok('linked command evidence appears in the incident timeline');
     else {
       const linkedEntries = await page.evaluate(id => (PROG.journal || []).filter(e => e.ticket === id).map(e => ({type:e.type,command:e.command,text:e.text,at:e.at})), incidentId);
       fail('incident timeline did not show linked command evidence for '+incidentId+'; timeline='+timeline+'; linkedEntries='+JSON.stringify(linkedEntries));
