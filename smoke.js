@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 /*
  * Optional real-browser smoke test. Serves the built app over localhost so
- * every browser gets a normal HTTP origin (file:// has an opaque "null"
- * origin and triggers WebKit CORS errors for local resources).
- *
- *   npm run smoke          # needs Playwright (devDependency)
+ * browsers use a normal HTTP origin and can load its complete local shell.
  */
 const fs = require('fs');
 const http = require('http');
@@ -15,18 +12,50 @@ const path = require('path');
   try { engines = require('playwright'); }
   catch { console.error('Playwright not installed — run `npm install` first. Skipping smoke test.'); process.exit(0); }
 
-  const indexPath = path.join(process.cwd(), 'index.html');
-  if (!fs.existsSync(indexPath)) throw new Error('index.html is missing; run npm run build first');
+  const root = process.cwd();
+  if (!fs.existsSync(path.join(root, 'index.html'))) throw new Error('index.html is missing; run npm run build first');
+
+  const mime = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.webmanifest': 'application/manifest+json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon'
+  };
 
   const server = http.createServer((req, res) => {
-    const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
-    if (pathname !== '/' && pathname !== '/index.html') {
-      res.writeHead(404);
-      res.end('Not found');
+    let pathname;
+    try { pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname); }
+    catch {
+      res.writeHead(400);
+      res.end('Bad request');
       return;
     }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    fs.createReadStream(indexPath).pipe(res);
+    const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+    const file = path.resolve(root, relative);
+    if (file !== root && !file.startsWith(root + path.sep)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    fs.stat(file, (statError, stat) => {
+      if (statError || !stat.isFile()) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': mime[path.extname(file).toLowerCase()] || 'application/octet-stream',
+        'Cache-Control': 'no-store'
+      });
+      fs.createReadStream(file).pipe(res);
+    });
   });
 
   await new Promise((resolve, reject) => {
@@ -37,7 +66,7 @@ const path = require('path');
   const browserName = process.env.PLAYWRIGHT_BROWSER || 'chromium';
   const engine = engines[browserName];
   if (!engine) {
-    server.close();
+    await new Promise(resolve => server.close(resolve));
     throw new Error('PLAYWRIGHT_BROWSER must be chromium, firefox, or webkit');
   }
 
@@ -46,7 +75,6 @@ const path = require('path');
     browser = await engine.launch();
     const page = await browser.newPage();
     const errors = [];
-    // Network failures such as blocked optional CDN assets are not app errors.
     const isNetworkNoise = t => /Failed to load resource|ERR_|net::|ERR_TUNNEL|Access-Control-Allow-Origin/i.test(t);
     page.on('pageerror', e => errors.push('pageerror: ' + e.message));
     page.on('console', m => {
@@ -56,8 +84,7 @@ const path = require('path');
     await page.goto('http://127.0.0.1:' + server.address().port + '/', { waitUntil: 'load' });
     await page.waitForTimeout(1500);
 
-    const hasApp = await page.$('.app');
-    if (!hasApp) errors.push('no .app element rendered — game did not boot');
+    if (!await page.$('.app')) errors.push('no .app element rendered — game did not boot');
 
     if (errors.length) {
       console.error('SMOKE FAILED:');
