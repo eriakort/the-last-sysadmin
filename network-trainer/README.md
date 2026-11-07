@@ -47,6 +47,8 @@ scenario format and the topology-editing ops are pure, tested modules
 grade loop is covered headlessly, and the format is ready for the classroom
 (Supabase) assignment layer.
 
+**Topology designer toolkit.** The Build canvas now includes a toggleable alignment grid and snap-to-grid positioning, duplicate-device actions that copy configuration without copying links, editable canvas annotations that survive scenario JSON export/import, selectable/removable links, and a port-label toggle. `Ctrl+Shift+D` duplicates the selected device; select a link and press `Delete` to remove it. These are authoring conveniences over the same deterministic simulator topology — they do not launch virtual machines or emulate vendor operating systems.
+
 **Classroom (🎓 Class).** A teacher authors a scenario in Build mode, **💾 Saves
 it to their class library**, and **assigns** it to a class; an enrolled student
 opens 🎓 Class, sees the assigned scenarios, **plays** them (building from
