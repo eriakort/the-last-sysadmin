@@ -1150,7 +1150,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const labels = groups[kind] || groups.canvas;
   const menu = document.createElement('div');
   menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
-  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : document.activeElement;
+  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : kind === 'link' ? document.querySelector('#topo .edge[data-link-index="' + target.index + '"]') : kind === 'drawing' ? document.querySelector('#topo .topo-drawing[data-drawing-index="' + target.index + '"]') : kind === 'note' ? document.querySelector('#topo .topo-note[data-note-index="' + target.index + '"]') : document.activeElement;
   TOPO_CONTEXT_MENU = menu;
   const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
   menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
