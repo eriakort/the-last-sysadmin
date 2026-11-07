@@ -5022,6 +5022,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const labels = groups[kind] || groups.canvas;
   const menu = document.createElement('div');
   menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
+  TOPO_CONTEXT_MENU = menu;
   const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
   menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
     (action === 'add:host' || action === 'add-note' || action === 'paste' || action === 'select-all' || action === 'fit' || action === 'toggle-grid' ? '<div class="ctx-separator"></div>' : '') +
