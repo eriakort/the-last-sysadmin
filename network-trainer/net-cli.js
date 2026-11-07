@@ -686,7 +686,7 @@ function runASA(cli, line) {
     '',
     'Traffic not matched by an access rule is denied by the implicit deny rule.',
     'This is an educational ASA-style command subset, not Cisco ASA software.'
-  ].join('\\n'));
+  ].join('\n'));
   if (words[0] === 'ping' || words[0] === 'traceroute' || words[0] === 'nmap' || words[0] === 'help' || words[0] === 'man')
     return dispatch(cli, raw);
   return err('% Invalid ASA command — use show, packet-tracer, configure terminal, or help');
@@ -1304,7 +1304,7 @@ const COMMANDS = {
     '  help or ?                         Display this command reference',
     '',
     'This is an educational network CLI. Only commands implemented in the simulator are available.'
-  ].join('\\n')),
+  ].join('\n')),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
