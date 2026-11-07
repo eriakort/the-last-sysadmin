@@ -4801,10 +4801,15 @@ function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; const snap = v => T
 function wireTopo() {
   const svg = $('#topo');
   if (svg) svg.addEventListener('click', e => {
-    const note = e.target.closest('.topo-note');
+    const target = e.target;
+    const note = target && target.closest ? target.closest('.topo-note') : null;
     if (note && canBuild()) { const i=Number(note.dataset.noteIndex), current=RUN.net.notes[i]; const value=prompt('Edit topology note (leave blank to remove):',current && current.text || ''); if(value===null)return; if(!value.trim())RUN.net.notes.splice(i,1); else current.text=value.trim().slice(0,120); refresh(); return; }
-    const edge=e.target.closest('.edge'); if(edge && canBuild()){LINK_SEL=Number(edge.dataset.linkIndex); refresh();}
   });
+  if (svg) svg.querySelectorAll('.edge').forEach(edge => edge.addEventListener('click', () => {
+    if (!canBuild()) return;
+    LINK_SEL = Number(edge.getAttribute('data-link-index'));
+    refresh();
+  }));
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || WIRE || e.button !== 0) return;
@@ -4925,7 +4930,7 @@ function wireConfig() {
   const gridBtn=$('#gridBtn');if(gridBtn)gridBtn.addEventListener('click',()=>{TOPO_GRID=!TOPO_GRID;refresh();});
   const snapBtn=$('#snapBtn');if(snapBtn)snapBtn.addEventListener('click',()=>{TOPO_SNAP=!TOPO_SNAP;refresh();});
   const portsBtn=$('#portsBtn');if(portsBtn)portsBtn.addEventListener('click',()=>toggleTopologyPorts());
-  const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{if(LINK_SEL==null)return;B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();});
+  const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
     if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
     refresh();
@@ -5101,7 +5106,7 @@ function renderPalette() {
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
   return `<div class="builder"><div class="label">Build · topology designer</div>
     <div class="pal-row">${add}</div>
-    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
+    <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
     <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
     <div class="pal-hint dim">Drag to place · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'} · click a link to select it, then remove it · click a note to edit.</div></div>`;
 }
