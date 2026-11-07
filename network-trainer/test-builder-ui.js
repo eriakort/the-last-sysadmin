@@ -235,6 +235,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await setAddr('h2', '10.0.1.20', '24');
 
   // --- grade ---
+  // Device selection can intentionally open the floating terminal on a double-click;
+  // tuck it away before using the scenario controls underneath it.
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await page.click('#check'); await page.waitForTimeout(120);
   const cls = await page.getAttribute('#status', 'class');
   const txt = await page.textContent('#status');
