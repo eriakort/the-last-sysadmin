@@ -1040,7 +1040,7 @@ function runTopologyContextAction(action, target) {
   if (action.startsWith('add:')) {
     rememberTopology();
     const id = B.addDevice(RUN.net, action.slice(4));
-    TOPO_SELECTED = new Set([id]); SEL = id; LINK_SEL = null; WIRE = null;
+    TOPO_SELECTED = new Set([id]); LINK_SEL = null; WIRE = null;
     selectDevice(id); return;
   }
   switch (action) {
@@ -1048,7 +1048,7 @@ function runTopologyContextAction(action, target) {
     case 'connect': WIRE = target.id; SEL = target.id; TOPO_SELECTED = new Set([target.id]); refresh(); break;
     case 'duplicate': {
       if (!target.id || !RUN.net.devices[target.id]) break;
-      try { rememberTopology(); const id = B.cloneDevice(RUN.net, target.id); TOPO_SELECTED = new Set([id]); SEL = id; LINK_SEL = null; selectDevice(id); }
+      try { rememberTopology(); const id = B.cloneDevice(RUN.net, target.id); TOPO_SELECTED = new Set([id]); LINK_SEL = null; selectDevice(id); }
       catch (err) { flashStatus(err.message); }
       break;
     }
@@ -1115,7 +1115,8 @@ function showTopologyContextMenu(e, kind, target = {}) {
   e.preventDefault(); e.stopPropagation();
   if (kind === 'device') {
     if (!TOPO_SELECTED.has(target.id)) TOPO_SELECTED = new Set([target.id]);
-    SEL = target.id; LINK_SEL = null; DRAWING_SEL = null;
+    LINK_SEL = null; DRAWING_SEL = null;
+    selectDevice(target.id);
   } else if (kind === 'link') {
     LINK_SEL = target.index; DRAWING_SEL = null;
   } else if (kind === 'drawing') {
@@ -1125,7 +1126,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   } else {
     LINK_SEL = null; DRAWING_SEL = null;
   }
-  refresh();
+  if (kind !== 'device') refresh();
   closeTopologyContextMenu();
   const groups = {
     device: [
