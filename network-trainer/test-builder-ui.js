@@ -107,6 +107,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#zoneBtn'); await page.waitForTimeout(70);
   if ((await page.locator('#topo .topo-zone text').textContent()) === 'Core LAN') ok('selected devices can be grouped in a named topology zone');
   else fail('topology zone was not rendered');
+  await page.uncheck('#config [data-topo-layer="zones"]'); await page.waitForTimeout(50);
+  if (await page.locator('#topo .topo-zone').count() === 0) ok('zone layer can be hidden without deleting zone data'); else fail('zone layer visibility toggle failed');
+  await page.check('#config [data-topo-layer="zones"]'); await page.waitForTimeout(50);
+  if (await page.locator('#topo .topo-zone').count() === 1) ok('zone layer can be restored'); else fail('zone layer did not restore');
+  await page.uncheck('#config [data-topo-layer="devices"]'); await page.waitForTimeout(50);
+  if (await page.locator('#topo .node').count() === 0) ok('device layer can be hidden independently'); else fail('device layer visibility toggle failed');
+  await page.check('#config [data-topo-layer="devices"]'); await page.waitForTimeout(50);
 
 
   // --- author: set the objective (reachable h1 <-> h2) ---

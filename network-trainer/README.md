@@ -395,3 +395,8 @@ The Build canvas supports multi-device editing while authoring or working in a b
 ## Topology zones and device labels
 
 The Build workspace supports named visual zones around selected devices and custom display labels for individual devices. Zones are stored with the scenario topology and render behind links and devices, so they provide logical grouping without changing connectivity or simulation behavior. Device IDs remain the stable identifiers used by the simulator, CLI, links, and mission checks; custom labels affect presentation only. Both changes participate in the topology undo/redo history.
+
+
+## Topology layer visibility
+
+In Build mode, the topology designer can independently show or hide zones, simulator links, notes, and devices. Visibility settings are stored with the active scenario topology and are included in topology snapshots, undo/redo, and scenario export. Hiding a layer is presentation-only: it does not remove objects, change link state, or affect CLI commands and grading. The standalone `index.html` is regenerated from the tested UI source by `npm run build:net`.
