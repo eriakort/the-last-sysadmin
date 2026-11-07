@@ -54,6 +54,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await input.press('Enter');
   await input.fill('ping srv');
   await input.press('Enter');
+  // The terminal overlays the scenario controls; minimize it before verification.
+  await page.locator('#terminalMinimize').click();
+  await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
   await page.locator('#check').click();
   await page.waitForTimeout(120);
   if (/ticket resolved/i.test(await page.locator('#status').innerText()))
