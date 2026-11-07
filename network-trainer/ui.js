@@ -715,7 +715,7 @@ function reviewConfigDrift(checkpointId) {
     '',
     'REMOVED LINES',
     ...(removed.length?removed.map(line=>'- '+line):['(none)'])
-  ].filter((line,index)=>line!==''||index===3||index===6).join('\n');
+  ].join('\n');
   wrap.innerHTML=`<div class="sheet sheet-wide config-drift-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · simulator</div><h2>Configuration drift review</h2><p class="dim">${esc(device.hostname||SEL)} · ${esc(SEL)}</p></div><button class="btn sm" id="closeConfigDrift">Close</button></div>
     <div class="config-drift-summary">${latest?`Baseline: ${esc(baselineLabel)} · captured ${esc(new Date(latest.at).toLocaleString())} · checkpoint ${esc(String(latest.id))}`:'No saved checkpoint for this device. Save one to establish a baseline.'} · ${added.length} added · ${removed.length} removed</div>
     ${!latest?'<div class="config-drift-empty">Capture a checkpoint, make a configuration change, then review drift here.</div>':!changes?'<div class="config-drift-empty">✓ No line-level configuration drift detected against this checkpoint.</div>':`<div class="config-drift-columns"><section><h3>Added lines <span>${added.length}</span></h3><pre class="config-drift-added">${esc(added.join('\n')||'No added lines')}</pre></section><section><h3>Removed lines <span>${removed.length}</span></h3><pre class="config-drift-removed">${esc(removed.join('\n')||'No removed lines')}</pre></section></div>`}
