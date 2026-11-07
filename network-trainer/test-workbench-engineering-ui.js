@@ -82,9 +82,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
 
   const box = await svg.boundingBox();
   const viewBeforePan = (await svg.getAttribute('viewBox')).split(' ').map(Number);
-  await page.mouse.move(box.x + 5, box.y + 5);
+  // Start well inside an empty canvas area (not on the SVG border or a device hit target).
+  const panStart = { x: box.x + box.width * 0.82, y: box.y + box.height * 0.82 };
+  await page.mouse.move(panStart.x, panStart.y);
   await page.mouse.down();
-  await page.mouse.move(box.x + 35, box.y + 25, { steps: 3 });
+  await page.mouse.move(panStart.x + 55, panStart.y + 35, { steps: 5 });
   await page.mouse.up();
   const viewAfterPan = (await svg.getAttribute('viewBox')).split(' ').map(Number);
   if (Math.abs(viewAfterPan[0] - viewBeforePan[0]) > 0.1 || Math.abs(viewAfterPan[1] - viewBeforePan[1]) > 0.1)
