@@ -4491,11 +4491,13 @@ function wireEvidenceTools() {
     if(status)status.textContent='Transcript download prepared.';
   });
 }
-function currentRunningConfig() {
-  if (!SEL || !RUN || !RUN.net.devices[SEL]) return null;
-  const result=RUN.cli.on(SEL).run('show running-config');
-  return result.code===0 ? result.out : null;
+function runningConfigForDevice(deviceId) {
+  if (!deviceId || !RUN || !RUN.net.devices[deviceId] || !RUN.cli) return null;
+  const cli=RUN.cli, prior={...cli};
+  try { const result=cli.on(deviceId).run('show running-config'); return result.code===0 ? result.out : null; }
+  finally { Object.assign(cli,prior); }
 }
+function currentRunningConfig() { return runningConfigForDevice(SEL); }
 function openCaptureCheckpoint() {
   const device=SEL && RUN && RUN.net.devices[SEL], status=$('#termEvidenceStatus');
   if(!device){if(status)status.textContent='Select a device before saving a checkpoint.';return;}
@@ -4599,6 +4601,32 @@ function openConfigHistory() {
   wrap.querySelectorAll('[data-config-baseline]').forEach(button=>button.addEventListener('click',()=>setConfigBaseline(button.dataset.configBaseline)));
   wrap.querySelectorAll('[data-config-delete]').forEach(button=>button.addEventListener('click',()=>deleteConfigCheckpoint(button.dataset.configDelete)));
 }
+function scanConfigFleet() {
+  if(!RUN||!RUN.net||!RUN.net.devices)return [];
+  const archives=Array.isArray(PROG.configArchives)?PROG.configArchives:[];
+  return Object.entries(RUN.net.devices).map(([id,device])=>{
+    const snapshots=archives.filter(x=>x.device===id).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
+    const baseline=snapshots.find(x=>x.baseline)||null, current=runningConfigForDevice(id);
+    if(current==null)return {id,hostname:device.hostname||id,kind:device.kind||'device',state:'unavailable',baseline,snapshots,current:null,added:[],removed:[]};
+    if(!baseline)return {id,hostname:device.hostname||id,kind:device.kind||'device',state:'no-baseline',baseline,snapshots,current,added:[],removed:[]};
+    const before=new Set(String(baseline.config||'').split('\n')),after=new Set(current.split('\n'));
+    const removed=[...before].filter(line=>line.trim()&&!after.has(line));
+    const added=[...after].filter(line=>line.trim()&&!before.has(line));
+    return {id,hostname:device.hostname||id,kind:device.kind||'device',state:added.length||removed.length?'drift':'clean',baseline,snapshots,current,added,removed};
+  }).sort((a,b)=>({drift:0,'no-baseline':1,unavailable:2,clean:3}[a.state]-({drift:0,'no-baseline':1,unavailable:2,clean:3}[b.state])||a.hostname.localeCompare(b.hostname));
+}
+function openConfigFleetAssurance() {
+  if(!RUN){const status=$('#termEvidenceStatus');if(status)status.textContent='Start a simulator scenario before scanning configuration.';return;}
+  const wrap=document.createElement('div');wrap.id='configFleetModal';wrap.className='config-history-overlay';
+  let rows=scanConfigFleet();
+  const summary=()=>{const count=state=>rows.filter(x=>x.state===state).length;return '<div class="fleet-config-summary"><div><b>'+rows.length+'</b><span>Devices scanned</span></div><div class="drift"><b>'+count('drift')+'</b><span>Drift detected</span></div><div class="unbaselined"><b>'+count('no-baseline')+'</b><span>No baseline</span></div><div class="clean"><b>'+count('clean')+'</b><span>In baseline</span></div></div>';};
+  const label=state=>({drift:'DRIFT',clean:'IN BASELINE','no-baseline':'NO BASELINE',unavailable:'UNAVAILABLE'}[state]||state);
+  const renderRows=()=>rows.map(item=>`<article class="fleet-config-row state-${item.state}" data-state="${item.state}" data-device="${esc(item.id)}"><div class="fleet-config-row-head"><div><b>${esc(item.hostname)}</b><small>${esc(item.id)} · ${esc(item.kind)}</small></div><span class="fleet-state">${label(item.state)}</span></div><div class="fleet-config-detail">${item.baseline?'Baseline: '+esc(item.baseline.label||item.baseline.hostname||item.baseline.device)+' · '+esc(new Date(item.baseline.at).toLocaleString()):'No pinned baseline'} · ${item.snapshots.length} checkpoint(s)${item.state==='drift'?' · '+item.added.length+' added / '+item.removed.length+' removed':''}</div><div class="fleet-config-actions"><button class="btn sm primary" type="button" data-fleet-open="${esc(item.id)}">${item.baseline?'Review drift':'Save first baseline'}</button></div></article>`).join('')||'<div class="config-drift-empty">No devices are available in this scenario.</div>';
+  const report=()=>['NETWORK CONFIGURATION FLEET ASSURANCE','Scanned: '+new Date().toISOString(),'','SUMMARY: '+rows.length+' devices; '+rows.filter(x=>x.state==='drift').length+' drift; '+rows.filter(x=>x.state==='clean').length+' clean; '+rows.filter(x=>x.state==='no-baseline').length+' without baseline; '+rows.filter(x=>x.state==='unavailable').length+' unavailable','',...rows.flatMap(x=>['DEVICE '+x.hostname+' ('+x.id+')','Status: '+label(x.state),'Baseline: '+(x.baseline?(x.baseline.label||x.baseline.id):'none'),'Checkpoints: '+x.snapshots.length,'Added lines: '+x.added.length,...x.added.map(v=>'+ '+v),'Removed lines: '+x.removed.length,...x.removed.map(v=>'- '+v),''])].join('\n');
+  const render=()=>{wrap.innerHTML=`<section class="config-history-sheet fleet-config-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · simulator fleet</div><h2>Fleet configuration overview</h2><p class="dim">Read-only running-config comparison against each device's pinned browser-local baseline</p></div><button class="btn sm" id="closeConfigFleet">Close</button></div>${summary()}<div class="fleet-config-toolbar"><input id="fleetConfigSearch" type="search" placeholder="Search device name or ID" aria-label="Search devices"><select id="fleetConfigFilter" aria-label="Filter configuration status"><option value="all">All statuses</option><option value="drift">Drift detected</option><option value="no-baseline">No baseline</option><option value="clean">In baseline</option><option value="unavailable">Unavailable</option></select><button type="button" class="btn sm" id="rescanConfigFleet">Rescan</button><button type="button" class="btn sm" id="exportConfigFleet">Export report</button><button type="button" class="btn sm primary" id="saveConfigFleet">Save scan to journal</button></div><div class="fleet-config-list" id="fleetConfigRows">${renderRows()}</div><p class="dim config-drift-foot">This scan reads the active simulator only. It does not poll physical equipment or apply configuration changes.</p></section>`;};
+  const bind=()=>{wrap.querySelector('#closeConfigFleet').addEventListener('click',()=>wrap.remove());const apply=()=>{const q=wrap.querySelector('#fleetConfigSearch').value.trim().toLowerCase(),filter=wrap.querySelector('#fleetConfigFilter').value;wrap.querySelectorAll('.fleet-config-row').forEach(el=>{el.hidden=(filter!=='all'&&el.dataset.state!==filter)||!el.textContent.toLowerCase().includes(q);});};wrap.querySelector('#fleetConfigSearch').addEventListener('input',apply);wrap.querySelector('#fleetConfigFilter').addEventListener('change',apply);wrap.querySelector('#rescanConfigFleet').addEventListener('click',()=>{rows=scanConfigFleet();render();bind();});wrap.querySelector('#exportConfigFleet').addEventListener('click',()=>{const blob=new Blob([report()],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='network-config-fleet-'+new Date().toISOString().slice(0,10)+'.txt';a.click();URL.revokeObjectURL(url);});wrap.querySelector('#saveConfigFleet').addEventListener('click',()=>{const drift=rows.filter(x=>x.state==='drift').length,clean=rows.filter(x=>x.state==='clean').length,unbaselined=rows.filter(x=>x.state==='no-baseline').length;addJournalEntry({type:'configuration fleet scan',device:'fleet',command:'show running-config',result:drift?'drift detected':'scan complete',text:'Scanned '+rows.length+' simulator devices: '+drift+' drift, '+clean+' in baseline, '+unbaselined+' without baseline.',output:report()});const btn=wrap.querySelector('#saveConfigFleet');btn.textContent='Saved to journal';btn.disabled=true;const status=$('#termEvidenceStatus');if(status)status.textContent='Fleet configuration scan saved to the Engineering Journal.';});wrap.querySelectorAll('[data-fleet-open]').forEach(btn=>btn.addEventListener('click',()=>{const item=rows.find(x=>x.id===btn.dataset.fleetOpen);if(!item)return;selectDevice(item.id);wrap.remove();if(item.baseline)reviewConfigDrift(item.baseline.id);else openCaptureCheckpoint();}));};
+  document.body.appendChild(wrap);render();bind();wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+}
 function exportConfigArchive() {
   const records=(PROG.configArchives||[]).filter(x=>!SEL||x.device===SEL);
   if(!records.length){const status=$('#termEvidenceStatus');if(status)status.textContent='No saved configuration checkpoints for this device.';return;}
@@ -4611,6 +4639,8 @@ function wireConfigArchiveTools() {
   $('#termConfigReview')?.addEventListener('click',reviewConfigDrift);
   $('#termConfigHistory')?.addEventListener('click',openConfigHistory);
   $('#termConfigExport')?.addEventListener('click',exportConfigArchive);
+  const toolbar=$('.term-head');
+  if(toolbar&&!$('#termConfigFleet')){const button=document.createElement('button');button.type='button';button.className='btn sm';button.id='termConfigFleet';button.textContent='Fleet assurance';button.title='Compare every simulator device with its pinned configuration baseline';toolbar.insertBefore(button,$('#termHelp'));button.addEventListener('click',openConfigFleetAssurance);}
 }
 function persistTerminalSession() {
   if (!SEL || !$('#tout')) return;
