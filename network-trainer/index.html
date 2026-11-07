@@ -4005,7 +4005,21 @@ function dashboardSnapshot() {
     solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
   };
 }
-function showWorkspaceView(view) {
+const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'infrastructure', 'knowledge', 'journal', 'changes']);
+function workspaceViewFromUrl() {
+  const requested = new URLSearchParams(window.location.search).get('view');
+  return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
+}
+function showWorkspaceView(view, options = {}) {
+  if (!WORKSPACE_VIEWS.has(view)) view = 'overview';
+  const historyMode = options.historyMode || 'push';
+  if (historyMode !== 'none') {
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get('view');
+    url.searchParams.set('view', view);
+    if (historyMode === 'replace') window.history.replaceState({ networkWorkspaceView: view }, '', url);
+    else if (current !== view) window.history.pushState({ networkWorkspaceView: view }, '', url);
+  }
   const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
   if (!overview || !incidents || !infrastructure || !knowledge || !journal || !changes || !cols) return;
   overview.hidden = view !== 'overview';
@@ -5503,6 +5517,7 @@ function boot() {
   wireConfigArchiveTools();
   wireGlobalPalette();
   $('#btnSearch').addEventListener('click',openPalette);
+  window.addEventListener('popstate', () => showWorkspaceView(workspaceViewFromUrl(), { historyMode: 'none' }));
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
@@ -5528,10 +5543,9 @@ function boot() {
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
   reloadMission(0);
-  showWorkspaceView(new URLSearchParams(location.search).get('view') === 'workbench' ? 'workbench' : 'overview');
+  showWorkspaceView(workspaceViewFromUrl(), { historyMode: 'replace' });
   renderOverview();
   initCloud();
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
-
 </script><script src="./workstation-shell.js"></script></body></html>
