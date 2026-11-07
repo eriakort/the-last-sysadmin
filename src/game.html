@@ -947,7 +947,7 @@ function migrate() {
     S.mig = 8;
   }
 }
-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
+function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; S.syncUpdatedAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
   S = freshState(); return false;
@@ -6564,25 +6564,89 @@ async function onLogin() {
   try { await sb.from('profiles').upsert({ id: authUser.id, display_name: nm || authUser.name }); } catch (e) {}
   syncPull();
 }
+// Merge independently changed devices instead of choosing the device with the
+// largest ticket count. File mtimes resolve same-path edits; directory children
+// are merged recursively so work in separate parts of the simulated filesystem survives.
+function syncMergeNode(local, remote) {
+  if (!local) return remote ? JSON.parse(JSON.stringify(remote)) : local;
+  if (!remote) return JSON.parse(JSON.stringify(local));
+  if (local.type === 'dir' && remote.type === 'dir') {
+    const merged = { ...local, ...remote, type: 'dir', children: {} };
+    const names = new Set([...Object.keys(local.children || {}), ...Object.keys(remote.children || {})]);
+    names.forEach(name => {
+      const child = syncMergeNode(local.children && local.children[name], remote.children && remote.children[name]);
+      if (child) merged.children[name] = child;
+    });
+    merged.mtime = Math.max(Number(local.mtime) || 0, Number(remote.mtime) || 0);
+    return merged;
+  }
+  const localTime = Number(local.mtime) || 0;
+  const remoteTime = Number(remote.mtime) || 0;
+  return JSON.parse(JSON.stringify(remoteTime >= localTime ? remote : local));
+}
+function syncMergeList(local, remote, keyFn) {
+  const values = new Map();
+  [...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])].forEach(item => {
+    const key = keyFn(item);
+    if (!values.has(key)) values.set(key, item);
+  });
+  return [...values.values()];
+}
+function mergeProgressStates(local, remote, remoteUpdatedAt) {
+  if (!local || !local.fs) return remote && remote.fs ? JSON.parse(JSON.stringify(remote)) : local;
+  if (!remote || !remote.fs) return JSON.parse(JSON.stringify(local));
+  const localTime = Date.parse(local.syncUpdatedAt || '') || 0;
+  const remoteTime = Date.parse(remote.syncUpdatedAt || remoteUpdatedAt || '') || 0;
+  const preferred = remoteTime >= localTime ? remote : local;
+  const merged = JSON.parse(JSON.stringify(preferred));
+  merged.fs = syncMergeNode(local.fs, remote.fs);
+  for (const key of ['done', 'learned', 'history', 'readM', 'cmdsM', 'nudged']) {
+    merged[key] = syncMergeList(local[key], remote[key], item => typeof item === 'string' ? item : JSON.stringify(item));
+  }
+  merged.times = syncMergeList(local.times, remote.times, item => item && (item.id || item.startedAt || item.mission) ? JSON.stringify([item.id, item.startedAt, item.mission, item.ms]) : JSON.stringify(item));
+  merged.hints = { ...(local.hints || {}), ...(remote.hints || {}) };
+  merged.xp = Math.max(Number(local.xp) || 0, Number(remote.xp) || 0);
+  merged.mission = Math.max(Number(local.mission) || 0, Number(remote.mission) || 0);
+  merged.finished = !!(local.finished || remote.finished);
+  merged.syncUpdatedAt = new Date(Math.max(localTime, remoteTime, Date.now())).toISOString();
+  return merged;
+}
 async function syncPull() {
   const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
   let row = null;
-  try { const { data } = await sb.from('progress').select('data,tickets').eq('user_id', authUser.id).maybeSingle(); row = data; } catch (e) { return; }
+  try {
+    const result = await sb.from('progress').select('data,tickets,updated_at').eq('user_id', authUser.id).maybeSingle();
+    if (result.error) return;
+    row = result.data;
+  } catch (e) { return; }
   const remote = row && row.data;
-  const localN = (S.done || []).length;
-  if (remote && remote.v === 1 && remote.fs && (remote.done || []).length > localN) {
-    S = remote; try { migrate(); } catch (e) {}
+  if (remote && remote.v === 1 && remote.fs) {
+    const before = JSON.stringify(S);
+    S = mergeProgressStates(S, remote, row.updated_at);
+    try { migrate(); } catch (e) {}
     if (!getNode(S.cwd)) S.cwd = HOME;
-    reloadUI(`Loaded your saved progress — ${(S.done || []).length} tickets resolved.`);
+    const changed = JSON.stringify(S) !== before;
+    if (changed) reloadUI(`Merged progress across devices — ${(S.done || []).length} tickets resolved.`);
+    else syncPushNow();
   } else {
     syncPushNow();
   }
 }
 let pushTimer = null;
-function syncPushSoon() { if (!authUser || RACE.active) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncPushNow, 6000); }
+function syncPushSoon() { if (!authUser || RACE.active) return; clearTimeout(pushTimer); pushTimer = setTimeout(syncPushNow, 1500); }
+let syncPushInFlight = false;
 async function syncPushNow() {
-  const sb = await getSB(); if (!sb || !authUser || RACE.active) return;
-  try { await sb.from('progress').upsert({ user_id: authUser.id, data: S, tickets: (S.done || []).length, updated_at: new Date().toISOString() }); } catch (e) {}
+  const sb = await getSB(); if (!sb || !authUser || RACE.active || syncPushInFlight) return;
+  syncPushInFlight = true;
+  try {
+    S.syncUpdatedAt = new Date().toISOString();
+    const { error } = await sb.from('progress').upsert({ user_id: authUser.id, data: S, tickets: (S.done || []).length, updated_at: S.syncUpdatedAt });
+    if (error) throw error;
+  } catch (e) {
+    // Keep the local copy; the next save or sign-in will retry synchronization.
+  } finally {
+    syncPushInFlight = false;
+  }
 }
 function reloadUI(note) {
   tout.innerHTML = '';
