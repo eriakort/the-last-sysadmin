@@ -78,11 +78,11 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await run('check');
 
   if ((await page.textContent('#pTitle')) === 'Make a workspace') ok('Chapter 2 starts with Make a workspace');
+  else fail('did not reach the first Chapter 2 mission');
   if (await page.locator('[data-journey-chapter="1"][data-status="complete"]').count()) ok('completed chapters are marked complete in the journey');
   else fail('Chapter 1 completion is not reflected in the journey');
   if (await page.locator('[data-journey-chapter="2"][data-status="current"]').count()) ok('the journey follows the learner into Chapter 2');
   else fail('the journey did not update the current chapter to Chapter 2');
-  else fail('did not reach the first Chapter 2 mission');
   const ch2Guide = await page.textContent('#learningPath').catch(() => '');
   for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
     if (ch2Guide.includes(stage)) ok('Chapter 2 learning stage present: ' + stage);
