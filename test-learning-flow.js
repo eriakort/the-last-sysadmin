@@ -118,6 +118,11 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
   await page.fill('#tin', 'whoami');
   await page.press('#tin', 'Enter');
+  if (await page.locator('#commandCoach').isVisible() && (await page.textContent('#commandCoach')).includes('account name') && (await page.textContent('#commandCoachParts')).includes('whoami')) ok('first command opens a contextual explanation and argument breakdown');
+  else fail('contextual command coach did not explain the first command');
+  await page.click('#commandCoachClose');
+  if (!(await page.locator('#commandCoach').isVisible())) ok('learner can dismiss the command coach without affecting the mission');
+  else fail('command coach did not dismiss');
   await page.fill('#tin', 'pwd');
   await page.press('#tin', 'Enter');
   await page.fill('#tin', 'check');

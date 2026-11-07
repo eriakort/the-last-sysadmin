@@ -124,6 +124,17 @@ button{font:inherit;cursor:pointer}
 .fs-explorer-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;background:var(--term);padding:8px;border-radius:5px;font:11px/1.5 var(--f-mono);color:var(--term-ink);margin:6px 0 0}
 .fs-explorer-help{font-size:11px;color:var(--muted);margin:0}
 .fs-explorer-entry:focus-visible,.fs-explorer-shortcuts button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.command-coach{margin:10px 0 12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--blue) 45%,var(--line));border-radius:7px;background:var(--panel);font-family:var(--f-body)}
+.command-coach-toggle{margin:8px 0 10px;font-size:11.5px;padding:5px 9px}
+.command-coach-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.command-coach-head strong{font:600 12px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--blue)}
+.command-coach p{margin:7px 0;font-size:12px;color:var(--ink)}
+.command-coach .coach-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:8px 0 3px}
+.command-coach .coach-parts{display:flex;gap:5px;flex-wrap:wrap}
+.command-coach .coach-part{display:inline-flex;gap:5px;align-items:center;background:var(--raise);border:1px solid var(--line);border-radius:5px;padding:4px 6px;font-size:10.5px}
+.command-coach .coach-part small{color:var(--muted);font-size:9px;text-transform:uppercase}
+.command-coach code{display:inline-block;margin-top:3px}
+.command-coach .coach-pitfall{color:var(--amber)}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -430,6 +441,15 @@ body.practicing{padding-top:40px}
       <div class="term-bar"><span class="dot" aria-hidden="true"></span><span>ssh rookie@halcyon-web01</span><span class="r">10.0.4.12 · bash</span></div>
       <div class="term-body" id="tbody">
         <div id="tout" role="log" aria-live="polite"></div>
+        <button class="btn command-coach-toggle" id="commandCoachToggle" type="button" aria-expanded="false" hidden>Explain last command</button>
+        <section class="command-coach" id="commandCoach" aria-label="Contextual command coach" aria-live="polite" hidden>
+          <div class="command-coach-head"><strong>Command coach</strong><button class="btn" id="commandCoachClose" type="button">Hide</button></div>
+          <p id="commandCoachSummary"></p>
+          <div class="coach-label">Breakdown</div><div class="coach-parts" id="commandCoachParts"></div>
+          <div class="coach-label">Try next</div><code id="commandCoachExample"></code>
+          <p class="coach-pitfall" id="commandCoachPitfall"></p>
+          <button class="btn" id="commandCoachUse" type="button">Use this example</button>
+        </section>
         <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
       </div>
       <div class="keys" aria-label="Terminal keys">
@@ -1398,6 +1418,7 @@ function exec(argv, ctx) {
   if (!GAME_CMDS.includes(name) && !S.learned.includes(name)) S.learned.push(name);
   const args = argv.slice(1);
   if (args.includes('--help') && MAN[name]) { ctx.out(renderMan(name)); return 0; }
+  updateCommandCoach(name, args);
   try { const r = fn(args, ctx); return typeof r === 'number' ? r : 0; }
   catch (e) { ctx.err(`${name}: ${e.message}\n`); return 1; }
 }
@@ -3707,6 +3728,59 @@ const MAN = {
   submit: ['game: answer a question ticket', 'submit ANSWER', [], ['submit 42', 'submit 03:47:12']],
   retry: ['game: restore the server to how it was when this ticket opened', 'retry', [], ['retry']]
 };
+const COMMAND_COACH = {
+  pwd: { summary: 'Shows the absolute path of your current working directory.', example: 'pwd', pitfall: 'It reports your location; it does not change directories.' },
+  whoami: { summary: 'Prints the account name used by this shell session.', example: 'id', pitfall: 'Use id when you also need UID, primary group, and supplementary groups.' },
+  ls: { summary: 'Lists directory entries. Add options to reveal hidden files or useful metadata.', example: 'ls -lah /var/log', pitfall: 'A plain ls hides dotfiles. Try -a when a configuration file seems to be missing.' },
+  cd: { summary: 'Changes the shell working directory. Relative paths start from where you are now.', example: 'cd /var/log', pitfall: 'A path beginning with / is absolute; .. means the parent directory.' },
+  cat: { summary: 'Prints file contents to the terminal, making it useful for short text files.', example: 'cat /etc/hosts', pitfall: 'Large files can flood the terminal. Use less or tail for longer logs.' },
+  grep: { summary: 'Finds lines matching a text pattern inside input or files; it is often combined with a pipe.', example: 'grep -i error /var/log/syslog', pitfall: 'Patterns are case-sensitive unless you add -i.' },
+  tail: { summary: 'Shows the end of a file, where recent log entries usually appear.', example: 'tail -n 20 /var/log/syslog', pitfall: 'The default is only ten lines. Use -n to choose a useful window.' },
+  df: { summary: 'Reports filesystem capacity and free space; -h makes sizes readable.', example: 'df -h', pitfall: 'df checks filesystem space. Use du to find which directory is consuming it.' },
+  du: { summary: 'Estimates space used by files and directories.', example: 'du -sh /var/log', pitfall: 'du measures selected paths; df reports capacity for the mounted filesystem.' },
+  ps: { summary: 'Takes a snapshot of processes. Options control which processes and columns appear.', example: 'ps aux', pitfall: 'ps is a snapshot, not a live view. Use top when you need continuous updates.' },
+  systemctl: { summary: 'Inspects and controls systemd services and other units.', example: 'systemctl status halcyon', pitfall: 'status is read-only; restart changes service state. Check before changing production services.' },
+  journalctl: { summary: 'Reads logs collected by systemd-journald. Filter by unit to focus on one service.', example: 'journalctl -u halcyon -n 30', pitfall: 'Without a filter, the journal can be very noisy. Add -u UNIT or -n N.' },
+  ip: { summary: 'Inspects or configures network interfaces, addresses, and routes.', example: 'ip addr show', pitfall: 'ip addr shows addresses; ip route shows the routing table.' },
+  ss: { summary: 'Displays socket and connection information, including listening ports.', example: 'ss -tuln', pitfall: 'Use -l to show listeners and -n to avoid name lookups.' },
+  chmod: { summary: 'Changes permission bits that control who can read, write, or execute a file.', example: 'chmod u+x ~/health.sh', pitfall: 'Avoid 777 as a quick fix; grant only the permissions the owner or group needs.' },
+  find: { summary: 'Searches directory trees by name, type, time, and other attributes.', example: 'find /var/log -name "*.log"', pitfall: 'Quote wildcard patterns so find, not the shell, expands them.' },
+  free: { summary: 'Summarises memory use. The available column is a better headroom signal than free alone.', example: 'free -h', pitfall: 'Linux uses spare memory for cache; low free memory does not automatically mean a problem.' },
+  uptime: { summary: 'Shows how long the system has run, logged-in users, and load averages.', example: 'uptime', pitfall: 'Load average includes runnable and I/O-waiting tasks; it is not a CPU percentage.' },
+  dig: { summary: 'Queries DNS records and shows how a name resolves.', example: 'dig halcyon-web01', pitfall: 'A DNS answer is not proof that the application port is reachable.' }
+};
+const COACH_ACTIONS = new Set(['systemctl', 'apt', 'apt-get', 'ufw', 'mount', 'umount', 'git']);
+const commandCoachSeen = new Set();
+let commandCoachLastExample = '';
+function updateCommandCoach(name, args) {
+  const panel = document.getElementById('commandCoach');
+  const toggle = document.getElementById('commandCoachToggle');
+  if (!panel || !toggle || GAME_CMDS.includes(name)) return;
+  const guide = COMMAND_COACH[name];
+  const manual = MAN[name];
+  if (!guide && !manual) return;
+  const summary = guide ? guide.summary : manual[0] + '. Use the manual for options and syntax.';
+  const example = guide ? guide.example : (manual[3] && manual[3][0]) || (name + ' --help');
+  const pitfall = guide ? guide.pitfall : 'Check the target and options before running a command; try man ' + name + ' for details.';
+  const tokens = [name, ...args];
+  const parts = tokens.map((token, index) => {
+    let kind = index === 0 ? 'command' : token.startsWith('-') ? 'option' :
+      (COACH_ACTIONS.has(name) && index === 1) ? 'action' :
+      (/^(\/|~|\.\.?($|\/))/.test(token) ? 'path' : 'argument');
+    return '<span class="coach-part"><small>' + kind + '</small><code>' + esc(token) + '</code></span>';
+  }).join('');
+  document.getElementById('commandCoachSummary').textContent = summary;
+  document.getElementById('commandCoachParts').innerHTML = parts || '<span class="empty">No arguments</span>';
+  document.getElementById('commandCoachExample').textContent = example;
+  document.getElementById('commandCoachPitfall').textContent = 'Watch out: ' + pitfall;
+  commandCoachLastExample = example;
+  toggle.hidden = false;
+  const firstUse = !commandCoachSeen.has(name);
+  commandCoachSeen.add(name);
+  panel.hidden = !firstUse;
+  toggle.setAttribute('aria-expanded', String(firstUse));
+}
+
 function renderMan(n) {
   const [d, syn, op, ex, note] = MAN[n];
   const H = `${n.toUpperCase()}(1)`;
@@ -6024,6 +6098,23 @@ function histMove(dir) {
   else { if (hIdx === null) return; hIdx++; if (hIdx >= S.history.length) { hIdx = null; tin.value = hDraft; } else tin.value = S.history[hIdx]; }
   const p = tin.value.length; requestAnimationFrame(() => tin.setSelectionRange(p, p));
 }
+const coachToggle = $('#commandCoachToggle'), coachPanel = $('#commandCoach');
+if (coachToggle) coachToggle.addEventListener('click', () => {
+  const open = coachPanel.hidden;
+  coachPanel.hidden = !open;
+  coachToggle.setAttribute('aria-expanded', String(open));
+});
+const coachClose = $('#commandCoachClose');
+if (coachClose) coachClose.addEventListener('click', () => {
+  coachPanel.hidden = true;
+  coachToggle.setAttribute('aria-expanded', 'false');
+});
+const coachUse = $('#commandCoachUse');
+if (coachUse) coachUse.addEventListener('click', () => {
+  tin.value = commandCoachLastExample;
+  tin.focus({ preventScroll: true });
+  tin.setSelectionRange(tin.value.length, tin.value.length);
+});
 tin.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); histMove(-1); }
