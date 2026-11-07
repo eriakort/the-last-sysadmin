@@ -60,6 +60,16 @@ This is not a WCAG conformance claim. No assistive-technology user testing, auto
 
 **Required remediation:** add a focused Playwright accessibility suite and axe-core scans for representative Linux and Network workspaces, dialogs, classroom flows, and Build mode. Add keyboard-only regression tests for topology interactions. Fix violations rather than suppressing them without documented justification.
 
+## Remediation progress
+
+### Batch 1 — focus visibility and application navigation
+
+Implemented in the first remediation pull request:
+
+- Added consistent `:focus-visible` outlines to keyboard-operable controls in both application shells, including explicit treatments for terminal and search inputs that previously suppressed outlines.
+- Changed the cross-application navigation from an ARIA tablist to a labelled navigation landmark with ordinary links and `aria-current="page"` on the active destination. In-page classroom and inspector tab widgets remain tablists.
+- Added source-level regression checks for these contracts. This does not replace visual contrast measurement or assistive-technology validation.
+
 ## Remediation sequence
 
 1. Establish shared focus-visible styling and correct page-navigation semantics.
