@@ -123,6 +123,42 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.check('#config [data-topo-layer="devices"]'); await page.waitForTimeout(50);
 
 
+  // --- topology drawing primitives ---
+  const svgBox = await page.locator('#topo').boundingBox();
+  const drawAt = async (tool, x1, y1, x2, y2) => {
+    await page.click('[data-draw-tool="' + tool + '"]');
+    await page.mouse.move(svgBox.x + x1, svgBox.y + y1);
+    await page.mouse.down();
+    await page.mouse.move(svgBox.x + x2, svgBox.y + y2, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(60);
+  };
+  await drawAt('line', 300, 90, 390, 130);
+  if (await page.locator('#topo .topo-drawing').count() === 1) ok('line drawing is stored on the topology');
+  else fail('line drawing was not created');
+  await drawAt('arrow', 300, 160, 390, 190);
+  await drawAt('rect', 430, 80, 520, 145);
+  await drawAt('ellipse', 430, 170, 520, 235);
+  await drawAt('freehand', 550, 100, 620, 160);
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('arrow, rectangle, ellipse and freehand drawings are supported');
+  else fail('not all drawing primitives were created');
+  await page.uncheck('#config [data-topo-layer="drawings"]');
+  if (await page.locator('#topo .topo-drawing').count() === 0) ok('drawing layer can be hidden without deleting annotations');
+  else fail('drawing layer visibility did not hide drawings');
+  await page.check('#config [data-topo-layer="drawings"]');
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('drawing layer can be restored');
+  else fail('drawing layer did not restore');
+  await page.click('#topo .topo-drawing[data-drawing-index="4"]');
+  await page.click('#delDrawing');
+  if (await page.locator('#topo .topo-drawing').count() === 4) ok('selected drawing can be removed');
+  else fail('selected drawing removal failed');
+  await page.click('#topoUndo');
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('drawing removal participates in undo history');
+  else fail('drawing removal was not undoable');
+  await page.click('#topoRedo');
+  if (await page.locator('#topo .topo-drawing').count() === 4) ok('drawing removal participates in redo history');
+  else fail('drawing removal was not redoable');
+
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
   await page.fill('#chkArgs .chkarg[data-arg="a"]', 'h1');
