@@ -400,3 +400,8 @@ The Build workspace supports named visual zones around selected devices and cust
 ## Topology layer visibility
 
 In Build mode, the topology designer can independently show or hide zones, simulator links, notes, and devices. Visibility settings are stored with the active scenario topology and are included in topology snapshots, undo/redo, and scenario export. Hiding a layer is presentation-only: it does not remove objects, change link state, or affect CLI commands and grading. The standalone `index.html` is regenerated from the tested UI source by `npm run build:net`.
+
+
+## Build workspace refresh recovery
+
+The Build workspace has its own `?view=build` route. Refreshing or bookmarking that URL restores Build mode instead of falling back to Workbench. While authoring, the current topology and scenario details are automatically saved in browser-local storage and restored when Build is reopened. This draft is local to the current browser profile and is not a cloud backup; export important scenarios for portability. Browser Back/Forward switches between Build and Workbench routes.

@@ -59,6 +59,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   // --- author: place the two endpoints the student will start with ---
   await addDev('host'); await addDev('host');
+  await page.fill('#aTitle', 'Refresh-safe lab');
+  await page.fill('#aObj', 'Keep the current Build workspace after refresh.');
+  await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'build');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#aTitle');
+  if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
+  if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
   if (built.includes('h1') && built.includes('h2')) ok('placed h1 and h2 (' + built.join(', ') + ')'); else fail('endpoints not placed: ' + JSON.stringify(built));
 
