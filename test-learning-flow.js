@@ -51,6 +51,23 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
 
+  const firstRun = page.locator('#firstRunGuide');
+  if (await firstRun.isVisible()) ok('first-session orientation is visible for a new learner');
+  else fail('first-session orientation is missing for a new learner');
+  const safetyNote = await firstRun.textContent();
+  if (safetyNote.includes('simulated Linux server') && safetyNote.includes('does not change your computer')) ok('onboarding clearly explains the safe simulation boundary');
+  else fail('onboarding does not explain that the terminal is simulated');
+  await page.click('[data-onboard-command="whoami"]');
+  if (await page.inputValue('#tin') === 'whoami' && (await page.textContent('#pTitle')) === 'Get your bearings') ok('starter command is placed in the terminal without running or skipping the mission');
+  else fail('starter command does not safely prepare the first mission');
+  await page.click('#firstRunDismiss');
+  if (!(await firstRun.isVisible())) ok('learner can dismiss the first-session orientation');
+  else fail('first-session orientation did not dismiss');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(120);
+  if (!(await page.locator('#firstRunGuide').isVisible())) ok('dismissed orientation stays dismissed on return');
+  else fail('dismissed orientation reappeared after reload');
+
   const journey = await page.$('#journey');
   if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible');
   else fail('structured Linux learning journey is missing or hidden');
