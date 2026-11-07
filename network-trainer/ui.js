@@ -104,7 +104,8 @@ function renderFlows() {
 function drawingMarkup(d, index) {
   const selected = DRAWING_SEL === index ? ' selected' : '';
   const color = esc(d.color || '#e5b85c');
-  const common = `class="topo-drawing${selected}" data-drawing-index="${index}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
+  const hitFill = d.type === "rect" || d.type === "ellipse" ? "transparent" : "none";
+  const common = `class="topo-drawing${selected}" data-drawing-index="${index}" fill="${hitFill}" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
   if (d.type === 'freehand') { const points=Array.isArray(d.points)?d.points:[]; return `<path ${common} d="${points.map((p,i)=>(i?'L':'M')+(Number(p[0])||0)+' '+(Number(p[1])||0)).join(' ')}"/>`; }
   const x1=Number(d.x1)||0,y1=Number(d.y1)||0,x2=Number(d.x2)||0,y2=Number(d.y2)||0;
   if (d.type === 'rect') return `<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`;
