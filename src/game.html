@@ -2956,12 +2956,12 @@ CMDS.gzip = (a, ctx) => {
       const out = baseName(L.abs).replace(/\.gz$/, '');
       if (!canWrite(L.abs)) { ctx.err(`gzip: ${t}: Permission denied\n`); st = 1; continue; }
       const node = L.node; delete node.gz; delete node.size;
-      par.children[out] = node; delete par.children[baseName(L.abs)];
+      par.children[out] = node; syncRecordDeletion(L.abs, node); delete par.children[baseName(L.abs)];
     } else {
       if (t.endsWith('.gz')) { ctx.err(`gzip: ${t} already has .gz suffix -- unchanged\n`); st = 1; continue; }
       if (!canWrite(L.abs)) { ctx.err(`gzip: ${t}: Permission denied\n`); st = 1; continue; }
       const node = L.node; node.gz = true; node.size = Math.max(32, Math.round(sizeOf(node) * 0.4));
-      par.children[baseName(L.abs) + '.gz'] = node; delete par.children[baseName(L.abs)];
+      par.children[baseName(L.abs) + '.gz'] = node; syncRecordDeletion(L.abs, node); delete par.children[baseName(L.abs)];
     }
   }
   return st;
