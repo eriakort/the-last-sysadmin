@@ -648,18 +648,42 @@ function currentRunningConfig() {
   const result=RUN.cli.on(SEL).run('show running-config');
   return result.code===0 ? result.out : null;
 }
-function captureConfigCheckpoint() {
-  const output=currentRunningConfig(), device=SEL && RUN && RUN.net.devices[SEL];
-  const status=$('#termEvidenceStatus');
+function openCaptureCheckpoint() {
+  const device=SEL && RUN && RUN.net.devices[SEL], status=$('#termEvidenceStatus');
+  if(!device){if(status)status.textContent='Select a device before saving a checkpoint.';return;}
+  const output=currentRunningConfig();
+  if(output==null || !output.trim()){if(status)status.textContent='Running configuration is unavailable for this device.';return;}
+  const wrap=document.createElement('div');wrap.id='checkpointCaptureModal';wrap.className='config-history-overlay';
+  const count=(PROG.configArchives||[]).filter(x=>x.device===SEL).length+1;
+  wrap.innerHTML=`<form class="config-history-sheet checkpoint-capture-form"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · local archive</div><h2>Save configuration checkpoint</h2><p class="dim">${esc(device.hostname||SEL)} · ${esc(SEL)}</p></div><button type="button" class="btn sm" id="cancelCheckpoint">Cancel</button></div><label>Checkpoint label<input name="label" maxlength="80" required value="Checkpoint ${count}" placeholder="e.g. Before VLAN rollout"></label><label>Operator note <span class="dim">(optional)</span><textarea name="note" rows="3" maxlength="500" placeholder="Known-good state, maintenance window, ticket reference…"></textarea></label><div class="checkpoint-capture-actions"><button type="submit" class="btn primary">Save checkpoint</button></div></form>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
+  wrap.querySelector('#cancelCheckpoint').addEventListener('click',()=>wrap.remove());
+  wrap.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const data=new FormData(e.currentTarget);captureConfigCheckpoint(data.get('label'),data.get('note'));wrap.remove();});
+  wrap.querySelector('[name="label"]').focus();
+}
+function captureConfigCheckpoint(label,note='') {
+  const output=currentRunningConfig(), device=SEL && RUN && RUN.net.devices[SEL], status=$('#termEvidenceStatus');
   if(!device){if(status)status.textContent='Select a device before saving a checkpoint.';return;}
   if(output==null || !output.trim()){if(status)status.textContent='Running configuration is unavailable for this device.';return;}
   PROG.configArchives=Array.isArray(PROG.configArchives)?PROG.configArchives:[];
-  const record={id:Date.now(),device:SEL,hostname:device.hostname||SEL,kind:device.kind||'device',at:new Date().toISOString(),config:output};
-  PROG.configArchives.unshift(record);
-  PROG.configArchives=PROG.configArchives.slice(0,100);
-  saveProg();
-  addJournalEntry({type:'configuration checkpoint',device:SEL,command:'show running-config',result:'captured',text:'Saved a running-configuration checkpoint.'});
-  if(status)status.textContent='Configuration checkpoint saved locally.';
+  const count=PROG.configArchives.filter(x=>x.device===SEL).length+1, cleanLabel=String(label||('Checkpoint '+count)).trim().slice(0,80);
+  if(!cleanLabel){if(status)status.textContent='Enter a checkpoint label.';return;}
+  const record={id:Date.now(),device:SEL,hostname:device.hostname||SEL,kind:device.kind||'device',at:new Date().toISOString(),label:cleanLabel,note:String(note||'').trim().slice(0,500),baseline:!PROG.configArchives.some(x=>x.device===SEL&&x.baseline),config:output};
+  PROG.configArchives.unshift(record);PROG.configArchives=PROG.configArchives.slice(0,100);saveProg();
+  addJournalEntry({type:'configuration checkpoint',device:SEL,command:'show running-config',result:'captured',text:'Saved checkpoint "'+cleanLabel+'".'});
+  if(status)status.textContent='Configuration checkpoint "'+cleanLabel+'" saved locally.'+(record.baseline?' Marked as the known-good baseline.':'');
+}
+function setConfigBaseline(checkpointId) {
+  const records=(PROG.configArchives||[]).filter(x=>x.device===SEL), target=records.find(x=>String(x.id)===String(checkpointId));if(!target)return;
+  records.forEach(x=>{x.baseline=x===target;});saveProg();openConfigHistory();
+  const status=$('#termEvidenceStatus');if(status)status.textContent='Known-good baseline set to "'+(target.label||target.hostname||target.device)+'".';
+}
+function deleteConfigCheckpoint(checkpointId) {
+  const target=(PROG.configArchives||[]).find(x=>x.device===SEL&&String(x.id)===String(checkpointId));if(!target)return;
+  if(target.baseline){const status=$('#termEvidenceStatus');if(status)status.textContent='Unpin this known-good baseline before deleting it.';return;}
+  PROG.configArchives=PROG.configArchives.filter(x=>!(x.device===SEL&&String(x.id)===String(checkpointId)));saveProg();openConfigHistory();
+  const status=$('#termEvidenceStatus');if(status)status.textContent='Checkpoint deleted from this browser-local archive.';
 }
 function reviewConfigDrift(checkpointId) {
   const device=SEL && RUN && RUN.net.devices[SEL], status=$('#termEvidenceStatus');
@@ -667,7 +691,7 @@ function reviewConfigDrift(checkpointId) {
   const output=currentRunningConfig();
   if(output==null){if(status)status.textContent='Could not read the current running configuration.';return;}
   const snapshots=(PROG.configArchives||[]).filter(x=>x.device===SEL).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
-  const latest=snapshots.find(x=>String(x.id)===String(checkpointId))||snapshots[0], baseline=latest?latest.config:'';
+  const latest=snapshots.find(x=>String(x.id)===String(checkpointId))||snapshots.find(x=>x.baseline)||snapshots[0], baseline=latest?latest.config:'';
   const oldLines=baseline.split('\n'), newLines=output.split('\n');
   const oldSet=new Set(oldLines), newSet=new Set(newLines);
   const removed=oldLines.filter(line=>line.trim()&&!newSet.has(line));
@@ -687,12 +711,14 @@ function openConfigHistory() {
   const status=$('#termEvidenceStatus');
   if(!SEL){if(status)status.textContent='Select a device before viewing checkpoint history.';return;}
   const wrap=document.createElement('div');wrap.id='configHistoryModal';wrap.className='config-history-overlay';
-  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current config to this checkpoint</button></article>`).join('');
+  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
   wrap.innerHTML=`<section class="config-history-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · local archive</div><h2>Checkpoint history</h2><p class="dim">${esc(SEL)} · ${snapshots.length} saved checkpoint${snapshots.length===1?'':'s'}</p></div><button class="btn sm" id="closeConfigHistory">Close</button></div><div class="config-history-list">${rows||'<div class="config-drift-empty">No checkpoints saved for this device yet. Use Save checkpoint after establishing a known-good configuration.</div>'}</div><p class="dim config-drift-foot">Choose any historical snapshot as the baseline for a read-only comparison with the current running configuration.</p></section>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
   wrap.querySelector('#closeConfigHistory').addEventListener('click',()=>wrap.remove());
   wrap.querySelectorAll('[data-config-compare]').forEach(button=>button.addEventListener('click',()=>{const id=button.dataset.configCompare;wrap.remove();reviewConfigDrift(id);}));
+  wrap.querySelectorAll('[data-config-baseline]').forEach(button=>button.addEventListener('click',()=>setConfigBaseline(button.dataset.configBaseline)));
+  wrap.querySelectorAll('[data-config-delete]').forEach(button=>button.addEventListener('click',()=>deleteConfigCheckpoint(button.dataset.configDelete)));
 }
 function exportConfigArchive() {
   const records=(PROG.configArchives||[]).filter(x=>!SEL||x.device===SEL);
@@ -702,7 +728,7 @@ function exportConfigArchive() {
   const status=$('#termEvidenceStatus');if(status)status.textContent='Configuration checkpoint archive exported.';
 }
 function wireConfigArchiveTools() {
-  $('#termConfigSave')?.addEventListener('click',captureConfigCheckpoint);
+  $('#termConfigSave')?.addEventListener('click',openCaptureCheckpoint);
   $('#termConfigReview')?.addEventListener('click',reviewConfigDrift);
   $('#termConfigHistory')?.addEventListener('click',openConfigHistory);
   $('#termConfigExport')?.addEventListener('click',exportConfigArchive);
