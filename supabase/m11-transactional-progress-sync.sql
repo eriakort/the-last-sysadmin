@@ -110,8 +110,6 @@ revoke insert,update on public.progress from anon,authenticated;
 revoke all on function public.sync_merge_node(jsonb,jsonb,jsonb,text) from public;
 revoke all on function public.merge_progress(jsonb) from public;
 grant execute on function public.merge_progress(jsonb) to authenticated;
- then (p_data->>'syncUpdatedAt')::timestamptz else null end;
-    v_existing_tombstones:=case when jsonb_typeof(v_existing->'syncTombstones')='array' then v_existing->'syncTombstones' else '[]'::jsonb end;
     if coalesce(v_remote_time,'-infinity'::timestamptz)>=coalesce(v_local_time,v_existing_updated_at,'-infinity'::timestamptz) then v_preferred:=p_data;
     else v_preferred:=v_existing; end if;
     select coalesce(jsonb_agg(item order by item->>'path'),'[]'::jsonb) into v_tombstones
@@ -182,8 +180,6 @@ revoke insert,update on public.progress from anon,authenticated;
 revoke all on function public.sync_merge_node(jsonb,jsonb,jsonb,text) from public;
 revoke all on function public.merge_progress(jsonb) from public;
 grant execute on function public.merge_progress(jsonb) to authenticated;
- then (p_data->>'syncUpdatedAt')::timestamptz else null end;
-    v_existing_tombstones:=case when jsonb_typeof(v_existing->'syncTombstones')='array' then v_existing->'syncTombstones' else '[]'::jsonb end;
     if coalesce(v_remote_time,'-infinity'::timestamptz)>=coalesce(v_local_time,v_existing_updated_at,'-infinity'::timestamptz) then v_preferred:=p_data;
     else v_preferred:=v_existing; end if;
     select coalesce(jsonb_agg(item order by item->>'path'),'[]'::jsonb) into v_tombstones
@@ -253,8 +249,6 @@ revoke insert,update on public.progress from anon,authenticated;
 revoke all on function public.sync_merge_node(jsonb,jsonb,jsonb,text) from public;
 revoke all on function public.merge_progress(jsonb) from public;
 grant execute on function public.merge_progress(jsonb) to authenticated;
- then (p_data->>'syncUpdatedAt')::timestamptz else null end;
-    v_existing_tombstones:=case when jsonb_typeof(v_existing->'syncTombstones')='array' then v_existing->'syncTombstones' else '[]'::jsonb end;
     if coalesce(v_remote_time,'-infinity'::timestamptz)>=coalesce(v_local_time,v_existing_updated_at,'-infinity'::timestamptz) then v_preferred:=p_data;
     else v_preferred:=v_existing; end if;
     select coalesce(jsonb_agg(item order by item->>'path'),'[]'::jsonb) into v_tombstones
