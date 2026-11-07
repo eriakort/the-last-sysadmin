@@ -1007,7 +1007,7 @@ function restoreTopology(snapshot) {
   Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
   TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
   if (SEL && !RUN.net.devices[SEL]) SEL = null;
-  LINK_SEL = null; WIRE = null; refresh();
+  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; refresh();
 }
 function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
 function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
