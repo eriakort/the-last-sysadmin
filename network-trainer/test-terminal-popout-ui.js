@@ -38,6 +38,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForSelector('#config .pal[data-add="host"]');
   await page.click('#config .pal[data-add="host"]');
   await page.waitForSelector('#topo .node');
+  // The floating console intentionally stays above workspaces. Minimize it to
+  // expose the canvas, then double-clicking a device should reopen it.
+  await page.click('#terminalMinimize');
+  await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
   const buildDevice = page.locator('#topo .node').first();
   const buildId = await buildDevice.getAttribute('data-dev');
   await buildDevice.dblclick();
