@@ -586,3 +586,8 @@ aside{scrollbar-color:#344a60 transparent}
  .terminal-window-content .term-head{max-height:76px}
  .terminal-window-titlebar{padding:6px 10px}
 }
+
+/* Keyboard-operable topology devices */
+#topo .node[role="button"]{cursor:pointer}
+#topo .node[role="button"]:focus-visible{outline:none;filter:drop-shadow(0 0 4px var(--focus));}
+#topo .node[role="button"]:focus-visible .hit{stroke:var(--focus);stroke-width:2.5;stroke-dasharray:4 2;}
