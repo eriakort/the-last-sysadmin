@@ -37,6 +37,14 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   const first = page.locator('#incidentList .incident-row').first();
   const ticketId = await first.locator('.incident-row-top b').innerText();
   await first.click();
+  const reportEvent = page.waitForEvent('download');
+  await page.locator('#incidentExportReport').click();
+  const reportDownload = await reportEvent;
+  const reportPath = await reportDownload.path();
+  const reportText = require('fs').readFileSync(reportPath, 'utf8');
+  if (reportDownload.suggestedFilename() === 'incident-'+ticketId.toLowerCase()+'-report.md' && reportText.includes(ticketId) && reportText.includes('Reported symptom') && reportText.includes('Investigation timeline'))
+    ok('selected incident exports a readable Markdown investigation report');
+  else fail('incident report export is missing ticket context or timeline content');
   if ((await page.locator('#incidentDetail').innerText()).includes(ticketId))
     ok('selecting a queue row loads the incident detail record');
   else fail('incident detail did not load the selected ticket');
