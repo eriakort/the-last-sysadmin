@@ -373,3 +373,8 @@ Open **History** in the device console to review every saved configuration check
 ### Workbench checkpoint lifecycle
 
 Configuration checkpoints can be labelled and annotated when captured. The first checkpoint for a device becomes its known-good baseline; operators can move that baseline to any historical snapshot. Drift review defaults to the pinned baseline, while history allows comparison against any checkpoint. A pinned baseline cannot be deleted. These records remain browser-local training data from the active simulator; no restore or physical-device operation is provided. Drift reviews can also be saved as timestamped Engineering Journal evidence (including the selected baseline label, device, added/removed lines and comparison summary) or downloaded as a standalone text report. Journal evidence and reports are local training records, not an external audit log.
+
+
+## Workbench fleet configuration assurance
+
+Use **Fleet assurance** in the device console to scan every device in the active simulator against its pinned known-good checkpoint. The overview reports drift, clean baselines, missing baselines, and unavailable configurations; supports device search and status filtering; and lets an operator jump directly to a device's drift review or capture its first baseline. A scan can be saved to the Engineering Journal or exported as a text report. The scan temporarily reads each simulator device's running configuration and restores the active console session context afterward. It is read-only and is not live network monitoring or a production compliance assessment.
