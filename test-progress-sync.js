@@ -73,4 +73,27 @@ const state = (overrides = {}) => ({
   assert.equal(merged.cwd, '/home/remote', 'the newest snapshot should supply non-monotonic settings');
 }
 
+{
+  const merged = context.syncMergeTombstones(
+    [{ path: '/home/a.txt', deletedAt: '2026-11-07T10:00:00Z' }],
+    [
+      { path: '/home/a.txt', deletedAt: '2026-11-07T10:01:00Z' },
+      { path: '/home/b.txt', deletedAt: '2026-11-07T10:02:00Z' }
+    ]
+  );
+  assert.equal(merged.length, 2, 'tombstones should be deduplicated by path');
+  assert.equal(merged.find(item => item.path === '/home/a.txt').deletedAt, '2026-11-07T10:01:00Z');
+}
+
+{
+  const local = state({ syncTombstones: [{ path: '/home/a.txt', deletedAt: '2026-11-07T10:00:00Z' }] });
+  const remote = state({ syncTombstones: [{ path: '/home/b.txt', deletedAt: '2026-11-07T10:01:00Z' }] });
+  const merged = context.mergeProgressStates(local, remote);
+  assert.deepEqual(
+    Array.from(merged.syncTombstones, item => item.path).sort(),
+    ['/home/a.txt', '/home/b.txt'],
+    'progress merge should retain tombstones from both devices'
+  );
+}
+
 console.log('Progress sync merge tests passed.');
