@@ -1,11 +1,13 @@
 // Headless UI test: boot the page, solve a mission via the terminal AND via the
 // config panel, and confirm Check reports resolved. Catches real page errors.
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium, firefox, webkit } = require('playwright');
 const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
 (async () => {
-  const browser = await chromium.launch();
+  const engine = ({ chromium, firefox, webkit })[process.env.PLAYWRIGHT_BROWSER || 'chromium'];
+  if (!engine) throw new Error('PLAYWRIGHT_BROWSER must be chromium, firefox, or webkit');
+  const browser = await engine.launch();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
