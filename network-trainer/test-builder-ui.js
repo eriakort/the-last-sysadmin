@@ -52,7 +52,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.textContent('#snapBtn')).includes('Snap off')) ok('snap-to-grid can be disabled'); else fail('snap toggle did not update');
   page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
   await page.click('#noteBtn'); await page.waitForTimeout(70);
-  if ((await page.locator('#topo .topo-note').innerText()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
+  if ((await page.locator('#topo .topo-note').textContent()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
 
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
