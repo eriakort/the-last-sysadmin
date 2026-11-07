@@ -548,3 +548,19 @@ aside{scrollbar-color:#344a60 transparent}
  .side-panel[data-collapsed=true] .side-panel-head strong{writing-mode:initial;transform:none}
  .side-panel[data-collapsed=true] .side-panel-toggle{margin:0}
 }
+
+
+/* Consistent keyboard focus for native controls and custom interactive surfaces. */
+:where(a,button,input,select,textarea,[tabindex]):focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:3px;
+}
+.knowledge-command:focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:3px;
+}
+.palette-search-row input:focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:3px;
+  border-radius:3px;
+}
