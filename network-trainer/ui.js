@@ -105,7 +105,7 @@ function drawingMarkup(d, index) {
   const selected = DRAWING_SEL === index ? ' selected' : '';
   const color = esc(d.color || '#e5b85c');
   const common = `class="topo-drawing${selected}" data-drawing-index="${index}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
-  if (d.type === 'freehand') return `<path ${common} d="${(d.points||[]).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ')}"/>`;
+  if (d.type === 'freehand') { const points=Array.isArray(d.points)?d.points:[]; return `<path ${common} d="${points.map((p,i)=>(i?'L':'M')+(Number(p[0])||0)+' '+(Number(p[1])||0)).join(' ')}"/>`; }
   const x1=Number(d.x1)||0,y1=Number(d.y1)||0,x2=Number(d.x2)||0,y2=Number(d.y2)||0;
   if (d.type === 'rect') return `<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`;
   if (d.type === 'ellipse') return `<ellipse ${common} cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" rx="${Math.abs(x2-x1)/2}" ry="${Math.abs(y2-y1)/2}"/>`;
@@ -1424,7 +1424,7 @@ function loadBuilderDraft() {
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild(options = {}) {
   showWorkspaceView('build', options);
-  MODE = 'build'; WIRE = null; SEL = null; TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
+  MODE = 'build'; WIRE = null; SEL = null; DRAW_TOOL='select'; DRAWING=null; DRAWING_SEL=null; TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
   const draft=loadBuilderDraft();
   if (draft) { AUTHOR=draft.author || {title:'My scenario',objective:'',ticket:null,hints:[],success:[]}; RUN=builderRun(draft.net); SEL=draft.selected || null; TOPO_VIEW=Array.isArray(draft.view)?draft.view:null; }
   else { AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] }; RUN = builderRun(B.blank()); }
