@@ -27,9 +27,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     const missionBlock = missionLines.slice(start, end).join('\n');
     // Only inspect mission metadata before its story; later application code can
     // contain unrelated "learning:" strings after the final mission definition.
-    const storyStart = missionBlock.search(/^\\s{4}story\\s*:/m);
+    const storyStart = missionBlock.indexOf('    story:');
     const missionHeader = storyStart >= 0 ? missionBlock.slice(0, storyStart) : missionBlock;
-    if (!/^\\s{4}learning\\s*:\\s*\\{/m.test(missionHeader)) continue;
+    if (!missionHeader.startsWith('    learning:') && !missionHeader.includes('\n    learning:')) continue;
     const chapter = missionStarts[i].chapter;
     guidedChapters.add(chapter);
     for (const field of requiredGuideFields) {
@@ -39,7 +39,12 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (guidedChapters.size === 35) ok('all 35 chapters have at least one complete six-part learning guide');
   else fail('expected guided coverage for all 35 chapters, found ' + guidedChapters.size);
   for (const id of ['survey', 'net-dig', 'ph-df', 'in-df', 'co-w', 'oom-status', 'gl-uptime']) {
-    if (missionStarts.some(m => m.id === id && missionLines.slice(m.line, missionStarts.find(n => n.line > m.line)?.line ?? missionLines.length).join('\n').includes('learning:'))) ok('new chapter guide present: ' + id);
+    const mission = missionStarts.find(m => m.id === id);
+    const next = mission && missionStarts.find(m => m.line > mission.line);
+    const block = mission ? missionLines.slice(mission.line, next ? next.line : missionLines.length).join('\n') : '';
+    const story = block.indexOf('    story:');
+    const header = story >= 0 ? block.slice(0, story) : block;
+    if (mission && (header.startsWith('    learning:') || header.includes('\n    learning:'))) ok('new chapter guide present: ' + id);
     else fail('new chapter guide missing: ' + id);
   }
 
