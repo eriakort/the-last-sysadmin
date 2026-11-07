@@ -166,7 +166,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('.topo-context-menu [data-action="duplicate"]'); await page.waitForTimeout(100);
   if (await page.locator('#topo .node').count() === 2) ok('context menu duplicates a device');
   else fail('context menu did not duplicate the device');
-  await page.locator('#topo .node').first().click({ button: 'right' });
+  // Dispatch the contextmenu event directly after the duplicate refreshes the SVG.
+  // This keeps the assertion focused on the app's context-menu handler rather than
+  // browser-specific right-click synthesis against a freshly-rendered SVG node.
+  await page.locator('#topo .node').first().dispatchEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 150 });
   await page.waitForSelector('.topo-context-menu');
   await page.click('.topo-context-menu [data-action="connect"]');
   await page.locator('#topo .node').nth(1).click(); await page.waitForTimeout(100);
