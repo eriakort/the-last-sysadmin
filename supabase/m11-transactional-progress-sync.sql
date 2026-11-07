@@ -53,7 +53,7 @@ declare
   v_local_time timestamptz; v_remote_time timestamptz;
 begin
   if v_uid is null then raise exception 'Authentication required' using errcode='28000'; end if;
-  if jsonb_typeof(p_data) is distinct from 'object' or p_data->>'v' is distinct from '1' or jsonb_typeof(p_data->'fs') is distinct from 'object' then
+  if jsonb_typeof(p_data) is distinct from 'object' or p_data->>'v' is distinct from '1' or jsonb_typeof(p_data->'fs') is distinct from 'object' or p_data->'fs'->>'type' is distinct from 'dir' then
     raise exception 'Invalid progress payload' using errcode='22023';
   end if;
   insert into public.progress(user_id,data,tickets,updated_at)
