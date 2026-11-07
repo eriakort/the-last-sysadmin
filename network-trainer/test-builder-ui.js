@@ -138,9 +138,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
 
   // --- topology drawing primitives ---
-  const svgBox = await page.locator('#topo').boundingBox();
   const drawAt = async (tool, x1, y1, x2, y2) => {
     await page.click('[data-draw-tool="' + tool + '"]');
+    // Tool selection refreshes the topology and may change its page position.
+    // Resolve the current SVG bounds for every gesture rather than reusing a stale box.
+    const svgBox = await page.locator('#topo').boundingBox();
     await page.mouse.move(svgBox.x + x1, svgBox.y + y1);
     await page.mouse.down();
     await page.mouse.move(svgBox.x + x2, svgBox.y + y2, { steps: 5 });
