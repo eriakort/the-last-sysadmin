@@ -355,10 +355,10 @@ function exportIncidentReport(ticket) {
     ...(entries.length ? entries.map(e => [
       '### '+(e.type || 'Activity')+' — '+new Date(e.at || 0).toLocaleString(), e.text || '',
       e.command ? 'Command: '+e.command : '', e.device ? 'Device: '+e.device : '', e.result ? 'Result: '+e.result : '',
-      e.output ? 'Output:\\n\\n'+fence+'text\\n'+e.output+'\\n'+fence : ''
-    ].filter(Boolean).join('\\n\\n')) : ['No ticket-linked activity recorded.'])
+      e.output ? 'Output:\n\n'+fence+'text\n'+e.output+'\n'+fence : ''
+    ].filter(Boolean).join('\n\n')) : ['No ticket-linked activity recorded.'])
   ];
-  const blob = new Blob([lines.join('\\n')], {type:'text/markdown;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+  const blob = new Blob([lines.join('\n')], {type:'text/markdown;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download='incident-'+String(ticket.id).toLowerCase()+'-report.md'; a.click(); URL.revokeObjectURL(url);
 }
 function refreshIncidentCenter() { if ($('#incidentsView') && !$('#incidentsView').hidden) renderIncidentCenter(); }
@@ -630,7 +630,7 @@ function cycleDeviceSession(direction) {
 }
 function clearActiveSessionOutput() {
   if (!SEL || !$('#tout')) return;
-  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\\n`;
+  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\n`;
   persistTerminalSession();
 }
 
@@ -778,7 +778,7 @@ function openConfigHistory() {
   const status=$('#termEvidenceStatus');
   if(!SEL){if(status)status.textContent='Select a device before viewing checkpoint history.';return;}
   const wrap=document.createElement('div');wrap.id='configHistoryModal';wrap.className='config-history-overlay';
-  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
+  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
   wrap.innerHTML=`<section class="config-history-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · local archive</div><h2>Checkpoint history</h2><p class="dim">${esc(SEL)} · ${snapshots.length} saved checkpoint${snapshots.length===1?'':'s'}</p></div><button class="btn sm" id="closeConfigHistory">Close</button></div><div class="config-history-list">${rows||'<div class="config-drift-empty">No checkpoints saved for this device yet. Use Save checkpoint after establishing a known-good configuration.</div>'}</div><p class="dim config-drift-foot">Choose any historical snapshot as the baseline for a read-only comparison with the current running configuration.</p></section>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
