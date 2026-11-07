@@ -1296,7 +1296,7 @@ function ciscoShow(cli, words) {
     const wanted=q.startsWith('port-security interface ')?ciscoIface(dev,words[2]):null;
     if(q.startsWith('port-security interface ')&&!wanted)return err('% Invalid interface');
     const rows=Object.entries(dev.ifaces).filter(([n,p])=>(!wanted||n===wanted)&&p.portSecurity&&p.portSecurity.enabled).map(([n,p])=>{const x=p.portSecurity;return n+'  '+(p.errDisabled?'err-disabled':'secure-up')+'  max '+Number(x.maximum||1)+'  current '+(x.secureMacs||[]).length+'  violation '+(x.violation||'shutdown')+'  count '+Number(x.violations||0)+'  MACs '+((x.secureMacs||[]).join(', ')||'(none)');});
-    return ok('Port                 Status        Max  Current  Violation  Count  Secure MACs\n'+(rows.join('\n')||'(no port-security configuration)'));
+    return ok('Port                 Status        Max  Current  Violation  Count  Secure MACs\\n'+(rows.join('\\n')||'(no port-security configuration)'));
   }
   if (q === 'hosts') {
     const rows = Object.entries(dev.hosts || {}).map(([n,a]) => n.padEnd(22) + M.ipStr(a).padEnd(16) + 'static');
@@ -1334,7 +1334,7 @@ function ciscoShow(cli, words) {
     const statics = (dev.routes || []).map(r => 'S    ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' [1/0] via ' + M.ipStr(r.via));
     const ospf = M.ospfLearned(cli.net, cli.cur).map(r => 'O    ' + M.ipStr(r.dest) + '/' + r.mask + ' [110/' + (r.hops || 1) + '] via ' + M.ipStr(r.via) + ', OSPF');
     const bgp = M.bgpLearned(cli.net, cli.cur).map(r => 'B    ' + M.ipStr(r.dest) + '/' + r.mask + ' [20/0] via ' + M.ipStr(r.via) + ', BGP');
-    return ok('Codes: C - connected, S - static, O - OSPF, B - BGP\n' + (connected.concat(statics, ospf, bgp).join('\n') || '% No routes'));
+    return ok('Codes: C - connected, S - static, O - OSPF, B - BGP\\n' + (connected.concat(statics, ospf, bgp).join('\\n') || '% No routes'));
   }
   if (q === 'standby brief' || q === 'standby') {
     const rows = [];
@@ -1350,37 +1350,37 @@ function ciscoShow(cli, words) {
     const sessions = M.bgpSessions(cli.net, cli.cur);
     return ok('BGP router identifier ' + (dev.bgp && dev.bgp.routerId != null ? M.ipStr(dev.bgp.routerId) : 'not set') +
       ', local AS number ' + (dev.bgp && dev.bgp.asn != null ? dev.bgp.asn : 'not configured') +
-      '\nNeighbor        V    AS       State/PfxRcd\n' +
+      '\\nNeighbor        V    AS       State/PfxRcd\\n' +
       (sessions.map(s => M.ipStr(s.ip).padEnd(16) + '4    ' + String(s.remoteAs).padEnd(9) +
-        (s.up ? 'Established / ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length + ' prefixes' : s.reason)).join('\n') || '(no BGP neighbors configured)'));
+        (s.up ? 'Established / ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length + ' prefixes' : s.reason)).join('\\n') || '(no BGP neighbors configured)'));
   }
   if (q === 'ip bgp' || q === 'ip bgp ipv4 unicast') {
     const rows = M.bgpLearned(cli.net, cli.cur).map(r => M.ipStr(r.dest) + '/' + r.mask + '     ' + M.ipStr(r.via) + '     ' + (r.asPath || []).join(' '));
-    return ok('Network              Next Hop        Path\n' + (rows.join('\n') || '(no BGP routes received)'));
+    return ok('Network              Next Hop        Path\\n' + (rows.join('\\n') || '(no BGP routes received)'));
   }
   if (q === 'ip bgp neighbors') {
     const sessions = M.bgpSessions(cli.net, cli.cur);
     return ok(sessions.map(s => 'Neighbor ' + M.ipStr(s.ip) + ' remote AS ' + s.remoteAs +
-      '\n  Type: ' + s.type + '\n  State: ' + (s.up ? 'Established' : s.reason) +
-      '\n  Inbound prefix-list: ' + (s.localNeighbor.inPrefixList || 'none') +
-      '\n  Outbound prefix-list: ' + (s.localNeighbor.outPrefixList || 'none')).join('\n\n') || '(no BGP neighbors configured)');
+      '\\n  Type: ' + s.type + '\\n  State: ' + (s.up ? 'Established' : s.reason) +
+      '\\n  Inbound prefix-list: ' + (s.localNeighbor.inPrefixList || 'none') +
+      '\\n  Outbound prefix-list: ' + (s.localNeighbor.outPrefixList || 'none')).join('\\n\\n') || '(no BGP neighbors configured)');
   }
   if (q.startsWith('ip bgp advertised-routes')) {
     const peerIp = words[3] ? parseIPv4(words[3]) : null;
     const rows = M.bgpAdvertised(cli.net, cli.cur, peerIp).map(r => M.ipStr(r.dest) + '/' + r.mask);
-    return ok('Advertised prefixes' + (peerIp == null ? '' : ' to ' + M.ipStr(peerIp)) + ':\n' + (rows.join('\n') || '(none)'));
+    return ok('Advertised prefixes' + (peerIp == null ? '' : ' to ' + M.ipStr(peerIp)) + ':\\n' + (rows.join('\\n') || '(none)'));
   }
   if (q === 'ip ospf neighbor') {
     const ns = M.ospfNeighbors(cli.net, cli.cur);
-    return ok('Neighbor ID       State   Address         Interface\n' + (ns.map(n => String((cli.net.devices[n.id].ospf && cli.net.devices[n.id].ospf.routerId != null) ? M.ipStr(cli.net.devices[n.id].ospf.routerId) : n.id).padEnd(18) + String(n.state || 'FULL').padEnd(8) + M.ipStr(n.ip).padEnd(16) + n.via).join('\n') || '(no OSPF neighbors)'));
+    return ok('Neighbor ID       State   Address         Interface\\n' + (ns.map(n => String((cli.net.devices[n.id].ospf && cli.net.devices[n.id].ospf.routerId != null) ? M.ipStr(cli.net.devices[n.id].ospf.routerId) : n.id).padEnd(18) + String(n.state || 'FULL').padEnd(8) + M.ipStr(n.ip).padEnd(16) + n.via).join('\\n') || '(no OSPF neighbors)'));
   }
   if (q === 'ip ospf interface brief') {
     const rows = Object.entries(dev.ifaces || {}).filter(([,p]) => p.ospf != null).map(([name,p]) => name.padEnd(18) + String(p.ospf).padEnd(10) + (p.up === false ? 'down' : 'up') + (dev.ospf && (dev.ospf.passiveInterfaces || []).includes(name) ? ' passive' : ''));
-    return ok('Interface         Area      State\n' + (rows.join('\n') || '(no OSPF-enabled interfaces)'));
+    return ok('Interface         Area      State\\n' + (rows.join('\\n') || '(no OSPF-enabled interfaces)'));
   }
   if (q === 'ip protocols') {
     const cfg = dev.ospf;
-    return ok('Routing Protocol is ' + (cfg ? 'ospf ' + cfg.processId : 'not configured') + (cfg && cfg.routerId != null ? '\nRouter ID: ' + M.ipStr(cfg.routerId) : '') + '\nOSPF neighbors: ' + M.ospfNeighbors(cli.net, cli.cur).length + '\nOSPF learned routes: ' + M.ospfLearned(cli.net, cli.cur).length);
+    return ok('Routing Protocol is ' + (cfg ? 'ospf ' + cfg.processId : 'not configured') + (cfg && cfg.routerId != null ? '\\nRouter ID: ' + M.ipStr(cfg.routerId) : '') + '\\nOSPF neighbors: ' + M.ospfNeighbors(cli.net, cli.cur).length + '\\nOSPF learned routes: ' + M.ospfLearned(cli.net, cli.cur).length);
   }
   if (q === 'vlan brief' || q === 'vlan') {
     if (dev.kind !== 'switch') return err('% VLAN database is available on switches only');
@@ -1705,7 +1705,7 @@ function runASA(cli, line) {
     }
     return err('% Invalid network object command — use host, subnet, or nat (inside,outside) static interface service tcp <port> <port>');
   }
-  if (words[0] === 'help' || words[0] === '?') return ok('ASA operational quick reference\n  enable · configure terminal · interface <physical-if> · nameif <name> · security-level <0-100>\n  object-group network <name> · network-object host <ip> · network-object <network> <mask>\n  object-group service <name> · service-object tcp|udp destination eq <port>\n  access-list <name> [line <n>] extended permit|deny <proto> <source> <destination> [eq <port>|object-group <service-group>]\n  access-group <name> in interface <nameif> · no access-group ...\n  show object-group · show access-list · clear access-list [name] · show access-group · show nat · show route\n  packet-tracer input <nameif> tcp <src-ip> <src-port> <dst-ip> <dst-port> · write memory\n  Group references are evaluated against current members; unmatched traffic hits implicit deny.\n  This is an educational ASA-style command subset, not Cisco ASA software.');
+  if (words[0] === 'help' || words[0] === '?') return ok('ASA operational quick reference\\n  enable · configure terminal · interface <physical-if> · nameif <name> · security-level <0-100>\\n  object-group network <name> · network-object host <ip> · network-object <network> <mask>\\n  object-group service <name> · service-object tcp|udp destination eq <port>\\n  access-list <name> [line <n>] extended permit|deny <proto> <source> <destination> [eq <port>|object-group <service-group>]\\n  access-group <name> in interface <nameif> · no access-group ...\\n  show object-group · show access-list · clear access-list [name] · show access-group · show nat · show route\\n  packet-tracer input <nameif> tcp <src-ip> <src-port> <dst-ip> <dst-port> · write memory\\n  Group references are evaluated against current members; unmatched traffic hits implicit deny.\\n  This is an educational ASA-style command subset, not Cisco ASA software.');
   if (words[0] === 'ping' || words[0] === 'traceroute' || words[0] === 'nmap' || words[0] === 'help' || words[0] === 'man')
     return dispatch(cli, raw);
   return err('% Invalid ASA command — use show, packet-tracer, configure terminal, or help');
@@ -2228,16 +2228,16 @@ const COMMANDS = {
     if (a[0] === 'advertised') {
       const peer = a[1] ? parseIPv4(a[1]) : null;
       if (a[1] && peer == null) return err('bgp: invalid neighbor address');
-      return ok('Advertised prefixes:\n' + (M.bgpAdvertised(cli.net,cli.cur,peer).map(r=>M.ipStr(r.dest)+'/'+r.mask).join('\n') || '(none)'));
+      return ok('Advertised prefixes:\\n' + (M.bgpAdvertised(cli.net,cli.cur,peer).map(r=>M.ipStr(r.dest)+'/'+r.mask).join('\\n') || '(none)'));
     }
     if (a[0] === 'received') {
       const rows=M.bgpLearned(cli.net,cli.cur).map(r=>M.ipStr(r.dest)+'/'+r.mask+' via '+M.ipStr(r.via)+' AS path '+(r.asPath||[]).join(' '));
-      return ok('Received prefixes:\n'+(rows.join('\n')||'(none)'));
+      return ok('Received prefixes:\\n'+(rows.join('\\n')||'(none)'));
     }
     if (a[0] === 'summary' || a[0] === 'neighbor' && !a[1]) {
       const ss = M.bgpSessions(cli.net, cli.cur);
       if (!ss.length) return ok('BGP: no neighbors configured');
-      return ok('BGP sessions:\n' + ss.map(s => '  ' + M.ipStr(s.ip) + '  AS' + s.remoteAs + '  ' + s.type + '  ' + (s.up ? 'Established' : s.reason) + '  prefixes ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length).join('\n'));
+      return ok('BGP sessions:\\n' + ss.map(s => '  ' + M.ipStr(s.ip) + '  AS' + s.remoteAs + '  ' + s.type + '  ' + (s.up ? 'Established' : s.reason) + '  prefixes ' + M.bgpLearned(cli.net,cli.cur).filter(r=>r.via===s.ip).length).join('\\n'));
     }
     return err('usage: bgp asn <n> | bgp neighbor <ip> remote-as <n> | bgp neighbor <ip> prefix-list <name> in|out | bgp network <cidr> | bgp prefix-list <name> permit|deny <cidr> | bgp summary|advertised|received');
   },
@@ -2255,7 +2255,7 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  IOS routing: router ospf <process-id> · router-id <id> · network <address> <wildcard> area <id> · passive-interface <if>\n  OSPF verification: show ip ospf neighbor · show ip ospf interface brief · show ip protocols · show ip route (C/S/O/B)\n  BGP operations: bgp asn · bgp neighbor · bgp network · bgp prefix-list · bgp advertised|received|summary\n  BGP verification: show ip bgp summary · show ip bgp · show ip bgp neighbors · show ip bgp advertised-routes\n  IOS services: ip dhcp pool · ip helper-address · ip name-server · ip host · ntp server|master · logging host|trap\n  show ip dhcp pool|binding|server statistics · show hosts · show ntp status|associations · show logging\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
+  help: () => ok('commands: ip, vlan, interface, switchport, spanning-tree, show, clear, exit, ping, traceroute, arp, tcpdump, iptables, nmap, dig, dhclient, resolvectl, man, help\n  IOS routing: router ospf <process-id> · router-id <id> · network <address> <wildcard> area <id> · passive-interface <if>\n  OSPF verification: show ip ospf neighbor · show ip ospf interface brief · show ip protocols · show ip route (C/S/O/B)\n  BGP operations: bgp asn · bgp neighbor · bgp network · bgp prefix-list · bgp advertised|received|summary\\n  BGP verification: show ip bgp summary · show ip bgp · show ip bgp neighbors · show ip bgp advertised-routes\\n  IOS services: ip dhcp pool · ip helper-address · ip name-server · ip host · ntp server|master · logging host|trap\n  show ip dhcp pool|binding|server statistics · show hosts · show ntp status|associations · show logging\n  ip addr | ip addr add|replace|del <A>/<p> dev <if> | ip link set <if> up|down\n  ip route | ip route add|replace [default|<cidr>] via <ip> | ip route del [default|<cidr>]\n  vlan <id> · interface <port> · switchport mode access|trunk · switchport access vlan <id>\n  switchport trunk native vlan <id> · switchport trunk allowed vlan <all|id,id> · spanning-tree vlan <id> priority <n>\n  show vlan brief · show interfaces trunk · show spanning-tree · show mac address-table dynamic · clear mac address-table dynamic\n  ping <host|ip|name> · traceroute <host|ip> · arp · tcpdump · iptables -L|-A ... · nmap <host|ip>\n  dig <name> · dhclient <if> · resolvectl dns <if> <ip> | resolvectl status'),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
@@ -4478,7 +4478,7 @@ function cycleDeviceSession(direction) {
 }
 function clearActiveSessionOutput() {
   if (!SEL || !$('#tout')) return;
-  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\n`;
+  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\\n`;
   persistTerminalSession();
 }
 
@@ -4626,7 +4626,7 @@ function openConfigHistory() {
   const status=$('#termEvidenceStatus');
   if(!SEL){if(status)status.textContent='Select a device before viewing checkpoint history.';return;}
   const wrap=document.createElement('div');wrap.id='configHistoryModal';wrap.className='config-history-overlay';
-  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
+  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
   wrap.innerHTML=`<section class="config-history-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · local archive</div><h2>Checkpoint history</h2><p class="dim">${esc(SEL)} · ${snapshots.length} saved checkpoint${snapshots.length===1?'':'s'}</p></div><button class="btn sm" id="closeConfigHistory">Close</button></div><div class="config-history-list">${rows||'<div class="config-drift-empty">No checkpoints saved for this device yet. Use Save checkpoint after establishing a known-good configuration.</div>'}</div><p class="dim config-drift-foot">Choose any historical snapshot as the baseline for a read-only comparison with the current running configuration.</p></section>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
