@@ -55,6 +55,20 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
   if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
   if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas; topology=' + (await page.locator('#topoWrap').innerText().catch(() => '<unavailable>')));
+  const emptyCanvas = await page.locator('#topo').boundingBox();
+  await page.click('[data-draw-tool="rect"]');
+  await page.mouse.move(emptyCanvas.x + 110, emptyCanvas.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(emptyCanvas.x + 220, emptyCanvas.y + 190, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(60);
+  if (await page.locator('#topo .topo-drawing').count() === 1) ok('drawing can start on an empty topology');
+  else fail('cannot create the first drawing on an empty canvas');
+  await page.click('[data-draw-tool="select"]');
+  await page.click('#topo .topo-drawing');
+  await page.click('#delDrawing');
+  if (await page.locator('#topo .topo-drawing').count() === 0) ok('empty-canvas drawing can be removed cleanly');
+  else fail('empty-canvas drawing cleanup failed');
   if (errors.length) console.error('  Browser errors after entering build mode: ' + errors.join(' | '));
 
   // --- author: place the two endpoints the student will start with ---
@@ -122,6 +136,57 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.locator('#topo .node').count() === 0) ok('device layer can be hidden independently'); else fail('device layer visibility toggle failed');
   await page.check('#config [data-topo-layer="devices"]'); await page.waitForTimeout(50);
 
+
+  // --- topology drawing primitives ---
+  const drawAt = async (tool, x1, y1, x2, y2) => {
+    await page.click('[data-draw-tool="' + tool + '"]');
+    // Tool selection refreshes the topology and may change its page position.
+    // Resolve the current SVG bounds for every gesture rather than reusing a stale box.
+    const svgBox = await page.locator('#topo').boundingBox();
+    // Use coordinates relative to the visible SVG viewport, not SVG viewBox units.
+    // This keeps every gesture inside the canvas even when its rendered size changes.
+    const px1 = svgBox.x + svgBox.width * x1, py1 = svgBox.y + svgBox.height * y1;
+    const px2 = svgBox.x + svgBox.width * x2, py2 = svgBox.y + svgBox.height * y2;
+    await page.mouse.move(px1, py1);
+    await page.mouse.down();
+    await page.mouse.move(px2, py2, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForTimeout(60);
+  };
+  // Keep gestures in the lower half of the rendered canvas, away from devices.
+  // Coordinates are normalized fractions of the current SVG bounding box.
+  await drawAt('line', .34, .62, .43, .68);
+  if (await page.locator('#topo .topo-drawing').count() === 1) ok('line drawing is stored on the topology');
+  else fail('line drawing was not created');
+  await drawAt('arrow', .49, .62, .58, .68);
+  await drawAt('rect', .64, .62, .73, .72);
+  await drawAt('ellipse', .78, .62, .87, .72);
+  // Keep the freehand path to the right of the h2 node; Playwright clicks its
+  // center later to verify selection and removal, so it must not sit beneath a node.
+  await drawAt('freehand', .84, .78, .94, .88);
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('arrow, rectangle, ellipse and freehand drawings are supported');
+  else fail('not all drawing primitives were created');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#topo');
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('topology drawings survive a Build refresh');
+  else fail('topology drawings were not restored after refresh');
+  await page.uncheck('#config [data-topo-layer="drawings"]');
+  if (await page.locator('#topo .topo-drawing').count() === 0) ok('drawing layer can be hidden without deleting annotations');
+  else fail('drawing layer visibility did not hide drawings');
+  await page.check('#config [data-topo-layer="drawings"]');
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('drawing layer can be restored');
+  else fail('drawing layer did not restore');
+  await page.click('[data-draw-tool="select"]');
+  await page.click('#topo .topo-drawing[data-drawing-index="4"]');
+  await page.click('#delDrawing');
+  if (await page.locator('#topo .topo-drawing').count() === 4) ok('selected drawing can be removed');
+  else fail('selected drawing removal failed');
+  await page.click('#topoUndo');
+  if (await page.locator('#topo .topo-drawing').count() === 5) ok('drawing removal participates in undo history');
+  else fail('drawing removal was not undoable');
+  await page.click('#topoRedo');
+  if (await page.locator('#topo .topo-drawing').count() === 4) ok('drawing removal participates in redo history');
+  else fail('drawing removal was not redoable');
 
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);

@@ -106,6 +106,28 @@ test('topology annotations survive scenario export and mission creation', () => 
   const roundTrip = S.fromJSON(S.toJSON({ title: 'Annotated', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
   assert(roundTrip.start.notes[0].x === 144, 'annotation position survives JSON round-trip');
 });
+
+test('drawing primitives, zones and layer visibility survive scenario export and mission creation', () => {
+  const topo = {
+    devices: { h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } } } },
+    links: [],
+    zones: [{ name: 'Core', x: 80, y: 60, w: 220, h: 160, devices: ['h1'] }],
+    drawings: [
+      { type: 'arrow', x1: 100, y1: 100, x2: 280, y2: 100, color: '#e5b85c' },
+      { type: 'freehand', points: [[40, 40], [52, 58], [70, 61]], color: '#38bdf8' }
+    ],
+    layerVisibility: { zones: true, drawings: false }
+  };
+  const start = S.fromTopology(topo);
+  assert(JSON.stringify(start.drawings) === JSON.stringify(topo.drawings), 'drawing geometry is retained');
+  assert(JSON.stringify(start.zones) === JSON.stringify(topo.zones), 'zone metadata is retained');
+  assert(JSON.stringify(start.layerVisibility) === JSON.stringify(topo.layerVisibility), 'layer visibility is retained');
+  const decoded = S.fromJSON(S.toJSON({ title: 'Diagram', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
+  const mission = S.toMission(decoded);
+  assert(JSON.stringify(mission.build().drawings) === JSON.stringify(topo.drawings), 'authored mission keeps drawing geometry');
+  assert(JSON.stringify(mission.build().zones) === JSON.stringify(topo.zones), 'authored mission keeps zones');
+  assert(JSON.stringify(mission.build().layerVisibility) === JSON.stringify(topo.layerVisibility), 'authored mission keeps layer visibility');
+});
 test('hand-placed node positions survive fromTopology and toMission', () => {
   const topo = { devices: { h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } } } }, links: [], pos: { h1: [123, 45] } };
   const start = S.fromTopology(topo);

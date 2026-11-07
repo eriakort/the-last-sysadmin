@@ -12,7 +12,7 @@
     "test:ui": "node test-classroom-ui.js",
     "test:play": "node test-authored-playback.js",
     "build:net": "node network-trainer/build-ui.js",
-    "test:net": "node network-trainer/net-engine.test.js && node network-trainer/net-cli.test.js && node network-trainer/net-mission.test.js",
+    "test:net": "node network-trainer/net-engine.test.js && node network-trainer/net-cli.test.js && node network-trainer/net-mission.test.js && node network-trainer/net-scenario.test.js",
     "test:learning": "node test-learning-flow.js"
   },
   "devDependencies": {

@@ -46,6 +46,7 @@ main{display:flex;flex-direction:column;min-width:0}
 #topoWrap{flex:1;overflow:auto;padding:16px;display:flex;align-items:center;justify-content:center}
 svg#topo{max-width:100%;height:auto}
 .edge{stroke:#44506a;stroke-width:2}
+.topo-drawing{cursor:pointer;pointer-events:all}.topo-drawing.selected{stroke:#38bdf8;stroke-width:4}.topo-drawing.draft{pointer-events:none}.draw-tool.active{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 18%,var(--raise));color:var(--ink);box-shadow:inset 0 0 0 1px var(--amber)}
 .edge.down{stroke:var(--bad);stroke-dasharray:5 4}
 .node{cursor:grab;color:var(--muted);touch-action:none}
 .node:active{cursor:grabbing}

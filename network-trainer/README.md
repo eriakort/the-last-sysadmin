@@ -405,3 +405,8 @@ In Build mode, the topology designer can independently show or hide zones, simul
 ## Build workspace refresh recovery
 
 The Build workspace has its own `?view=build` route. Refreshing or bookmarking that URL restores Build mode instead of falling back to Workbench. While authoring, the current topology and scenario details are automatically saved in browser-local storage and restored when Build is reopened. This draft is local to the current browser profile and is not a cloud backup; export important scenarios for portability. Browser Back/Forward switches between Build and Workbench routes.
+
+
+## Topology drawing primitives
+
+The Build canvas includes selectable drawing tools for straight lines, directional arrows, rectangles, ellipses and freehand paths. Drawings are stored as topology presentation metadata, can be selected and removed, participate in topology undo/redo, and are included in browser-local Build draft recovery and scenario export. The dedicated Drawings layer can be hidden or restored without deleting annotations. These objects are diagram annotations only: they do not create simulator links, devices, routes or packet behavior.
