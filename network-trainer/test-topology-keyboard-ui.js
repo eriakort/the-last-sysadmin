@@ -7,8 +7,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
-  await page.waitForSelector('#topo .node');
+  // Build mode starts with an intentionally empty canvas. Add a device before
+  // asserting keyboard behavior; the default mission is not a reliable source
+  // of topology nodes for this isolated builder test.
   await page.click('#btnBuild');
+  await page.waitForSelector('#config .pal[data-add="host"]');
+  await page.click('#config .pal[data-add="host"]');
   await page.waitForSelector('#topo .node');
   const node = page.locator('#topo .node').first();
   const label = await node.getAttribute('aria-label');
