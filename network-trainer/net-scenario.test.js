@@ -38,6 +38,16 @@ test('a port cannot be double-used, and self-links are refused', () => {
   threw = false; try { B.addLink(t, 'r1', 'r1'); } catch (e) { threw = true; }
   assert(threw, 'a self-link is refused');
 });
+test('cloneDevice copies configuration without links and offsets the canvas position', () => {
+  const t = B.blank(); B.addDevice(t, 'host', 'h1');
+  t.devices.h1.ifaces.eth0.ip = require('./net-model').ip('10.0.0.10');
+  t.pos = { h1: [120, 72] };
+  const id = B.cloneDevice(t, 'h1');
+  assert(id === 'h2', 'clone receives the next unique host id');
+  assert(t.devices[id].ifaces.eth0.ip === t.devices.h1.ifaces.eth0.ip, 'clone copies interface configuration');
+  assert(t.pos[id][0] === 152 && t.pos[id][1] === 104, 'clone is offset from source');
+  assert(t.links.length === 0, 'clone does not duplicate physical links');
+});
 test('removeDevice also drops links that touched it', () => {
   const t = B.blank();
   B.addDevice(t, 'host', 'h1'); B.addDevice(t, 'switch', 'sw1'); B.addLink(t, 'h1', 'sw1');
@@ -89,6 +99,13 @@ test('a build-from-scratch scenario is authorable, serializable, and solvable', 
   assert(run.done() === true, 'grader accepts the built network:\n' + run.status());
 });
 
+test('topology annotations survive scenario export and mission creation', () => {
+  const topo = { devices: {}, links: [], notes: [{ text: 'Core uplink', x: 144, y: 72 }] };
+  const start = S.fromTopology(topo);
+  assert(start.notes && start.notes[0].text === 'Core uplink', 'annotation is retained');
+  const roundTrip = S.fromJSON(S.toJSON({ title: 'Annotated', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
+  assert(roundTrip.start.notes[0].x === 144, 'annotation position survives JSON round-trip');
+});
 test('hand-placed node positions survive fromTopology and toMission', () => {
   const topo = { devices: { h1: { id: 'h1', kind: 'host', ifaces: { eth0: { up: true } } } }, links: [], pos: { h1: [123, 45] } };
   const start = S.fromTopology(topo);
