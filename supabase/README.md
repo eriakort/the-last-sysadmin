@@ -53,6 +53,7 @@ it should and nothing it shouldn't. It covers:
 - **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
+- **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
 recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
