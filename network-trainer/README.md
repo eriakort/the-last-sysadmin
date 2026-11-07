@@ -368,3 +368,8 @@ Workbench console sessions are available per simulated device. Switch using the 
 ## Workbench checkpoint history
 
 Open **History** in the device console to review every saved configuration checkpoint for the selected simulator device. Each entry shows when it was captured and its configuration size. Choose any historical checkpoint to compare the current running configuration against that snapshot, rather than being limited to the latest baseline. Comparisons remain read-only; checkpoints are browser-local and are not restored or applied to devices.
+
+
+### Workbench checkpoint lifecycle
+
+Configuration checkpoints can be labelled and annotated when captured. The first checkpoint for a device becomes its known-good baseline; operators can move that baseline to any historical snapshot. Drift review defaults to the pinned baseline, while history allows comparison against any checkpoint. A pinned baseline cannot be deleted. These records remain browser-local training data from the active simulator; no restore or physical-device operation is provided.
