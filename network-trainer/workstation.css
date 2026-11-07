@@ -31,7 +31,7 @@ body{background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,syste
 .brand .sub{font-size:10px;color:#8fa3bb}
 .mark{width:25px;height:25px;border-radius:8px;border-color:#31556b;background:#13283a}
 .mark::after{right:8px;width:7px;height:7px;background:var(--good);box-shadow:0 0 10px #43d6a088}
-.apptabs{display:none}
+.apptabs{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .hud{gap:10px;font-size:10px;flex-wrap:wrap;justify-content:flex-end}
 .hud>span{padding:5px 8px;border:1px solid #27394d;border-radius:7px;background:#0e1723}
 .hud b{font-size:12px}
@@ -72,6 +72,9 @@ aside{scrollbar-color:#344a60 transparent}
  .nav-item .nav-glyph{width:auto}
  .nav-soon{display:none}
  #top{align-items:flex-start;flex-direction:column;padding:10px 12px}
+ .apphdr{width:100%;flex-wrap:wrap;gap:8px}
+ .apptabs{width:100%;gap:4px}
+ .apptab{padding:5px 8px;font-size:12px}
  .hud{justify-content:flex-start;width:100%}
  .hud>span{display:none}
  #cols{display:flex;flex-direction:column}

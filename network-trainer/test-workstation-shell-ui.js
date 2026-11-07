@@ -52,6 +52,15 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Overview navigation did not return to the landing view');
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const appTabs = page.locator('nav.apptabs');
+  const environmentTabs = appTabs.locator('a.apptab');
+  const environmentLabels = (await environmentTabs.allTextContents()).map(text => text.trim());
+  if (await appTabs.isVisible() && await environmentTabs.count() === 2 &&
+      await environmentTabs.nth(0).isVisible() && await environmentTabs.nth(1).isVisible() &&
+      environmentLabels.some(label => label.includes('Linux Sysadmin')) &&
+      environmentLabels.some(label => label.includes('Network Sysadmin')))
+    ok('application switcher remains visible and both environments are reachable on mobile');
+  else fail('application switcher is hidden or an environment link is unavailable on mobile: ' + environmentLabels.join(' | '));
   const railBox = await rail.boundingBox();
   const mainBox = await page.locator('#mainArea').boundingBox();
   if (railBox && mainBox && Math.abs(railBox.width - 390) < 3 && mainBox.width >= 380)
