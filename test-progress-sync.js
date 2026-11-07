@@ -11,7 +11,7 @@ assert.notEqual(start, -1, 'sync merge helpers should exist in the app');
 assert.notEqual(end, -1, 'sync merge helpers should end before syncPull');
 const helpers = html.slice(start, end);
 const context = {};
-vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones; this.syncApplyTombstones = syncApplyTombstones;', context);
+vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones; this.syncApplyTombstones = syncApplyTombstones; this.syncRecordDeletion = syncRecordDeletion;', context);
 
 const dir = (children, mtime = 1) => ({ type: 'dir', children, mtime });
 const file = (content, mtime) => ({ type: 'file', content, mtime });
@@ -112,6 +112,20 @@ const state = (overrides = {}) => ({
   const tree = dir({ home: dir({ 'recreated.txt': file('new copy', Date.parse('2026-11-07T10:01:00Z')) }) });
   const filtered = context.syncApplyTombstones(tree, '/', tombstones);
   assert.equal(filtered.children.home.children['recreated.txt'].content, 'new copy', 'a newer recreation must survive');
+}
+
+{
+  context.S = state();
+  context.norm = path => path;
+  context.syncRecordDeletion('/home/archive', dir({
+    'one.txt': file('one', 1),
+    nested: dir({ 'two.txt': file('two', 2) })
+  }));
+  assert.deepEqual(
+    Array.from(context.S.syncTombstones, item => item.path).sort(),
+    ['/home/archive', '/home/archive/nested', '/home/archive/nested/two.txt', '/home/archive/one.txt'].sort(),
+    'recursive directory deletion should record every path'
+  );
 }
 
 console.log('Progress sync merge tests passed.');
