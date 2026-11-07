@@ -4863,7 +4863,7 @@ function openSettings() {
   wireModalDialog(wrap,'#closeS');
   wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
   wrap.querySelectorAll('.tm').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); closeModal(); openSettings(); }));
-  $('#reset').addEventListener('click', () => { if (confirm('Erase all progress and XP?')) { PROG = { done: {}, xp: 0, theme: PROG.theme }; saveProg(); updateHud(); $('#brief').innerHTML = renderBrief(); wireBrief(); wrap.remove(); } });
+  $('#reset').addEventListener('click', () => { if (confirm('Erase all progress and XP?')) { PROG = { done: {}, xp: 0, theme: PROG.theme }; saveProg(); updateHud(); $('#brief').innerHTML = renderBrief(); wireBrief(); closeModal(); } });
   $('#closeS').addEventListener('click', closeModal);
 }
 
