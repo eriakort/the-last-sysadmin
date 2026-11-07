@@ -53,11 +53,11 @@ declare
   v_local_time timestamptz; v_remote_time timestamptz;
 begin
   if v_uid is null then raise exception 'Authentication required' using errcode='28000'; end if;
-  if jsonb_typeof(p_data)<>'object' or p_data->>'v'<>'1' or jsonb_typeof(p_data->'fs')<>'object' then
+  if jsonb_typeof(p_data) is distinct from 'object' or p_data->>'v' is distinct from '1' or jsonb_typeof(p_data->'fs') is distinct from 'object' then
     raise exception 'Invalid progress payload' using errcode='22023';
   end if;
   insert into public.progress(user_id,data,tickets,updated_at)
-    values(v_uid,p_data,jsonb_array_length(coalesce(p_data->'done','[]'::jsonb)),now())
+    values(v_uid,p_data,jsonb_array_length(case when jsonb_typeof(p_data->'done')='array' then p_data->'done' else '[]'::jsonb end),now())
     on conflict(user_id) do nothing;
   select data,updated_at into v_existing,v_existing_updated_at
     from public.progress where user_id=v_uid for update;
@@ -96,7 +96,7 @@ begin
   v_merged:=jsonb_set(v_merged,'{syncUpdatedAt}',to_jsonb(greatest(
     coalesce(nullif(v_existing->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),
     coalesce(nullif(p_data->>'syncUpdatedAt','')::timestamptz,'-infinity'::timestamptz),now())::text),true);
-  update public.progress set data=v_merged,tickets=jsonb_array_length(coalesce(v_merged->'done','[]'::jsonb)),updated_at=now() where user_id=v_uid;
+  update public.progress set data=v_merged,tickets=jsonb_array_length(case when jsonb_typeof(v_merged->'done')='array' then v_merged->'done' else '[]'::jsonb end),updated_at=now() where user_id=v_uid;
   return v_merged;
 end; $$;
 
