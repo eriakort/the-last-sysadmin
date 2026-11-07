@@ -26,6 +26,7 @@ let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SH
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true };
 let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null;
+let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -1220,6 +1221,15 @@ function wireTopo() {
         if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
         WIRE = null; refresh(); return;
       }
+      const clickAt = Date.now();
+      if (LAST_NODE_ACTIVATION.id === id && clickAt - LAST_NODE_ACTIVATION.at < 450) {
+        LAST_NODE_ACTIVATION = { id:null, at:0 };
+        e.preventDefault();
+        selectDevice(id);
+        openTerminalWindow(true);
+        return;
+      }
+      LAST_NODE_ACTIVATION = { id, at:clickAt };
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
@@ -1227,11 +1237,6 @@ function wireTopo() {
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
-    });
-    n.addEventListener('dblclick', e => {
-      e.preventDefault(); e.stopPropagation();
-      selectDevice(n.dataset.dev);
-      openTerminalWindow(true);
     });
   });
 }
