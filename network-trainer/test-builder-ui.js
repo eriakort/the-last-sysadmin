@@ -15,7 +15,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const node = d => `#topo .node[data-dev="${d}"]`;
   const clickNode = async d => { await page.click(node(d)); await page.waitForTimeout(60); };
   const addDev = async kind => { await page.click(`#config .pal[data-add="${kind}"]`); await page.waitForTimeout(70); };
-  const wire = async (a, b) => { await clickNode(a); await page.click('#wireBtn'); await page.waitForTimeout(40); await clickNode(b); };
+  const wire = async (a, b) => { await clickNode(a); await page.click('#wireBtn'); await page.waitForTimeout(40); await clickNode(b); await page.waitForTimeout(450); };
   const setAddr = async (d, ip, pfx) => {
     await clickNode(d);
     await page.fill(`#config .ifrow[data-if="eth0"] .ip`, ip);     // address first (kept),
