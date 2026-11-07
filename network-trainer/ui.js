@@ -297,7 +297,7 @@ function renderIncidentCenter() {
     <div class="incident-symptom"><span class="label2">Reported symptom</span><p>${esc(selected.symptom)}</p></div>
     <div class="incident-facts"><div><small>Service</small><b>${esc(selected.service)}</b></div><div><small>Impact</small><b>${esc(selected.impact)}</b></div><div><small>Reported by</small><b>${esc(selected.from)}</b></div><div><small>Assigned to</small><b>${esc(selected.assigned)}</b></div><div><small>Last updated</small><b>${selected.updatedAt ? esc(new Date(selected.updatedAt).toLocaleString()) : 'Not updated'}</b></div><div><small>Training scenario</small><b>${esc(selected.chapter)}</b></div></div>
     <div class="incident-assignment"><label for="incidentAssignee">Ownership</label><select id="incidentAssignee"><option${selected.assigned === 'You' ? ' selected' : ''}>You</option><option${selected.assigned === 'Network Operations' ? ' selected' : ''}>Network Operations</option><option${selected.assigned === 'L2 Network Engineering' ? ' selected' : ''}>L2 Network Engineering</option></select><button class="btn sm" id="incidentAssignSave">Update owner</button></div>
-    <div class="incident-actions">${selected.status === 'new' ? '<button class="btn primary" id="incidentAcknowledge">Acknowledge</button>' : ''}
+    <div class="incident-actions"><button class="btn" id="incidentExportReport">Export incident report</button>${selected.status === 'new' ? '<button class="btn primary" id="incidentAcknowledge">Acknowledge</button>' : ''}
       ${selected.status === 'resolved' ? '<button class="btn" id="incidentReview">Review in Workbench</button>' : '<button class="btn primary" id="incidentInvestigate">Investigate in Workbench →</button>'}
     </div>
     <div class="incident-timeline"><div class="label2">Investigation timeline</div>${timeline || '<p class="dim">No ticket-linked activity yet. Acknowledge the incident or start an investigation to create the first record.</p>'}</div>`
@@ -317,6 +317,8 @@ function renderIncidentCenter() {
   root.querySelector('#incidentStatus').addEventListener('change', e => { INCIDENT_FILTERS.status=e.target.value; renderIncidentCenter(); });
   root.querySelector('#incidentPriority').addEventListener('change', e => { INCIDENT_FILTERS.priority=e.target.value; renderIncidentCenter(); });
   root.querySelectorAll('[data-incident-select]').forEach(b => b.addEventListener('click', () => { INCIDENT_SELECTED=b.dataset.incidentSelect; renderIncidentCenter(); }));
+  const exportReport = root.querySelector('#incidentExportReport');
+  if (exportReport) exportReport.addEventListener('click', () => exportIncidentReport(selected));
   const acknowledge = root.querySelector('#incidentAcknowledge');
   if (acknowledge) acknowledge.addEventListener('click', () => {
     setTicketState(selected.id, 'acknowledged', 'You');
@@ -338,6 +340,26 @@ function renderIncidentCenter() {
   });
   const review = root.querySelector('#incidentReview');
   if (review) review.addEventListener('click', () => { MODE='play'; reloadMission(selected.index); });
+}
+function exportIncidentReport(ticket) {
+  if (!ticket) return;
+  const entries = (PROG.journal || []).filter(e => e.ticket === ticket.id).slice().sort((a,b) => new Date(a.at || 0) - new Date(b.at || 0));
+  const fence = String.fromCharCode(96).repeat(3);
+  const lines = [
+    '# Incident investigation report', '',
+    '- Incident: '+ticket.id, '- Title: '+ticket.title, '- Status: '+ticket.status,
+    '- Priority: '+ticket.priority, '- Service: '+ticket.service, '- Impact: '+ticket.impact,
+    '- Reported by: '+ticket.from, '- Assigned to: '+ticket.assigned, '- SLA target: '+ticket.sla,
+    '- Scenario: '+ticket.chapter, '- Exported: '+new Date().toISOString(), '',
+    '## Reported symptom', ticket.symptom || 'Not recorded', '', '## Investigation timeline',
+    ...(entries.length ? entries.map(e => [
+      '### '+(e.type || 'Activity')+' — '+new Date(e.at || 0).toLocaleString(), e.text || '',
+      e.command ? 'Command: '+e.command : '', e.device ? 'Device: '+e.device : '', e.result ? 'Result: '+e.result : '',
+      e.output ? 'Output:\n\n'+fence+'text\n'+e.output+'\n'+fence : ''
+    ].filter(Boolean).join('\n\n')) : ['No ticket-linked activity recorded.'])
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/markdown;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='incident-'+String(ticket.id).toLowerCase()+'-report.md'; a.click(); URL.revokeObjectURL(url);
 }
 function refreshIncidentCenter() { if ($('#incidentsView') && !$('#incidentsView').hidden) renderIncidentCenter(); }
 
@@ -608,7 +630,7 @@ function cycleDeviceSession(direction) {
 }
 function clearActiveSessionOutput() {
   if (!SEL || !$('#tout')) return;
-  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\\n`;
+  $('#tout').textContent=`— Output cleared for ${SEL}. Command history is retained. —\n`;
   persistTerminalSession();
 }
 
@@ -756,7 +778,7 @@ function openConfigHistory() {
   const status=$('#termEvidenceStatus');
   if(!SEL){if(status)status.textContent='Select a device before viewing checkpoint history.';return;}
   const wrap=document.createElement('div');wrap.id='configHistoryModal';wrap.className='config-history-overlay';
-  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
+  const rows=snapshots.map((x,i)=>`<article class="config-history-item"><div class="config-history-meta"><b>${x.baseline?'KNOWN-GOOD BASELINE':i===0?'LATEST CHECKPOINT':'CHECKPOINT '+(i+1)}</b><time>${esc(new Date(x.at).toLocaleString())}</time></div><strong>${esc(x.label||x.hostname||x.device)} · ${esc(x.kind||'device')}</strong><small>${String(x.config||'').split('\n').filter(line=>line.trim()).length} non-empty configuration lines · ID ${esc(String(x.id))}</small>${x.note?'<p class="config-history-note">'+esc(x.note)+'</p>':''}<div class="config-history-actions"><button type="button" class="btn sm" data-config-compare="${esc(String(x.id))}">Compare current</button><button type="button" class="btn sm" data-config-baseline="${esc(String(x.id))}" ${x.baseline?'disabled':''}>${x.baseline?'Pinned baseline':'Set as baseline'}</button><button type="button" class="btn sm danger" data-config-delete="${esc(String(x.id))}" ${x.baseline?'disabled':''}>Delete</button></div></article>`).join('');
   wrap.innerHTML=`<section class="config-history-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · local archive</div><h2>Checkpoint history</h2><p class="dim">${esc(SEL)} · ${snapshots.length} saved checkpoint${snapshots.length===1?'':'s'}</p></div><button class="btn sm" id="closeConfigHistory">Close</button></div><div class="config-history-list">${rows||'<div class="config-drift-empty">No checkpoints saved for this device yet. Use Save checkpoint after establishing a known-good configuration.</div>'}</div><p class="dim config-drift-foot">Choose any historical snapshot as the baseline for a read-only comparison with the current running configuration.</p></section>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
