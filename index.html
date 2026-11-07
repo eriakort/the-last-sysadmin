@@ -6521,7 +6521,7 @@ function boot(restored) {
   else startMission();
   if (S.tracker && !S.finished) S.missionStart = Date.now();
   ensureClock();
-  updatePrompt(); render(); save(); scrollEnd();
+  updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
 /* ============================================================
