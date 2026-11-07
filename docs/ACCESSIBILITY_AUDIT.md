@@ -98,6 +98,11 @@ Implemented in the modal-focus remediation pull request:
 - Added Playwright regression coverage for dialog semantics, Tab wrapping, Escape, and focus restoration. These tests do not replace manual keyboard or assistive-technology validation.
 
 
+### Final validation — manual keyboard and screen-reader testing
+
+- Added [`ACCESSIBILITY_MANUAL_VALIDATION.md`](./ACCESSIBILITY_MANUAL_VALIDATION.md), a repeatable execution worksheet covering keyboard-only workflows in both applications, topology editing, dialogs/menus, focus visibility, status announcements, and an NVDA screen-reader pass.
+- **Status: not run.** This repository workflow cannot substitute for a hands-on session with a real browser and assistive technology. The worksheet records the recommended test setup, environment/version details, result states, defect log, and exit criteria. No manual pass or WCAG conformance is claimed.
+
 ### Batch 5 — accessible names, status announcements, and automated scanning
 
 Implemented in the Batch 5 remediation pull request:
