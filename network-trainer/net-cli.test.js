@@ -715,7 +715,8 @@ test('help presents network commands in readable groups with short descriptions'
   has(help.out, 'ip helper-address <ip>', 'DHCP relay usage');
   has(help.out, 'Relay DHCP requests to another subnet', 'DHCP relay explanation');
   eq(help.out.includes('commands: ip,'), false, 'old compressed command list removed');
-  eq(help.out.split('\\n').length > 35, true, 'reference is presented as separate lines');
+  eq(help.out.includes('\\n'), false, 'reference contains real line breaks, not literal escape sequences');
+  eq(help.out.split('\n').length > 35, true, 'reference is presented as separate lines');
 });
 
 test('ASA help separates firewall setup, objects, access control and troubleshooting', () => {
@@ -727,6 +728,8 @@ test('ASA help separates firewall setup, objects, access control and troubleshoo
   has(help.out, 'ACCESS CONTROL AND NAT', 'policy group');
   has(help.out, 'Permit or deny matching traffic', 'access-list description');
   has(help.out, 'implicit deny rule', 'security behaviour explained');
+  eq(help.out.includes('\\n'), false, 'ASA help contains real line breaks, not literal escape sequences');
+  eq(help.out.split('\n').length > 20, true, 'ASA reference is presented as separate lines');
 });
 
 let failed = 0;
