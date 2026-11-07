@@ -145,7 +145,7 @@ function dashboardSnapshot() {
     solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
   };
 }
-const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'infrastructure', 'knowledge', 'journal', 'changes']);
+const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'knowledge', 'journal', 'changes']);
 function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
@@ -168,11 +168,13 @@ function showWorkspaceView(view, options = {}) {
   knowledge.hidden = view !== 'knowledge';
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
-  cols.hidden = view !== 'workbench';
+  cols.hidden = view !== 'workbench' && view !== 'build';
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
+  const buildButton = $('#btnBuild');
+  if (buildButton) { if (view === 'build') buildButton.setAttribute('aria-current', 'page'); else buildButton.removeAttribute('aria-current'); }
   if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
   if (view === 'incidents') renderIncidentCenter();
   if (view === 'infrastructure') renderInfrastructureView();
@@ -877,6 +879,7 @@ function refresh() {
   wireTopo(); wireConfig(); wireSessionTabs();
   const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
   refreshOverview(); refreshInfrastructureView();
+  if (MODE === 'build') persistBuilderDraft();
 }
 function runMission(m, solvedKey, options = {}) {
   showWorkspaceView('workbench', options); RUN = startMission(m); SEL = RUN.mission.console;
@@ -1071,8 +1074,8 @@ function wireBrief() {
     $('#chkType').addEventListener('change', renderCheckArgs);
     $('#addChk').addEventListener('click', addCheckFromForm);
     document.querySelectorAll('#brief [data-delchk]').forEach(b => b.addEventListener('click', () => { AUTHOR.success.splice(+b.dataset.delchk, 1); $('#brief').innerHTML = renderAuthor(); wireBrief(); }));
-    $('#aTitle').addEventListener('input', e => { AUTHOR.title = e.target.value; });
-    $('#aObj').addEventListener('input', e => { AUTHOR.objective = e.target.value; });
+    $('#aTitle').addEventListener('input', e => { AUTHOR.title = e.target.value; persistBuilderDraft(); });
+    $('#aObj').addEventListener('input', e => { AUTHOR.objective = e.target.value; persistBuilderDraft(); });
     $('#exportScn').addEventListener('click', exportScenario);
     $('#importScn').addEventListener('change', e => { if (e.target.files[0]) importScenario(e.target.files[0]); });
     $('#playScn').addEventListener('click', playAuthored);
@@ -1353,14 +1356,28 @@ function addCheckFromForm() {
   AUTHOR.success.push(s); $('#brief').innerHTML = renderAuthor(); wireBrief();
 }
 function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { authored: true, mode: 'build' }, done: () => false, results: () => [] }; }
+const BUILDER_DRAFT_KEY = 'networkTrainerBuilderDraft';
+function persistBuilderDraft() {
+  if (MODE !== 'build' || !RUN || !RUN.net) return;
+  try { localStorage.setItem(BUILDER_DRAFT_KEY, JSON.stringify({ version:1, net:RUN.net, author:AUTHOR, selected:SEL, view:TOPO_VIEW })); } catch (e) {}
+}
+function loadBuilderDraft() {
+  try {
+    const d=JSON.parse(localStorage.getItem(BUILDER_DRAFT_KEY)||'null');
+    if (!d || d.version!==1 || !d.net || typeof d.net.devices!=='object' || !Array.isArray(d.net.links)) return null;
+    return d;
+  } catch(e) { return null; }
+}
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
-function enterBuild() {
-  showWorkspaceView('workbench');
+function enterBuild(options = {}) {
+  showWorkspaceView('build', options);
   MODE = 'build'; WIRE = null; SEL = null; TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
-  AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
-  RUN = builderRun(B.blank());
+  const draft=loadBuilderDraft();
+  if (draft) { AUTHOR=draft.author || {title:'My scenario',objective:'',ticket:null,hints:[],success:[]}; RUN=builderRun(draft.net); SEL=draft.selected || null; TOPO_VIEW=Array.isArray(draft.view)?draft.view:null; }
+  else { AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] }; RUN = builderRun(B.blank()); }
   renderAll();
-  termClear(); termEcho('— Build mode. Add devices, 🔗 Wire them, set addresses, then add objectives. ▶ Play to test.');
+  if (!draft) termClear();
+  termEcho(draft ? '— Restored your saved Build workspace.' : '— Build mode. Add devices, 🔗 Wire them, set addresses, then add objectives. ▶ Play to test.');
 }
 function exitBuild() { reloadMission(0); }
 function currentScenario() {
@@ -1661,9 +1678,14 @@ function boot() {
   wireConfigArchiveTools();
   wireGlobalPalette();
   $('#btnSearch').addEventListener('click',openPalette);
-  window.addEventListener('popstate', () => showWorkspaceView(workspaceViewFromUrl(), { historyMode: 'none' }));
+  window.addEventListener('popstate', () => {
+    const view=workspaceViewFromUrl();
+    if (view==='build') { enterBuild({historyMode:'none'}); return; }
+    if (view==='workbench' && MODE==='build') { reloadMission(0,{historyMode:'none'}); return; }
+    showWorkspaceView(view,{historyMode:'none'});
+  });
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
-  $('#navWorkbench').addEventListener('click', () => showWorkspaceView('workbench'));
+  $('#navWorkbench').addEventListener('click', () => { if (MODE==='build') reloadMission(0); else showWorkspaceView('workbench'); });
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
   $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
@@ -1687,8 +1709,8 @@ function boot() {
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
   const initialWorkspaceView = workspaceViewFromUrl();
-  reloadMission(0, { historyMode: 'none' });
-  showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' });
+  if (initialWorkspaceView === 'build') enterBuild({historyMode:'replace'});
+  else { reloadMission(0, { historyMode: 'none' }); showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' }); }
   renderOverview();
   initCloud();
 }
