@@ -4198,14 +4198,15 @@ function openTicketQueue() {
   <div class="help-note"><b>Shift discipline:</b> Acknowledge first. Read the symptom and impact. Gather evidence before changing configuration. Verify the affected service, then add a resolution note to your work journal.</div>
   <div class="row"><button class="btn" id="closeS">Close queue</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelector('#closeS').addEventListener('click', closeModal);
   const filter = () => { const value = wrap.querySelector('#queueFilter').value; wrap.querySelectorAll('.queue-ticket').forEach(row => { const t = tickets.find(x => x.id === row.dataset.ticket); row.hidden = value === 'open' ? t.status === 'resolved' : value !== 'all' && t.status !== value; }); };
   wrap.querySelector('#queueFilter').addEventListener('change', filter);
   wrap.querySelectorAll('[data-ack]').forEach(btn => btn.addEventListener('click', () => {
     const t = tickets.find(x => x.id === btn.dataset.ack); setTicketState(t.id, 'acknowledged', 'You');
     addJournalEntry({ type: 'ticket acknowledged', ticket: t.id, text: 'Accepted ownership. Reviewing impact and beginning triage.' });
-    wrap.remove(); openTicketQueue();
+    closeModal(); openTicketQueue();
   }));
   wrap.querySelectorAll('[data-work],[data-review]').forEach(btn => btn.addEventListener('click', () => {
     const t = tickets.find(x => x.id === (btn.dataset.work || btn.dataset.review));
@@ -4859,10 +4860,11 @@ function openSettings() {
     <button class="btn" id="reset">Reset progress</button>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelectorAll('.tm').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); wrap.remove(); openSettings(); }));
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelectorAll('.tm').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); closeModal(); openSettings(); }));
   $('#reset').addEventListener('click', () => { if (confirm('Erase all progress and XP?')) { PROG = { done: {}, xp: 0, theme: PROG.theme }; saveProg(); updateHud(); $('#brief').innerHTML = renderBrief(); wireBrief(); wrap.remove(); } });
-  $('#closeS').addEventListener('click', () => wrap.remove());
+  $('#closeS').addEventListener('click', closeModal);
 }
 
 /* ---------- wiring ---------- */
@@ -5483,8 +5485,9 @@ function openStats() {
     <table class="stats"><thead><tr><th>Ticket</th><th>Done</th><th>Time</th><th>Hints</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  $('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  $('#closeS').addEventListener('click', closeModal);
 }
 
 /* ---------- build mode: scenario authoring + design canvas ---------- */
@@ -5638,13 +5641,40 @@ async function initCloud() {
   updateClassBtn();
 }
 function updateClassBtn() { const b = $('#btnClass'); if (b) b.classList.toggle('on', !!AUTHUSER); }
-function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+let MODAL_RETURN_FOCUS = null;
+function modalFocusable(wrap) {
+  return [...wrap.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el => !el.hidden && el.getClientRects().length);
+}
+function wireModalDialog(wrap, preferredFocus) {
+  const dialog=wrap.querySelector('.sheet'), heading=dialog&&dialog.querySelector('h2,h1,[data-dialog-title]');
+  if(!dialog)return;
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.tabIndex=-1;
+  if(heading){if(!heading.id)heading.id='modal-title';dialog.setAttribute('aria-labelledby',heading.id);}else dialog.setAttribute('aria-label','Dialog');
+  MODAL_RETURN_FOCUS=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const initial=typeof preferredFocus==='string'?wrap.querySelector(preferredFocus):preferredFocus;
+  (initial||modalFocusable(wrap)[0]||dialog).focus();
+  wrap.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeModal();return;}
+    if(e.key!=='Tab')return;
+    const items=modalFocusable(wrap),first=items[0],last=items[items.length-1];
+    if(!items.length){e.preventDefault();dialog.focus();}
+    else if(e.shiftKey&&(document.activeElement===first||!wrap.contains(document.activeElement))){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&(document.activeElement===last||!wrap.contains(document.activeElement))){e.preventDefault();first.focus();}
+  });
+  wrap.addEventListener('focusout',()=>queueMicrotask(()=>{if(wrap.isConnected&&!wrap.contains(document.activeElement)){const items=modalFocusable(wrap);(items[0]||dialog).focus();}}));
+}
+function closeModal() {
+  const m=$('#modal');if(!m)return;m.remove();
+  const target=MODAL_RETURN_FOCUS;MODAL_RETURN_FOCUS=null;
+  if(target&&target.isConnected)target.focus();
+}
 function modalShell(title) {
   const wrap = document.createElement('div'); wrap.id = 'modal';
   wrap.innerHTML = `<div class="sheet"><h2>${esc(title)}</h2><div class="cx-body"></div><div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelector('#closeS').addEventListener('click', closeModal);
   return wrap;
 }
 function saveToLibrary() {
@@ -5798,30 +5828,41 @@ function collectPaletteResults(query) {
 }
 function renderPaletteResults() {
   const list=$('#paletteResults'); if(!list)return;
-  list.innerHTML=PALETTE_RESULTS.length?PALETTE_RESULTS.map((r,i)=>'<button type="button" class="palette-result'+(i===PALETTE_ACTIVE?' active':'')+'" data-palette-index="'+i+'" role="option" aria-selected="'+(i===PALETTE_ACTIVE)+'"><span class="palette-result-kind">'+esc(r.kind)+'</span><span class="palette-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.detail)+'</small></span><span class="palette-result-enter">↵</span></button>').join(''):'<div class="palette-empty">No matching devices, incidents, changes or commands.</div>';
+  list.innerHTML=PALETTE_RESULTS.length?PALETTE_RESULTS.map((r,i)=>'<button type="button" class="palette-result'+(i===PALETTE_ACTIVE?' active':'')+'" data-palette-index="'+i+'" id="palette-option-'+i+'" role="option" aria-selected="'+(i===PALETTE_ACTIVE)+'"><span class="palette-result-kind">'+esc(r.kind)+'</span><span class="palette-result-copy"><b>'+esc(r.title)+'</b><small>'+esc(r.detail)+'</small></span><span class="palette-result-enter">↵</span></button>').join(''):'<div class="palette-empty">No matching devices, incidents, changes or commands.</div>';
   list.querySelectorAll('[data-palette-index]').forEach(b=>b.addEventListener('click',()=>activatePaletteResult(Number(b.dataset.paletteIndex))));
+  const input=$('#paletteSearch');if(input){if(PALETTE_RESULTS.length)input.setAttribute('aria-activedescendant','palette-option-'+PALETTE_ACTIVE);else input.removeAttribute('aria-activedescendant');}
 }
 function activatePaletteResult(index) {
   const item=PALETTE_RESULTS[index]; if(!item)return;
   closePalette(); item.action();
 }
+let PALETTE_RETURN_FOCUS=null;
 function openPalette() {
   if($('#workstationPalette')){const input=$('#paletteSearch');$('#workstationPalette').hidden=false;input.value='';PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();return;}
-  const modal=document.createElement('div');modal.id='workstationPalette';modal.className='palette-overlay';modal.innerHTML='<section class="palette-dialog" role="dialog" aria-modal="true" aria-label="Search workstation"><div class="palette-search-row"><span aria-hidden="true">⌕</span><input id="paletteSearch" type="search" autocomplete="off" placeholder="Search devices, incidents, changes, commands…"><kbd>ESC</kbd></div><div id="paletteResults" class="palette-results" role="listbox"></div><footer><span>↑ ↓ Navigate</span><span>↵ Open</span><span>Ctrl K Search</span></footer></section>';
+  const modal=document.createElement('div');modal.id='workstationPalette';modal.className='palette-overlay';modal.innerHTML='<section class="palette-dialog" role="dialog" aria-modal="true" aria-label="Search workstation"><div class="palette-search-row"><span aria-hidden="true">⌕</span><input id="paletteSearch" type="search" aria-label="Search devices, incidents, changes and commands" autocomplete="off" placeholder="Search devices, incidents, changes, commands…"><kbd>ESC</kbd></div><div id="paletteResults" class="palette-results" role="listbox" aria-label="Search results"></div><footer><span>↑ ↓ Navigate</span><span>↵ Open</span><span>Ctrl K Search</span></footer></section>';
+  PALETTE_RETURN_FOCUS=document.activeElement instanceof HTMLElement?document.activeElement:null;
   document.body.appendChild(modal);
-  const input=modal.querySelector('#paletteSearch');
+  const input=modal.querySelector('#paletteSearch'),dialog=modal.querySelector('.palette-dialog');
+  const focusables=()=>[...dialog.querySelectorAll('input:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el=>el.getClientRects().length);
   input.addEventListener('input',()=>{PALETTE_RESULTS=collectPaletteResults(input.value);PALETTE_ACTIVE=0;renderPaletteResults();});
   input.addEventListener('keydown',e=>{
-    if(e.key==='ArrowDown'){e.preventDefault();PALETTE_ACTIVE=Math.min(PALETTE_RESULTS.length-1,PALETTE_ACTIVE+1);renderPaletteResults();}
+    if(e.key==='ArrowDown'){e.preventDefault();PALETTE_ACTIVE=Math.min(Math.max(0,PALETTE_RESULTS.length-1),PALETTE_ACTIVE+1);renderPaletteResults();}
     else if(e.key==='ArrowUp'){e.preventDefault();PALETTE_ACTIVE=Math.max(0,PALETTE_ACTIVE-1);renderPaletteResults();}
     else if(e.key==='Enter'){e.preventDefault();activatePaletteResult(PALETTE_ACTIVE);}
     else if(e.key==='Escape'){e.preventDefault();closePalette();}
-    else if(e.key==='Tab'){const first=modal.querySelector('.palette-result');if(first){e.preventDefault();first.focus();}}
   });
+  modal.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();closePalette();return;}
+    if(e.key!=='Tab')return;
+    const items=focusables();if(!items.length){e.preventDefault();dialog.focus();return;}
+    if(e.shiftKey&&(document.activeElement===items[0]||!modal.contains(document.activeElement))){e.preventDefault();items[items.length-1].focus();}
+    else if(!e.shiftKey&&(document.activeElement===items[items.length-1]||!modal.contains(document.activeElement))){e.preventDefault();items[0].focus();}
+  });
+  modal.addEventListener('focusout',()=>queueMicrotask(()=>{if(modal.isConnected&&!modal.contains(document.activeElement))input.focus();}));
   modal.addEventListener('click',e=>{if(e.target===modal)closePalette();});
   PALETTE_RESULTS=collectPaletteResults('');PALETTE_ACTIVE=0;renderPaletteResults();input.focus();
 }
-function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remove();}
+function closePalette(){const modal=$('#workstationPalette');if(!modal)return;modal.remove();const target=PALETTE_RETURN_FOCUS;PALETTE_RETURN_FOCUS=null;if(target&&target.isConnected)target.focus();}
 function wireGlobalPalette() {
   document.addEventListener('keydown',e=>{if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){const mod=e.ctrlKey||e.metaKey;if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redoTopology():undoTopology();return;}if(mod&&e.key.toLowerCase()==='y'){e.preventDefault();redoTopology();return;}if(mod&&e.key.toLowerCase()==='c'){e.preventDefault();copyTopologySelection();return;}if(mod&&e.key.toLowerCase()==='v'){e.preventDefault();pasteTopologySelection();return;}}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;} if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='d'&&SEL){e.preventDefault();try{const id=B.cloneDevice(RUN.net,SEL);selectDevice(id);refresh();}catch(err){flashStatus(err.message);}return;}if(e.key==='Delete'&&LINK_SEL!=null){e.preventDefault();B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();return;}}if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
 }
