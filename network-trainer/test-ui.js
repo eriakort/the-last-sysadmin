@@ -129,6 +129,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     if (linked) ok('Workbench evidence is saved against the selected incident');
     else fail('saved command evidence was not linked to the selected incident');
     await page.click('#navIncidents'); await page.waitForTimeout(120);
+    await page.locator('[data-incident-select="'+incidentId+'"]').click(); await page.waitForTimeout(80);
     const timeline = await page.locator('#incidentDetail').innerText();
     if (timeline.includes('command evidence') && timeline.includes(incidentId)) ok('linked command evidence appears in the incident timeline');
     else fail('incident timeline did not show linked command evidence');
