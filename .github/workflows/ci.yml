@@ -23,6 +23,12 @@ jobs:
       - name: Install Chromium for browser tests
         run: npx playwright install --with-deps chromium
 
+      - name: Run Supabase schema and RLS tests
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres createuser --superuser "$USER" || true
+          supabase/test/run.sh
+
       - name: Linux build, unit tests, verification, and generated-file check
         run: npm run check
 
