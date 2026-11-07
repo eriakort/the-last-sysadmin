@@ -324,14 +324,15 @@ function openTicketQueue() {
   <div class="help-note"><b>Shift discipline:</b> Acknowledge first. Read the symptom and impact. Gather evidence before changing configuration. Verify the affected service, then add a resolution note to your work journal.</div>
   <div class="row"><button class="btn" id="closeS">Close queue</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelector('#closeS').addEventListener('click', closeModal);
   const filter = () => { const value = wrap.querySelector('#queueFilter').value; wrap.querySelectorAll('.queue-ticket').forEach(row => { const t = tickets.find(x => x.id === row.dataset.ticket); row.hidden = value === 'open' ? t.status === 'resolved' : value !== 'all' && t.status !== value; }); };
   wrap.querySelector('#queueFilter').addEventListener('change', filter);
   wrap.querySelectorAll('[data-ack]').forEach(btn => btn.addEventListener('click', () => {
     const t = tickets.find(x => x.id === btn.dataset.ack); setTicketState(t.id, 'acknowledged', 'You');
     addJournalEntry({ type: 'ticket acknowledged', ticket: t.id, text: 'Accepted ownership. Reviewing impact and beginning triage.' });
-    wrap.remove(); openTicketQueue();
+    closeModal(); openTicketQueue();
   }));
   wrap.querySelectorAll('[data-work],[data-review]').forEach(btn => btn.addEventListener('click', () => {
     const t = tickets.find(x => x.id === (btn.dataset.work || btn.dataset.review));
@@ -985,10 +986,11 @@ function openSettings() {
     <button class="btn" id="reset">Reset progress</button>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelectorAll('.tm').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); wrap.remove(); openSettings(); }));
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelectorAll('.tm').forEach(b => b.addEventListener('click', () => { applyTheme(b.dataset.th); closeModal(); openSettings(); }));
   $('#reset').addEventListener('click', () => { if (confirm('Erase all progress and XP?')) { PROG = { done: {}, xp: 0, theme: PROG.theme }; saveProg(); updateHud(); $('#brief').innerHTML = renderBrief(); wireBrief(); wrap.remove(); } });
-  $('#closeS').addEventListener('click', () => wrap.remove());
+  $('#closeS').addEventListener('click', closeModal);
 }
 
 /* ---------- wiring ---------- */
@@ -1609,8 +1611,9 @@ function openStats() {
     <table class="stats"><thead><tr><th>Ticket</th><th>Done</th><th>Time</th><th>Hints</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  $('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  $('#closeS').addEventListener('click', closeModal);
 }
 
 /* ---------- build mode: scenario authoring + design canvas ---------- */
@@ -1764,13 +1767,40 @@ async function initCloud() {
   updateClassBtn();
 }
 function updateClassBtn() { const b = $('#btnClass'); if (b) b.classList.toggle('on', !!AUTHUSER); }
-function closeModal() { const m = $('#modal'); if (m) m.remove(); }
+let MODAL_RETURN_FOCUS = null;
+function modalFocusable(wrap) {
+  return [...wrap.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el => !el.hidden && el.getClientRects().length);
+}
+function wireModalDialog(wrap, preferredFocus) {
+  const dialog=wrap.querySelector('.sheet'), heading=dialog&&dialog.querySelector('h2,h1,[data-dialog-title]');
+  if(!dialog)return;
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.tabIndex=-1;
+  if(heading){if(!heading.id)heading.id='modal-title';dialog.setAttribute('aria-labelledby',heading.id);}else dialog.setAttribute('aria-label','Dialog');
+  MODAL_RETURN_FOCUS=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const initial=typeof preferredFocus==='string'?wrap.querySelector(preferredFocus):preferredFocus;
+  (initial||modalFocusable(wrap)[0]||dialog).focus();
+  wrap.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeModal();return;}
+    if(e.key!=='Tab')return;
+    const items=modalFocusable(wrap),first=items[0],last=items[items.length-1];
+    if(!items.length){e.preventDefault();dialog.focus();}
+    else if(e.shiftKey&&(document.activeElement===first||!wrap.contains(document.activeElement))){e.preventDefault();last.focus();}
+    else if(!e.shiftKey&&(document.activeElement===last||!wrap.contains(document.activeElement))){e.preventDefault();first.focus();}
+  });
+  wrap.addEventListener('focusout',()=>queueMicrotask(()=>{if(wrap.isConnected&&!wrap.contains(document.activeElement)){const items=modalFocusable(wrap);(items[0]||dialog).focus();}}));
+}
+function closeModal() {
+  const m=$('#modal');if(!m)return;m.remove();
+  const target=MODAL_RETURN_FOCUS;MODAL_RETURN_FOCUS=null;
+  if(target&&target.isConnected)target.focus();
+}
 function modalShell(title) {
   const wrap = document.createElement('div'); wrap.id = 'modal';
   wrap.innerHTML = `<div class="sheet"><h2>${esc(title)}</h2><div class="cx-body"></div><div class="row" style="margin-top:14px"><button class="btn primary" id="closeS">Done</button></div></div>`;
   document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#closeS').addEventListener('click', () => wrap.remove());
+  wireModalDialog(wrap,'#closeS');
+  wrap.addEventListener('click', e => { if (e.target === wrap) closeModal(); });
+  wrap.querySelector('#closeS').addEventListener('click', closeModal);
   return wrap;
 }
 function saveToLibrary() {
