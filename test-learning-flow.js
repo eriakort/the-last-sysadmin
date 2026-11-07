@@ -1,5 +1,6 @@
-// Browser regression for the first guided-learning pilot (Linux Chapter 1).
+// Browser regression for guided learning, curriculum coverage and mastery gates.
 const path = require('path');
+const fs = require('fs');
 const { chromium } = require('playwright');
 const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
@@ -10,6 +11,42 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   const ok = m => console.log('  ✓ ' + m);
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
+  // Every chapter should offer at least one complete six-part guide.
+  const gameSource = fs.readFileSync(path.join(process.cwd(), 'src/game.html'), 'utf8');
+  const missionLines = gameSource.split(/\r?\n/);
+  const missionStarts = [];
+  for (let line = 0; line < missionLines.length; line++) {
+    const match = missionLines[line].match(/^\s*\{\s*ch:\s*(\d+),\s*id:\s*'([^']+)'/);
+    if (match) missionStarts.push({ line, chapter: Number(match[1]), id: match[2] });
+  }
+  const guidedChapters = new Set();
+  const requiredGuideFields = ['concept', 'example', 'practice', 'investigate', 'review', 'question', 'choices', 'answer'];
+  for (let i = 0; i < missionStarts.length; i++) {
+    const start = missionStarts[i].line;
+    const end = i + 1 < missionStarts.length ? missionStarts[i + 1].line : missionLines.length;
+    const missionBlock = missionLines.slice(start, end).join('\n');
+    // Only inspect mission metadata before its story; later application code can
+    // contain unrelated "learning:" strings after the final mission definition.
+    const storyStart = missionBlock.indexOf('    story:');
+    const missionHeader = storyStart >= 0 ? missionBlock.slice(0, storyStart) : missionBlock;
+    if (!missionHeader.startsWith('    learning:') && !missionHeader.includes('\n    learning:')) continue;
+    const chapter = missionStarts[i].chapter;
+    guidedChapters.add(chapter);
+    for (const field of requiredGuideFields) {
+      if (!missionHeader.includes(field + ':') && !missionHeader.includes('"' + field + '":')) fail('chapter ' + (chapter + 1) + ' guide is missing ' + field);
+    }
+  }
+  if (guidedChapters.size === 35) ok('all 35 chapters have at least one complete six-part learning guide');
+  else fail('expected guided coverage for all 35 chapters, found ' + guidedChapters.size);
+  for (const id of ['survey', 'net-dig', 'ph-df', 'in-df', 'co-w', 'oom-status', 'gl-uptime']) {
+    const mission = missionStarts.find(m => m.id === id);
+    const next = mission && missionStarts.find(m => m.line > mission.line);
+    const block = mission ? missionLines.slice(mission.line, next ? next.line : missionLines.length).join('\n') : '';
+    const story = block.indexOf('    story:');
+    const header = story >= 0 ? block.slice(0, story) : block;
+    if (mission && (header.startsWith('    learning:') || header.includes('\n    learning:'))) ok('new chapter guide present: ' + id);
+    else fail('new chapter guide missing: ' + id);
+  }
 
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
@@ -200,6 +237,15 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await run('sudo usermod -s /usr/sbin/nologin jmorrow');
   if ((await page.textContent('#pTitle')) === 'Survey the machine') ok('Chapter 5 starts after the Chapter 4 access lockdown');
   else fail('did not reach the first Chapter 5 mission');
+
+  // The process-survey guide now has its own mastery gate. Prove the PID
+  // concept before completing the existing incident ticket.
+  await page.click('[data-learning-choice="user"]');
+  if ((await page.textContent('#learningFeedback')).includes('Not quite')) ok('Chapter 5 rejects confusing process owner with process ID');
+  else fail('Chapter 5 accepted an incorrect process-survey answer');
+  await page.click('[data-learning-choice="pid"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. The PID')) ok('Chapter 5 explains the process identifier');
+  else fail('Chapter 5 process-survey answer did not show its explanation');
 
   await run('ps aux');
   await run('submit 2447');
@@ -953,10 +999,18 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
 
-  // Complete the existing DNS/network diagnostics chapter before entering kernel work.
+  // The new DNS guide adds a mastery gate before the existing objective can advance.
+  // Exercise the incorrect answer, prove the concept, then complete the original ticket.
+  await checkLearningStages('Names to addresses', 'port', ['forward lookup', 'IP address', 'dig +short']);
   await run('dig +short halcyon-db01');
   await run('submit 10.0.4.20');
-  if ((await page.textContent('#pTitle')) === 'Addresses to names') ok('DNS lookup advances to reverse lookup');
+  if ((await page.textContent('#pTitle')) === 'Names to addresses') ok('DNS objective cannot bypass the mastery gate');
+  else fail('DNS objective advanced before mastery was proven');
+  await page.click('[data-learning-choice="ip"]');
+  if ((await page.textContent('#learningFeedback')).includes('Correct. DNS resolves')) ok('DNS mastery answer explains name resolution');
+  else fail('DNS mastery answer did not show its explanation');
+  await run('submit 10.0.4.20');
+  if ((await page.textContent('#pTitle')) === 'Addresses to names') ok('DNS lookup + mastery advances to reverse lookup');
   else fail('DNS lookup did not advance');
   await run('host 10.0.4.20');
   await run('submit halcyon-db01');
