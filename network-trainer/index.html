@@ -4738,15 +4738,15 @@ function refresh() {
   const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
   refreshOverview(); refreshInfrastructureView();
 }
-function runMission(m, solvedKey) {
-  showWorkspaceView('workbench'); RUN = startMission(m); SEL = RUN.mission.console;
+function runMission(m, solvedKey, options = {}) {
+  showWorkspaceView('workbench', options); RUN = startMission(m); SEL = RUN.mission.console;
   TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; PAN = null; INSPECTOR_TAB = 'overview';
   TERM_SESSIONS[SEL] = { history: [], index: -1, output: '' };
   HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]);
   startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear();
   termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`);
 }
-function reloadMission(i) { MODE = 'play'; PLAYING_DBID = null; showWorkspaceView('workbench'); runMission(chapters[i], chapters[i].id); }
+function reloadMission(i, options = {}) { MODE = 'play'; PLAYING_DBID = null; showWorkspaceView('workbench', options); runMission(chapters[i], chapters[i].id, options); }
 function startTimer() { if (TICK) clearInterval(TICK); TSTART = Date.now(); const t = $('#time'); if (t) t.textContent = '0:00'; TICK = setInterval(() => { const el = $('#time'); if (el && !SOLVED_NOW) el.textContent = fmtTime(Date.now() - TSTART); }, 1000); }
 function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; persistTerminalSession(); }
@@ -5542,11 +5542,11 @@ function boot() {
   document.addEventListener('pointermove', onDragMove);   // node dragging (attached once)
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
-  reloadMission(0);
-  showWorkspaceView(workspaceViewFromUrl(), { historyMode: 'replace' });
+  const initialWorkspaceView = workspaceViewFromUrl();
+  reloadMission(0, { historyMode: 'none' });
+  showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' });
   renderOverview();
   initCloud();
 }
 if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
-
 </script><script src="./workstation-shell.js"></script></body></html>
