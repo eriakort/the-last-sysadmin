@@ -155,7 +155,7 @@ function renderTopo() {
   const maxX = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[0])) + 100 : 800, maxY = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[1])) + 80 : 600;
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
   const view = TOPO_VIEW || [0, 0, maxX, maxY];
-  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="img" aria-label="network topology" tabindex="0">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)" pointer-events="none"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
+  let s = `<svg id="topo" viewBox="${view.join(' ')}" role="group" aria-label="Network topology">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)" pointer-events="none"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
   if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
@@ -577,7 +577,7 @@ function renderBrief() {
     <div class="label">Objective</div><p>${esc(m.objective)}</p>
     <div class="label">Hints</div><ol>${hints}</ol>
     <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>`;
-  return `<select id="pick">${opts}</select>
+  return `<select id="pick" aria-label="Select mission">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}${solved ? ' · <span class="done">solved</span>' : ''}</div>
     <h1>${esc(m.title)}</h1>
     ${renderTicket(m)}
@@ -677,8 +677,8 @@ function renderConfig() {
   const tabs = panels.map(p => `<button type="button" class="inspector-tab${p.id === INSPECTOR_TAB ? ' active' : ''}" data-inspector-tab="${p.id}">${p.label}</button>`).join('');
   const panel = panels.find(p => p.id === INSPECTOR_TAB);
   return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
-    <div class="inspector-tabs" role="tablist" aria-label="Device inspector sections">${tabs}</div>
-    <section class="inspector-panel" role="tabpanel">${panel.html}</section>`;
+    <div class="inspector-tabs" role="group" aria-label="Device inspector sections">${tabs}</div>
+    <section class="inspector-panel" role="region" aria-label="${esc(panel.label)}">${panel.html}</section>`;
 }
 
 /* ---------- actions ---------- */
