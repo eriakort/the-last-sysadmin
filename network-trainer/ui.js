@@ -1496,11 +1496,12 @@ function mountTerminalWindow() {
   win.setAttribute('aria-label', 'Floating device terminal');
   win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
+  win.hidden = true; // Start tucked away so the console never blocks workspace controls.
   document.body.appendChild(win);
   const restore = document.createElement('button');
   restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
   restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
-  restore.hidden = true; document.body.appendChild(restore);
+  restore.hidden = false; document.body.appendChild(restore);
   const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
   if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
     win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
