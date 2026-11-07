@@ -5984,7 +5984,7 @@ function renderJourney() {
   const currentLevel = LEARNING_LEVELS.findIndex(level => currentChapter >= level.first && currentChapter <= level.last);
   const pct = Math.round(completedMissions / totalMissions * 100);
   const openLevels = new Set([...root.querySelectorAll('details[open]')].map(el => Number(el.dataset.journeyLevel)));
-  if (!root.dataset.initialized) openLevels.add(currentLevel);
+  openLevels.add(currentLevel);
   const levelMarkup = LEARNING_LEVELS.map((level, li) => {
     const chapterRows = CHAPTERS.map((chapter, ci) => {
       if (ci < level.first || ci > level.last) return '';
