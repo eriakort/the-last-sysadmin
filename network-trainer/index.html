@@ -5322,7 +5322,7 @@ function renderKnowledgeCommands(items) {
   return items.map(x=>`<button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
 }
 function wireKnowledgeCommands(root) {
-  root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; input.focus();}}));
+  root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; openTerminalWindow(true);}}));
 }
 
 function addJournalEntry(entry) {
