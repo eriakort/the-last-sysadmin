@@ -378,3 +378,8 @@ Configuration checkpoints can be labelled and annotated when captured. The first
 ## Workbench fleet configuration assurance
 
 Use **Fleet assurance** in the device console to scan every device in the active simulator against its pinned known-good checkpoint. The overview reports drift, clean baselines, missing baselines, and unavailable configurations; supports device search and status filtering; and lets an operator jump directly to a device's drift review or capture its first baseline. A scan can be saved to the Engineering Journal or exported as a text report. The scan temporarily reads each simulator device's running configuration and restores the active console session context afterward. It is read-only and is not live network monitoring or a production compliance assessment.
+
+
+## Incident investigation report export
+
+From an incident record, use **Export incident report** to download a Markdown handover containing the ticket summary, reported symptom, ownership and SLA context, plus the complete ticket-linked investigation timeline. Command evidence includes its device, command, result and captured output. The export is generated locally from this browser's simulator journal; it is not sent to an external ticketing or document system.
