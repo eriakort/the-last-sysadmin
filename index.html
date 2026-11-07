@@ -3803,7 +3803,7 @@ const COMMAND_COACH = {
 const COACH_ACTIONS = new Set(['systemctl', 'apt', 'apt-get', 'ufw', 'mount', 'umount', 'git']);
 const COMMAND_INCIDENT_STEPS = [
   { command: 'systemctl', args: ['status', 'halcyon'], task: '1 · Inspect the service. Check the current status of halcyon without changing it.', success: 'Service state checked. Now inspect its recent logs.' },
-  { command: 'journalctl', args: ['-u', 'halcyon', '-n', '20'], task: '2 · Investigate the evidence. Read the latest 20 journal entries for halcyon.', success: 'Recent service logs reviewed. Now check whether the expected ports are listening.' },
+  { command: 'journalctl', args: ['-u', 'halcyon', '-n', '20'], task: '2 · Review recent logs. Read the latest 20 journal entries for halcyon.', success: 'Recent service logs reviewed. Now check whether the expected ports are listening.' },
   { command: 'ss', args: ['-tuln'], task: '3 · Check network listeners. List listening TCP and UDP sockets with numeric ports.', success: 'Listener state checked. Investigation complete — you have gathered service, log, and socket evidence.' }
 ];
 let commandIncidentActive = false;
