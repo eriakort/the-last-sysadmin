@@ -11,7 +11,7 @@ assert.notEqual(start, -1, 'sync merge helpers should exist in the app');
 assert.notEqual(end, -1, 'sync merge helpers should end before syncPull');
 const helpers = html.slice(start, end);
 const context = {};
-vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones;', context);
+vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones; this.syncApplyTombstones = syncApplyTombstones;', context);
 
 const dir = (children, mtime = 1) => ({ type: 'dir', children, mtime });
 const file = (content, mtime) => ({ type: 'file', content, mtime });
@@ -94,6 +94,24 @@ const state = (overrides = {}) => ({
     ['/home/a.txt', '/home/b.txt'],
     'progress merge should retain tombstones from both devices'
   );
+}
+
+{
+  const tombstones = [{ path: '/home/deleted.txt', deletedAt: '2026-11-07T10:00:00Z' }];
+  const staleTree = dir({ home: dir({
+    'deleted.txt': file('stale', Date.parse('2026-11-07T09:00:00Z')),
+    'new.txt': file('new', Date.parse('2026-11-07T11:00:00Z'))
+  }) });
+  const filtered = context.syncApplyTombstones(staleTree, '/', tombstones);
+  assert.equal(filtered.children.home.children['deleted.txt'], undefined, 'a stale local file must not return after server merge');
+  assert.equal(filtered.children.home.children['new.txt'].content, 'new', 'unrelated newer files must survive');
+}
+
+{
+  const tombstones = [{ path: '/home/recreated.txt', deletedAt: '2026-11-07T10:00:00Z' }];
+  const tree = dir({ home: dir({ 'recreated.txt': file('new copy', Date.parse('2026-11-07T10:01:00Z')) }) });
+  const filtered = context.syncApplyTombstones(tree, '/', tombstones);
+  assert.equal(filtered.children.home.children['recreated.txt'].content, 'new copy', 'a newer recreation must survive');
 }
 
 console.log('Progress sync merge tests passed.');
