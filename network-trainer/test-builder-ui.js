@@ -168,6 +168,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   else fail('not all drawing primitives were created');
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#topo');
+  // A restored floating terminal can overlap the canvas after reload; tuck it away for builder interactions.
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   if (await page.locator('#topo .topo-drawing').count() === 5) ok('topology drawings survive a Build refresh');
   else fail('topology drawings were not restored after refresh');
   await page.uncheck('#config [data-topo-layer="drawings"]');
