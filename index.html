@@ -141,6 +141,22 @@ button{font:inherit;cursor:pointer}
 #commandCoachDrillFeedback[data-result="success"]{color:var(--green)}
 #commandCoachDrillFeedback[data-result="retry"]{color:var(--amber)}
 #commandCoachDrillProgress{color:var(--muted);font-size:10px}
+.skill-progress{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.skill-progress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.skill-progress h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
+.skill-progress-head p{font-size:11.5px;color:var(--muted);margin:3px 0 0}
+#commandSkillCount{font:600 11px var(--f-mono);color:var(--green);white-space:nowrap}
+.skill-progress-track{height:6px;background:var(--led-off);border-radius:5px;overflow:hidden}
+.skill-progress-track span{display:block;height:100%;width:0;background:var(--green);transition:width .2s}
+.skill-progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.skill-progress-item{display:flex;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--raise);font-size:11px;min-width:0}
+.skill-progress-item[data-complete="true"]{border-color:color-mix(in srgb,var(--green) 55%,var(--line))}
+.skill-progress-mark{font:600 11px var(--f-mono);color:var(--muted);flex:none}
+.skill-progress-item[data-complete="true"] .skill-progress-mark{color:var(--green)}
+.skill-progress-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.skill-progress-state{margin-left:auto;color:var(--muted);font-size:9px;white-space:nowrap}
+.skill-progress-item[data-complete="true"] .skill-progress-state{color:var(--green)}
+@media(max-width:700px){.skill-progress-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -400,6 +416,11 @@ body.practicing{padding-top:40px}
         <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
       </section>
       <section class="journey" id="journey" aria-label="Linux learning journey"></section>
+      <section class="skill-progress" id="commandSkillProgress" aria-labelledby="commandSkillTitle">
+        <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Practise core commands and keep your progress between visits.</p></div><span id="commandSkillCount">0/7</span></div>
+        <div class="skill-progress-track" role="progressbar" aria-label="Command skills practised" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0"><span></span></div>
+        <div class="skill-progress-grid" id="commandSkillGrid"></div>
+      </section>
       <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
         <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
         <div class="fs-explorer-path" id="fsExplorerPath" aria-live="polite">/</div>
@@ -1029,9 +1050,10 @@ function reviveProc(name) {
   return { pid: s.mainpid, user: name === 'halcyon' ? 'halcyon' : 'root', cpu: 1.0, mem: 3.0, vsz: 900000, rss: 150000, tty: '?', stat: 'Ssl', start: '09:15', time: '0:00', cmd: s.exec };
 }
 function freshState() {
-  return { v: 1, mig: 8, sudo: false, vars: {}, units: {}, daemonReloaded: false, images: initImages(), containers: initContainers(), repo: initRepo(), procs: initProcs(), disks: initDisks(), mounts: initMounts(), packages: initPackages(), aptUpdated: false, services: initServices(), crontabs: initCrontabs(), firewall: { active: false, rules: [] }, net: initNet(), journal: initJournal(), curledLocal: false, tracker: false, times: [], missionStart: null, held: 0, heldPid: null, inodeBad: false, oom: null, iowait: false, compromise: false, intruderIp: INTRUDER_IP, sysctl: initSysctl(), lvm: initLvm(), dns: initDns(), aliases: initAliases(), umask: 18, fs: buildFS(), cwd: HOME, oldpwd: HOME, mission: 0, xp: 0, hints: {}, done: [], learned: [], history: [], readM: [], cmdsM: [], nudged: [], checkpoint: null, finished: false, lastStatus: 0 };
+  return { v: 1, mig: 8, sudo: false, vars: {}, units: {}, daemonReloaded: false, images: initImages(), containers: initContainers(), repo: initRepo(), procs: initProcs(), disks: initDisks(), mounts: initMounts(), packages: initPackages(), aptUpdated: false, services: initServices(), crontabs: initCrontabs(), firewall: { active: false, rules: [] }, net: initNet(), journal: initJournal(), curledLocal: false, tracker: false, times: [], missionStart: null, held: 0, heldPid: null, inodeBad: false, oom: null, iowait: false, compromise: false, intruderIp: INTRUDER_IP, sysctl: initSysctl(), lvm: initLvm(), dns: initDns(), aliases: initAliases(), umask: 18, fs: buildFS(), cwd: HOME, oldpwd: HOME, mission: 0, xp: 0, hints: {}, done: [], learned: [], history: [], readM: [], cmdsM: [], nudged: [], checkpoint: null, finished: false, lastStatus: 0, commandSkills: [] };
 }
 function migrate() {
+  S.commandSkills = Array.isArray(S.commandSkills) ? S.commandSkills.filter(name => Object.prototype.hasOwnProperty.call(COMMAND_DRILLS, name)) : [];
   if ((S.mig || 1) < 2) {
   const put = (path, content) => { const n = getNode(path); if (n && n.type === 'file') { n.content = content; delete n.size; } };
   put('/var/log/auth.log', AUTHLOG); put('/etc/shadow', SHADOW); put('/etc/group', GROUP);
@@ -3775,6 +3797,27 @@ const commandCoachSeen = new Set();
 const completedCommandDrills = new Set();
 let activeCommandDrill = null;
 let commandCoachLastExample = '';
+function renderCommandSkills() {
+  const root = document.getElementById('commandSkillProgress');
+  if (!root) return;
+  const completed = new Set(S.commandSkills || []);
+  const names = Object.keys(COMMAND_DRILLS);
+  const count = names.filter(name => completed.has(name)).length;
+  const track = root.querySelector('.skill-progress-track');
+  const bar = track && track.querySelector('span');
+  const progress = root.querySelector('[role="progressbar"]');
+  const countLabel = document.getElementById('commandSkillCount');
+  const summary = document.getElementById('commandSkillSummary');
+  if (countLabel) countLabel.textContent = count + '/' + names.length;
+  if (summary) summary.textContent = count === names.length ? 'All core command skills practised. Revisit any skill from the command coach.' : count + ' core command skill' + (count === 1 ? '' : 's') + ' practised. Your progress is saved on this device.';
+  if (bar) bar.style.width = (count / names.length * 100) + '%';
+  if (progress) progress.setAttribute('aria-valuenow', String(count));
+  const grid = document.getElementById('commandSkillGrid');
+  if (grid) grid.innerHTML = names.map(name => {
+    const done = completed.has(name);
+    return '<div class="skill-progress-item" data-skill="' + name + '" data-complete="' + done + '"><span class="skill-progress-mark" aria-hidden="true">' + (done ? '✓' : '○') + '</span><span class="skill-progress-name">' + name + '</span><span class="skill-progress-state">' + (done ? 'Practised' : 'Not yet') + '</span></div>';
+  }).join('');
+}
 function updateCommandCoach(name, args) {
   if (activeCommandDrill) {
     const drill = COMMAND_DRILLS[activeCommandDrill];
@@ -3783,6 +3826,9 @@ function updateCommandCoach(name, args) {
       const feedback = document.getElementById('commandCoachDrillFeedback');
       if (passed) {
         completedCommandDrills.add(activeCommandDrill);
+        S.commandSkills = Array.from(new Set([...(S.commandSkills || []), activeCommandDrill]));
+        save();
+        renderCommandSkills();
         feedback.textContent = drill.success;
         feedback.dataset.result = 'success';
         activeCommandDrill = null;
@@ -3793,7 +3839,7 @@ function updateCommandCoach(name, args) {
         feedback.dataset.result = 'retry';
       }
       feedback.hidden = false;
-      document.getElementById('commandCoachDrillProgress').textContent = 'Session practice: ' + completedCommandDrills.size + '/7 completed';
+      document.getElementById('commandCoachDrillProgress').textContent = 'Saved skills: ' + (S.commandSkills || []).length + '/7 practised';
     }
   }
   const panel = document.getElementById('commandCoach');
@@ -3819,7 +3865,7 @@ function updateCommandCoach(name, args) {
     drillButton.hidden = !COMMAND_DRILLS[name];
     drillButton.textContent = completedCommandDrills.has(name) ? 'Practise this skill again' : 'Practice this skill';
   }
-  document.getElementById('commandCoachDrillProgress').textContent = 'Session practice: ' + completedCommandDrills.size + '/7 completed';
+  document.getElementById('commandCoachDrillProgress').textContent = 'Saved skills: ' + (S.commandSkills || []).length + '/7 practised';
   document.getElementById('commandCoachParts').innerHTML = parts || '<span class="empty">No arguments</span>';
   document.getElementById('commandCoachExample').textContent = example;
   document.getElementById('commandCoachPitfall').textContent = 'Watch out: ' + pitfall;
@@ -5964,7 +6010,7 @@ function submitLine(line) {
   try { runLine(line); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
   if (clearRequested) { tout.innerHTML = ''; clearRequested = false; }
   afterCommand();
-  updatePrompt(); render(); save(); scrollEnd();
+  updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
 }
 function afterCommand() {
   if (S.finished) return;
