@@ -97,6 +97,18 @@ button{font:inherit;cursor:pointer}
 .learning-feedback.bad{color:var(--red)}
 /* A visible curriculum map makes the 35-chapter journey feel navigable without
    replacing the incident-driven terminal experience. */
+/* First-session orientation: short, dismissible, and tied to the real terminal. */
+.first-run{background:var(--raise);border:1px solid color-mix(in srgb,var(--blue) 45%,var(--line));border-radius:8px;padding:13px;display:flex;flex-direction:column;gap:9px}
+.first-run-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.first-run h2{font:600 15px var(--f-display);margin:0;color:var(--blue)}
+.first-run p{margin:0;color:var(--ink);font-size:12.5px}
+.first-run-steps{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.first-run-step{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;font-size:12px}
+.first-run-step strong{display:block;color:var(--ink);margin-bottom:2px}
+.first-run-actions{display:flex;gap:6px;flex-wrap:wrap}
+.first-run-actions .btn{font-size:11.5px;padding:5px 8px}
+.first-run-note{color:var(--muted)!important;font-size:11.5px!important}
+@media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
 .journey{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px}
 .journey-summary{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .journey-summary strong{font:600 15px var(--f-display);color:var(--amber)}
@@ -340,6 +352,20 @@ body.practicing{padding-top:40px}
         <h1 id="pTitle"></h1>
       </div>
       <p class="story" id="pStory"></p>
+      <section class="first-run" id="firstRunGuide" aria-labelledby="firstRunTitle" hidden>
+        <div class="first-run-head"><h2 id="firstRunTitle">Your first 2 minutes</h2><button class="btn" id="firstRunDismiss" type="button">Got it</button></div>
+        <p>You're connected to a <strong>simulated Linux server</strong>. Try a command, read the result, and experiment safely — this does not change your computer.</p>
+        <div class="first-run-steps">
+          <div class="first-run-step"><strong>1 · Read the prompt</strong><code>rookie@halcyon-web01:~$</code> means user, server, and current folder. The <code>$</code> is where you type.</div>
+          <div class="first-run-step"><strong>2 · Explore</strong><code>pwd</code> shows where you are; <code>ls</code> lists what is here; <code>whoami</code> shows your user.</div>
+        </div>
+        <div class="first-run-actions" aria-label="Try a starter command">
+          <button class="btn" type="button" data-onboard-command="whoami">Try whoami</button>
+          <button class="btn" type="button" data-onboard-command="pwd">Try pwd</button>
+          <button class="btn" type="button" data-onboard-command="ls -a">Try ls -a</button>
+        </div>
+        <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
+      </section>
       <section class="journey" id="journey" aria-label="Linux learning journey"></section>
       <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
       <div class="objective">
@@ -6174,7 +6200,25 @@ ${MOTD}
 Last login: Thu Oct 22 17:58:03 2026 from 10.0.4.31`);
   emitSys(restored ? 'Session restored. Your files and progress are as you left them.' : 'Type <code>help</code> to list commands, <code>man ls</code> to read a manual, or <code>hint</code> if you get stuck. If a ticket won\'t advance even though you did the step, type <code>check</code> and it will tell you what it is still waiting for.', 'hint');
 }
+function initFirstRunGuide(restored) {
+  const panel = $('#firstRunGuide');
+  if (!panel) return;
+  let completed = false;
+  try { completed = localStorage.getItem('lsa-first-run-complete') === '1'; } catch (e) {}
+  panel.hidden = !!restored || completed;
+  const dismiss = $('#firstRunDismiss');
+  if (dismiss) dismiss.addEventListener('click', () => {
+    panel.hidden = true;
+    try { localStorage.setItem('lsa-first-run-complete', '1'); } catch (e) {}
+  });
+  panel.querySelectorAll('[data-onboard-command]').forEach(button => button.addEventListener('click', () => {
+    tin.value = button.dataset.onboardCommand || '';
+    tin.focus({ preventScroll: true });
+    tin.setSelectionRange(tin.value.length, tin.value.length);
+  }));
+}
 function boot(restored) {
+  initFirstRunGuide(restored);
   motd(restored);
   if (restored) { const fixed = repairWorld(); if (fixed) { S.checkpoint = JSON.stringify(S.fs); emitSys(`Restored ${fixed} game file${fixed === 1 ? '' : 's'} that had been deleted, so you can keep going.`, 'hint'); } }
   if (restored && S.finished && S.mission < MISSIONS.length) {
