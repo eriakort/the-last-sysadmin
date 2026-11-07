@@ -947,7 +947,7 @@ function migrate() {
     S.mig = 8;
   }
 }
-function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
+function save() { if (typeof RACE !== 'undefined' && RACE.active) return; if (typeof PRACTICE !== 'undefined' && PRACTICE.active) return; S.syncUpdatedAt = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable: progress lasts for this visit only */ } if (typeof syncPushSoon === 'function') syncPushSoon(); }
 function load() {
   try { const raw = localStorage.getItem(KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 1 && s.fs) { S = s; migrate(); return true; } } } catch (e) { /* ignore */ }
   S = freshState(); return false;
