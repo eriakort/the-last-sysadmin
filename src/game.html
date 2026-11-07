@@ -6597,6 +6597,24 @@ function syncMergeTombstones(local, remote) {
   });
   return [...latest.values()];
 }
+function syncApplyTombstones(node, path, tombstones) {
+  if (!node) return null;
+  const deletion = (Array.isArray(tombstones) ? tombstones : [])
+    .filter(item => item && item.path === path)
+    .reduce((latest, item) => Math.max(latest, Date.parse(item.deletedAt) || 0), 0);
+  if (node.type === 'dir') {
+    const children = {};
+    for (const [name, child] of Object.entries(node.children || {})) {
+      const childPath = path === '/' ? '/' + name : path + '/' + name;
+      const kept = syncApplyTombstones(child, childPath, tombstones);
+      if (kept) children[name] = kept;
+    }
+    if (!Object.keys(children).length && deletion >= (Number(node.mtime) || 0)) return null;
+    return { ...node, children };
+  }
+  if (deletion && deletion >= (Number(node.mtime) || 0)) return null;
+  return node;
+}
 function syncMergeNode(local, remote) {
   if (!local) return remote ? JSON.parse(JSON.stringify(remote)) : local;
   if (!remote) return JSON.parse(JSON.stringify(local));
@@ -6636,6 +6654,7 @@ function mergeProgressStates(local, remote, remoteUpdatedAt) {
   merged.times = syncMergeList(local.times, remote.times, item => item && (item.id || item.startedAt || item.mission) ? JSON.stringify([item.id, item.startedAt, item.mission, item.ms]) : JSON.stringify(item));
   merged.hints = { ...(local.hints || {}), ...(remote.hints || {}) };
   merged.syncTombstones = syncMergeTombstones(local.syncTombstones, remote.syncTombstones);
+  if (merged.syncTombstones.length) merged.fs = syncApplyTombstones(merged.fs, '/', merged.syncTombstones);
   merged.xp = Math.max(Number(local.xp) || 0, Number(remote.xp) || 0);
   merged.mission = Math.max(Number(local.mission) || 0, Number(remote.mission) || 0);
   merged.finished = !!(local.finished || remote.finished);
