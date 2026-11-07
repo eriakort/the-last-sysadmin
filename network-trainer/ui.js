@@ -699,14 +699,43 @@ function reviewConfigDrift(checkpointId) {
   const removed=oldLines.filter(line=>line.trim()&&!newSet.has(line));
   const added=newLines.filter(line=>line.trim()&&!oldSet.has(line));
   const wrap=document.createElement('div');wrap.id='modal';
-  const changes=removed.length||added.length;
+  const changes=removed.length||added.length, reviewedAt=new Date();
+  const baselineLabel=latest?(latest.label||latest.hostname||latest.device):'No saved checkpoint';
+  const reportText=[
+    'NETWORK CONFIGURATION DRIFT REVIEW',
+    'Device: '+(device.hostname||SEL)+' ('+SEL+')',
+    'Reviewed: '+reviewedAt.toISOString(),
+    'Baseline: '+baselineLabel,
+    latest?'Baseline captured: '+new Date(latest.at).toISOString():'',
+    latest?'Baseline checkpoint ID: '+latest.id:'',
+    'Summary: '+added.length+' added; '+removed.length+' removed',
+    '',
+    'ADDED LINES',
+    ...(added.length?added.map(line=>'+ '+line):['(none)']),
+    '',
+    'REMOVED LINES',
+    ...(removed.length?removed.map(line=>'- '+line):['(none)'])
+  ].join('\n');
   wrap.innerHTML=`<div class="sheet sheet-wide config-drift-sheet"><div class="modal-head"><div><div class="eyebrow">Configuration assurance · simulator</div><h2>Configuration drift review</h2><p class="dim">${esc(device.hostname||SEL)} · ${esc(SEL)}</p></div><button class="btn sm" id="closeConfigDrift">Close</button></div>
-    <div class="config-drift-summary">${latest?`Baseline: ${esc(new Date(latest.at).toLocaleString())} · checkpoint ${esc(String(latest.id))}`:'No saved checkpoint for this device. Save one to establish a baseline.'} · ${added.length} added · ${removed.length} removed</div>
+    <div class="config-drift-summary">${latest?`Baseline: ${esc(baselineLabel)} · captured ${esc(new Date(latest.at).toLocaleString())} · checkpoint ${esc(String(latest.id))}`:'No saved checkpoint for this device. Save one to establish a baseline.'} · ${added.length} added · ${removed.length} removed</div>
     ${!latest?'<div class="config-drift-empty">Capture a checkpoint, make a configuration change, then review drift here.</div>':!changes?'<div class="config-drift-empty">✓ No line-level configuration drift detected against this checkpoint.</div>':`<div class="config-drift-columns"><section><h3>Added lines <span>${added.length}</span></h3><pre class="config-drift-added">${esc(added.join('\n')||'No added lines')}</pre></section><section><h3>Removed lines <span>${removed.length}</span></h3><pre class="config-drift-removed">${esc(removed.join('\n')||'No removed lines')}</pre></section></div>`}
-    <p class="dim config-drift-foot">Read-only comparison against the selected browser-local checkpoint. It does not apply, restore or validate configuration on physical equipment.</p></div>`;
+    <div class="row config-drift-actions"><button type="button" class="btn primary" id="saveConfigDriftEvidence" ${latest?'':'disabled'}>Save review to journal</button><button type="button" class="btn" id="downloadConfigDriftReport" ${latest?'':'disabled'}>Download report</button></div>
+    <p class="dim config-drift-foot">Read-only comparison against the selected browser-local checkpoint. Saving records evidence locally; it does not apply, restore or validate configuration on physical equipment.</p></div>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();});
   wrap.querySelector('#closeConfigDrift').addEventListener('click',()=>wrap.remove());
+  const saveEvidence=wrap.querySelector('#saveConfigDriftEvidence');
+  if(saveEvidence&&latest)saveEvidence.addEventListener('click',()=>{
+    addJournalEntry({type:'configuration drift review',device:SEL,command:'show running-config',result:changes?'drift detected':'no drift',text:'Compared current running configuration with "'+baselineLabel+'": '+added.length+' added and '+removed.length+' removed lines.',output:reportText});
+    saveEvidence.textContent='Saved to journal';saveEvidence.disabled=true;
+    if(status)status.textContent='Configuration drift review saved to the Engineering Journal.';
+  });
+  const downloadReport=wrap.querySelector('#downloadConfigDriftReport');
+  if(downloadReport&&latest)downloadReport.addEventListener('click',()=>{
+    const blob=new Blob([reportText+'\n'],{type:'text/plain;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='config-drift-'+SEL+'-'+reviewedAt.toISOString().slice(0,10)+'.txt';a.click();URL.revokeObjectURL(url);
+    if(status)status.textContent='Configuration drift report downloaded.';
+  });
 }
 function openConfigHistory() {
   const snapshots=(PROG.configArchives||[]).filter(x=>x.device===SEL).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
