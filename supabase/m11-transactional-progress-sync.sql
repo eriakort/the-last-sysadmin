@@ -67,8 +67,8 @@ begin
     v_tombstones:=v_incoming_tombstones;
     v_merged:=jsonb_set(p_data,'{fs}',public.sync_merge_node(null,p_data->'fs',v_tombstones,'/'),true);
   else
-    v_local_time:=nullif(v_existing->>'syncUpdatedAt','')::timestamptz;
-    v_remote_time:=case when p_data->>'syncUpdatedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z
+    v_local_time:=case when v_existing->>'syncUpdatedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$' then (v_existing->>'syncUpdatedAt')::timestamptz else null end;
+    v_remote_time:=case when p_data->>'syncUpdatedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$' then (p_data->>'syncUpdatedAt')::timestamptz else null end;
     if coalesce(v_remote_time,'-infinity'::timestamptz)>=coalesce(v_local_time,v_existing_updated_at,'-infinity'::timestamptz) then v_preferred:=p_data;
     else v_preferred:=v_existing; end if;
     select coalesce(jsonb_agg(item order by item->>'path'),'[]'::jsonb) into v_tombstones
@@ -78,8 +78,9 @@ begin
           union all select jsonb_array_elements(v_incoming_tombstones) item
         ) all_items
         where item->>'path' like '/%' and item->>'path'<>'/' and item ? 'deletedAt'
-          and item->>'path' !~ '(^|/)\\.\\.?(/|$)'
-          and item->>'deletedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z
+          and item->>'path' !~ '(^|/)[.][.]?(/|$)'
+          and item->>'deletedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$'
+        order by item->>'path',case when item->>'deletedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,3})?Z$' then (item->>'deletedAt')::timestamptz else '-infinity'::timestamptz end desc
       ) newest;
     v_merged:=jsonb_set(v_preferred,'{fs}',public.sync_merge_node(v_existing->'fs',p_data->'fs',v_tombstones,'/'),true);
     foreach v_key in array array['done','learned','history','readM','cmdsM','nudged','times'] loop
