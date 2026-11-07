@@ -87,3 +87,13 @@ Implemented in the first remediation pull request:
 - Dialogs and menus expose correct semantics and keyboard behavior.
 - Automated accessibility scans run in CI with no unexplained serious/critical violations.
 - Manual keyboard and screen-reader checks are recorded; no claim of WCAG conformance is made until a full audit supports it.
+
+### Batch 4 — modal and search-palette focus lifecycle
+
+Implemented in the modal-focus remediation pull request:
+
+- Added labelled dialog semantics and modal state to the Network Trainer settings, statistics, incident-queue, and classroom dialogs.
+- Added initial focus, forward/reverse Tab containment, Escape dismissal, backdrop dismissal, and return-to-opener focus restoration for those dialogs.
+- Applied the same keyboard focus-containment and restoration behavior to the global workstation search palette; gave its search field and result list explicit accessible names and exposed the active result through `aria-activedescendant`.
+- Added Playwright regression coverage for dialog semantics, Tab wrapping, Escape, and focus restoration. These tests do not replace manual keyboard or assistive-technology validation.
+
