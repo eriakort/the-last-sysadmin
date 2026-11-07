@@ -126,6 +126,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.textContent('#gridBtn')).includes('Grid off')) ok('canvas grid can be toggled'); else fail('grid toggle did not update');
   await page.click('#snapBtn'); await page.waitForTimeout(50);
   if ((await page.textContent('#snapBtn')).includes('Snap off')) ok('snap-to-grid can be disabled'); else fail('snap toggle did not update');
+  // The second h2 selection is a separate click, not the double-click gesture that opens its terminal.
+  await page.waitForTimeout(450);
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await clickNode('h2'); // place the note beside h2, away from the initial h1/h2 nodes
   page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
   await page.click('#noteBtn'); await page.waitForTimeout(70);
