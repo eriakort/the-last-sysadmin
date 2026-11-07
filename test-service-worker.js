@@ -18,8 +18,7 @@ const cacheFor = name => {
     store.set(name, {
       entries,
       async addAll(items) {
-        if (globalThis.failPrecache) throw new Error('precache failed');
-        for (const item of items) entries.set(String(item), makeResponse('cached:' + item));
+              for (const item of items) entries.set(String(item), makeResponse('cached:' + item));
       },
       async put(request, response) { entries.set(request.url || String(request), response); },
       async match(request) { return entries.get(request.url || String(request)) || entries.get(String(request)); }
@@ -50,7 +49,6 @@ let network = async request => { calls.fetch++; return makeResponse('network:' +
 const context = vm.createContext({
   self, caches, URL, Promise,
   fetch: request => network(request),
-  globalThis: { failPrecache: false }
 });
 vm.runInContext(source, context);
 
@@ -63,8 +61,9 @@ async function dispatch(name, properties) {
     respondWith(promise) { response = Promise.resolve(promise); }
   };
   handlers[name](event);
+  const result = response ? await response : undefined;
   if (task) await task;
-  return response ? await response : undefined;
+  return result;
 }
 
 (async () => {
@@ -97,7 +96,7 @@ async function dispatch(name, properties) {
   assert.strictEqual(calls.fetch, fetchesBefore, 'cache hit avoids a network request');
 
   const missing = { method: 'GET', mode: 'cors', url: 'https://sysadmin.example/missing.js' };
-  await assert.rejects(dispatch('fetch', { request: missing }), 'missing non-navigation assets must not receive HTML fallback');
+  await assert.rejects(dispatch('fetch', { request: missing }), undefined, 'missing non-navigation assets must not receive HTML fallback');
 
   const post = { method: 'POST', mode: 'cors', url: 'https://sysadmin.example/api' };
   assert.strictEqual(await dispatch('fetch', { request: post }), undefined, 'non-GET requests bypass the worker');
