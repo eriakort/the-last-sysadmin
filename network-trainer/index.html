@@ -93,7 +93,7 @@ textarea.wide{resize:vertical;font-family:inherit}
 .topo-context-menu .ctx-heading{padding:6px 9px 5px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
 .topo-context-menu button{display:block;width:100%;padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ink);text-align:left;font:inherit;font-size:12.5px;cursor:pointer}
 .topo-context-menu button:hover,.topo-context-menu button:focus-visible{outline:none;background:var(--raise);color:var(--amber)}
-.topo-context-menu button.danger{color:var(--red)}
+.topo-context-menu button.danger{color:var(--bad)}
 .topo-context-menu button:disabled{opacity:.4;cursor:not-allowed}
 .topo-context-menu .ctx-separator{height:1px;margin:4px 2px;background:var(--line)}
 .cx-body{max-height:60vh;overflow:auto}
@@ -4032,7 +4032,7 @@ function renderTopo() {
   if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
-  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
+  if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" data-link-index="${li}" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
   if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
@@ -5049,7 +5049,7 @@ function wireTopo() {
   if (svg) svg.addEventListener('contextmenu', e => {
     if (!canBuild()) return;
     const node = e.target.closest && e.target.closest('.node');
-    const edge = e.target.closest && e.target.closest('.edge');
+    const edge = e.target.closest && (e.target.closest('.edge') || e.target.closest('.edge-label'));
     const drawing = e.target.closest && e.target.closest('.topo-drawing');
     const note = e.target.closest && e.target.closest('.topo-note');
     if (node) showTopologyContextMenu(e, 'device', { id: node.dataset.dev });
