@@ -29,6 +29,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   else fail('device explorer search did not retain only the matching device');
   await search.fill('');
 
+  await page.locator('#terminalRestore').click();
+  await page.waitForSelector('#terminalWindow:not([hidden])');
+
   const sessionTabs = page.locator('#sessionTabs [data-session-device]');
   if (await sessionTabs.count() === devices) ok('console session tabs are provided for every device');
   else fail('console session tabs do not match the device inventory');
