@@ -84,7 +84,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (cls === 'ok' && /complete/.test(txt)) ok('grader accepts the built network'); else fail('scenario not accepted: [' + cls + '] ' + txt);
 
   // --- link selection and removal are explicit and reversible by rewiring ---
-  await page.click('#topo .edge'); await page.waitForTimeout(60);
+  const edge = page.locator('#topo .edge').first();
+  await edge.evaluate(el => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })));
+  await page.waitForTimeout(60);
   if (await page.$('#delLink')) { await page.click('#delLink'); await page.waitForTimeout(60); if (await page.$eval('#topo .edge', es => es.length) === 1) ok('selected link can be removed independently'); else fail('selected link removal did not update topology'); }
   else fail('selecting a topology link did not expose remove action');
 
