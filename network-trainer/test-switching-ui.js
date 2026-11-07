@@ -14,18 +14,23 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.waitForTimeout(90);
   };
   const node = id => '#topo .node[data-dev="' + id + '"]';
+  const openDeviceConsole = async id => {
+    await page.locator(node(id)).dblclick();
+    await page.waitForSelector('#terminalWindow:not([hidden])');
+    await page.waitForFunction(deviceId => document.querySelector('#termTarget')?.textContent === deviceId, id);
+  };
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(350);
   const missionOption = await page.locator('#pick option').filter({ hasText: 'Put Finance back in its VLAN' }).getAttribute('value');
   if (missionOption == null) throw new Error('access VLAN mission was not listed');
   await page.selectOption('#pick', missionOption);
   await page.waitForTimeout(180);
-  await page.click(node('h1'));
+  await openDeviceConsole('h1');
   await run('ping srv');
   if (!(await page.locator('#tout').innerText()).includes('no host with that address')) {
     throw new Error('VLAN mismatch should make the initial ping fail');
   }
-  await page.click(node('sw1'));
+  await openDeviceConsole('sw1');
   await run('show vlan brief');
   await run('vlan 10');
   await run('vlan 20');
@@ -39,7 +44,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await run('exit');
   const panel = await page.locator('#config').innerText();
   if (!panel.includes('VLAN 20')) throw new Error('switch panel did not reflect configured access VLANs');
-  await page.click(node('h1'));
+  await openDeviceConsole('h1');
   await run('ping srv');
   const output = await page.locator('#tout').innerText();
   if (!output.includes('reply received')) throw new Error('configured VLAN should restore reachability');
