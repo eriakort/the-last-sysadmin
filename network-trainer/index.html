@@ -3785,6 +3785,9 @@ function fromTopology(topo) {
   const out = { devices: clone(topo.devices), links: clone(topo.links) };
   if (topo.pos && Object.keys(topo.pos).length) out.pos = clone(topo.pos);
   if (Array.isArray(topo.notes) && topo.notes.length) out.notes = clone(topo.notes);
+  if (Array.isArray(topo.zones) && topo.zones.length) out.zones = clone(topo.zones);
+  if (Array.isArray(topo.drawings) && topo.drawings.length) out.drawings = clone(topo.drawings);
+  if (topo.layerVisibility && typeof topo.layerVisibility === 'object') out.layerVisibility = clone(topo.layerVisibility);
   return out;
 }
 
