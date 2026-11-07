@@ -1,5 +1,6 @@
 // Browser regression for the first guided-learning pilot (Linux Chapter 1).
 const path = require('path');
+const fs = require('fs');
 const { chromium } = require('playwright');
 const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
@@ -10,6 +11,33 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
   const ok = m => console.log('  ✓ ' + m);
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
+  // Every chapter should offer at least one complete six-part guide.
+  const gameSource = fs.readFileSync(path.join(process.cwd(), 'src/game.html'), 'utf8');
+  const missionLines = gameSource.split(/\r?\n/);
+  const missionStarts = [];
+  for (let line = 0; line < missionLines.length; line++) {
+    const match = missionLines[line].match(/^\s*\{\s*ch:\s*(\d+),\s*id:\s*'([^']+)'/);
+    if (match) missionStarts.push({ line, chapter: Number(match[1]), id: match[2] });
+  }
+  const guidedChapters = new Set();
+  const requiredGuideFields = ['concept', 'example', 'practice', 'investigate', 'review', 'question', 'choices', 'answer'];
+  for (let i = 0; i < missionStarts.length; i++) {
+    const start = missionStarts[i].line;
+    const end = i + 1 < missionStarts.length ? missionStarts[i + 1].line : missionLines.length;
+    const missionBlock = missionLines.slice(start, end).join('\n');
+    if (!missionBlock.includes('learning:')) continue;
+    const chapter = missionStarts[i].chapter;
+    guidedChapters.add(chapter);
+    for (const field of requiredGuideFields) {
+      if (!missionBlock.includes(field + ':') && !missionBlock.includes('"' + field + '":')) fail('chapter ' + (chapter + 1) + ' guide is missing ' + field);
+    }
+  }
+  if (guidedChapters.size === 35) ok('all 35 chapters have at least one complete six-part learning guide');
+  else fail('expected guided coverage for all 35 chapters, found ' + guidedChapters.size);
+  for (const id of ['survey', 'net-dig', 'ph-df', 'in-df', 'co-w', 'oom-status', 'gl-uptime']) {
+    if (missionStarts.some(m => m.id === id && missionLines.slice(m.line, missionStarts.find(n => n.line > m.line)?.line ?? missionLines.length).join('\n').includes('learning:'))) ok('new chapter guide present: ' + id);
+    else fail('new chapter guide missing: ' + id);
+  }
 
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
