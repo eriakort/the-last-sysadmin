@@ -6493,6 +6493,7 @@ function initFirstRunGuide(restored) {
   }));
 }
 function boot(restored) {
+  (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
   initFilesystemExplorer();
   motd(restored);
