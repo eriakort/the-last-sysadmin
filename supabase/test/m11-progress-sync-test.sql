@@ -20,8 +20,14 @@ select test.sync_expect('XP and mission use maximum',(select data->>'xp'='20' an
 select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1700000002000,"children":{"home":{"type":"dir","mtime":1700000002000,"children":{}}}},"done":["ticket-a","ticket-b"],"syncTombstones":[{"path":"/home/keep.txt","deletedAt":"2026-11-07T10:02:00Z"}],"syncUpdatedAt":"2026-11-07T10:02:00Z"}'::jsonb);
 select test.sync_expect('deleted file removed',(select not (data->'fs'->'children'->'home'->'children' ? 'keep.txt') from public.progress where user_id=:'U1'));
 select test.sync_expect('tombstone retained',(select data->'syncTombstones' @> '[{"path":"/home/keep.txt","deletedAt":"2026-11-07T10:02:00Z"}]'::jsonb from public.progress where user_id=:'U1'));
-select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1790000000000,"children":{"home":{"type":"dir","mtime":1790000000000,"children":{"keep.txt":{"type":"file","content":"recreated","mtime":1790000000000}}}}},"done":["ticket-a","ticket-b"],"syncTombstones":[{"path":"/home/keep.txt","deletedAt":"2026-11-07T10:02:00Z"}],"syncUpdatedAt":"2026-11-07T10:03:00Z"}'::jsonb);
+select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1800000000000,"children":{"home":{"type":"dir","mtime":1800000000000,"children":{"keep.txt":{"type":"file","content":"recreated","mtime":1800000000000}}}}},"done":["ticket-a","ticket-b"],"syncTombstones":[{"path":"/home/keep.txt","deletedAt":"2026-11-07T10:02:00Z"}],"syncUpdatedAt":"2026-11-07T10:03:00Z"}'::jsonb);
 select test.sync_expect('newer recreation survives',(select data->'fs'->'children'->'home'->'children'->'keep.txt'->>'content'='recreated' from public.progress where user_id=:'U1'));
+
+-- Recursive directory deletion must suppress stale descendants even when the
+-- receiving device has no copy of the deleted directory.
+select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1700000003000,"children":{"home":{"type":"dir","mtime":1700000003000,"children":{"gone":{"type":"dir","mtime":1700000003000,"children":{"nested.txt":{"type":"file","content":"stale","mtime":1700000003000}}}}}}},"done":[],"syncTombstones":[{"path":"/home/gone","deletedAt":"2026-11-07T10:04:00Z"},{"path":"/home/gone/nested.txt","deletedAt":"2026-11-07T10:04:00Z"}],"syncUpdatedAt":"2026-11-07T10:04:00Z"}'::jsonb);
+select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1700000004000,"children":{"home":{"type":"dir","mtime":1700000004000,"children":{}}}},"done":[],"syncUpdatedAt":"2026-11-07T10:05:00Z"}'::jsonb);
+select test.sync_expect('directory tombstone removes stale directory and descendants',(select not (data->'fs'->'children'->'home'->'children' ? 'gone') from public.progress where user_id=:'U1'));
 select test.login(:'U2');
 select public.merge_progress('{"v":1,"fs":{"type":"dir","children":{}},"done":["own"]}'::jsonb);
 select test.sync_expect('RPC writes authenticated user only',(select count(*)=1 from public.progress where user_id=:'U2'));
