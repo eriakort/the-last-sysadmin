@@ -701,6 +701,34 @@ test('HSRP rejects invalid groups, priorities, tracked interfaces and virtual IP
   eq(cli.run('standby 1 track wan decrement 20').code,0,'valid tracking accepted');
 });
 
+test('help presents network commands in readable groups with short descriptions', () => {
+  const cli = makeCLI(world(), 'r1');
+  const help = cli.run('help');
+  eq(help.code, 0, 'help succeeds');
+  has(help.out, 'DEVICE AND INTERFACE', 'interface group');
+  has(help.out, 'IP ROUTING', 'routing group');
+  has(help.out, 'CONNECTIVITY AND DIAGNOSTICS', 'diagnostics group');
+  has(help.out, 'NETWORK SERVICES', 'services group');
+  has(help.out, 'SECURITY AND FIREWALL', 'security group');
+  has(help.out, 'ping <host|ip>', 'ping usage');
+  has(help.out, 'Test whether a destination is reachable', 'ping explanation');
+  has(help.out, 'ip helper-address <ip>', 'DHCP relay usage');
+  has(help.out, 'Relay DHCP requests to another subnet', 'DHCP relay explanation');
+  eq(help.out.includes('commands: ip,'), false, 'old compressed command list removed');
+  eq(help.out.split('\\n').length > 35, true, 'reference is presented as separate lines');
+});
+
+test('ASA help separates firewall setup, objects, access control and troubleshooting', () => {
+  const net = { devices: { fw: { id: 'fw', kind: 'firewall', firewallOS: 'asa', ifaces: {}, routes: [] } }, links: [] };
+  const help = makeCLI(net, 'fw').run('help');
+  eq(help.code, 0, 'ASA help succeeds');
+  has(help.out, 'ASA FIREWALL COMMANDS', 'ASA heading');
+  has(help.out, 'NETWORK OBJECTS', 'object group');
+  has(help.out, 'ACCESS CONTROL AND NAT', 'policy group');
+  has(help.out, 'Permit or deny matching traffic', 'access-list description');
+  has(help.out, 'implicit deny rule', 'security behaviour explained');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
