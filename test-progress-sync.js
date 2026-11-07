@@ -5,13 +5,13 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const html = fs.readFileSync('src/game.html', 'utf8');
-const start = html.indexOf('function syncMergeNode(');
+const start = html.indexOf('function syncRecordDeletion(');
 const end = html.indexOf('async function syncPull()', start);
 assert.notEqual(start, -1, 'sync merge helpers should exist in the app');
 assert.notEqual(end, -1, 'sync merge helpers should end before syncPull');
 const helpers = html.slice(start, end);
 const context = {};
-vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates;', context);
+vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones; this.syncApplyTombstones = syncApplyTombstones; this.syncRecordDeletion = syncRecordDeletion;', context);
 
 const dir = (children, mtime = 1) => ({ type: 'dir', children, mtime });
 const file = (content, mtime) => ({ type: 'file', content, mtime });
@@ -71,6 +71,61 @@ const state = (overrides = {}) => ({
   const remote = state({ cwd: '/home/remote', syncUpdatedAt: '2026-11-07T11:00:00.000Z' });
   const merged = context.mergeProgressStates(local, remote);
   assert.equal(merged.cwd, '/home/remote', 'the newest snapshot should supply non-monotonic settings');
+}
+
+{
+  const merged = context.syncMergeTombstones(
+    [{ path: '/home/a.txt', deletedAt: '2026-11-07T10:00:00Z' }],
+    [
+      { path: '/home/a.txt', deletedAt: '2026-11-07T10:01:00Z' },
+      { path: '/home/b.txt', deletedAt: '2026-11-07T10:02:00Z' }
+    ]
+  );
+  assert.equal(merged.length, 2, 'tombstones should be deduplicated by path');
+  assert.equal(merged.find(item => item.path === '/home/a.txt').deletedAt, '2026-11-07T10:01:00Z');
+}
+
+{
+  const local = state({ syncTombstones: [{ path: '/home/a.txt', deletedAt: '2026-11-07T10:00:00Z' }] });
+  const remote = state({ syncTombstones: [{ path: '/home/b.txt', deletedAt: '2026-11-07T10:01:00Z' }] });
+  const merged = context.mergeProgressStates(local, remote);
+  assert.deepEqual(
+    Array.from(merged.syncTombstones, item => item.path).sort(),
+    ['/home/a.txt', '/home/b.txt'],
+    'progress merge should retain tombstones from both devices'
+  );
+}
+
+{
+  const tombstones = [{ path: '/home/deleted.txt', deletedAt: '2026-11-07T10:00:00Z' }];
+  const staleTree = dir({ home: dir({
+    'deleted.txt': file('stale', Date.parse('2026-11-07T09:00:00Z')),
+    'new.txt': file('new', Date.parse('2026-11-07T11:00:00Z'))
+  }) });
+  const filtered = context.syncApplyTombstones(staleTree, '/', tombstones);
+  assert.equal(filtered.children.home.children['deleted.txt'], undefined, 'a stale local file must not return after server merge');
+  assert.equal(filtered.children.home.children['new.txt'].content, 'new', 'unrelated newer files must survive');
+}
+
+{
+  const tombstones = [{ path: '/home/recreated.txt', deletedAt: '2026-11-07T10:00:00Z' }];
+  const tree = dir({ home: dir({ 'recreated.txt': file('new copy', Date.parse('2026-11-07T10:01:00Z')) }) });
+  const filtered = context.syncApplyTombstones(tree, '/', tombstones);
+  assert.equal(filtered.children.home.children['recreated.txt'].content, 'new copy', 'a newer recreation must survive');
+}
+
+{
+  context.S = state();
+  context.norm = path => path;
+  context.syncRecordDeletion('/home/archive', dir({
+    'one.txt': file('one', 1),
+    nested: dir({ 'two.txt': file('two', 2) })
+  }));
+  assert.deepEqual(
+    Array.from(context.S.syncTombstones, item => item.path).sort(),
+    ['/home/archive', '/home/archive/nested', '/home/archive/nested/two.txt', '/home/archive/one.txt'].sort(),
+    'recursive directory deletion should record every path'
+  );
 }
 
 console.log('Progress sync merge tests passed.');

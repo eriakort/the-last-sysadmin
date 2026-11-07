@@ -39,6 +39,11 @@ run "$REPO/supabase/m2-enrollment.sql" >/dev/null
 echo "Re-applying m2-enrollment.sql (idempotency check)..."
 run "$REPO/supabase/m2-enrollment.sql" >/dev/null 2>&1
 
+echo "Applying m11-transactional-progress-sync.sql..."
+run "$REPO/supabase/m11-transactional-progress-sync.sql" >/dev/null
+echo "Re-applying m11-transactional-progress-sync.sql..."
+run "$REPO/supabase/m11-transactional-progress-sync.sql" >/dev/null 2>&1
+
 for m in m4-enroll-by-email m6-missions m7-scenarios m10-authored-delivery; do
   echo "Applying $m.sql..."
   run "$REPO/supabase/$m.sql" >/dev/null
@@ -59,6 +64,9 @@ echo "Running authored-mission delivery tests (M10)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m10-delivery-test.sql"
 
 echo
+echo "Running transactional progress-sync tests (M11)..."
+"${PSQL[@]}" -d "$DB" -f "$HERE/m11-progress-sync-test.sql"
+
 echo "Cleaning up..."
 "${ADMIN[@]}" -c "drop database if exists $DB with (force);" >/dev/null
 echo "Done."

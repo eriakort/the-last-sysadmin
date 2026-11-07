@@ -14,8 +14,9 @@ Run these **in order**. All are safe to re-run.
 5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
 6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
 7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
+8. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
 
-Skipping any of 3–7 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+Skipping any of 3–8 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
 
 There is no server code — the game talks to Supabase directly with the anon
 key, and RLS is what keeps tenants apart.
@@ -28,6 +29,12 @@ key, and RLS is what keeps tenants apart.
 > by design today — a teacher can create and group missions, but there is not yet
 > a path that delivers them to students to *play*. That delivery step is a planned
 > follow-up; built-in missions are fully assignable now.
+
+## Progress sync hardening (M11)
+
+After applying M11, the browser reads its own progress row but can no longer write it directly. It sends progress through the authenticated `merge_progress(jsonb)` RPC. The function derives the user ID from `auth.uid()`, locks the user progress row, merges against the latest committed state, and writes the result in one transaction. Filesystem deletions are carried as path tombstones so stale copies do not reappear. A file or directory recreated with a newer modification time wins over an older tombstone.
+
+M11 is a required deployment migration. Until it is applied to the connected Supabase project, cloud writes are unavailable; the browser keeps its local save and retries on a later save or sign-in. Coordinate the migration with the matching frontend deployment: older frontend builds still use direct table upserts and will no longer be able to write after M11 revokes those privileges. Local browser saves are retained during the transition. Run `supabase/test/run.sh` before deploying.
 
 ## What M1 guarantees
 
