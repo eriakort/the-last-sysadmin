@@ -52,6 +52,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Overview navigation did not return to the landing view');
 
   await page.setViewportSize({ width: 390, height: 844 });
+  const appTabs = page.locator('nav.apptabs');
+  const linuxTab = appTabs.locator('a.apptab[href="../"]');
+  const networkTab = appTabs.locator('a.apptab[aria-current="page"]');
+  if (await appTabs.isVisible() && await linuxTab.isVisible() && await networkTab.isVisible())
+    ok('application switcher remains visible and both environments are reachable on mobile');
+  else fail('application switcher is hidden or an environment link is unavailable on mobile');
   const railBox = await rail.boundingBox();
   const mainBox = await page.locator('#mainArea').boundingBox();
   if (railBox && mainBox && Math.abs(railBox.width - 390) < 3 && mainBox.width >= 380)
