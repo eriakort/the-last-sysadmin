@@ -90,7 +90,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForTimeout(60);
   if (await page.$('#delLink')) {
     await page.click('#delLink'); await page.waitForTimeout(60);
-    const remaining = await page.$eval('#topo .edge', es => es.length);
+    const remaining = await page.locator('#topo .edge').count();
     if (remaining === 1) ok('selected link can be removed independently');
     else fail('selected link removal did not update topology (remaining links: ' + remaining + ')');
   } else fail('selecting a topology link did not expose remove action');
