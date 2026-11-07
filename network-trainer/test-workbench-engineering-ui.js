@@ -29,6 +29,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   else fail('device explorer search did not retain only the matching device');
   await search.fill('');
 
+  await page.locator('#terminalRestore').click();
+  await page.waitForSelector('#terminalWindow:not([hidden])');
+
   const sessionTabs = page.locator('#sessionTabs [data-session-device]');
   if (await sessionTabs.count() === devices) ok('console session tabs are provided for every device');
   else fail('console session tabs do not match the device inventory');
@@ -66,6 +69,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
     else fail('routing inspector tab did not render its panel');
   } else fail('routing inspector tab is missing for a routed endpoint');
 
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
+
   const svg = page.locator('#topo');
   const before = await svg.getAttribute('viewBox');
   await page.locator('#topoZoomIn').click();
@@ -79,10 +87,28 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
 
   const box = await svg.boundingBox();
   const viewBeforePan = (await svg.getAttribute('viewBox')).split(' ').map(Number);
-  await page.mouse.move(box.x + 5, box.y + 5);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 35, box.y + 25, { steps: 3 });
-  await page.mouse.up();
+  // Find a point that is genuinely hit-testable on the SVG's empty canvas. Fixed
+  // percentages can land on a device, drawing, or an overlapping floating control.
+  const panStart = await page.evaluate(() => {
+    const canvas = document.querySelector('#topo');
+    const rect = canvas.getBoundingClientRect();
+    const candidates = [[.5,.15],[.15,.5],[.85,.5],[.5,.85],[.15,.15],[.85,.15],[.15,.85],[.85,.85],[.5,.35],[.35,.5]];
+    for (const [rx, ry] of candidates) {
+      const x = rect.left + rect.width * rx, y = rect.top + rect.height * ry;
+      const hit = document.elementFromPoint(x, y);
+      if (hit && canvas.contains(hit) && !hit.closest('.node, .topo-drawing, .edge, .edge-label, #terminalWindow'))
+        return { x, y, hit: hit.tagName.toLowerCase() };
+    }
+    return null;
+  });
+  if (!panStart) fail('could not find an unobstructed empty point on the topology canvas');
+  else {
+    const start = { x: panStart.x, y: panStart.y };
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + Math.min(35, box.width * .08), start.y + Math.min(25, box.height * .08), { steps: 5 });
+    await page.mouse.up();
+  }
   const viewAfterPan = (await svg.getAttribute('viewBox')).split(' ').map(Number);
   if (Math.abs(viewAfterPan[0] - viewBeforePan[0]) > 0.1 || Math.abs(viewAfterPan[1] - viewBeforePan[1]) > 0.1)
     ok('topology canvas pans independently of device dragging');

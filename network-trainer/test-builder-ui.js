@@ -15,7 +15,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const node = d => `#topo .node[data-dev="${d}"]`;
   const clickNode = async d => { await page.click(node(d)); await page.waitForTimeout(60); };
   const addDev = async kind => { await page.click(`#config .pal[data-add="${kind}"]`); await page.waitForTimeout(70); };
-  const wire = async (a, b) => { await clickNode(a); await page.click('#wireBtn'); await page.waitForTimeout(40); await clickNode(b); };
+  const wire = async (a, b) => { await clickNode(a); await page.click('#wireBtn'); await page.waitForTimeout(40); await clickNode(b); await page.waitForTimeout(450); };
   const setAddr = async (d, ip, pfx) => {
     await clickNode(d);
     await page.fill(`#config .ifrow[data-if="eth0"] .ip`, ip);     // address first (kept),
@@ -78,6 +78,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'build');
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#aTitle');
+  // Reload restores the floating terminal; minimize it before continuing canvas authoring.
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
   if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
@@ -91,6 +96,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.click('#delDev'); await page.waitForTimeout(60);
   } else fail('duplicate control missing for selected device');
   // Multi-select, clipboard and history controls.
+  // Avoid completing the browser's double-click gesture from the preceding device selection;
+  // double-click intentionally opens that device's floating terminal.
+  await page.waitForTimeout(450);
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await page.click('#topo .node[data-dev="h1"]');
   await page.click('#topo .node[data-dev="h2"]', { modifiers: ['Shift'] });
   await page.waitForTimeout(50);
@@ -114,6 +126,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.textContent('#gridBtn')).includes('Grid off')) ok('canvas grid can be toggled'); else fail('grid toggle did not update');
   await page.click('#snapBtn'); await page.waitForTimeout(50);
   if ((await page.textContent('#snapBtn')).includes('Snap off')) ok('snap-to-grid can be disabled'); else fail('snap toggle did not update');
+  // The second h2 selection is a separate click, not the double-click gesture that opens its terminal.
+  await page.waitForTimeout(450);
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await clickNode('h2'); // place the note beside h2, away from the initial h1/h2 nodes
   page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
   await page.click('#noteBtn'); await page.waitForTimeout(70);
@@ -168,6 +186,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   else fail('not all drawing primitives were created');
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#topo');
+  // A restored floating terminal can overlap the canvas after reload; tuck it away for builder interactions.
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   if (await page.locator('#topo .topo-drawing').count() === 5) ok('topology drawings survive a Build refresh');
   else fail('topology drawings were not restored after refresh');
   await page.uncheck('#config [data-topo-layer="drawings"]');
@@ -212,6 +235,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await setAddr('h2', '10.0.1.20', '24');
 
   // --- grade ---
+  // Device selection can intentionally open the floating terminal on a double-click;
+  // tuck it away before using the scenario controls underneath it.
+  if (await page.locator('#terminalWindow:not([hidden])').count()) {
+    await page.locator('#terminalMinimize').click();
+    await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+  }
   await page.click('#check'); await page.waitForTimeout(120);
   const cls = await page.getAttribute('#status', 'class');
   const txt = await page.textContent('#status');

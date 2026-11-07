@@ -57,9 +57,14 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.getAttribute('#status', 'class')) === 'bad') ok('Check shows unresolved before the fix');
   else fail('expected unresolved status before the fix');
 
+  // The floating console starts minimized; explicitly open it before using commands.
+  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
+
   // --- solve via the TERMINAL (console is h1 by default) ---
   await page.fill('#tin', 'ip addr add 10.0.1.10/24 dev eth0');
   await page.press('#tin', 'Enter'); await page.waitForTimeout(150);
+  // The floating console intentionally overlays the workspace while open; tuck it away before testing workspace controls.
+  await page.click('#terminalMinimize'); await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
   await page.click('#check'); await page.waitForTimeout(100);
   if ((await page.getAttribute('#status', 'class')) === 'ok') ok('solved first-contact via the terminal');
   else fail('terminal solution did not resolve: ' + (await page.textContent('#status')));
@@ -112,6 +117,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#modal #closeS'); await page.waitForTimeout(100);
 
   // --- terminal command history (ArrowUp recalls last command) ---
+  // The terminal is minimized after reload; restore it before interacting with its input.
+  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
   await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
   await page.press('#tin', 'ArrowUp'); await page.waitForTimeout(60);
   if ((await page.inputValue('#tin')) === 'ip addr') ok('ArrowUp recalls the previous command');
@@ -125,6 +132,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.selectOption('#termEvidenceTicket', incidentId);
     await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
     await page.click('#termSaveEvidence'); await page.waitForTimeout(100);
+    // Hide the floating terminal before interacting with the incident list beneath it.
+    await page.click('#terminalMinimize'); await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
     const linked = await page.evaluate(id => (PROG.journal || []).some(e => e.type === 'command evidence' && e.ticket === id && e.output), incidentId);
     if (linked) ok('Workbench evidence is saved against the selected incident');
     else fail('saved command evidence was not linked to the selected incident');
@@ -157,7 +166,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('.topo-context-menu [data-action="duplicate"]'); await page.waitForTimeout(100);
   if (await page.locator('#topo .node').count() === 2) ok('context menu duplicates a device');
   else fail('context menu did not duplicate the device');
-  await page.locator('#topo .node').first().click({ button: 'right' });
+  // Dispatch the contextmenu event directly after the duplicate refreshes the SVG.
+  // This keeps the assertion focused on the app's context-menu handler rather than
+  // browser-specific right-click synthesis against a freshly-rendered SVG node.
+  await page.locator('#topo .node').first().dispatchEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 150 });
   await page.waitForSelector('.topo-context-menu');
   await page.click('.topo-context-menu [data-action="connect"]');
   await page.locator('#topo .node').nth(1).click(); await page.waitForTimeout(100);

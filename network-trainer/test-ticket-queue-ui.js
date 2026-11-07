@@ -40,15 +40,23 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   else fail('ticket did not launch its linked scenario');
 
   // This incident requires a diagnosis before the configuration check is unlocked.
+  // Keep the floating terminal minimized while interacting with the diagnosis panel.
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
   else fail('correct ticket diagnosis did not unlock verification');
+
+  // Restore the terminal only after diagnosis, when command entry is required.
+  await page.locator('#terminalRestore').click();
+  await page.waitForSelector('#terminalWindow:not([hidden])');
 
   const input = page.locator('#tin');
   await input.fill('ip addr add 10.0.1.10/24 dev eth0');
   await input.press('Enter');
   await input.fill('ping srv');
   await input.press('Enter');
+  // The terminal overlays the scenario controls; minimize it before verification.
+  await page.locator('#terminalMinimize').click();
+  await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
   await page.locator('#check').click();
   await page.waitForTimeout(120);
   if (/ticket resolved/i.test(await page.locator('#status').innerText()))

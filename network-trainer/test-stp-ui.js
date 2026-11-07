@@ -14,13 +14,23 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.waitForTimeout(100);
   };
   const node = id => '#topo .node[data-dev="' + id + '"]';
+  const openDeviceConsole = async id => {
+    // Hide the current floating console before opening another device.
+    if (await page.locator('#terminalWindow:not([hidden])').count()) {
+      await page.locator('#terminalMinimize').click();
+      await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+    }
+    await page.locator(node(id)).dblclick();
+    await page.waitForSelector('#terminalWindow:not([hidden])');
+    await page.waitForFunction(deviceId => document.querySelector('#termTarget')?.textContent === deviceId, id);
+  };
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(350);
   const option = await page.locator('#pick option').filter({ hasText: 'Stop the loop, keep the link' }).getAttribute('value');
   if (option == null) throw new Error('STP mission was not listed');
   await page.selectOption('#pick', option);
   await page.waitForTimeout(180);
-  await page.click(node('sw3'));
+  await openDeviceConsole('sw3');
   await run('show spanning-tree vlan 10');
   let output = await page.locator('#tout').innerText();
   if (!output.includes('Root bridge: sw1')) throw new Error('default STP root should initially be sw1');
@@ -28,10 +38,10 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await run('show spanning-tree vlan 10');
   output = await page.locator('#tout').innerText();
   if (!output.includes('Root bridge: sw3')) throw new Error('STP priority change did not elect sw3');
-  await page.click(node('h1'));
+  await openDeviceConsole('h1');
   await run('ping srv');
   if (!(await page.locator('#tout').innerText()).includes('reply received')) throw new Error('endpoint ping should populate switch MAC tables');
-  await page.click(node('sw1'));
+  await openDeviceConsole('sw1');
   await run('show mac address-table dynamic');
   output = await page.locator('#tout').innerText();
   if (!output.includes('srv/eth0')) throw new Error('remote server MAC was not learned through the forwarding path');
@@ -40,7 +50,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (!panel.includes('spanning tree') || !panel.includes('learned mac addresses')) {
     throw new Error('switch panel is missing STP or MAC learning details; panel=' + panel + '; pageErrors=' + errors.join(' | '));
   }
-  await page.click(node('h1'));
+  await openDeviceConsole('h1');
   await run('ping srv');
   output = await page.locator('#tout').innerText();
   if (!output.includes('reply received')) throw new Error('STP should preserve endpoint reachability');

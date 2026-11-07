@@ -38,7 +38,14 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('reference command is handed to the Workbench console');
   else fail('command handoff to Workbench failed');
 
+  // The floating terminal is mounted outside the Workbench layout. Focus the
+  // actual command field and wait for its persisted journal record before
+  // navigating away, rather than racing the view transition against the submit.
   await page.locator('#tin').press('Enter');
+  await page.waitForFunction(() => {
+    const progress = JSON.parse(localStorage.getItem('nettrainer') || '{}');
+    return Array.isArray(progress.journal) && progress.journal.some(entry => entry.command === 'show vlan brief');
+  }, null, { timeout: 3000 });
   await page.locator('#navJournal').click();
   if (await page.locator('#journalView').isVisible()) ok('Journal is a first-class workspace destination');
   else fail('Journal workspace did not open');

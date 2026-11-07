@@ -26,6 +26,7 @@ let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SH
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true };
 let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null;
+let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -1220,6 +1221,15 @@ function wireTopo() {
         if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
         WIRE = null; refresh(); return;
       }
+      const clickAt = Date.now();
+      if (LAST_NODE_ACTIVATION.id === id && clickAt - LAST_NODE_ACTIVATION.at < 450) {
+        LAST_NODE_ACTIVATION = { id:null, at:0 };
+        e.preventDefault();
+        selectDevice(id);
+        openTerminalWindow(true);
+        return;
+      }
+      LAST_NODE_ACTIVATION = { id, at:clickAt };
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
@@ -1438,7 +1448,7 @@ function renderKnowledgeCommands(items) {
   return items.map(x=>`<button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
 }
 function wireKnowledgeCommands(root) {
-  root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; input.focus();}}));
+  root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; openTerminalWindow(true);}}));
 }
 
 function addJournalEntry(entry) {
@@ -1476,6 +1486,62 @@ function exportJournal() {
 }
 function openJournal() { showWorkspaceView('journal'); }
 function openHelp() { showWorkspaceView('knowledge'); }
+function mountTerminalWindow() {
+  const term = $('#term');
+  if (!term || $('#terminalWindow')) return;
+  const win = document.createElement('section');
+  win.id = 'terminalWindow';
+  win.className = 'terminal-window';
+  win.setAttribute('role', 'region');
+  win.setAttribute('aria-label', 'Floating device terminal');
+  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
+  win.querySelector('.terminal-window-content').appendChild(term);
+  win.hidden = true; // Start tucked away so the console never blocks workspace controls.
+  document.body.appendChild(win);
+  const restore = document.createElement('button');
+  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
+  restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
+  restore.hidden = false; document.body.appendChild(restore);
+  const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
+  if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+    win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
+    win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
+    win.style.right = 'auto'; win.style.bottom = 'auto';
+  }
+  const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
+  $('#terminalMinimize').addEventListener('click', minimize);
+  restore.addEventListener('click', () => openTerminalWindow(true));
+  const bar = win.querySelector('.terminal-window-titlebar');
+  let drag = null;
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('button') || e.button !== 0) return;
+    const rect = win.getBoundingClientRect();
+    drag = { x:e.clientX, y:e.clientY, left:rect.left, top:rect.top };
+    bar.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  bar.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const left = Math.max(0, Math.min(window.innerWidth - 220, drag.left + e.clientX - drag.x));
+    const top = Math.max(0, Math.min(window.innerHeight - 90, drag.top + e.clientY - drag.y));
+    win.style.left = left + 'px'; win.style.top = top + 'px'; win.style.right = 'auto'; win.style.bottom = 'auto';
+  });
+  const finishDrag = () => {
+    if (!drag) return;
+    drag = null;
+    const rect = win.getBoundingClientRect();
+    try { localStorage.setItem('network-terminal-window-v1', JSON.stringify({ left:rect.left, top:rect.top })); } catch (_) {}
+  };
+  bar.addEventListener('pointerup', finishDrag);
+  bar.addEventListener('pointercancel', finishDrag);
+}
+function openTerminalWindow(focusInput = false) {
+  const win = $('#terminalWindow'), restore = $('#terminalRestore');
+  if (!win) return;
+  win.hidden = false;
+  if (restore) restore.hidden = true;
+  win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
+  if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
+}
 function wireTerm() {
   const inp = $('#tin');
   inp.addEventListener('keydown', e => {
@@ -1889,6 +1955,7 @@ function boot() {
     </div>
       </div>
     </div>`;
+  mountTerminalWindow();
   wireTerm();
   wireEvidenceTools();
   wireConfigArchiveTools();
