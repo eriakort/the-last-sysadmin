@@ -25,10 +25,10 @@ key, and RLS is what keeps tenants apart.
 > dashboard (**Authentication → Providers**), not in SQL. Email + magic-link work
 > with no extra setup.
 
-> **Authoring vs. delivery:** `authored_missions` and `scenarios` are author-only
-> by design today — a teacher can create and group missions, but there is not yet
-> a path that delivers them to students to *play*. That delivery step is a planned
-> follow-up; built-in missions are fully assignable now.
+> **Authoring and delivery:** Teachers can create and group authored missions in
+> `authored_missions` and `scenarios`. M10 adds `get_class_missions()` so enrolled
+> students can retrieve authored missions assigned directly or through a scenario.
+> Built-in missions remain assignable as well.
 
 ## Progress sync hardening (M11)
 
