@@ -15,6 +15,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   };
   const node = id => '#topo .node[data-dev="' + id + '"]';
   const openDeviceConsole = async id => {
+    // The current device console floats above the topology; tuck it away before opening another device.
+    if (await page.locator('#terminalWindow:not([hidden])').count()) {
+      await page.locator('#terminalMinimize').click();
+      await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
+    }
     await page.locator(node(id)).dblclick();
     await page.waitForSelector('#terminalWindow:not([hidden])');
     await page.waitForFunction(deviceId => document.querySelector('#termTarget')?.textContent === deviceId, id);
