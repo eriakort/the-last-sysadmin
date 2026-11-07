@@ -22,7 +22,8 @@ let MODE = 'play';                                 // 'play' | 'build' (authorin
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
 let WIRE = null;                                   // first endpoint picked while wiring a link
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
-let LASTPOS = {}, DRAG = null, PAN = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null; // topology interaction state
+let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
+let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
@@ -115,7 +116,7 @@ function renderTopo() {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
-    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''}" data-dev="${id}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="70" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${id}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${id}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="70" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${id}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text></g>`;
   }
   return s + '</svg>';
 }
@@ -935,12 +936,36 @@ function svgPoint(svg, clientX, clientY) {
 const nodePos = id => (RUN.net.pos && RUN.net.pos[id]) || LASTPOS[id] || [90, 50];
 function setPos(id, x, y) { RUN.net.pos = RUN.net.pos || {}; const snap = v => TOPO_SNAP ? Math.round(v / 24) * 24 : v; RUN.net.pos[id] = [Math.max(4, snap(x)), Math.max(4, snap(y))]; }
 
+function topologySnapshot() { return JSON.parse(JSON.stringify(RUN.net)); }
+function rememberTopology(snapshot) { TOPO_UNDO.push(snapshot || topologySnapshot()); if (TOPO_UNDO.length > 60) TOPO_UNDO.shift(); TOPO_REDO = []; }
+function restoreTopology(snapshot) {
+  for (const key of Object.keys(RUN.net)) delete RUN.net[key];
+  Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
+  TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
+  if (SEL && !RUN.net.devices[SEL]) SEL = null;
+  LINK_SEL = null; WIRE = null; refresh();
+}
+function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
+function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
+function copyTopologySelection() {
+  const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]); if(!ids.length && SEL)ids.push(SEL);
+  if(!ids.length)return;
+  const set=new Set(ids), pos=RUN.net.pos||{};
+  TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id)})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
+}
+function pasteTopologySelection() {
+  if(!canBuild()||!TOPO_CLIPBOARD||!TOPO_CLIPBOARD.devices.length)return;
+  const before=topologySnapshot(), map={};
+  TOPO_CLIPBOARD.devices.forEach(item=>{const kind=item.device.services?'server':item.device.kind;const prefix={host:'h',server:'srv',switch:'sw',router:'r',firewall:'fw'}[kind]||'h';let n=1;while(RUN.net.devices[prefix+n])n++;const newId=prefix+n;const copy=JSON.parse(JSON.stringify(item.device));copy.id=newId;if(copy.hostname===item.id)copy.hostname=newId;RUN.net.devices[newId]=copy;RUN.net.pos=RUN.net.pos||{};RUN.net.pos[newId]=[item.pos[0]+48,item.pos[1]+48];map[item.id]=newId;});
+  TOPO_CLIPBOARD.links.forEach(l=>{if(map[l.a[0]]&&map[l.b[0]])try{B.addLink(RUN.net,map[l.a[0]],map[l.b[0]],l.a[1],l.b[1]);}catch(e){}});
+  rememberTopology(before); TOPO_SELECTED=new Set(Object.values(map)); SEL=Object.values(map)[0]||SEL; refresh();
+}
 function wireTopo() {
   const svg = $('#topo');
   if (svg) svg.addEventListener('click', e => {
     const target = e.target;
     const note = target && target.closest ? target.closest('.topo-note') : null;
-    if (note && canBuild()) { const i=Number(note.dataset.noteIndex), current=RUN.net.notes[i]; const value=prompt('Edit topology note (leave blank to remove):',current && current.text || ''); if(value===null)return; if(!value.trim())RUN.net.notes.splice(i,1); else current.text=value.trim().slice(0,120); refresh(); return; }
+    if (note && canBuild()) { const i=Number(note.dataset.noteIndex), current=RUN.net.notes[i]; const value=prompt('Edit topology note (leave blank to remove):',current && current.text || ''); if(value===null)return; rememberTopology();if(!value.trim())RUN.net.notes.splice(i,1); else current.text=value.trim().slice(0,120); refresh(); return; }
   });
   if (svg) svg.querySelectorAll('.edge').forEach(edge => edge.addEventListener('click', () => {
     if (!canBuild()) return;
@@ -950,6 +975,7 @@ function wireTopo() {
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
     if (e.target.closest('.node') || WIRE || e.button !== 0) return;
+    if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
     PAN = { x:e.clientX, y:e.clientY, view:[vb.x,vb.y,vb.width,vb.height], width:rect.width, height:rect.height };
     svg.classList.add('panning');
@@ -958,20 +984,24 @@ function wireTopo() {
   document.querySelectorAll('#topo .node').forEach(n => {
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
+      if (e.shiftKey && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id))TOPO_SELECTED.delete(id);else TOPO_SELECTED.add(id); SEL=id; refresh(); return; }
       if (WIRE) {                                      // wiring: connect the armed device to this one
-        if (WIRE !== id) { try { B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
+        if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
         WIRE = null; refresh(); return;
       }
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
-      DRAG = { id, offX: px - cur[0], offY: py - cur[1], moved: false };
+      if(!TOPO_SELECTED.has(id)){TOPO_SELECTED=new Set([id]);SEL=id;}
+      const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
+      DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
     });
   });
 }
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
+  if (BOX) { const p=svgPoint(svg,e.clientX,e.clientY);BOX.current=p;const x=Math.min(BOX.start[0],p[0]),y=Math.min(BOX.start[1],p[1]);BOX.el.setAttribute('x',x);BOX.el.setAttribute('y',y);BOX.el.setAttribute('width',Math.abs(p[0]-BOX.start[0]));BOX.el.setAttribute('height',Math.abs(p[1]-BOX.start[1]));return; }
   if (PAN) {
     const dx = (e.clientX - PAN.x) * PAN.view[2] / Math.max(1, PAN.width);
     const dy = (e.clientY - PAN.y) * PAN.view[3] / Math.max(1, PAN.height);
@@ -982,21 +1012,18 @@ function onDragMove(e) {
   if (!DRAG) return;
   const [px, py] = svgPoint(svg, e.clientX, e.clientY);
   const nx = px - DRAG.offX, ny = py - DRAG.offY;
-  const prev = nodePos(DRAG.id);
+  const prev = DRAG.starts[DRAG.id] || nodePos(DRAG.id);
   if (!DRAG.moved && Math.hypot(nx - prev[0], ny - prev[1]) > 3) DRAG.moved = true;
-  setPos(DRAG.id, nx, ny);
-  const p = nodePos(DRAG.id), cx = p[0] + 24, cy = p[1] + 18;         // live DOM update: node + its links
-  const g = document.querySelector(`#topo .node[data-dev="${DRAG.id}"]`);
-  if (g) g.setAttribute('transform', `translate(${p[0]},${p[1]})`);
-  document.querySelectorAll(`#topo line[data-a="${DRAG.id}"]`).forEach(l => { l.setAttribute('x1', cx); l.setAttribute('y1', cy); });
-  document.querySelectorAll(`#topo line[data-b="${DRAG.id}"]`).forEach(l => { l.setAttribute('x2', cx); l.setAttribute('y2', cy); });
+  const dx=nx-prev[0],dy=ny-prev[1];
+  DRAG.ids.forEach(id=>{const start=DRAG.starts[id]||nodePos(id);setPos(id,start[0]+dx,start[1]+dy);const p=nodePos(id),cx=p[0]+24,cy=p[1]+18;const g=document.querySelector(`#topo .node[data-dev="${id}"]`);if(g)g.setAttribute('transform',`translate(${p[0]},${p[1]})`);document.querySelectorAll(`#topo line[data-a="${id}"]`).forEach(l=>{l.setAttribute('x1',cx);l.setAttribute('y1',cy);});document.querySelectorAll(`#topo line[data-b="${id}"]`).forEach(l=>{l.setAttribute('x2',cx);l.setAttribute('y2',cy);});});
 }
 function onDragUp() {
+  if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
   if (!d.moved) selectDevice(d.id);
-  else refresh();
+  else { rememberTopology(d.before); refresh(); }
 }
 function zoomTopology(factor) {
   const svg = $('#topo'); if (!svg) return;
@@ -1060,19 +1087,20 @@ function wireConfig() {
   document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; input.focus(); } }));
   document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
-    const id = B.addDevice(RUN.net, b.dataset.add); LINK_SEL=null; selectDevice(id); WIRE = null; refresh();
+    rememberTopology(); const id = B.addDevice(RUN.net, b.dataset.add); TOPO_SELECTED=new Set([id]); LINK_SEL=null; selectDevice(id); WIRE = null; refresh();
   }));
-  const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{const id=B.cloneDevice(RUN.net,SEL);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
-  const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
+  const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{rememberTopology(); const id=B.cloneDevice(RUN.net,SEL);TOPO_SELECTED=new Set([id]);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
+  const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;rememberTopology();RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
   const gridBtn=$('#gridBtn');if(gridBtn)gridBtn.addEventListener('click',()=>{TOPO_GRID=!TOPO_GRID;refresh();});
   const snapBtn=$('#snapBtn');if(snapBtn)snapBtn.addEventListener('click',()=>{TOPO_SNAP=!TOPO_SNAP;refresh();});
   const portsBtn=$('#portsBtn');if(portsBtn)portsBtn.addEventListener('click',()=>toggleTopologyPorts());
-  const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
+  const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;rememberTopology();B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
+  const ub=$('#topoUndo');if(ub)ub.addEventListener('click',undoTopology);const rb=$('#topoRedo');if(rb)rb.addEventListener('click',redoTopology);const cp=$('#topoCopy');if(cp)cp.addEventListener('click',copyTopologySelection);const ps=$('#topoPaste');if(ps)ps.addEventListener('click',pasteTopologySelection);
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
     if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
     refresh();
   });
-  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { B.removeDevice(RUN.net, SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; LINK_SEL=null; refresh(); } });
+  const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { rememberTopology(); B.removeDevice(RUN.net, SEL); TOPO_SELECTED.delete(SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; LINK_SEL=null; refresh(); } });
   const ab = $('#arrangeBtn'); if (ab) ab.addEventListener('click', autoArrange);
   function runProbe(cmd) {
     const to = ($('#config .pingto')||{}).value?.trim();
@@ -1242,6 +1270,7 @@ function renderPalette() {
   const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}">＋ ${n}</button>`).join('');
   const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
   return `<div class="builder"><div class="label">Build · topology designer</div>
+    <div class="pal-row"><button class="btn sm" id="topoUndo" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
     <div class="pal-row">${add}</div>
     <div class="pal-row"><button class="btn sm" id="wireBtn">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev">⧉ Duplicate</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn">＋ Note</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
     <div class="pal-row"><button class="btn sm" id="gridBtn" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
@@ -1305,7 +1334,7 @@ function builderRun(net) { return { net, cli: makeCLI(net, null), mission: { aut
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild() {
   showWorkspaceView('workbench');
-  MODE = 'build'; WIRE = null; SEL = null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
+  MODE = 'build'; WIRE = null; SEL = null; TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
   AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] };
   RUN = builderRun(B.blank());
   renderAll();
@@ -1333,7 +1362,7 @@ function importScenario(file) {
   reader.onload = () => {
     try {
       const scn = S.fromJSON(reader.result);
-      MODE = 'build'; WIRE = null; SEL = null;
+      MODE = 'build'; WIRE = null; SEL = null;TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null;
       AUTHOR = { title: scn.title, objective: scn.objective || '', ticket: scn.ticket || null, hints: scn.hints || [], success: scn.success || [] };
       RUN = builderRun(S.clone(scn.start || { devices: {}, links: [] }));
       renderAll();
@@ -1553,7 +1582,7 @@ function openPalette() {
 }
 function closePalette(){const modal=$('#workstationPalette');if(modal)modal.remove();}
 function wireGlobalPalette() {
-  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;} if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='d'&&SEL){e.preventDefault();try{const id=B.cloneDevice(RUN.net,SEL);selectDevice(id);refresh();}catch(err){flashStatus(err.message);}return;}if(e.key==='Delete'&&LINK_SEL!=null){e.preventDefault();B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();return;}}if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
+  document.addEventListener('keydown',e=>{if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){const mod=e.ctrlKey||e.metaKey;if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redoTopology():undoTopology();return;}if(mod&&e.key.toLowerCase()==='y'){e.preventDefault();redoTopology();return;}if(mod&&e.key.toLowerCase()==='c'){e.preventDefault();copyTopologySelection();return;}if(mod&&e.key.toLowerCase()==='v'){e.preventDefault();pasteTopologySelection();return;}}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;} if(canBuild()&&RUN&&!/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||'')){if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='d'&&SEL){e.preventDefault();try{const id=B.cloneDevice(RUN.net,SEL);selectDevice(id);refresh();}catch(err){flashStatus(err.message);}return;}if(e.key==='Delete'&&LINK_SEL!=null){e.preventDefault();B.removeLink(RUN.net,LINK_SEL);LINK_SEL=null;refresh();return;}}if(e.key==='Escape'&&$('#workstationPalette'))closePalette();});
 }
 
 /* ---------- boot ---------- */
