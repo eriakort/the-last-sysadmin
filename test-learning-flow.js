@@ -137,7 +137,6 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.waitForTimeout(150);
   if (await page.locator('[data-skill="whoami"][data-complete="true"]').count()) ok('command skill progress survives a browser reload');
   else fail('command skill progress did not persist after reload');
-  await page.click('#commandCoachToggle');
   await page.fill('#tin', 'pwd');
   await page.press('#tin', 'Enter');
   await page.fill('#tin', 'check');
