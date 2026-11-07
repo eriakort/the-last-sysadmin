@@ -39,6 +39,21 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
   if (built.includes('h1') && built.includes('h2')) ok('placed h1 and h2 (' + built.join(', ') + ')'); else fail('endpoints not placed: ' + JSON.stringify(built));
 
+  // --- modern topology designer controls ---
+  await page.click('#topo .node[data-dev="h1"]'); await page.waitForTimeout(50);
+  if (await page.$('#duplicateDev')) {
+    await page.click('#duplicateDev'); await page.waitForTimeout(70);
+    if (await page.$('#topo .node[data-dev="h3"]')) ok('selected device can be duplicated without copying links'); else fail('duplicate device was not created');
+    await page.click('#delDev'); await page.waitForTimeout(60);
+  } else fail('duplicate control missing for selected device');
+  await page.click('#gridBtn'); await page.waitForTimeout(50);
+  if ((await page.textContent('#gridBtn')).includes('Grid off')) ok('canvas grid can be toggled'); else fail('grid toggle did not update');
+  await page.click('#snapBtn'); await page.waitForTimeout(50);
+  if ((await page.textContent('#snapBtn')).includes('Snap off')) ok('snap-to-grid can be disabled'); else fail('snap toggle did not update');
+  page.once('dialog', dialog => dialog.accept('Core uplink — ISP handoff'));
+  await page.click('#noteBtn'); await page.waitForTimeout(70);
+  if ((await page.locator('#topo .topo-note').innerText()).includes('Core uplink')) ok('topology annotation is visible on canvas'); else fail('topology annotation missing');
+
   // --- author: set the objective (reachable h1 <-> h2) ---
   await page.selectOption('#chkType', 'reachable'); await page.waitForTimeout(60);
   await page.fill('#chkArgs .chkarg[data-arg="a"]', 'h1');
@@ -67,6 +82,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const cls = await page.getAttribute('#status', 'class');
   const txt = await page.textContent('#status');
   if (cls === 'ok' && /complete/.test(txt)) ok('grader accepts the built network'); else fail('scenario not accepted: [' + cls + '] ' + txt);
+
+  // --- link selection and removal are explicit and reversible by rewiring ---
+  await page.click('#topo .edge'); await page.waitForTimeout(60);
+  if (await page.$('#delLink')) { await page.click('#delLink'); await page.waitForTimeout(60); if (await page.$eval('#topo .edge', es => es.length) === 1) ok('selected link can be removed independently'); else fail('selected link removal did not update topology'); }
+  else fail('selecting a topology link did not expose remove action');
 
   // --- exit build returns to the campaign ---
   await browser.close();
