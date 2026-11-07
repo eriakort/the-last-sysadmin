@@ -34,7 +34,7 @@ key, and RLS is what keeps tenants apart.
 
 After applying M11, the browser reads its own progress row but can no longer write it directly. It sends progress through the authenticated `merge_progress(jsonb)` RPC. The function derives the user ID from `auth.uid()`, locks the user progress row, merges against the latest committed state, and writes the result in one transaction. Filesystem deletions are carried as path tombstones so stale copies do not reappear. A file or directory recreated with a newer modification time wins over an older tombstone.
 
-M11 is a required deployment migration. Until it is applied to the connected Supabase project, cloud writes are unavailable; the browser keeps its local save and retries on a later save or sign-in. Run `supabase/test/run.sh` before deploying.
+M11 is a required deployment migration. Until it is applied to the connected Supabase project, cloud writes are unavailable; the browser keeps its local save and retries on a later save or sign-in. Coordinate the migration with the matching frontend deployment: older frontend builds still use direct table upserts and will no longer be able to write after M11 revokes those privileges. Local browser saves are retained during the transition. Run `supabase/test/run.sh` before deploying.
 
 ## What M1 guarantees
 
