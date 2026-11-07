@@ -1113,6 +1113,7 @@ function runTopologyContextAction(action, target) {
 function showTopologyContextMenu(e, kind, target = {}) {
   if (!canBuild()) return;
   e.preventDefault(); e.stopPropagation();
+  closeTopologyContextMenu();
   if (kind === 'device') {
     if (!TOPO_SELECTED.has(target.id)) TOPO_SELECTED = new Set([target.id]);
     LINK_SEL = null; DRAWING_SEL = null;
@@ -1127,7 +1128,6 @@ function showTopologyContextMenu(e, kind, target = {}) {
     LINK_SEL = null; DRAWING_SEL = null;
   }
   if (kind !== 'device') refresh();
-  closeTopologyContextMenu();
   const groups = {
     device: [
       ['Configure / inspect', 'configure'], ['Connect to another device', 'connect'], ['Duplicate device', 'duplicate'],
@@ -1173,7 +1173,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
 
 function wireTopo() {
   const svg = $('#topo');
-  if (svg) svg.addEventListener('contextmenu', e => {
+  if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
     const node = e.target.closest && e.target.closest('.node');
     const edge = e.target.closest && (e.target.closest('.edge') || e.target.closest('.edge-label'));
@@ -1187,7 +1187,7 @@ function wireTopo() {
       const point = svgPoint(svg, e.clientX, e.clientY);
       showTopologyContextMenu(e, 'canvas', { point });
     }
-  });
+  };
 
   if (svg) svg.addEventListener('click', e => {
     if (DRAW_TOOL !== 'select' && canBuild()) return;
