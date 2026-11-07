@@ -12,12 +12,15 @@
 const path = require('path');
 
 (async () => {
-  let chromium;
-  try { ({ chromium } = require('playwright')); }
+  let engines;
+  try { engines = require('playwright'); }
   catch { console.error('Playwright not installed — run `npm install` first. Skipping smoke test.'); process.exit(0); }
 
   const url = 'file://' + path.join(process.cwd(), 'index.html');
-  const browser = await chromium.launch();
+  const browserName = process.env.PLAYWRIGHT_BROWSER || 'chromium';
+  const engine = engines[browserName];
+  if (!engine) throw new Error('PLAYWRIGHT_BROWSER must be chromium, firefox, or webkit');
+  const browser = await engine.launch();
   const page = await browser.newPage();
   const errors = [];
   // Resource-load failures depend on network/sandbox connectivity, not on the
