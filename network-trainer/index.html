@@ -4139,7 +4139,7 @@ function renderIncidentCenter() {
     <span class="incident-row-top"><b>${esc(t.id)}</b><span class="tk-pri tk-${esc(t.priority.toLowerCase())}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></span>
     <strong>${esc(t.title)}</strong><small>${esc(t.service)} · ${esc(t.assigned)}</small>
   </button>`).join('');
-  const timeline = selected ? (PROG.journal || []).filter(e => e.ticket === selected.id).slice(0,8).map(e => `<article class="incident-timeline-item"><i></i><div><b>${esc(e.type || 'Activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time><p>${esc(e.text || e.command || e.output || 'Recorded activity')}</p>${e.command ? `<code>${esc(e.command)}</code>` : ''}</div></article>`).join('') : '';
+  const timeline = selected ? (PROG.journal || []).filter(e => e.ticket === selected.id).sort((a,b) => new Date(b.at || 0) - new Date(a.at || 0)).slice(0,8).map(e => `<article class="incident-timeline-item"><i></i><div><b>${esc(e.type || 'Activity')}</b><time>${esc(new Date(e.at).toLocaleString())}</time><p>${esc(e.text || e.command || e.output || 'Recorded activity')}</p>${e.command ? `<code>${esc(e.command)}</code>` : ''}</div></article>`).join('') : '';
   const detail = selected ? `
     <div class="incident-detail-head"><div><div class="eyebrow">Incident record · ${esc(selected.id)}</div><h2>${esc(selected.title)}</h2><div class="incident-detail-badges"><span class="tk-pri tk-${esc(selected.priority.toLowerCase())}">${esc(selected.priority)}</span><span class="ticket-state state-${esc(selected.status)}">${esc(selected.status)}</span></div></div><span class="incident-sla">SLA target <b>${esc(selected.sla)}</b></span></div>
     <div class="incident-symptom"><span class="label2">Reported symptom</span><p>${esc(selected.symptom)}</p></div>
@@ -4460,8 +4460,18 @@ function clearActiveSessionOutput() {
   persistTerminalSession();
 }
 
+function refreshEvidenceTicketOptions() {
+  const select=$('#termEvidenceTicket'); if(!select)return;
+  const previous=select.value;
+  const tickets=allTickets();
+  select.innerHTML='<option value="">Unlinked evidence</option>'+tickets.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.id)+' · '+esc(t.title)+'</option>').join('');
+  const preferred=previous || (RUN&&RUN.mission&&RUN.mission.ticket&&RUN.mission.ticket.id) || '';
+  select.value=tickets.some(t=>t.id===preferred)?preferred:'';
+}
 function wireEvidenceTools() {
   const status = $('#termEvidenceStatus');
+  const ticketSelect=$('#termEvidenceTicket');
+  if(ticketSelect){ticketSelect.addEventListener('focus',refreshEvidenceTicketOptions);ticketSelect.addEventListener('change',()=>{if(status)status.textContent=ticketSelect.value?'Evidence will be linked to '+ticketSelect.value+'.':'Evidence will remain unlinked.';});}
   const copy = $('#termCopyOutput');
   if (copy) copy.addEventListener('click', async () => {
     const output = $('#tout')?.textContent || '';
@@ -4479,7 +4489,9 @@ function wireEvidenceTools() {
   if (save) save.addEventListener('click', () => {
     const output=$('#tout')?.textContent || '';
     if (!SEL || !output.trim()) { if(status)status.textContent='Select a device and collect output first.'; return; }
-    addJournalEntry({type:'command evidence',device:SEL,command:HIST[HIST.length-1] || '',result:'captured',text:'Captured console transcript from the Workbench.',output});
+    refreshEvidenceTicketOptions();
+    const ticket=$('#termEvidenceTicket')?.value || '';
+    addJournalEntry({type:'command evidence',ticket,device:SEL,command:HIST[HIST.length-1] || '',result:'captured',text:'Captured console transcript from the Workbench.'+(ticket?' and linked it to '+ticket+'.':'.'),output});
     if(status)status.textContent='Evidence saved to Engineering Journal.';
   });
   const download = $('#termDownload');
@@ -5396,7 +5408,7 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" title="Zoom out">−</button><button class="btn sm" id="topoZoomIn" title="Zoom in">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" title="Previous device session">‹</button><button class="btn sm" id="sessionNext" title="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><label class="term-evidence-ticket">Incident <select id="termEvidenceTicket" aria-label="Link evidence to incident"><option value="">Unlinked evidence</option></select></label><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>

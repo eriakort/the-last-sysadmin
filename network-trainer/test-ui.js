@@ -117,6 +117,28 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if ((await page.inputValue('#tin')) === 'ip addr') ok('ArrowUp recalls the previous command');
   else fail('history not working: ' + (await page.inputValue('#tin')));
 
+  // --- Workbench command evidence can be attached to an incident timeline ---
+  await page.click('#navWorkbench'); await page.waitForTimeout(120);
+  await page.locator('#termEvidenceTicket').focus();
+  const incidentId = await page.locator('#termEvidenceTicket option').nth(1).getAttribute('value');
+  if (incidentId) {
+    await page.selectOption('#termEvidenceTicket', incidentId);
+    await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
+    await page.click('#termSaveEvidence'); await page.waitForTimeout(100);
+    const linked = await page.evaluate(id => (PROG.journal || []).some(e => e.type === 'command evidence' && e.ticket === id && e.output), incidentId);
+    if (linked) ok('Workbench evidence is saved against the selected incident');
+    else fail('saved command evidence was not linked to the selected incident');
+    await page.click('#navIncidents'); await page.waitForTimeout(120);
+    await page.selectOption('#incidentStatus', 'all'); await page.waitForTimeout(80);
+    await page.locator('#incidentList [data-incident-select="'+incidentId+'"]').click(); await page.waitForTimeout(80);
+    const timeline = await page.locator('#incidentDetail').innerText();
+    if (/command evidence/i.test(timeline) && timeline.includes('ip addr')) ok('linked command evidence appears in the incident timeline');
+    else {
+      const linkedEntries = await page.evaluate(id => (PROG.journal || []).filter(e => e.ticket === id).map(e => ({type:e.type,command:e.command,text:e.text,at:e.at})), incidentId);
+      fail('incident timeline did not show linked command evidence for '+incidentId+'; timeline='+timeline+'; linkedEntries='+JSON.stringify(linkedEntries));
+    }
+  } else fail('incident selector did not populate ticket options');
+
   await browser.close();
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\nUI OK.');

@@ -153,3 +153,8 @@ The device console provides **Copy output**, **Save evidence**, and **Download**
 ## Workbench configuration checkpoints
 
 Use **Save checkpoint** to capture the selected simulator device's current `show running-config` output in browser-local storage. **Review drift** compares the current running configuration with the latest checkpoint and lists added and removed lines; **Export archive** downloads saved checkpoints for the selected device as JSON. Checkpoints are retained locally (up to 100 records across devices) and recorded in the Engineering Journal. The comparison is read-only: it does not restore configuration, execute changes, or connect to physical equipment.
+
+
+## Workbench incident-linked evidence
+
+The Workbench evidence toolbar lets an engineer choose an incident before saving a console transcript. The selected ticket ID is recorded with the device, command and output in the browser-local Engineering Journal, where it appears in that incident's investigation timeline. Evidence can remain unlinked when it is general lab work. This is local simulator training evidence, not a production ticketing-system integration.
