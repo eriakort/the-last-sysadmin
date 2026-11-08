@@ -5460,19 +5460,39 @@ const KNOWLEDGE_PLAYBOOKS = [
 function renderKnowledgeCenter() {
   const root = $('#knowledgeView'); if (!root) return;
   root.innerHTML = `
-    <div class="knowledge-page-heading"><div><div class="eyebrow">Field reference · network operations</div><h1>Network knowledge</h1><p>Practical command references and repeatable troubleshooting workflows. Select a command to send it to the active Workbench console.</p></div><span class="help-key">L1 / L2 FIELD GUIDE</span></div>
+    <div class="knowledge-page-heading"><div><div class="eyebrow">Field reference · network operations</div><h1>Network knowledge</h1><p>Practical command references and repeatable troubleshooting workflows. Select a command to send it to the active Workbench console, or open the coach to understand when and why to use it.</p></div><span class="help-key">L1 / L2 FIELD GUIDE</span></div>
     <section class="knowledge-playbooks"><div class="knowledge-section-head"><h2>Troubleshooting playbooks</h2><span>Work methodically · capture evidence</span></div><div class="knowledge-playbook-grid">${KNOWLEDGE_PLAYBOOKS.map((p,i)=>`<article class="knowledge-playbook"><div class="eyebrow">PLAYBOOK 0${i+1}</div><h3>${esc(p.title)}</h3><ol>${p.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`).join('')}</div></section>
-    <section class="knowledge-library"><div class="knowledge-section-head"><div><h2>Command reference</h2><p>Search by command, task or description. Availability depends on the selected simulator device and CLI mode.</p></div></div><div class="knowledge-toolbar"><input id="knowledgeSearch" type="search" placeholder="Search commands and tasks…" aria-label="Search commands"><select id="knowledgeCategory" aria-label="Filter command category"><option value="all">All categories</option>${[...new Set(KNOWLEDGE_COMMANDS.map(x=>x.cat))].map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div id="knowledgeCommands" class="knowledge-command-list">${renderKnowledgeCommands(KNOWLEDGE_COMMANDS)}</div></section>
+    <section class="knowledge-library"><div class="knowledge-section-head"><div><h2>Command reference</h2><p>Search by command, task or description. Availability depends on the selected simulator device and CLI mode.</p></div></div><div class="knowledge-toolbar"><input id="knowledgeSearch" type="search" placeholder="Search commands and tasks…" aria-label="Search commands"><select id="knowledgeCategory" aria-label="Filter command category"><option value="all">All categories</option>${[...new Set(KNOWLEDGE_COMMANDS.map(x=>x.cat))].map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div id="knowledgeCommands" class="knowledge-command-list">${renderKnowledgeCommands(KNOWLEDGE_COMMANDS)}</div>
+      <section class="network-command-coach" id="networkCommandCoach" aria-live="polite" aria-label="Network command coach"><div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div></section>
+    </section>
     <p class="knowledge-caveat">Simulator reference only: this is not a complete Cisco IOS / IOS XE command catalogue. Commands vary by device and CLI context; unsupported commands should be treated as unavailable, not assumed to work on production equipment.</p>`;
   const search=root.querySelector('#knowledgeSearch'), category=root.querySelector('#knowledgeCategory'), list=root.querySelector('#knowledgeCommands');
   const filter=()=>{const q=search.value.trim().toLowerCase(), cat=category.value; const matches=KNOWLEDGE_COMMANDS.filter(x=>(cat==='all'||x.cat===cat)&&(!q||[x.cmd,x.cat,x.desc].join(' ').toLowerCase().includes(q))); list.innerHTML=renderKnowledgeCommands(matches); wireKnowledgeCommands(root);};
   search.addEventListener('input',filter); category.addEventListener('change',filter); wireKnowledgeCommands(root);
 }
 function renderKnowledgeCommands(items) {
-  return items.map(x=>`<button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
+  return items.map(x=>`<article class="knowledge-command-row"><button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button><button class="btn sm knowledge-coach-btn" type="button" data-knowledge-coach="${esc(x.cmd)}">Coach</button></article>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
+}
+function renderNetworkCommandCoach(command) {
+  const root=$('#networkCommandCoach'), item=KNOWLEDGE_COMMANDS.find(x=>x.cmd===command);
+  if(!root||!item)return;
+  KNOWLEDGE_COACH_COMMAND=command;
+  const guided=[
+    'Start with the question: what fact are you trying to confirm?',
+    'Run the command on the device that owns the relevant interface, route, VLAN or policy.',
+    'Compare the result with the expected design and the incident scope before making a change.'
+  ];
+  const hint='Check the selected device and CLI mode first. Similar commands may exist on different platforms, but their syntax and output are not interchangeable.';
+  const challenge='Without running it yet, explain what evidence this command should provide and what you would inspect next if the result is unexpected.';
+  const learning=KNOWLEDGE_COACH_MODE==='guided'?'<ol>'+guided.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ol>':KNOWLEDGE_COACH_MODE==='assisted'?'<p>'+esc(hint)+'</p>':'<p>'+esc(challenge)+'</p>';
+  root.innerHTML='<div class="coach-head"><div><div class="eyebrow">NETWORK LEARNING COACH</div><h3>'+esc(item.cmd)+'</h3><p>'+esc(item.desc)+'</p></div><label>Learning mode <select id="networkCoachMode" aria-label="Learning mode"><option value="guided" '+(KNOWLEDGE_COACH_MODE==='guided'?'selected':'')+'>Guided</option><option value="assisted" '+(KNOWLEDGE_COACH_MODE==='assisted'?'selected':'')+'>Assisted</option><option value="challenge" '+(KNOWLEDGE_COACH_MODE==='challenge'?'selected':'')+'>Challenge</option></select></label></div><div class="coach-content"><div><b>Purpose</b><p>'+esc(item.desc)+'</p><b>'+(KNOWLEDGE_COACH_MODE==='challenge'?'Your task':'How to approach it')+'</b>'+learning+'</div><div class="coach-output"><b>How to interpret the result</b><p>Look for the state, values and device/port identifiers relevant to your question. A successful command only confirms what it displays; it does not by itself prove end-to-end connectivity or that the incident is resolved.</p><p class="dim">Output varies by simulated device, configuration and CLI context. Use the evidence in the Workbench rather than memorising a fixed output.</p></div></div><div class="row"><button class="btn primary" id="networkCoachPractice" type="button">Practice in Workbench</button><button class="btn" id="networkCoachClose" type="button">Close coach</button></div>';
+  root.querySelector('#networkCoachMode').addEventListener('change',e=>{KNOWLEDGE_COACH_MODE=e.target.value;renderNetworkCommandCoach(command);});
+  root.querySelector('#networkCoachPractice').addEventListener('click',()=>{showWorkspaceView('workbench');const input=$('#tin');if(input){input.value=item.cmd;openTerminalWindow(true);}});
+  root.querySelector('#networkCoachClose').addEventListener('click',()=>{KNOWLEDGE_COACH_COMMAND=null;root.innerHTML='<div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div>';});
 }
 function wireKnowledgeCommands(root) {
   root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; openTerminalWindow(true);}}));
+  root.querySelectorAll('[data-knowledge-coach]').forEach(b=>b.addEventListener('click',()=>renderNetworkCommandCoach(b.dataset.knowledgeCoach)));
 }
 
 function addJournalEntry(entry) {
