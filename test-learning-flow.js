@@ -76,7 +76,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.locator('#mistakeCoach').innerText()).includes('Understand → Inspect → Correct → Verify') && (await page.locator('#mistakeCoach').innerText()).includes('Try next'))
     ok('Linux mistake feedback gives a shared learning cycle and actionable next step');
   else fail('Linux mistake feedback omitted the learning cycle or next step');
-  await page.locator('#tin').fill('whoami');
+  await page.locator('#tin').fill('true');
   await page.locator('#tin').press('Enter');
   if (!(await page.locator('#mistakeCoach').isVisible())) ok('mistake feedback clears after the next command');
   else fail('stale Linux mistake feedback remained after a new command');
