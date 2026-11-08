@@ -78,7 +78,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('#healthRefresh');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible()) ok('dashboard refreshes on demand without background polling');
   else fail('dashboard refresh removed its dialog');
-  await page.click('#serverHealthDialog [data-health-close]');
+  await page.getByRole('button', { name: 'Close server health' }).click();
   if (await page.locator('#serverHealthDialog [role="dialog"]').count() === 0) ok('dashboard closes cleanly');
   else fail('dashboard did not close');
 
