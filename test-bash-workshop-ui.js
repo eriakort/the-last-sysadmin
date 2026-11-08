@@ -1,0 +1,26 @@
+const path=require('path');
+const {chromium}=require('playwright');
+const URL='file://'+path.join(process.cwd(),'index.html');
+(async()=>{
+ const browser=await chromium.launch();const page=await browser.newPage();const errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ const fail=m=>{throw new Error(m);};
+ await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(250);
+ if(!(await page.$('#btnBashWorkshop')))fail('Bash workshop button is missing');
+ await page.click('#btnBashWorkshop');
+ if(!(await page.$('[role="dialog"]#bashWorkshopDialog')))fail('Bash workshop dialog did not open');
+ await page.click('[data-bash-load^="NAME="]');await page.press('#tin','Enter');await page.waitForTimeout(100);
+ await page.click('#btnBashWorkshop');
+ if(!(await page.locator('.bash-workshop-card.complete').count()))fail('Variable exercise was not marked complete');
+ await page.click('[data-bash-load^="bash -c \\'if test -f"]');await page.press('#tin','Enter');await page.waitForTimeout(100);
+ await page.click('#btnBashWorkshop');
+ await page.click('[data-bash-load^="bash -c \\'for service"]');await page.press('#tin','Enter');await page.waitForTimeout(100);
+ await page.click('#btnBashWorkshop');
+ await page.click('[data-bash-load^="mkdir -p"]');await page.press('#tin','Enter');await page.waitForTimeout(150);
+ await page.click('#btnBashWorkshop');
+ const completed=await page.locator('.bash-workshop-card.complete').count();
+ if(completed!==4)fail('Expected 4 completed exercises, got '+completed);
+ if(errors.length)fail('Browser errors: '+errors.join('; '));
+ console.log('✓ Bash workshop opens, loads and verifies variable, conditional, loop and executable-script exercises');
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1);});

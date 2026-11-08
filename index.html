@@ -426,6 +426,25 @@ body.practicing{padding-top:40px}
 .mistake-coach-title strong{color:var(--ink)}.mistake-coach-title span{color:var(--amber);font-weight:700}
 .mistake-coach p{margin:5px 0;color:var(--muted)}.mistake-coach-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
 .mistake-coach-next b,.mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
+
+/* Bash scripting workshop */
+.bash-workshop-backdrop{position:fixed;inset:0;z-index:120;background:rgba(3,8,14,.78);display:flex;align-items:center;justify-content:center;padding:20px}
+.bash-workshop-dialog{width:min(900px,100%);max-height:min(88vh,900px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 80px #0009;padding:22px}
+.bash-workshop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.bash-workshop-head h2{font-family:var(--f-display);margin:0;font-size:22px}
+.bash-workshop-intro{color:var(--muted);max-width:70ch;margin:8px 0 16px}
+.bash-workshop-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.bash-workshop-card{border:1px solid var(--line);background:var(--raise);border-radius:10px;padding:14px;min-width:0}
+.bash-workshop-card h3{font-size:15px;margin:0 0 6px}
+.bash-workshop-card p{font-size:13px;color:var(--muted);margin:6px 0 10px}
+.bash-workshop-card pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--term);padding:10px;border-radius:7px;color:var(--term-ink);font:12px/1.55 var(--f-mono);margin:10px 0}
+.bash-workshop-card .bash-status{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.bash-workshop-card.complete{border-color:var(--green)}
+.bash-workshop-card.complete .bash-status{color:var(--green)}
+.bash-workshop-actions{display:flex;gap:8px;flex-wrap:wrap}
+.bash-workshop-note{font-size:12px;color:var(--muted);margin:14px 0 0}
+@media(max-width:680px){.bash-workshop-backdrop{padding:8px}.bash-workshop-dialog{padding:14px;max-height:94vh}.bash-workshop-grid{grid-template-columns:1fr}.bash-workshop-head h2{font-size:19px}}
+
 </style>
 </head>
 <body>
@@ -450,6 +469,7 @@ body.practicing{padding-top:40px}
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
+      <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6578,6 +6598,36 @@ function renderServerHealth() {
 function openServerHealth(){let root=document.getElementById('serverHealthDialog');if(!root){root=document.createElement('div');root.id='serverHealthDialog';document.body.appendChild(root);}renderServerHealth();root.querySelector('.health-dialog button')?.focus();}
 function closeServerHealth(){const root=document.getElementById('serverHealthDialog');if(root)root.innerHTML='';}
 
+
+/* Bash scripting workshop — guided practice on the simulated shell */
+const BASH_WORKSHOP = [
+  {id:'variables',title:'1 · Variables and quoting',level:'Foundation',concept:'Store a value once, then reuse it. Double quotes allow variable expansion; single quotes keep text literal.',command:'NAME="Ada Lovelace" && echo "Hello, $NAME"',objective:'Set NAME and print a greeting that includes its value.'},
+  {id:'conditions',title:'2 · Make a decision',level:'Branching',concept:'An if statement runs one branch when a test succeeds and another when it fails. The test command returns an exit status.',command:'bash -c \\'if test -f /etc/hostname; then echo "Hostname file found"; else echo "Hostname file missing"; fi\\'',objective:'Test whether the simulated hostname file exists.'},
+  {id:'loops',title:'3 · Repeat with a loop',level:'Iteration',concept:'A for loop assigns each item to a variable and runs the body once per item.',command:'bash -c \\'for service in ssh cron nginx; do echo "Reviewing $service"; done\\'',objective:'Print one review line for each service name.'},
+  {id:'script',title:'4 · Build and run a script',level:'Mini project',concept:'Create a script file, add a shebang and commands, make it executable, then run it by path. This combines loops and file permissions.',command:'mkdir -p ~/scripts && printf \\'%s\\\\n\\' \\'#!/bin/bash\\' \\'for service in ssh cron nginx; do\\' \\'  echo "Reviewing $service"\\' \\'done\\' > ~/scripts/service-check.sh && chmod +x ~/scripts/service-check.sh && ~/scripts/service-check.sh',objective:'Create an executable script and run it from the simulated filesystem.'}
+];
+function bashWorkshopIsComplete(id) {
+  const history=S.history||[];
+  if(id==='variables') return !!(S.vars&&S.vars.NAME==='Ada Lovelace'&&history.some(x=>x.indexOf('NAME="Ada Lovelace"')>=0));
+  if(id==='conditions') return history.some(x=>x.indexOf("bash -c 'if test -f /etc/hostname")===0);
+  if(id==='loops') return history.some(x=>x.indexOf("bash -c 'for service in ssh cron nginx")===0);
+  if(id==='script') { const found=lookup('~/scripts/service-check.sh'); return !!(found&&!found.err&&found.node&&found.node.type==='file'&&(found.node.mode&0o111)&&S.lastScriptRun===found.abs); }
+  return false;
+}
+function closeBashWorkshop(){const root=document.getElementById('bashWorkshopDialog');if(root)root.remove();}
+function openBashWorkshop(){
+  closeBashWorkshop();
+  const root=document.createElement('div');root.id='bashWorkshopDialog';root.className='bash-workshop-backdrop';
+  root.innerHTML='<section class="bash-workshop-dialog" role="dialog" aria-modal="true" aria-labelledby="bashWorkshopTitle">'
+  +'<div class="bash-workshop-head"><div><div class="eyebrow">Linux Sysadmin · Practical lab</div><h2 id="bashWorkshopTitle">Bash scripting workshop</h2></div><button class="btn" type="button" data-bash-close aria-label="Close Bash workshop">Close</button></div>'
+  +'<p class="bash-workshop-intro">Learn by running Bash-style commands in this platform’s simulated Linux environment. Work through each exercise in order, or revisit any topic. Nothing runs on your computer or a real server.</p>'
+  +'<div class="bash-workshop-grid">'+BASH_WORKSHOP.map(function(item){const done=bashWorkshopIsComplete(item.id);return '<article class="bash-workshop-card'+(done?' complete':'')+'"><div class="bash-status">'+(done?'✓ Completed':item.level)+'</div><h3>'+esc(item.title)+'</h3><p>'+esc(item.concept)+'</p><div class="label">Practice objective</div><p>'+esc(item.objective)+'</p><pre><code>'+esc(item.command)+'</code></pre><div class="bash-workshop-actions"><button class="btn primary" type="button" data-bash-load="'+esc(item.command)+'">Load into terminal</button></div></article>';}).join('')+'</div>'
+  +'<p class="bash-workshop-note">Loading a command only places it in the terminal input. Read it, edit it if you like, and press Enter to run it. Reopen this workshop to see your progress.</p></section>';
+  root.addEventListener('click',function(event){if(event.target===root||event.target.closest('[data-bash-close]')){closeBashWorkshop();return;}const load=event.target.closest('[data-bash-load]');if(load){const input=document.getElementById('tin');if(input){input.value=load.getAttribute('data-bash-load')||'';closeBashWorkshop();input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);}}});
+  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeBashWorkshop();});
+  document.body.appendChild(root);const close=root.querySelector('[data-bash-close]');if(close)close.focus();
+}
+
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6738,6 +6788,8 @@ function initFirstRunGuide(restored) {
 function boot(restored) {
   const healthButton = document.getElementById('btnHealthDashboard');
   if (healthButton && !healthButton.dataset.bound) { healthButton.dataset.bound='true'; healthButton.addEventListener('click',openServerHealth); }
+  const bashButton=document.getElementById('btnBashWorkshop');
+  if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
   initFilesystemExplorer();
