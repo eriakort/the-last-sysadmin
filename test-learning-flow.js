@@ -75,6 +75,15 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#serverHealthDialog')).includes('simulator state') && (await page.textContent('#serverHealthDialog')).includes('not your computer'))
     ok('dashboard clearly identifies its simulated, read-only data source');
   else fail('dashboard does not explain its simulation boundary');
+  if ((await page.textContent('#serverHealthDialog')).includes('Observe → Hypothesise → Test → Verify'))
+    ok('guided troubleshooting teaches an evidence-first learning cycle');
+  else fail('guided troubleshooting workflow is missing');
+  const terminalLinesBefore = await page.locator('#tout .cmdl').count();
+  await page.locator('[data-health-command="systemctl --failed"]').click();
+  if (await page.inputValue('#tin') === 'systemctl --failed' && await page.locator('#tout .cmdl').count() === terminalLinesBefore)
+    ok('troubleshooting prepares a command without executing it');
+  else fail('troubleshooting command was not safely prepared in the terminal');
+  await page.click('#btnHealthDashboard');
   await page.click('#healthRefresh');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible()) ok('dashboard refreshes on demand without background polling');
   else fail('dashboard refresh removed its dialog');
