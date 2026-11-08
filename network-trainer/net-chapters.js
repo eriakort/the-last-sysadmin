@@ -960,7 +960,33 @@ const chapters = [
       ['r1','show standby brief'],['r2','show standby brief'],['hq','ping isp'],
       ['r1','enable'],['r1','write memory'],['r2','enable'],['r2','write memory']
     ]
-  }
+  },
+
+  {
+    id: 'cross-track-web-availability-network',
+    chapter: 'Integrated Operations · Cross-discipline case',
+    title: 'Restore client access to the Halcyon portal',
+    story: 'The Linux administrator has been asked to restore the application service. From the network side, users still cannot reach the portal by name: the workstation has a stale local host record. Correct the record and verify the full path to the web service.',
+    objective: 'On workstation, update portal.halcyon.local to 10.60.0.20. Then verify that the name resolves to web01, the workstation can reach the server, and TCP service 8080 is available.',
+    ticket: { id: 'INC-XD-2041', from: 'Priya · Service Desk', priority: 'P1', symptom: 'The Halcyon portal is unavailable to staff. The application team is restoring the server; please validate and repair client-side network access.' },
+    diagnose: { q: 'A direct ping to 10.60.0.20 succeeds, but portal.halcyon.local resolves to 10.60.0.99. What is the most likely network-side fault?', options: ['The workstation has a stale local host record', 'The web server interface is down', 'The switch has lost power'], answer: 0, because: 'Direct IP reachability works, while the name points to a different address. Correct the workstation name record before changing routes or interfaces.' },
+    console: 'workstation',
+    hints: ['Use show hosts to inspect the local name table before changing it.', 'Enter privileged mode, then configuration mode. Add the correct mapping with ip host portal.halcyon.local 10.60.0.20.', 'Return to privileged mode, then verify with ping portal.halcyon.local and Check.'],
+    build: () => ({
+      devices: {
+        workstation: { id: 'workstation', kind: 'host', ifaces: { eth0: { ip: ip('10.60.0.10'), mask: 24, up: true } }, hosts: { 'portal.halcyon.local': ip('10.60.0.99') } },
+        web01: SRV('web01', '10.60.0.20', 24, null, { 8080: 'http' }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('workstation', 'eth0', 'sw1', 'p1'), L('web01', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [
+      { type: 'resolves', dev: 'workstation', name: 'portal.halcyon.local', ip: '10.60.0.20' },
+      { type: 'reachable', a: 'workstation', b: 'web01' },
+      { type: 'service_up', dev: 'web01', port: 8080 }
+    ],
+    solution: [['workstation', 'enable'], ['workstation', 'configure terminal'], ['workstation', 'ip host portal.halcyon.local 10.60.0.20'], ['workstation', 'end']]
+  },
 ];
 
 module.exports = { chapters };
