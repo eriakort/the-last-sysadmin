@@ -465,6 +465,7 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
       <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
       <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
+      <button class="btn" id="btnCrossTrackCase" type="button" title="Work a service outage across Linux and network operations">Integrated case</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6263,6 +6264,7 @@ function completeMission() {
   if (PRACTICE.active && PRACTICE.label === 'Linux Security & Recovery Lab') {
     try { const completed = JSON.parse(localStorage.getItem('lsa-ops-recovery-complete') || '[]'); if (!completed.includes(m.id)) completed.push(m.id); localStorage.setItem('lsa-ops-recovery-complete', JSON.stringify(completed)); } catch (e) {}
   }
+  if (PRACTICE.active && m.id === 'cross-track-web-availability-linux') crossTrackWrite('linux');
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -6657,6 +6659,38 @@ function openOpsRecoveryLab(){
   document.body.appendChild(root);const close=root.querySelector('[data-ops-close]');if(close)close.focus();
 }
 
+
+/* Cross-discipline case: one service outage, two independently verified disciplines. */
+const CROSS_TRACK_KEY='lsa-cross-track-web-availability-v1';
+function crossTrackRead(){try{const value=JSON.parse(localStorage.getItem(CROSS_TRACK_KEY)||'{}');return value&&typeof value==='object'?value:{};}catch(e){return {};}}
+function crossTrackWrite(track){const value=crossTrackRead();value[track]=true;value.updatedAt=new Date().toISOString();try{localStorage.setItem(CROSS_TRACK_KEY,JSON.stringify(value));}catch(e){}}
+const CROSS_TRACK_LINUX_MISSION=[{
+ id:'cross-track-web-availability-linux',title:'Restore the Halcyon web service',
+ story:'The help desk reports that the Halcyon portal is unavailable. The network team has confirmed that the server is reachable and the application port is no longer responding. Investigate the service state and restore it safely.',
+ objective:'Inspect halcyon.service, identify why the application is unavailable, restart it, and verify that it is active.',
+ hints:['Use systemctl status halcyon to inspect the service before changing anything.','Use sudo systemctl restart halcyon, then run systemctl status halcyon again.'],
+ check_type:'service_state',check_arg1:'halcyon',check_arg2:'active',
+ onStart:()=>{if(S.services&&S.services.halcyon)S.services.halcyon.active=false;}
+}];
+function closeCrossTrackCase(){const root=document.getElementById('crossTrackCaseDialog');if(root)root.remove();}
+function openCrossTrackCase(){
+ closeCrossTrackCase();const state=crossTrackRead();
+ const root=document.createElement('div');root.id='crossTrackCaseDialog';root.className='bash-workshop-backdrop';
+ root.innerHTML='<section class="bash-workshop-dialog" role="dialog" aria-modal="true" aria-labelledby="crossTrackCaseTitle">'
+ +'<div class="bash-workshop-head"><div><div class="eyebrow">Integrated operations · P1 service incident</div><h2 id="crossTrackCaseTitle">The unavailable Halcyon portal</h2></div><button class="btn" type="button" data-cross-close aria-label="Close integrated case">Close</button></div>'
+ +'<p class="ops-lab-summary">Restore service end-to-end by completing two investigations: repair the application service on Linux, then correct the client-side network name record and verify delivery. Each half is graded by its own simulator; completing one does not auto-complete the other.</p>'
+ +'<div class="ops-lab-card'+(state.linux?' complete':'')+'"><div class="ops-lab-status">'+(state.linux?'✓ Linux task demonstrated':'1 · Linux Sysadmin')+'</div><h3>Restore the application service</h3><p>Inspect the simulated systemd service, restart it and verify its state. Campaign progress is untouched.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-cross-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.network?' complete':'')+'"><div class="ops-lab-status">'+(state.network?'✓ Network task demonstrated':'2 · Network Sysadmin')+'</div><h3>Restore client access</h3><p>Correct the stale local name record, then verify name resolution, IP reachability and the web service port.</p><div class="ops-lab-actions"><button class="btn" type="button" data-cross-network>Open Network task</button></div></div>'
+ +'<p class="ops-lab-safety">Simulation only. Both environments run in the browser and do not connect to real servers or network devices. Completion is stored locally in this browser profile.</p></section>';
+ root.addEventListener('click',function(event){
+  if(event.target===root||event.target.closest('[data-cross-close]')){closeCrossTrackCase();return;}
+  if(event.target.closest('[data-cross-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_LINUX_MISSION,'Cross-discipline Service Recovery');return;}
+  if(event.target.closest('[data-cross-network]')){window.location.href='network-trainer/index.html?crossTrack=web-availability';return;}
+ });
+ root.addEventListener('keydown',function(event){if(event.key==='Escape')closeCrossTrackCase();});
+ document.body.appendChild(root);const close=root.querySelector('[data-cross-close]');if(close)close.focus();
+}
+
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6821,6 +6855,8 @@ function boot(restored) {
   if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
   const opsButton=document.getElementById('btnOpsRecoveryLab');
   if(opsButton&&!opsButton.dataset.bound){opsButton.dataset.bound='true';opsButton.addEventListener('click',openOpsRecoveryLab);}
+  const crossButton=document.getElementById('btnCrossTrackCase');
+  if(crossButton&&!crossButton.dataset.bound){crossButton.dataset.bound='true';crossButton.addEventListener('click',openCrossTrackCase);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
   initFilesystemExplorer();
@@ -6835,6 +6871,7 @@ function boot(restored) {
   if (S.tracker && !S.finished) S.missionStart = Date.now();
   ensureClock();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
+  if(new URLSearchParams(window.location.search).get('crossTrack')==='web-availability')openCrossTrackCase();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
 /* ============================================================

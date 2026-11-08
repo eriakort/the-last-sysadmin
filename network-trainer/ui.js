@@ -236,6 +236,11 @@ function showWorkspaceView(view, options = {}) {
   if (view === 'journal') renderJournalPage();
   if (view === 'changes') renderChangeManagement();
 }
+
+const CROSS_TRACK_KEY = 'lsa-cross-track-web-availability-v1';
+function crossTrackProgress() { try { const value = JSON.parse(localStorage.getItem(CROSS_TRACK_KEY) || '{}'); return value && typeof value === 'object' ? value : {}; } catch (e) { return {}; } }
+function markCrossTrackProgress(track) { const value = crossTrackProgress(); value[track] = true; value.updatedAt = new Date().toISOString(); try { localStorage.setItem(CROSS_TRACK_KEY, JSON.stringify(value)); } catch (e) {} }
+
 function renderOverview() {
   const root = $('#overview'); if (!root || !RUN) return;
   const d = dashboardSnapshot();
@@ -245,6 +250,8 @@ function renderOverview() {
   const incidentRows = d.active.slice(0, 5).map(t => `<article class="overview-incident"><div class="oi-head"><b>${esc(t.id)}</b><span class="tk-pri ${priorityClass(t.priority)}">${esc(t.priority)}</span><span class="ticket-state state-${esc(t.status)}">${esc(t.status)}</span></div><strong>${esc(t.title)}</strong><p>${esc(t.symptom)}</p><div class="oi-foot"><span>${esc(t.service)}</span><button class="btn sm" data-overview-ticket="${esc(t.id)}">Investigate →</button></div></article>`).join('');
   const activityRows = d.activity.map(e => `<article class="overview-activity"><span class="activity-dot"></span><div><b>${esc(e.type || 'Activity')}</b><p>${esc([e.ticket,e.device,e.text].filter(Boolean).join(' · ') || e.command || 'Recorded in engineering journal')}</p><time>${esc(new Date(e.at).toLocaleString())}</time></div></article>`).join('');
   const flowRows = d.flows.map(f => `<div class="overview-flow ${f.ok ? 'flow-ok' : 'flow-bad'}"><b>${esc((f.proto || 'icmp').toUpperCase())}</b><span>${esc(M.ipStr(f.src))} → ${esc(M.ipStr(f.dst))}</span><strong>${f.ok ? 'Delivered' : 'Dropped'}</strong></div>`).join('');
+  const crossTrack = crossTrackProgress();
+  const crossIndex = chapters.findIndex(m => m.id === 'cross-track-web-availability-network');
   root.innerHTML = `
     <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
     <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
@@ -255,6 +262,7 @@ function renderOverview() {
       <article class="overview-metric"><span>Resolved tickets</span><strong>${d.resolved}<small> / ${d.total}</small></strong><em>${PROG.xp} XP · ${esc(rankFor(PROG.xp))}</em></article>
     </section>
     <div class="overview-grid">
+      <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>The unavailable Halcyon portal</h2></div><span class="ticket-state ${crossTrack.linux && crossTrack.network ? 'state-resolved' : 'state-investigating'}">${crossTrack.linux && crossTrack.network ? 'case complete' : 'two-track case'}</span></div><p>Coordinate Linux service recovery with network name-resolution and reachability checks. Each discipline is verified in its own simulator.</p><div class="cross-track-status"><span>${crossTrack.linux ? '✓' : '○'} Linux service recovery</span><span>${crossTrack.network ? '✓' : '○'} Network access recovery</span></div><div class="oi-foot"><button class="btn sm primary" id="crossTrackStart">Start network task</button><button class="btn sm" id="crossTrackLinux">Open Linux case</button></div></section>
       <section class="overview-panel inventory-panel"><div class="overview-panel-head"><div><span class="eyebrow">Current lab topology</span><h2>Device health</h2></div><button class="text-action" id="healthWorkbench">Inspect topology →</button></div>
         <div class="overview-table-wrap"><table class="overview-table"><thead><tr><th>Device</th><th>Primary IP</th><th>Status</th><th>Ports up</th></tr></thead><tbody>${deviceRows || '<tr><td colspan="4">No devices in this scenario.</td></tr>'}</tbody></table></div>
         <p class="overview-footnote">Health is calculated from the active simulator scenario and interface/link state. It is not external monitoring.</p>
@@ -280,6 +288,8 @@ function renderOverview() {
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
   click('progressStats', openStats);
+  click('crossTrackStart', () => { if (crossIndex >= 0) reloadMission(crossIndex); });
+  click('crossTrackLinux', () => { window.location.href='../index.html?crossTrack=web-availability'; });
   root.querySelectorAll('[data-overview-ticket]').forEach(btn => btn.addEventListener('click', () => {
     const t = d.active.find(x => x.id === btn.dataset.overviewTicket); if (!t) return;
     setTicketState(t.id, 'investigating', 'You'); showWorkspaceView('workbench'); reloadMission(t.index);
@@ -965,6 +975,7 @@ function doCheck() {
   }
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
+    if (id === 'cross-track-web-availability-network') markCrossTrackProgress('network');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';
