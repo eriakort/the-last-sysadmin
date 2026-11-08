@@ -681,10 +681,46 @@ function ping(net, srcDev, dst, base = {}) {
   return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
 }
 
+/* ---------- packet journey view model ---------- */
+// A presentation-safe trace built from the same forwarding engine as ping().
+// L2 switches remain transparent when the engine treats them as one segment;
+// the journey never invents intermediate devices or forwarding decisions.
+function packetJourney(net, srcDev, destination, opts = {}) {
+  const dst = typeof destination === 'number' ? destination : ip(String(destination));
+  const proto = opts.proto || 'icmp';
+  const dport = opts.dport;
+  const result = ping(net, srcDev, dst, { proto, dport });
+  const describe = (path, direction, ok, reason) => (path || []).map((id, index) => {
+    const dev = net.devices[id] || {};
+    const outgoing = path[index + 1] || null;
+    const link = outgoing && (net.links || []).find(l =>
+      (l.a[0] === id && l.b[0] === outgoing) || (l.b[0] === id && l.a[0] === outgoing));
+    const local = Object.entries(dev.ifaces || {}).find(([, iface]) => iface.up !== false && iface.ip != null);
+    return {
+      index: index + 1, deviceId: id, deviceName: dev.label || dev.hostname || id,
+      kind: dev.kind || 'device', address: local ? ipStr(local[1].ip) : null,
+      nextDeviceId: outgoing, localInterface: link ? (link.a[0] === id ? link.a[1] : link.b[1]) : null,
+      peerInterface: link ? (link.a[0] === id ? link.b[1] : link.a[1]) : null,
+      state: index === path.length - 1 ? (ok ? 'delivered' : 'stopped') : 'forwarded',
+      direction, detail: index === path.length - 1 ? reason : (outgoing ? 'Forwarded toward ' + (net.devices[outgoing].label || net.devices[outgoing].hostname || outgoing) : 'Packet entered this device')
+    };
+  });
+  const requestPath = result.forward && result.forward.path || [];
+  const replyPath = result.reply && result.reply.path || [];
+  return {
+    ok: result.ok, sourceDeviceId: srcDev, destinationIp: ipStr(dst), protocol: proto,
+    destinationPort: dport == null ? null : Number(dport), reason: result.reason,
+    request: describe(requestPath, 'request', !!(result.forward && result.forward.ok), result.forward ? result.forward.reason : result.reason),
+    reply: describe(replyPath, 'reply', !!(result.reply && result.reply.ok), result.reply ? result.reply.reason : 'Reply path not reached'),
+    requestResult: result.forward ? result.forward.reason : result.reason,
+    replyResult: result.reply ? result.reply.reason : 'Not attempted'
+  };
+}
+
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
-  aclDecision, forward, ping, sourceIpToward,
+  aclDecision, forward, ping, packetJourney, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
