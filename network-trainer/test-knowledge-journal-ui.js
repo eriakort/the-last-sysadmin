@@ -19,13 +19,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await page.reload({ waitUntil: 'load' });
   await page.locator('#navKnowledge').click();
   if (await page.locator('#knowledgeView').isVisible()) ok('Knowledge is a first-class workspace destination');
+  else fail('Knowledge workspace did not open');
   if (await page.locator('#knowledgeView').innerText().then(text => text.includes('Your learning plan') && text.includes('Routing and path verification') && text.includes('1 recent command error'))) ok('learning plan adapts its recommended focus to recent Workbench errors');
   else fail('learning plan did not derive a useful focus from the saved journal');
   await page.locator('#coachPracticeFocus').click();
   if (await page.locator('#tin').inputValue() === 'show ip route') ok('adaptive practice prepares the relevant Workbench command without changing simulator state');
   else fail('adaptive practice did not prepare the recommended command');
   await page.locator('#navKnowledge').click();
-  else fail('Knowledge workspace did not open');
   if (await page.locator('.knowledge-playbook').count() >= 4) ok('troubleshooting playbooks are available');
   else fail('troubleshooting playbooks are missing');
 
