@@ -6602,7 +6602,8 @@ function healthResourceSnapshot() {
   const diskUsed = Math.min(diskTotal, DISK_BASE + treeSize(S.fs) + (S.held || 0));
   const diskPercent = diskTotal ? Math.min(100, diskUsed / diskTotal * 100) : 0;
   const cpuWarn = !!(S.iowait || (top && top.cpu > 80) || cpu >= 85);
-  // Warn before headroom becomes critical; the busy simulator fixture leaves ~32% available.\n  const memoryWarn = memoryAvailable / memoryTotal < 0.35;
+  // Warn before headroom becomes critical; the busy simulator fixture leaves ~32% available.
+  const memoryWarn = memoryAvailable / memoryTotal < 0.35;
   const diskWarn = diskPercent >= 85 || !!S.inodeBad;
   return {
     top, cpu, cpuCores, cpuWarn,
