@@ -8,6 +8,7 @@ const { chapters } = require('./net-chapters');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
+const AW = require('./net-automation-workshop');
 const S = require('./net-scenario');
 const NC = require('./net-classroom');
 
@@ -39,7 +40,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], configArchives: Array.isArray(p.configArchives) ? p.configArchives : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], designAcademy: p.designAcademy && typeof p.designAcademy === 'object' ? p.designAcademy : {}, changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], configArchives: Array.isArray(p.configArchives) ? p.configArchives : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], designAcademy: p.designAcademy && typeof p.designAcademy === 'object' ? p.designAcademy : {}, automationWorkshop: p.automationWorkshop && typeof p.automationWorkshop === 'object' ? p.automationWorkshop : {}, changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -192,7 +193,7 @@ function dashboardSnapshot() {
     solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
   };
 }
-const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'protocols', 'design', 'knowledge', 'journal', 'changes']);
+const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'protocols', 'design', 'automation', 'knowledge', 'journal', 'changes']);
 function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
@@ -207,13 +208,14 @@ function showWorkspaceView(view, options = {}) {
     if (historyMode === 'replace') window.history.replaceState({ networkWorkspaceView: view }, '', url);
     else if (current !== view) window.history.pushState({ networkWorkspaceView: view }, '', url);
   }
-  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), protocols = $('#protocolsView'), design = $('#designView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
-  if (!overview || !incidents || !infrastructure || !protocols || !design || !knowledge || !journal || !changes || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), protocols = $('#protocolsView'), design = $('#designView'), automation = $('#automationView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !protocols || !design || !automation || !knowledge || !journal || !changes || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
   infrastructure.hidden = view !== 'infrastructure';
   protocols.hidden = view !== 'protocols';
   design.hidden = view !== 'design';
+  automation.hidden = view !== 'automation';
   knowledge.hidden = view !== 'knowledge';
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
@@ -229,6 +231,7 @@ function showWorkspaceView(view, options = {}) {
   if (view === 'infrastructure') renderInfrastructureView();
   if (view === 'protocols') renderProtocolLab();
   if (view === 'design') renderDesignAcademy();
+  if (view === 'automation') renderAutomationWorkshop();
   if (view === 'knowledge') renderKnowledgeCenter();
   if (view === 'journal') renderJournalPage();
   if (view === 'changes') renderChangeManagement();
@@ -2024,6 +2027,29 @@ async function renderClassroom(sb, body) {
 }
 
 
+/* ---------- network automation workshop ---------- */
+let AUTOMATION_CASE='baseline', AUTOMATION_LAB=null;
+function ensureAutomationLab(){if(!AUTOMATION_LAB||AUTOMATION_LAB.id!==AUTOMATION_CASE){const lab=AW.createLab(AUTOMATION_CASE);AUTOMATION_LAB={id:AUTOMATION_CASE,...lab};}}
+function renderAutomationWorkshop(){
+ const root=$('#automationView');if(!root)return;ensureAutomationLab();
+ PROG.automationWorkshop=PROG.automationWorkshop&&typeof PROG.automationWorkshop==='object'?PROG.automationWorkshop:{};
+ const playbook=AW.getPlaybook(AUTOMATION_CASE),saved=PROG.automationWorkshop[playbook.id],lab=AUTOMATION_LAB;
+ const tabs=AW.PLAYBOOKS.map(p=>'<button type="button" class="auto-tab'+(p.id===playbook.id?' active':'')+'" data-auto-case="'+esc(p.id)+'" aria-pressed="'+(p.id===playbook.id?'true':'false')+'"><b>'+esc(p.title)+'</b><small>'+esc(p.level)+'</small></button>').join('');
+ const deviceOptions=playbook.deviceIds.map(id=>'<option value="'+esc(id)+'"'+(lab.device===id?' selected':'')+'>'+esc(id)+'</option>').join('');
+ const commandGroups=playbook.steps.map(step=>'<section class="auto-command-group"><h3>Device · '+esc(step.device)+'</h3><div class="auto-command-list">'+step.commands.map((cmd,i)=>'<button type="button" class="auto-command" data-auto-command="'+esc(cmd)+'" data-auto-device="'+esc(step.device)+'"><span>'+(i+1)+'.</span><code>'+esc(cmd)+'</code><small>Load</small></button>').join('')+'</div></section>').join('');
+ const checks=saved&&saved.result?'<section class="auto-review" aria-live="polite"><div class="auto-review-head"><div><span class="eyebrow">Playbook verification</span><h2>'+saved.result.score+' / '+saved.result.total+' checks passed</h2></div><strong class="'+(saved.result.passed?'passed':'needs-work')+'">'+saved.result.percent+'%</strong></div><div class="auto-checks">'+saved.result.checks.map(x=>'<article class="'+(x.ok?'good':'gap')+'"><b>'+(x.ok?'✓ ':'↻ ')+esc(x.label)+'</b><p>'+esc(x.detail)+'</p></article>').join('')+'</div></section>':'<p class="auto-empty">Run the playbook in the isolated simulator, then verify the resulting device configuration and routing state.</p>';
+ const history=lab.output.map(x=>'<div class="auto-output-line '+(x.code?'error':'')+'"><b>'+esc(x.device)+'#</b> '+esc(x.command)+(x.out?'\n'+esc(x.out):'')+'</div>').join('');
+ root.innerHTML='<div class="automation-page"><style>'+ 
+ '.automation-page{max-width:1240px;margin:0 auto;padding:26px}.auto-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}.auto-head h1{font-size:30px;margin:3px 0 6px}.auto-head p{color:var(--muted);max-width:760px;margin:0}.auto-sim-label{border:1px solid var(--line);border-radius:20px;padding:6px 10px;color:var(--muted);font-size:11px;letter-spacing:.07em}.auto-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:18px 0}.auto-tab{text-align:left;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);cursor:pointer}.auto-tab.active{border-color:var(--amber);box-shadow:inset 0 -2px var(--amber);background:color-mix(in srgb,var(--amber) 8%,var(--panel))}.auto-tab b,.auto-tab small{display:block}.auto-tab small{color:var(--muted);font-size:11px;margin-top:4px}.auto-brief,.auto-console,.auto-review,.auto-recipes{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:17px;margin-top:12px}.auto-brief h2{font-size:21px;margin:3px 0 7px}.auto-brief p{color:var(--muted);margin:0}.auto-objectives{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:13px}.auto-objectives span{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--raise);font-size:12px}.auto-console-head,.auto-review-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.auto-console h2,.auto-review h2{margin:2px 0;font-size:18px}.auto-console select{min-width:130px}.auto-terminal{margin:12px 0;padding:12px;min-height:110px;max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#071016;color:#cfe;font:12px/1.5 ui-monospace,monospace;border-radius:7px}.auto-output-line{padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)}.auto-output-line b{color:var(--amber)}.auto-output-line.error{color:#ffbcbc}.auto-command-form{display:flex;gap:8px;align-items:center}.auto-command-form input{flex:1;min-width:0;font:12px ui-monospace,monospace;padding:9px}.auto-recipes h2{font-size:17px;margin:0 0 10px}.auto-command-group{margin-top:12px}.auto-command-group h3{font-size:12px;color:var(--amber);margin:0 0 6px}.auto-command-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.auto-command{display:flex;align-items:center;gap:8px;text-align:left;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--raise);color:var(--ink);cursor:pointer}.auto-command span,.auto-command small{color:var(--muted);font-size:10px}.auto-command code{flex:1;min-width:0;overflow-wrap:anywhere;font:11px ui-monospace,monospace}.auto-command:hover{border-color:var(--amber)}.auto-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.auto-review-head>strong{font-size:24px;color:var(--amber)}.auto-review-head>strong.passed{color:var(--good)}.auto-review-head>strong.needs-work{color:var(--bad)}.auto-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.auto-checks article{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}.auto-checks article.good{border-left:3px solid var(--good)}.auto-checks article.gap{border-left:3px solid var(--bad)}.auto-checks p,.auto-empty{font-size:12px;color:var(--muted);margin:5px 0}.auto-note{font-size:11px;color:var(--muted);margin-top:10px}@media(max-width:760px){.automation-page{padding:15px}.auto-tabs,.auto-objectives,.auto-checks,.auto-command-list{grid-template-columns:1fr}.auto-command-form{flex-wrap:wrap}.auto-command-form input{flex-basis:100%}}'+
+ '</style><header class="auto-head"><div><div class="eyebrow">Network engineering · guided automation</div><h1>Network Automation Workshop</h1><p>Practise repeatable configuration workflows against an isolated network simulator. Learn to standardise, verify and safely re-run changes before applying the same discipline to real automation tools.</p></div><span class="auto-sim-label">SIMULATED · NO EXTERNAL DEVICES</span></header><nav class="auto-tabs" aria-label="Automation playbooks">'+tabs+'</nav><section class="auto-brief"><div class="eyebrow">'+esc(playbook.level)+' playbook</div><h2>'+esc(playbook.title)+'</h2><p>'+esc(playbook.summary)+'</p><div class="auto-objectives">'+playbook.objectives.map(x=>'<span>• '+esc(x)+'</span>').join('')+'</div></section><section class="auto-console"><div class="auto-console-head"><div><div class="eyebrow">Interactive command sandbox</div><h2>Run and inspect commands</h2></div><label>Active device <select id="autoDevice" aria-label="Active automation lab device">'+deviceOptions+'</select></label></div><pre class="auto-terminal" id="autoOutput" aria-live="polite">'+(history||'Sandbox ready. Select a command recipe below or enter a command.')+'</pre><form id="autoCommandForm" class="auto-command-form"><input id="autoCommandInput" autocomplete="off" aria-label="Network automation command" placeholder="Enter a simulated device command…"><button class="btn primary" type="submit">Run command</button></form><div class="auto-actions"><button class="btn primary" id="autoVerify" type="button">Verify playbook</button><button class="btn" id="autoReset" type="button">Reset sandbox</button></div><p class="auto-note">Commands execute only inside this playbook&#39;s isolated simulator. They do not affect the active Workbench mission or real network equipment.</p></section><section class="auto-recipes"><h2>Command recipe · select to load, then run</h2>'+commandGroups+'</section>'+checks+'</div>';
+ root.querySelectorAll('[data-auto-case]').forEach(b=>b.addEventListener('click',()=>{AUTOMATION_CASE=b.dataset.autoCase;AUTOMATION_LAB=null;renderAutomationWorkshop();}));
+ root.querySelectorAll('[data-auto-command]').forEach(b=>b.addEventListener('click',()=>{root.querySelector('#autoDevice').value=b.dataset.autoDevice;lab.device=b.dataset.autoDevice;lab.cli.on(lab.device);root.querySelector('#autoCommandInput').value=b.dataset.autoCommand;root.querySelector('#autoCommandInput').focus();}));
+ root.querySelector('#autoDevice').addEventListener('change',e=>{lab.device=e.target.value;lab.cli.on(lab.device);});
+ root.querySelector('#autoCommandForm').addEventListener('submit',e=>{e.preventDefault();const field=root.querySelector('#autoCommandInput'),command=field.value.trim();if(!command)return;const device=lab.device;const result=lab.cli.on(device).run(command);lab.output.push({device,command,out:result.out||'',code:result.code});lab.output=lab.output.slice(-80);field.value='';root.querySelector('#autoOutput').innerHTML=lab.output.map(x=>'<div class="auto-output-line '+(x.code?'error':'')+'"><b>'+esc(x.device)+'#</b> '+esc(x.command)+(x.out?'\n'+esc(x.out):'')+'</div>').join('');root.querySelector('#autoOutput').scrollTop=root.querySelector('#autoOutput').scrollHeight;});
+ root.querySelector('#autoVerify').addEventListener('click',()=>{const result=AW.evaluate(playbook.id,lab.net);PROG.automationWorkshop[playbook.id]={result,reviewedAt:new Date().toISOString()};saveProg();addJournalEntry({type:'automation playbook review',text:playbook.title+' · '+result.score+'/'+result.total+' checks passed'});renderAutomationWorkshop();});
+ root.querySelector('#autoReset').addEventListener('click',()=>{AUTOMATION_LAB=null;renderAutomationWorkshop();});
+}
+
 /* ---------- enterprise network design academy ---------- */
 let DESIGN_CASE='small-office';
 function renderDesignAcademy(){
@@ -2164,6 +2190,7 @@ function boot() {
         <button class="nav-item" id="navInfrastructure" title="Inspect devices, links and infrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
         <button class="nav-item" id="navProtocols" title="Explore how network protocols exchange packets" data-view="protocols" type="button"><span class="nav-glyph">⇄</span>Protocol labs</button>
         <button class="nav-item" id="navDesign" title="Practise enterprise network architecture decisions" data-view="design" type="button"><span class="nav-glyph">⌘</span>Design academy</button>
+        <button class="nav-item" id="navAutomation" title="Practise repeatable network configuration workflows" data-view="automation" type="button"><span class="nav-glyph">⚙</span>Automation lab</button>
         <div class="nav-section">Reference & records</div>
         <button class="nav-item" id="navKnowledge" title="Browse command references and troubleshooting playbooks" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
         <button class="nav-item" id="navJournal" title="Review saved investigation notes and evidence" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
@@ -2193,6 +2220,7 @@ function boot() {
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
     <section id="protocolsView" aria-label="Interactive network protocol labs" hidden></section>
     <section id="designView" aria-label="Enterprise network design academy" hidden></section>
+    <section id="automationView" aria-label="Network automation workshop" hidden></section>
     <section id="knowledgeView" aria-label="Network knowledge centre" hidden></section>
     <section id="journalView" aria-label="Engineering journal" hidden></section>
     <section id="changeView" aria-label="Change management" hidden></section>
@@ -2221,6 +2249,7 @@ function boot() {
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
   $('#navProtocols').addEventListener('click', () => showWorkspaceView('protocols'));
   $('#navDesign').addEventListener('click', () => showWorkspaceView('design'));
+  $('#navAutomation').addEventListener('click', () => showWorkspaceView('automation'));
   $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
   $('#navJournal').addEventListener('click', () => showWorkspaceView('journal'));
   $('#navChanges').addEventListener('click', () => showWorkspaceView('changes'));
