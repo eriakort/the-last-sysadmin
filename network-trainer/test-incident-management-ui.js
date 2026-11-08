@@ -2,6 +2,7 @@
 // ticket-linked timeline and verified handoff into the Workbench.
 const path = require('path');
 const { chromium } = require('playwright');
+const { chapters } = require('./net-chapters');
 const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
 (async () => {
@@ -76,6 +77,39 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
       ok('incident timeline retains the investigation handoff record');
     else fail('incident timeline is missing the investigation handoff');
   } else fail('active incident does not offer a Workbench investigation action');
+
+  // Complete the selected mission through the same persisted progress model
+  // used by the simulator, then reload so the incident is genuinely resolved.
+  const chapter = chapters.find((item, index) =>
+    (item.ticket && item.ticket.id || 'NET-' + String(index + 1).padStart(4, '0')) === ticketId);
+  if (!chapter) throw new Error('Could not map selected incident to its training mission');
+  await page.evaluate(missionId => {
+    const progress = JSON.parse(localStorage.getItem('nettrainer') || '{}');
+    progress.done = { ...(progress.done || {}), [missionId]: true };
+    localStorage.setItem('nettrainer', JSON.stringify(progress));
+  }, chapter.id);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(150);
+  await page.locator('#navIncidents').click();
+  await page.locator('#incidentStatus').selectOption('resolved');
+  const closure = page.locator('#incidentDetail .incident-closure-review');
+  if (await closure.count() === 1) {
+    // Read authored DOM text rather than rendered innerText: the interface
+    // intentionally styles section labels, and text-transform must not affect
+    // a content-presence assertion.
+    const reviewText = (await closure.textContent()).replace(/\\s+/g, ' ').toLowerCase();
+    if (reviewText.includes('evidence-bearing entries') && reviewText.includes('handover questions'))
+      ok('resolved incidents expose an evidence-aware closure review and shift-handover prompts');
+    else fail('closure review content mismatch: ' + reviewText.slice(0, 1200));
+    const reportEvent = page.waitForEvent('download');
+    await page.locator('#incidentExportReport').click();
+    const report = await reportEvent;
+    const reportText = require('fs').readFileSync(await report.path(), 'utf8');
+    if (reportText.includes('## Closure review') && reportText.includes('### Handover prompts'))
+      ok('exported incident report includes closure and handover guidance');
+    else fail('incident report omitted closure review content');
+  } else fail('resolved incident did not expose its closure review');
+  await page.locator('#incidentStatus').selectOption('open');
 
   await page.setViewportSize({ width: 390, height: 844 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);

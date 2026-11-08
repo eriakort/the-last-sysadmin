@@ -4637,7 +4637,36 @@ function renderIncidentCenter() {
     <div class="incident-actions"><button class="btn" id="incidentExportReport">Export incident report</button>${selected.status === 'new' ? '<button class="btn primary" id="incidentAcknowledge">Acknowledge</button>' : ''}
       ${selected.status === 'resolved' ? '<button class="btn" id="incidentReview">Review in Workbench</button>' : '<button class="btn primary" id="incidentInvestigate">Investigate in Workbench →</button>'}
     </div>
-    <div class="incident-timeline"><div class="label2">Investigation timeline</div>${timeline || '<p class="dim">No ticket-linked activity yet. Acknowledge the incident or start an investigation to create the first record.</p>'}</div>`
+    <div class="incident-timeline"><div class="label2">Investigation timeline</div>${timeline || '<p class="dim">No ticket-linked activity yet. Acknowledge the incident or start an investigation to create the first record.</p>'}</div>
+    ${selected.status === 'resolved' ? (() => {
+      const evidence = (PROG.journal || []).filter(e => e.ticket === selected.id);
+      const commands = evidence.filter(e => e.command).length;
+      const outputs = evidence.filter(e => e.output || e.result).length;
+      const evidenceRecords = evidence.filter(e => e.command || e.output || e.result).length;
+      return `<section class="incident-timeline incident-closure-review" aria-labelledby="incidentClosureHeading">
+        <div class="label2" id="incidentClosureHeading">Closure review · evidence and handover</div>
+        <p>Use this review to assess the quality of the incident record. Activity counts are indicators only; they do not prove that service recovery or business impact was independently verified.</p>
+        <div class="incident-facts">
+          <div><small>Timeline entries</small><b>${evidence.length}</b></div>
+          <div><small>Command records</small><b>${commands}</b></div>
+          <div><small>Output / result records</small><b>${outputs}</b></div>
+          <div><small>Evidence-bearing entries</small><b>${evidenceRecords}</b></div>
+        </div>
+        <h3>Before closing the record</h3>
+        <ul>
+          <li>Attach the before-and-after state and the exact command or test used to validate recovery.</li>
+          <li>Confirm the affected user or service path works, and record any remaining limitations.</li>
+          <li>Record the root cause separately from symptoms, contributing factors and assumptions.</li>
+          <li>Identify the owner for follow-up actions, monitoring and rollback if the fault returns.</li>
+        </ul>
+        <h3>Handover questions</h3>
+        <ol>
+          <li>What evidence rules out the most plausible alternative cause?</li>
+          <li>Which change restored service, and how was its scope kept minimal?</li>
+          <li>What should the next shift monitor, and what condition requires escalation?</li>
+        </ol>
+      </section>`;
+    })() : ''}`
     : '<div class="incident-detail-empty"><b>No incidents match these filters</b><p>Adjust the filters to see more of the queue.</p></div>';
   root.innerHTML = `
     <div class="incident-page-heading"><div><div class="eyebrow">Network operations · service desk</div><h1>Incident management</h1><p>Own the ticket lifecycle: prioritize, acknowledge, investigate with evidence and verify before resolution.</p></div><button class="btn" id="incidentOverviewBack">← Operations overview</button></div>
@@ -4693,7 +4722,19 @@ function exportIncidentReport(ticket) {
       '### '+(e.type || 'Activity')+' — '+new Date(e.at || 0).toLocaleString(), e.text || '',
       e.command ? 'Command: '+e.command : '', e.device ? 'Device: '+e.device : '', e.result ? 'Result: '+e.result : '',
       e.output ? 'Output:\n\n'+fence+'text\n'+e.output+'\n'+fence : ''
-    ].filter(Boolean).join('\n\n')) : ['No ticket-linked activity recorded.'])
+    ].filter(Boolean).join('\n\n')) : ['No ticket-linked activity recorded.']),
+    '', '## Closure review',
+    'Evidence-bearing journal entries: '+entries.filter(e => e.command || e.output || e.result).length,
+    'Command records: '+entries.filter(e => e.command).length,
+    'Output / result records: '+entries.filter(e => e.output || e.result).length,
+    '', '### Closure checklist',
+    '- Confirm recovery with a user-visible service test and preserve before/after evidence.',
+    '- Separate the confirmed root cause from symptoms, contributing factors and assumptions.',
+    '- Record residual risk, monitoring, follow-up owner and rollback criteria.',
+    '', '### Handover prompts',
+    '- What evidence rules out the most plausible alternative cause?',
+    '- Which minimal change restored service, and how was its scope validated?',
+    '- What should the next shift monitor, and what condition requires escalation?'
   ];
   const blob = new Blob([lines.join('\n')], {type:'text/markdown;charset=utf-8'}), url=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=url; a.download='incident-'+String(ticket.id).toLowerCase()+'-report.md'; a.click(); URL.revokeObjectURL(url);
