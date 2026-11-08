@@ -301,7 +301,7 @@ test('packet journey reports the real request and reply hops from the forwarding
   if (!journey.ok) throw new Error('expected a successful round trip');
   if (journey.request.map(h => h.deviceId).join(',') !== 'h1,r1,h2') throw new Error('unexpected request path: ' + journey.request.map(h => h.deviceId));
   if (journey.reply.map(h => h.deviceId).join(',') !== 'h2,r1,h1') throw new Error('unexpected reply path: ' + journey.reply.map(h => h.deviceId));
-  if (journey.request[1].kind !== 'router' || journey.request[1].localInterface !== 'eth0') throw new Error('router/interface evidence missing');
+  if (journey.request[1].kind !== 'router' || journey.request[1].localInterface !== 'eth0' || journey.request[1].ingressInterface !== 'eth0' || journey.request[1].egressInterface !== 'eth1') throw new Error('router ingress/egress interface evidence missing');
   if (journey.request[journey.request.length - 1].state !== 'delivered') throw new Error('destination should be marked delivered');
 });
 test('packet journey preserves the actual forwarding failure and does not fabricate a reply', () => {

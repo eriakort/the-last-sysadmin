@@ -692,18 +692,28 @@ function packetJourney(net, srcDev, destination, opts = {}) {
   const result = ping(net, srcDev, dst, { proto, dport });
   const describe = (path, direction, ok, reason) => (path || []).map((id, index) => {
     const dev = net.devices[id] || {};
+    const previous = path[index - 1] || null;
     const outgoing = path[index + 1] || null;
-    let transit = null;
+    let ingress = null, egress = null;
+    if (previous) for (const name of Object.keys(dev.ifaces || {})) {
+      const peer = l2Domain(net, id, name).find(([peerId]) => peerId === previous);
+      if (peer) { ingress = { local: name, peer: peer[1] }; break; }
+    }
     if (outgoing) for (const name of Object.keys(dev.ifaces || {})) {
       const peer = l2Domain(net, id, name).find(([peerId]) => peerId === outgoing);
-      if (peer) { transit = { local: name, peer: peer[1] }; break; }
+      if (peer) { egress = { local: name, peer: peer[1] }; break; }
     }
     const local = Object.entries(dev.ifaces || {}).find(([, iface]) => iface.up !== false && iface.ip != null);
     return {
       index: index + 1, deviceId: id, deviceName: dev.label || dev.hostname || id,
       kind: dev.kind || 'device', address: local ? ipStr(local[1].ip) : null,
-      nextDeviceId: outgoing, localInterface: transit ? transit.local : null,
-      peerInterface: transit ? transit.peer : null,
+      nextDeviceId: outgoing,
+      localInterface: ingress ? ingress.local : (egress ? egress.local : null),
+      peerInterface: ingress ? ingress.peer : (egress ? egress.peer : null),
+      ingressInterface: ingress ? ingress.local : null,
+      ingressPeerInterface: ingress ? ingress.peer : null,
+      egressInterface: egress ? egress.local : null,
+      egressPeerInterface: egress ? egress.peer : null,
       state: index === path.length - 1 ? (ok ? 'delivered' : 'stopped') : 'forwarded',
       direction, detail: index === path.length - 1 ? reason : (outgoing ? 'Forwarded toward ' + (net.devices[outgoing].label || net.devices[outgoing].hostname || outgoing) : 'Packet entered this device')
     };
