@@ -27,6 +27,25 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('command search narrows the reference library');
   else fail('command search did not filter the library');
 
+  await page.locator('[data-knowledge-coach="show spanning-tree"]').click();
+  if (await page.locator('#networkCommandCoach').isVisible() && (await page.locator('#networkCommandCoach').innerText()).includes('NETWORK LEARNING COACH'))
+    ok('Network Learning Coach explains a command in context');
+  else fail('Network Learning Coach did not open');
+  await page.locator('#networkCoachMode').selectOption('assisted');
+  if ((await page.locator('#networkCommandCoach').innerText()).includes('Check the selected device'))
+    ok('coach mode switches to concise assistance');
+  else fail('assisted coach mode did not update');
+  await page.locator('#networkCoachMode').selectOption('challenge');
+  if ((await page.locator('#networkCommandCoach').innerText()).includes('Your task'))
+    ok('challenge mode prompts independent reasoning');
+  else fail('challenge mode did not show a task');
+  await page.locator('#networkCoachMode').selectOption('guided');
+  await page.locator('#networkCoachPractice').click();
+  if (await page.locator('#tin').inputValue() === 'show spanning-tree')
+    ok('coach practice sends the selected command to the Workbench');
+  else fail('coach practice did not prepare the Workbench command');
+
+  await page.locator('#navKnowledge').click();
   await page.locator('#knowledgeSearch').fill('');
   await page.locator('#knowledgeCategory').selectOption({ label: 'Cisco IOS · switching' });
   if (await page.locator('.knowledge-command').count() > 0 && (await page.locator('.knowledge-command').first().innerText()).toLowerCase().includes('switch'))
