@@ -85,6 +85,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible() && (await page.textContent('#serverHealthDialog')).includes('Service dependency view'))
     ok('server health dashboard opens with a service dependency view');
   else fail('server health dashboard did not render');
+  const dependencyNodes=page.locator('#serverHealthDialog [data-health-node]');
+  if(await dependencyNodes.count()>=8) ok('dependency explorer renders selectable application, SSH and scheduled-job paths');
+  else fail('dependency explorer is missing expected evidence nodes');
+  await page.locator('#serverHealthDialog [data-health-node="db-connection"]').click();
+  if((await page.locator('#healthDependencyDetail').innerText()).includes('established connection') && await page.locator('#serverHealthDialog [data-health-node="db-connection"]').getAttribute('aria-pressed')==='true') ok('dependency selection reveals its evidence in an accessible detail panel');
+  else fail('dependency selection did not update the evidence panel');
+
   if ((await page.textContent('#serverHealthDialog')).includes('simulator state') && (await page.textContent('#serverHealthDialog')).includes('not your computer'))
     ok('dashboard clearly identifies its simulated, read-only data source');
   else fail('dashboard does not explain its simulation boundary');
