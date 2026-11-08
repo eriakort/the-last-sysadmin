@@ -1,0 +1,5 @@
+const assert=require('assert');
+const W=require('./net-automation-workshop');
+function runAll(lab,device,commands){lab.cli.on(device);for(const command of commands){const r=lab.cli.run(command);assert.strictEqual(r.code,0,device+' :: '+command+' :: '+r.out);}}
+for(const p of W.PLAYBOOKS){const lab=W.createLab(p.id);assert.strictEqual(W.evaluate(p.id,lab.net).passed,false);for(const step of p.steps)runAll(lab,step.device,step.commands);const result=W.evaluate(p.id,lab.net);assert.strictEqual(result.passed,true,p.id+' should pass: '+JSON.stringify(result));for(const step of p.steps)runAll(lab,step.device,step.commands);const repeated=W.evaluate(p.id,lab.net);assert.strictEqual(repeated.passed,true,p.id+' should remain valid when commands are repeated');if(p.id==='switch-access'){assert.strictEqual(lab.net.devices.sw1.vlans.filter(v=>v===20).length,1);assert.strictEqual(lab.net.devices.sw1.ospf,undefined);}if(p.id==='baseline'){assert.strictEqual(lab.net.devices.edge.ntp.servers.length,1);assert.strictEqual(lab.net.devices.edge.syslog.hosts.length,1);}}
+console.log('Network automation workshop unit tests passed.');
