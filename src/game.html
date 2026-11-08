@@ -428,6 +428,15 @@ body.practicing{padding-top:40px}
 .bash-workshop-card.complete .bash-status{color:var(--green)}
 .bash-workshop-actions{display:flex;gap:8px;flex-wrap:wrap}
 .bash-workshop-note{font-size:12px;color:var(--muted);margin:14px 0 0}
+.ops-lab-summary{color:var(--muted);font-size:13px;max-width:72ch;margin:8px 0 16px}
+.ops-lab-card{border:1px solid var(--line);background:var(--raise);border-radius:10px;padding:14px;min-width:0}
+.ops-lab-card.complete{border-color:var(--green)}
+.ops-lab-card h3{font-size:15px;margin:5px 0}
+.ops-lab-card p{font-size:12px;color:var(--muted);margin:6px 0}
+.ops-lab-card .ops-lab-status{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.ops-lab-card.complete .ops-lab-status{color:var(--green)}
+.ops-lab-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ops-lab-safety{border-left:3px solid var(--blue);padding:9px 11px;background:var(--raise);font-size:11px;color:var(--muted);margin-top:14px}
 @media(max-width:680px){.bash-workshop-backdrop{padding:8px}.bash-workshop-dialog{padding:14px;max-height:94vh}.bash-workshop-grid{grid-template-columns:1fr}.bash-workshop-head h2{font-size:19px}}
 
 </style>
@@ -455,6 +464,7 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
       <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
       <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
+      <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6250,6 +6260,9 @@ function completeMission() {
     S.missionStart = null; timeStr = ` · <span class="pu">${fmtDur(ms)}</span>`;
   }
   recordAttempt(m);
+  if (PRACTICE.active && PRACTICE.label === 'Linux Security & Recovery Lab') {
+    try { const completed = JSON.parse(localStorage.getItem('lsa-ops-recovery-complete') || '[]'); if (!completed.includes(m.id)) completed.push(m.id); localStorage.setItem('lsa-ops-recovery-complete', JSON.stringify(completed)); } catch (e) {}
+  }
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -6613,6 +6626,37 @@ function openBashWorkshop(){
   document.body.appendChild(root);const close=root.querySelector('[data-bash-close]');if(close)close.focus();
 }
 
+
+/* Linux security operations and storage recovery — isolated, evidence-led practice. */
+const OPS_RECOVERY_MISSIONS = [
+  {id:'ops-revoke-contractor',title:'1 · Revoke unauthorised privileged access',story:'The access review found that a former contractor still belongs to the sudo group. Preserve the account and its evidence, but remove the unnecessary privilege.',objective:'Review the group and authentication evidence, then remove jmorrow from sudo. Do not delete the account or its home directory.',hints:['Compare the sudo group in /etc/group with the accepted SSH and sudo events in /var/log/auth.log.','Use sudo gpasswd -d USER GROUP to remove supplementary group membership.'],check_type:'group_not_member',check_arg1:'sudo',check_arg2:'jmorrow'},
+  {id:'ops-protect-customer-export',title:'2 · Restrict exposed customer data',story:'A customer export was written to a public-facing directory. Reduce its permissions to owner-only while retaining the file for investigation.',objective:'Set /srv/halcyon/export/customers.csv to mode 0600 and verify the resulting permissions.',hints:['Use ls -l to inspect the current mode before changing it.','Use sudo chmod 600 /srv/halcyon/export/customers.csv, then verify with stat or ls -l.'],check_type:'file_mode',check_arg1:'/srv/halcyon/export/customers.csv',check_arg2:'600'},
+  {id:'ops-disable-export-hook',title:'3 · Disable suspicious persistence safely',story:'An unauthorised export hook is present in the application directory. Keep it as evidence, but prevent it from being executed by the scheduled job.',objective:'Remove execute permission from /srv/halcyon/export/sync_out.sh without deleting or editing the evidence.',hints:['Inspect its owner, timestamp and mode with stat or ls -l.','Use sudo chmod 640 /srv/halcyon/export/sync_out.sh. The file should remain readable but not executable.'],check_type:'file_mode',check_arg1:'/srv/halcyon/export/sync_out.sh',check_arg2:'640'},
+  {id:'ops-mount-backup-volume',title:'4 · Provision the backup volume',story:'A spare ext4 volume is available at /dev/vdb1. Prepare a dedicated mount point and mount the volume without touching the root filesystem.',objective:'Create /mnt/backups and mount /dev/vdb1 there. Verify the device-to-mount-point relationship.',hints:['Check lsblk and findmnt before making changes.','Use sudo mkdir -p /mnt/backups followed by sudo mount /dev/vdb1 /mnt/backups.'],check_type:'mount_state',check_arg1:'/mnt/backups',check_arg2:'/dev/vdb1'},
+  {id:'ops-persist-backup-mount',title:'5 · Make the mount persistent',story:'The backup volume is mounted for this session, but it would not survive a reboot. Add a safe fstab entry and validate it.',objective:'Add /dev/vdb1 /mnt/backups ext4 defaults,nofail 0 2 to /etc/fstab, then inspect the entry.',hints:['Back up /etc/fstab before editing it.','Append the six-field entry with sudo tee -a /etc/fstab; use findmnt --verify if supported by the simulated tools.'],check_type:'file_matches',check_arg1:'/etc/fstab',check_arg2:'/dev/vdb1\\s+/mnt/backups\\s+ext4\\s+defaults,nofail\\s+0\\s+2'},
+  {id:'ops-backup-and-restore',title:'6 · Prove the backup can restore',story:'A backup is only useful if it can be read back. Create a compressed archive of /etc on the mounted backup volume, then restore it to a separate test directory.',objective:'Create /mnt/backups/etc-backup.tar.gz from /etc and extract it under /mnt/restore. Verify /mnt/restore/etc/hostname exists.',hints:['Create the archive with tar -czf and use -C / to store paths relative to the filesystem root.','Create /mnt/restore, then extract with tar -xzf ARCHIVE -C /mnt/restore.'],check_type:'file_exists',check_arg1:'/mnt/restore/etc/hostname'}
+];
+function opsRecoveryCompleted(){try{const ids=JSON.parse(localStorage.getItem('lsa-ops-recovery-complete')||'[]');return Array.isArray(ids)?ids:[];}catch(e){return [];}}
+function closeOpsRecoveryLab(){const root=document.getElementById('opsRecoveryDialog');if(root)root.remove();}
+function openOpsRecoveryLab(){
+  closeOpsRecoveryLab();
+  const completed=opsRecoveryCompleted();
+  const root=document.createElement('div');root.id='opsRecoveryDialog';root.className='bash-workshop-backdrop';
+  root.innerHTML='<section class="bash-workshop-dialog" role="dialog" aria-modal="true" aria-labelledby="opsRecoveryTitle">'
+  +'<div class="bash-workshop-head"><div><div class="eyebrow">Linux Sysadmin · Isolated practical lab</div><h2 id="opsRecoveryTitle">Security operations &amp; storage recovery</h2></div><button class="btn" type="button" data-ops-close aria-label="Close security and recovery lab">Close</button></div>'
+  +'<p class="ops-lab-summary">Work through a realistic handover: investigate suspicious access, contain exposed data without destroying evidence, prepare persistent backup storage, and prove that a restore works. Each run uses a fresh simulated server; your campaign files and progress remain untouched.</p>'
+  +'<div class="bash-workshop-grid">'+OPS_RECOVERY_MISSIONS.map(function(item){const done=completed.includes(item.id);return '<article class="ops-lab-card'+(done?' complete':'')+'"><div class="ops-lab-status">'+(done?'✓ Demonstrated':'Practice objective')+'</div><h3>'+esc(item.title)+'</h3><p>'+esc(item.story)+'</p><p><strong>'+esc(item.objective)+'</strong></p></article>';}).join('')+'</div>'
+  +'<div class="ops-lab-actions"><button class="btn primary" type="button" data-ops-start>Start isolated lab</button><button class="btn" type="button" data-ops-reset>Reset demonstrated progress</button></div>'
+  +'<p class="ops-lab-safety">Simulation only — commands run in the browser-based Linux sandbox, never on your computer or a real server. Preserve evidence and verify each change before moving on.</p></section>';
+  root.addEventListener('click',function(event){
+    if(event.target===root||event.target.closest('[data-ops-close]')){closeOpsRecoveryLab();return;}
+    if(event.target.closest('[data-ops-reset]')){try{localStorage.removeItem('lsa-ops-recovery-complete');}catch(e){}closeOpsRecoveryLab();openOpsRecoveryLab();return;}
+    if(event.target.closest('[data-ops-start]')){closeOpsRecoveryLab();playAuthored(OPS_RECOVERY_MISSIONS,'Linux Security & Recovery Lab');}
+  });
+  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeOpsRecoveryLab();});
+  document.body.appendChild(root);const close=root.querySelector('[data-ops-close]');if(close)close.focus();
+}
+
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6775,6 +6819,8 @@ function boot(restored) {
   if (healthButton && !healthButton.dataset.bound) { healthButton.dataset.bound='true'; healthButton.addEventListener('click',openServerHealth); }
   const bashButton=document.getElementById('btnBashWorkshop');
   if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
+  const opsButton=document.getElementById('btnOpsRecoveryLab');
+  if(opsButton&&!opsButton.dataset.bound){opsButton.dataset.bound='true';opsButton.addEventListener('click',openOpsRecoveryLab);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
   initFilesystemExplorer();
@@ -7183,6 +7229,12 @@ function authoredCheck(m) {
       const want = /^(active|running|start|up|on|enabled|true)/i.test(a2 || 'active');
       return () => { const s = S.services[a1]; return !!s && (!!s.active === want); };
     }
+    case 'file_mode':
+      return () => { const n = getNode(absPath(a1)); const want = parseInt(a2, 8); return !!(n && n.type === 'file' && Number.isFinite(want) && n.mode === want); };
+    case 'group_not_member':
+      return () => { const row = splitLines(getNode('/etc/group')?.content || '').map(line => line.split(':')).find(parts => parts[0] === a1); return !!row && !(row[3] || '').split(',').includes(a2); };
+    case 'mount_state':
+      return () => (S.mounts || []).some(mount => mount.mp === a1 && mount.dev === a2);
     default:
       return () => false;
   }
@@ -7207,7 +7259,8 @@ function playAuthored(missions, label) {
     ch: chIdx, id: m.id, title: m.title || 'Mission',
     story: m.story || '', objective: m.objective || 'Complete the task.',
     hints: Array.isArray(m.hints) ? m.hints.slice(0, 3) : [],
-    check: authoredCheck(m)
+    check: typeof m.check === 'function' ? m.check : authoredCheck(m),
+    onStart: typeof m.onStart === 'function' ? m.onStart : undefined
   }));
   PRACTICE = { active: true, startIdx, endIdx: MISSIONS.length - 1, label: label || '' };
   S = freshState(); S.sudo = true; S.mission = startIdx;
