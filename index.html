@@ -6282,6 +6282,7 @@ function completeMission() {
   if (PRACTICE.active && m.id === 'cross-track-web-availability-linux') crossTrackWrite('linux');
   if (PRACTICE.active && m.id === 'cross-track-remote-admin-linux') crossTrackWrite('remoteLinux');
   if (PRACTICE.active && m.id === 'cross-track-ssh-hardening-linux') crossTrackWrite('hardeningLinux');
+  if (PRACTICE.active && m.id === 'cross-track-contractor-containment-linux') crossTrackWrite('contractorLinux');
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -6705,6 +6706,13 @@ const CROSS_TRACK_HARDENING_LINUX_MISSION=[{
  check_type:'service_state',check_arg1:'fail2ban',check_arg2:'active',
  onStart:()=>{if(S.services&&S.services.fail2ban)S.services.fail2ban.active=false;}
 }];
+const CROSS_TRACK_CONTAINMENT_LINUX_MISSION=[{
+ id:'cross-track-contractor-containment-linux',title:'Revoke compromised contractor privileges',
+ story:'Security has correlated repeated SSH authentication activity from 198.51.100.200 with the former contractor account jmorrow. The account still belongs to sudo. Preserve the account and its home directory for investigation, but remove its unnecessary administrative privilege.',
+ objective:'Review the authentication evidence and sudo group membership, then remove jmorrow from sudo. Do not delete the account or alter its home directory.',
+ hints:['Use sudo grep -n jmorrow /var/log/auth.log to review the recorded SSH and privilege events, then inspect getent group sudo.','Use sudo gpasswd -d jmorrow sudo, then verify the sudo group no longer lists jmorrow.'],
+ check_type:'group_not_member',check_arg1:'sudo',check_arg2:'jmorrow'
+}];
 function closeCrossTrackCase(){const root=document.getElementById('crossTrackCaseDialog');if(root)root.remove();}
 function openCrossTrackCase(){
  closeCrossTrackCase();const state=crossTrackRead();
@@ -6718,6 +6726,8 @@ function openCrossTrackCase(){
  +'<div class="ops-lab-card'+(state.remoteNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteNetwork?'✓ Network task demonstrated':'4 · Network Sysadmin')+'</div><h3>Repair the management access policy</h3><p>Correct ACL order to permit SSH while continuing to deny unrelated services.</p><div class="ops-lab-actions"><button class="btn" type="button" data-remote-network>Open Network task</button></div></div>'
  +'<div class="ops-lab-card'+(state.hardeningLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningLinux?'✓ Linux task demonstrated':'5 · Linux Sysadmin')+'</div><h3>Restore brute-force protection</h3><p>Inspect the Fail2Ban unit, restore the service and verify its state.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-hardening-linux>Start Linux task</button></div></div>'
  +'<div class="ops-lab-card'+(state.hardeningNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningNetwork?'✓ Network task demonstrated':'6 · Network Sysadmin')+'</div><h3>Limit SSH to the operations subnet</h3><p>Apply least-privilege ACL rules while preserving client web access.</p><div class="ops-lab-actions"><button class="btn" type="button" data-hardening-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.contractorLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.contractorLinux?'✓ Linux task demonstrated':'7 · Linux Sysadmin')+'</div><h3>Revoke compromised contractor privileges</h3><p>Correlate SSH evidence and remove the former contractor from sudo without destroying the account.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-contractor-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.contractorNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.contractorNetwork?'✓ Network task demonstrated':'8 · Network Sysadmin')+'</div><h3>Contain the suspicious SSH source</h3><p>Block the confirmed source IP from jump-host SSH while preserving operations access and public HTTPS.</p><div class="ops-lab-actions"><button class="btn" type="button" data-contractor-network>Open Network task</button></div></div>'
  +'<p class="ops-lab-safety">Simulation only. Both environments run in the browser and do not connect to real servers or network devices. Completion is stored locally in this browser profile.</p></section>';
  root.addEventListener('click',function(event){
   if(event.target===root||event.target.closest('[data-cross-close]')){closeCrossTrackCase();return;}
@@ -6727,6 +6737,8 @@ function openCrossTrackCase(){
   if(event.target.closest('[data-remote-network]')){window.location.href='network-trainer/index.html?crossTrack=remote-admin';return;}
   if(event.target.closest('[data-hardening-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_HARDENING_LINUX_MISSION,'Cross-discipline SSH Hardening');return;}
   if(event.target.closest('[data-hardening-network]')){window.location.href='network-trainer/index.html?crossTrack=ssh-hardening';return;}
+  if(event.target.closest('[data-contractor-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_CONTAINMENT_LINUX_MISSION,'Cross-discipline Contractor Containment');return;}
+  if(event.target.closest('[data-contractor-network]')){window.location.href='network-trainer/index.html?crossTrack=contractor-containment';return;}
  });
  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeCrossTrackCase();});
  document.body.appendChild(root);const close=root.querySelector('[data-cross-close]');if(close)close.focus();
@@ -6912,7 +6924,7 @@ function boot(restored) {
   if (S.tracker && !S.finished) S.missionStart = Date.now();
   ensureClock();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
-  if(['web-availability','remote-admin'].includes(new URLSearchParams(window.location.search).get('crossTrack')))openCrossTrackCase();
+  if(['web-availability','remote-admin','contractor-containment'].includes(new URLSearchParams(window.location.search).get('crossTrack')))openCrossTrackCase();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
 /* ============================================================
