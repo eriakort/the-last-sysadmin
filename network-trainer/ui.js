@@ -263,6 +263,7 @@ function renderOverview() {
     </section>
     <div class="overview-grid">
       <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>The unavailable Halcyon portal</h2></div><span class="ticket-state ${crossTrack.linux && crossTrack.network ? 'state-resolved' : 'state-investigating'}">${crossTrack.linux && crossTrack.network ? 'case complete' : 'two-track case'}</span></div><p>Coordinate Linux service recovery with network name-resolution and reachability checks. Each discipline is verified in its own simulator.</p><div class="cross-track-status"><span>${crossTrack.linux ? '✓' : '○'} Linux service recovery</span><span>${crossTrack.network ? '✓' : '○'} Network access recovery</span></div><div class="oi-foot"><button class="btn sm primary" id="crossTrackStart">Start network task</button><button class="btn sm" id="crossTrackLinux">Open Linux case</button></div></section>
+      <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>Restore secure remote administration</h2></div><span class="ticket-state ${crossTrack.remoteLinux && crossTrack.remoteNetwork ? 'state-resolved' : 'state-investigating'}">${crossTrack.remoteLinux && crossTrack.remoteNetwork ? 'case complete' : 'two-track case'}</span></div><p>Restore the SSH daemon on Linux and repair the network management ACL without exposing unrelated services.</p><div class="cross-track-status"><span>${crossTrack.remoteLinux ? '✓' : '○'} Linux SSH service</span><span>${crossTrack.remoteNetwork ? '✓' : '○'} Network SSH policy</span></div><div class="oi-foot"><button class="btn sm primary" id="remoteAdminStart">Start network task</button><button class="btn sm" id="remoteAdminLinux">Open Linux task</button></div></section>
       <section class="overview-panel inventory-panel"><div class="overview-panel-head"><div><span class="eyebrow">Current lab topology</span><h2>Device health</h2></div><button class="text-action" id="healthWorkbench">Inspect topology →</button></div>
         <div class="overview-table-wrap"><table class="overview-table"><thead><tr><th>Device</th><th>Primary IP</th><th>Status</th><th>Ports up</th></tr></thead><tbody>${deviceRows || '<tr><td colspan="4">No devices in this scenario.</td></tr>'}</tbody></table></div>
         <p class="overview-footnote">Health is calculated from the active simulator scenario and interface/link state. It is not external monitoring.</p>
@@ -290,6 +291,8 @@ function renderOverview() {
   click('progressStats', openStats);
   click('crossTrackStart', () => { if (crossIndex >= 0) reloadMission(crossIndex); });
   click('crossTrackLinux', () => { window.location.href='../index.html?crossTrack=web-availability'; });
+  click('remoteAdminStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-remote-admin-network'); if(index>=0) reloadMission(index); });
+  click('remoteAdminLinux', () => { window.location.href='../index.html?crossTrack=remote-admin'; });
   root.querySelectorAll('[data-overview-ticket]').forEach(btn => btn.addEventListener('click', () => {
     const t = d.active.find(x => x.id === btn.dataset.overviewTicket); if (!t) return;
     setTicketState(t.id, 'investigating', 'You'); showWorkspaceView('workbench'); reloadMission(t.index);
@@ -976,6 +979,7 @@ function doCheck() {
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
     if (id === 'cross-track-web-availability-network') markCrossTrackProgress('network');
+    if (id === 'cross-track-remote-admin-network') markCrossTrackProgress('remoteNetwork');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';

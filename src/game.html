@@ -6265,6 +6265,7 @@ function completeMission() {
     try { const completed = JSON.parse(localStorage.getItem('lsa-ops-recovery-complete') || '[]'); if (!completed.includes(m.id)) completed.push(m.id); localStorage.setItem('lsa-ops-recovery-complete', JSON.stringify(completed)); } catch (e) {}
   }
   if (PRACTICE.active && m.id === 'cross-track-web-availability-linux') crossTrackWrite('linux');
+  if (PRACTICE.active && m.id === 'cross-track-remote-admin-linux') crossTrackWrite('remoteLinux');
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -6672,6 +6673,14 @@ const CROSS_TRACK_LINUX_MISSION=[{
  check_type:'service_state',check_arg1:'halcyon',check_arg2:'active',
  onStart:()=>{if(S.services&&S.services.halcyon)S.services.halcyon.active=false;}
 }];
+const CROSS_TRACK_REMOTE_LINUX_MISSION=[{
+ id:'cross-track-remote-admin-linux',title:'Restore secure remote administration',
+ story:'The operations team cannot administer jump01 over SSH. The host is reachable, but the SSH service is stopped. Inspect the service before restoring it, then verify that it is active.',
+ objective:'Inspect ssh.service, identify its inactive state, restart it with appropriate privileges, and verify that it is active.',
+ hints:['Use systemctl status ssh to inspect the service and confirm its current state.','Use sudo systemctl restart ssh, then verify with systemctl is-active ssh.'],
+ check_type:'service_state',check_arg1:'ssh',check_arg2:'active',
+ onStart:()=>{if(S.services&&S.services.ssh)S.services.ssh.active=false;}
+}];
 function closeCrossTrackCase(){const root=document.getElementById('crossTrackCaseDialog');if(root)root.remove();}
 function openCrossTrackCase(){
  closeCrossTrackCase();const state=crossTrackRead();
@@ -6681,11 +6690,15 @@ function openCrossTrackCase(){
  +'<p class="ops-lab-summary">Restore service end-to-end by completing two investigations: repair the application service on Linux, then correct the client-side network name record and verify delivery. Each half is graded by its own simulator; completing one does not auto-complete the other.</p>'
  +'<div class="ops-lab-card'+(state.linux?' complete':'')+'"><div class="ops-lab-status">'+(state.linux?'✓ Linux task demonstrated':'1 · Linux Sysadmin')+'</div><h3>Restore the application service</h3><p>Inspect the simulated systemd service, restart it and verify its state. Campaign progress is untouched.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-cross-linux>Start Linux task</button></div></div>'
  +'<div class="ops-lab-card'+(state.network?' complete':'')+'"><div class="ops-lab-status">'+(state.network?'✓ Network task demonstrated':'2 · Network Sysadmin')+'</div><h3>Restore client access</h3><p>Correct the stale local name record, then verify name resolution, IP reachability and the web service port.</p><div class="ops-lab-actions"><button class="btn" type="button" data-cross-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.remoteLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteLinux?'✓ Linux task demonstrated':'3 · Linux Sysadmin')+'</div><h3>Restore SSH on jump01</h3><p>Inspect the SSH daemon, restart it safely and confirm the service is active.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-remote-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.remoteNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteNetwork?'✓ Network task demonstrated':'4 · Network Sysadmin')+'</div><h3>Repair the management access policy</h3><p>Correct ACL order to permit SSH while continuing to deny unrelated services.</p><div class="ops-lab-actions"><button class="btn" type="button" data-remote-network>Open Network task</button></div></div>'
  +'<p class="ops-lab-safety">Simulation only. Both environments run in the browser and do not connect to real servers or network devices. Completion is stored locally in this browser profile.</p></section>';
  root.addEventListener('click',function(event){
   if(event.target===root||event.target.closest('[data-cross-close]')){closeCrossTrackCase();return;}
   if(event.target.closest('[data-cross-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_LINUX_MISSION,'Cross-discipline Service Recovery');return;}
   if(event.target.closest('[data-cross-network]')){window.location.href='network-trainer/index.html?crossTrack=web-availability';return;}
+  if(event.target.closest('[data-remote-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_REMOTE_LINUX_MISSION,'Cross-discipline Remote Access');return;}
+  if(event.target.closest('[data-remote-network]')){window.location.href='network-trainer/index.html?crossTrack=remote-admin';return;}
  });
  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeCrossTrackCase();});
  document.body.appendChild(root);const close=root.querySelector('[data-cross-close]');if(close)close.focus();
@@ -6871,7 +6884,7 @@ function boot(restored) {
   if (S.tracker && !S.finished) S.missionStart = Date.now();
   ensureClock();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
-  if(new URLSearchParams(window.location.search).get('crossTrack')==='web-availability')openCrossTrackCase();
+  if(['web-availability','remote-admin'].includes(new URLSearchParams(window.location.search).get('crossTrack')))openCrossTrackCase();
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
 /* ============================================================
