@@ -77,6 +77,23 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     else fail('incident timeline is missing the investigation handoff');
   } else fail('active incident does not offer a Workbench investigation action');
 
+  await page.locator('#incidentStatus').selectOption('resolved');
+  const closure = page.locator('#incidentDetail .incident-closure-review');
+  if (await closure.count() === 1) {
+    const reviewText = await closure.innerText();
+    if (reviewText.includes('Evidence-bearing entries') && reviewText.includes('Handover questions'))
+      ok('resolved incidents expose an evidence-aware closure review and shift-handover prompts');
+    else fail('closure review is missing evidence metrics or handover guidance');
+    const reportEvent = page.waitForEvent('download');
+    await page.locator('#incidentExportReport').click();
+    const report = await reportEvent;
+    const reportText = require('fs').readFileSync(await report.path(), 'utf8');
+    if (reportText.includes('## Closure review') && reportText.includes('### Handover prompts'))
+      ok('exported incident report includes closure and handover guidance');
+    else fail('incident report omitted closure review content');
+  } else fail('resolved incident did not expose its closure review');
+  await page.locator('#incidentStatus').selectOption('open');
+
   await page.setViewportSize({ width: 390, height: 844 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   if (!overflow) ok('incident workspace reflows without horizontal page overflow on mobile');
