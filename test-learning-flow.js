@@ -68,6 +68,20 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (!(await page.locator('#firstRunGuide').isVisible())) ok('dismissed orientation stays dismissed on return');
   else fail('dismissed orientation reappeared after reload');
 
+  await page.click('#btnHealthDashboard');
+  if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible() && (await page.textContent('#serverHealthDialog')).includes('Service dependency view'))
+    ok('server health dashboard opens with a service dependency view');
+  else fail('server health dashboard did not render');
+  if ((await page.textContent('#serverHealthDialog')).includes('simulator state') && (await page.textContent('#serverHealthDialog')).includes('not your computer'))
+    ok('dashboard clearly identifies its simulated, read-only data source');
+  else fail('dashboard does not explain its simulation boundary');
+  await page.click('#healthRefresh');
+  if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible()) ok('dashboard refreshes on demand without background polling');
+  else fail('dashboard refresh removed its dialog');
+  await page.getByRole('button', { name: 'Close server health' }).click();
+  if (await page.locator('#serverHealthDialog [role="dialog"]').count() === 0) ok('dashboard closes cleanly');
+  else fail('dashboard did not close');
+
   await page.click('[data-fs-nav="/etc"]');
   if ((await page.textContent('#fsExplorerPath')) === '/etc' && (await page.textContent('#fsExplorerList')).includes('passwd')) ok('filesystem explorer opens /etc and lists its simulated configuration files');
   else fail('filesystem explorer did not list /etc');

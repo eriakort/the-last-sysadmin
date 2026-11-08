@@ -357,6 +357,28 @@ body.practicing{padding-top:40px}
   border-radius:3px;
 }
 
+
+/* Server health dashboard — read-only, state-derived and opened on demand. */
+#serverHealthDialog:empty{display:none}
+#serverHealthDialog{position:fixed;inset:0;z-index:1200}
+.health-backdrop{position:absolute;inset:0;background:#05080dcc}
+.health-dialog{position:absolute;inset:4vh 4vw;overflow:auto;max-width:1180px;margin:auto;padding:22px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 24px 90px #0009;color:var(--text)}
+.health-dialog>header,.health-dialog>footer{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.health-dialog h2{margin:4px 0;font-size:22px}.health-dialog header p,.health-dialog footer{color:var(--muted);font-size:12px}
+.health-overview{display:flex;justify-content:space-between;align-items:center;margin:18px 0 12px;color:var(--muted);font-size:12px}
+.health-state{font-weight:700}.health-state.ok,.health-good{color:var(--good)}.health-state.warn,.health-warning{color:var(--amber)}
+.health-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.health-metric{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--raise);display:grid;gap:5px}
+.health-metric>span,.health-metric small{color:var(--muted);font-size:11px}.health-metric strong{font-size:23px}.health-metric.warn strong{color:var(--amber)}
+.health-columns{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0}
+.health-columns>section{min-width:0;padding:14px;border:1px solid var(--line);border-radius:8px}
+.health-columns h3{margin:0 0 12px;font-size:14px}
+.health-flow{display:grid;justify-items:center;gap:6px}.health-node{width:min(100%,440px);padding:9px 12px;border:1px solid var(--line);border-radius:7px;background:var(--raise);display:grid;gap:4px}
+.health-node.ok{border-color:var(--good)}.health-node.warn{border-color:var(--amber)}.health-node small{color:var(--muted);overflow-wrap:anywhere}.health-link{color:var(--muted);font-size:13px}
+.health-columns p,.health-columns li{font-size:12px;line-height:1.6}.health-dialog footer{align-items:center;margin-top:18px;padding-top:12px;border-top:1px solid var(--line)}
+@media(max-width:700px){.health-dialog{inset:0;border-radius:0;padding:16px}.health-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.health-columns{grid-template-columns:1fr}.health-dialog>header{align-items:center}}
+@media(max-width:380px){.health-metrics{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -380,6 +402,7 @@ body.practicing{padding-top:40px}
       <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
       <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
+      <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6398,6 +6421,29 @@ function initFilesystemExplorer() {
     if (fsExplorerPath !== '/') { fsExplorerPath = parentOf(fsExplorerPath); fsExplorerSelected = ''; renderFilesystemExplorer(); }
   });
 }
+/* ---------- Server health dashboard (derived from the canonical simulator state) ---------- */
+function healthMetric(label, value, detail, tone) {
+  return '<article class="health-metric '+(tone||'')+'"><span>'+esc(label)+'</span><strong>'+esc(String(value))+'</strong><small>'+esc(detail)+'</small></article>';
+}
+function renderServerHealth() {
+  const root=document.getElementById('serverHealthDialog'); if(!root)return;
+  const services=Object.entries(S.services||{});
+  const running=services.filter(([,s])=>s.active);
+  const stopped=services.filter(([,s])=>!s.active);
+  const procs=(S.procs||[]).slice().sort((a,b)=>(b.cpu||0)-(a.cpu||0));
+  const mounts=S.mounts||[];
+  const listeners=(S.net&&S.net.listen)||[];
+  const top=procs[0];
+  const diskState=S.inodeBad?'warning':'neutral';
+  const firewall=S.firewall&&S.firewall.active?'Active':'Inactive';
+  const status=stopped.length||S.inodeBad?'Needs attention':'Operational';
+  root.innerHTML='<div class="health-backdrop" data-health-close></div><section class="health-dialog" role="dialog" aria-modal="true" aria-labelledby="healthTitle"><header><div><div class="eyebrow">SIMULATED HOST · HALCYON-WEB01</div><h2 id="healthTitle">Server health</h2><p>Live view of the current training scenario. Values are derived from the simulator state, not your computer.</p></div><button class="btn" type="button" data-health-close aria-label="Close server health">Close</button></header><div class="health-overview"><span class="health-state '+(status==='Operational'?'ok':'warn')+'">'+status+'</span><span>Mission '+(S.mission+1)+' · '+(S.done||[]).length+' tickets resolved</span></div><div class="health-metrics">'+healthMetric('Services running',running.length+'/'+services.length,'system service state',stopped.length?'warn':'')+healthMetric('Processes',procs.length,'simulated process table','')+healthMetric('Listening sockets',listeners.length,'configured local listeners','')+healthMetric('Mounted filesystems',mounts.length,'active mount records','')+healthMetric('Firewall',firewall,'host firewall state',S.firewall&&S.firewall.active?'':'warn')+healthMetric('Highest CPU process',top?top.cpu+'%':'—',top?top.cmd:'no process data',top&&top.cpu>80?'warn':'')+'</div><div class="health-columns"><section><h3>Service dependency view</h3><div class="health-flow"><div class="health-node"><b>Host</b><small>halcyon-web01 · '+esc((S.net?.ifaces||[]).find(x=>x.name==='eth0')?.ipv4||'network unavailable')+'</small></div><div class="health-link">↓</div>'+services.map(([key,s])=>'<div class="health-node '+(s.active?'ok':'warn')+'"><b>'+esc(s.unit)+'</b><small>'+esc(s.desc)+' · '+(s.active?'active':'inactive')+' · PID '+esc(String(s.mainpid||'—'))+'</small></div>').join('<div class="health-link">↓</div>')+'<div class="health-link">↓</div><div class="health-node"><b>Network endpoints</b><small>'+listeners.map(x=>esc(x.laddr+':'+x.lport+' · '+x.proc)).join(' | ')+'</small></div></div></section><section><h3>Attention points</h3>'+(stopped.length?'<ul>'+stopped.map(([k,s])=>'<li><b>'+esc(s.unit)+'</b> is inactive. Check <code>systemctl status '+esc(s.unit)+'</code> and the journal.</li>').join('')+'</ul>':'<p class="health-good">All currently modelled services are active.</p>')+(S.inodeBad?'<p class="health-warning">The simulator reports inode pressure. Compare <code>df -i</code> with <code>df -h</code>.</p>':'<p>No inode-exhaustion flag is currently set in this scenario.</p>')+(top&&top.cpu>80?'<p class="health-warning">High CPU is attributed to PID '+top.pid+'. Inspect with <code>ps</code> or <code>top</code> before taking action.</p>':'')+'<p>Firewall: '+firewall+'. Verify intended policy before changing rules.</p></section></div><footer><span>Read-only overview · use the terminal to investigate and remediate</span><button class="btn primary" type="button" id="healthRefresh">Refresh view</button></footer></section>';
+  root.querySelectorAll('[data-health-close]').forEach(el=>el.addEventListener('click',closeServerHealth));
+  root.querySelector('#healthRefresh').addEventListener('click',renderServerHealth);
+}
+function openServerHealth(){let root=document.getElementById('serverHealthDialog');if(!root){root=document.createElement('div');root.id='serverHealthDialog';document.body.appendChild(root);}renderServerHealth();root.querySelector('.health-dialog button')?.focus();}
+function closeServerHealth(){const root=document.getElementById('serverHealthDialog');if(root)root.innerHTML='';}
+
 function render() {
   $('#xp').textContent = S.xp;
   $('#rank').textContent = rankName();
@@ -6556,6 +6602,8 @@ function initFirstRunGuide(restored) {
   }));
 }
 function boot(restored) {
+  const healthButton = document.getElementById('btnHealthDashboard');
+  if (healthButton && !healthButton.dataset.bound) { healthButton.dataset.bound='true'; healthButton.addEventListener('click',openServerHealth); }
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
   initFilesystemExplorer();
