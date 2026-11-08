@@ -1,6 +1,6 @@
 /* The Last Sysadmin - offline service worker */
 const CACHE_PREFIX = 'last-sysadmin-v';
-const CACHE = CACHE_PREFIX + '75';
+const CACHE = CACHE_PREFIX + '76';
 const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 
 self.addEventListener('install', (event) => {
