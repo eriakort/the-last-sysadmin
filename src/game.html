@@ -1368,14 +1368,14 @@ function tokenize(line) {
     if (c === '"') {
       start(); cur.quoted = true; i++; let s = '';
       while (i < line.length && line[i] !== '"') {
-        if (line[i] === '\\' && '"\\$`'.includes(line[i + 1])) { s += line[i + 1]; i += 2; }
+        if (line[i] === '\' && '"\\$`'.includes(line[i + 1])) { s += line[i + 1]; i += 2; }
         else if (line[i] === '$') s += expandVar();
         else { s += line[i]; i++; }
       }
       if (i >= line.length) throw new Error('unexpected EOF while looking for matching `"\'');
       i++; cur.v += s; cur.pat += escGlob(s); continue;
     }
-    if (c === '\\') { start(); const n = line[i + 1] ?? ''; cur.v += n; cur.pat += escGlob(n); cur.quoted = cur.quoted || n === ''; i += 2; continue; }
+    if (c === '\') { start(); const n = line[i + 1] ?? ''; cur.v += n; cur.pat += escGlob(n); cur.quoted = cur.quoted || n === ''; i += 2; continue; }
     if (c === '$') { start(); const s = expandVar(); cur.v += s; cur.pat += escGlob(s); continue; }
     if (c === '~' && !cur && (i + 1 >= line.length || ' /\t;|'.includes(line[i + 1]))) { start(); cur.v += HOME; cur.pat += escGlob(HOME); i++; continue; }
     if (c === '`') { start(); const j = line.indexOf('`', i + 1); const inner = j < 0 ? line.slice(i + 1) : line.slice(i + 1, j); const out = runCapture(inner); cur.v += out; cur.pat += escGlob(out); i = j < 0 ? line.length : j + 1; continue; }
@@ -1411,13 +1411,13 @@ function segRe(seg, icase) {
   let r = '^';
   for (let i = 0; i < seg.length; i++) {
     const ch = seg[i];
-    if (ch === '\\') r += reEsc(seg[++i] ?? '');
+    if (ch === '\') r += reEsc(seg[++i] ?? '');
     else if (ch === '*') r += '.*';
     else if (ch === '?') r += '.';
     else if (ch === '[') {
       const j = seg.indexOf(']', i + 2);
       if (j < 0) r += '\\[';
-      else { let cls = seg.slice(i + 1, j); if (cls[0] === '!') cls = '^' + cls.slice(1); r += '[' + cls.replace(/\\/g, '\\\\') + ']'; i = j; }
+      else { let cls = seg.slice(i + 1, j); if (cls[0] === '!') cls = '^' + cls.slice(1); r += '[' + cls.replace(/\\/g, '\\\') + ']'; i = j; }
     } else r += reEsc(ch);
   }
   return new RegExp(r + '$', icase ? 'i' : '');
@@ -1706,13 +1706,13 @@ function breToJs(p) {
   let r = '';
   for (let i = 0; i < p.length; i++) {
     const c = p[i];
-    if (c === '\\') {
+    if (c === '\') {
       const n = p[++i];
-      if (n === undefined) r += '\\\\';
+      if (n === undefined) r += '\\\';
       else if ('+?|(){}'.includes(n)) r += n;
       else if (n === '<' || n === '>') r += '\\b';
-      else r += '\\' + n;
-    } else if ('+?|(){}'.includes(c)) r += '\\' + c;
+      else r += '\' + n;
+    } else if ('+?|(){}'.includes(c)) r += '\' + c;
     else r += c;
   }
   return r;
@@ -1727,7 +1727,7 @@ function readDelim(s, i, d) {
   let out = '';
   while (i < s.length) {
     const c = s[i];
-    if (c === '\\' && i + 1 < s.length) { if (s[i + 1] === d) { out += d; i += 2; continue; } out += c + s[i + 1]; i += 2; continue; }
+    if (c === '\' && i + 1 < s.length) { if (s[i + 1] === d) { out += d; i += 2; continue; } out += c + s[i + 1]; i += 2; continue; }
     if (c === d) return [out, i + 1];
     out += c; i++;
   }
@@ -1757,7 +1757,7 @@ CMDS.set = (a, ctx) => { if (!a.length) { for (const k of Object.keys(S.vars || 
 CMDS.env = CMDS.set;
 CMDS.printf = (a, ctx) => {
   let fmt = a[0] || ''; const args = a.slice(1);
-  fmt = fmt.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+  fmt = fmt.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\');
   let ai = 0;
   ctx.out(fmt.replace(/%[sd%]/g, sp => sp === '%%' ? '%' : (sp === '%d' ? String(parseInt(args[ai++] || '0', 10) || 0) : (args[ai++] ?? ''))));
   return 0;
@@ -1932,7 +1932,7 @@ CMDS.echo = (a, ctx) => {
   let n = false, e = false, i = 0;
   while (i < a.length && /^-[ne]+$/.test(a[i])) { if (a[i].includes('n')) n = true; if (a[i].includes('e')) e = true; i++; }
   let s = a.slice(i).join(' ');
-  if (e) s = s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+  if (e) s = s.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\');
   ctx.out(s + (n ? '' : '\n'));
 };
 CMDS.true = () => 0;
@@ -2442,9 +2442,9 @@ function sedRep(r) {
   let o = '';
   for (let i = 0; i < r.length; i++) {
     const c = r[i];
-    if (c === '\\') {
+    if (c === '\') {
       const n = r[++i];
-      if (n === undefined) o += '\\';
+      if (n === undefined) o += '\';
       else if (/\d/.test(n)) o += '$' + n;
       else if (n === 'n') o += '\n';
       else if (n === 't') o += '\t';
@@ -2528,7 +2528,7 @@ const awkVal = tok => {
   const n = +tok.slice(1);
   return e => n === 0 ? e.l : (e.F[n - 1] ?? '');
 };
-function splitCommas(s) { const out = []; let cur = '', q = false; for (let i = 0; i < s.length; i++) { const c = s[i]; if (c === '"' && s[i - 1] !== '\\') q = !q; if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
+function splitCommas(s) { const out = []; let cur = '', q = false; for (let i = 0; i < s.length; i++) { const c = s[i]; if (c === '"' && s[i - 1] !== '\') q = !q; if (c === ',' && !q) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
 function parseAwkAction(body) {
   const stmts = body.split(/[;\n]/).map(x => x.trim()).filter(Boolean);
   if (!stmts.length) return [];
@@ -6587,9 +6587,9 @@ function closeServerHealth(){const root=document.getElementById('serverHealthDia
 /* Bash scripting workshop — guided practice on the simulated shell */
 const BASH_WORKSHOP = [
   {id:'variables',title:'1 · Variables and quoting',level:'Foundation',concept:'Store a value once, then reuse it. Double quotes allow variable expansion; single quotes keep text literal.',command:'NAME="Ada Lovelace" && echo "Hello, $NAME"',objective:'Set NAME and print a greeting that includes its value.'},
-  {id:'conditions',title:'2 · Make a decision',level:'Branching',concept:'An if statement runs one branch when a test succeeds and another when it fails. The test command returns an exit status.',command:'bash -c \\'if test -f /etc/hostname; then echo "Hostname file found"; else echo "Hostname file missing"; fi\\'',objective:'Test whether the simulated hostname file exists.'},
-  {id:'loops',title:'3 · Repeat with a loop',level:'Iteration',concept:'A for loop assigns each item to a variable and runs the body once per item.',command:'bash -c \\'for service in ssh cron nginx; do echo "Reviewing $service"; done\\'',objective:'Print one review line for each service name.'},
-  {id:'script',title:'4 · Build and run a script',level:'Mini project',concept:'Create a script file, add a shebang and commands, make it executable, then run it by path. This combines loops and file permissions.',command:'mkdir -p ~/scripts && printf \\'%s\\\\n\\' \\'#!/bin/bash\\' \\'for service in ssh cron nginx; do\\' \\'  echo "Reviewing $service"\\' \\'done\\' > ~/scripts/service-check.sh && chmod +x ~/scripts/service-check.sh && ~/scripts/service-check.sh',objective:'Create an executable script and run it from the simulated filesystem.'}
+  {id:'conditions',title:'2 · Make a decision',level:'Branching',concept:'An if statement runs one branch when a test succeeds and another when it fails. The test command returns an exit status.',command:'bash -c \'if test -f /etc/hostname; then echo "Hostname file found"; else echo "Hostname file missing"; fi\'',objective:'Test whether the simulated hostname file exists.'},
+  {id:'loops',title:'3 · Repeat with a loop',level:'Iteration',concept:'A for loop assigns each item to a variable and runs the body once per item.',command:'bash -c \'for service in ssh cron nginx; do echo "Reviewing $service"; done\'',objective:'Print one review line for each service name.'},
+  {id:'script',title:'4 · Build and run a script',level:'Mini project',concept:'Create a script file, add a shebang and commands, make it executable, then run it by path. This combines loops and file permissions.',command:'mkdir -p ~/scripts && printf \'%s\\n\' \'#!/bin/bash\' \'for service in ssh cron nginx; do\' \'  echo "Reviewing $service"\' \'done\' > ~/scripts/service-check.sh && chmod +x ~/scripts/service-check.sh && ~/scripts/service-check.sh',objective:'Create an executable script and run it from the simulated filesystem.'}
 ];
 function bashWorkshopIsComplete(id) {
   const history=S.history||[];
