@@ -9,7 +9,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
-  await page.locator('#overviewWorkbench').click();
+  // Exercise the application's real workspace router directly. The navigation
+  // control itself is covered by the dedicated workstation-shell UI suite.
+  await page.evaluate(() => {
+    if (typeof showWorkspaceView !== 'function') throw new Error('workspace router did not initialise');
+    showWorkspaceView('workbench');
+  });
   await page.waitForFunction(() => {
     const workspace = document.getElementById('cols');
     const input = document.getElementById('tin');
