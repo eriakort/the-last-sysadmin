@@ -2,6 +2,7 @@
 // ticket-linked timeline and verified handoff into the Workbench.
 const path = require('path');
 const { chromium } = require('playwright');
+const { chapters } = require('./net-chapters');
 const URL = 'file://' + path.join(process.cwd(), 'index.html');
 
 (async () => {
@@ -77,9 +78,19 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     else fail('incident timeline is missing the investigation handoff');
   } else fail('active incident does not offer a Workbench investigation action');
 
-  // The default queue filter is Open incidents. Include resolved tickets before
-  // resolving the selected record so the render keeps that same ticket selected.
-  await page.locator('#incidentStatus').selectOption('all');
+  // Complete the selected mission through the same persisted progress model
+  // used by the simulator, then reload so the incident is genuinely resolved.
+  const chapter = chapters.find((item, index) =>
+    (item.ticket && item.ticket.id || 'NET-' + String(index + 1).padStart(4, '0')) === ticketId);
+  if (!chapter) throw new Error('Could not map selected incident to its training mission');
+  await page.evaluate(missionId => {
+    const progress = JSON.parse(localStorage.getItem('nettrainer') || '{}');
+    progress.done = { ...(progress.done || {}), [missionId]: true };
+    localStorage.setItem('nettrainer', JSON.stringify(progress));
+  }, chapter.id);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(150);
+  await page.locator('#navIncidents').click();
   await page.locator('#incidentStatus').selectOption('resolved');
   const closure = page.locator('#incidentDetail .incident-closure-review');
   if (await closure.count() === 1) {
