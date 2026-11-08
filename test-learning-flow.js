@@ -68,6 +68,19 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (!(await page.locator('#firstRunGuide').isVisible())) ok('dismissed orientation stays dismissed on return');
   else fail('dismissed orientation reappeared after reload');
 
+  await page.locator('#tin').fill('nmae');
+  await page.locator('#tin').press('Enter');
+  if (await page.locator('#mistakeCoach').isVisible() && (await page.locator('#mistakeCoach').innerText()).includes('Command not found'))
+    ok('failed Linux commands explain the error category');
+  else fail('Linux command mistake explanation did not appear');
+  if ((await page.locator('#mistakeCoach').innerText()).includes('Understand → Inspect → Correct → Verify') && (await page.locator('#mistakeCoach').innerText()).includes('Try next'))
+    ok('Linux mistake feedback gives a shared learning cycle and actionable next step');
+  else fail('Linux mistake feedback omitted the learning cycle or next step');
+  await page.locator('#tin').fill('true');
+  await page.locator('#tin').press('Enter');
+  if (!(await page.locator('#mistakeCoach').isVisible())) ok('mistake feedback clears after the next command');
+  else fail('stale Linux mistake feedback remained after a new command');
+
   await page.click('#btnHealthDashboard');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible() && (await page.textContent('#serverHealthDialog')).includes('Service dependency view'))
     ok('server health dashboard opens with a service dependency view');

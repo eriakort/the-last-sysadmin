@@ -392,6 +392,14 @@ body.practicing{padding-top:40px}
 .health-step .btn{flex:0 0 auto;align-self:center;font-size:10px}
 .health-troubleshoot-note{padding-top:10px;border-top:1px solid var(--line)}
 @media(max-width:700px){.health-troubleshoot-head{display:block}.health-troubleshoot-tag{display:inline-block;margin-top:8px}.health-steps{grid-template-columns:1fr}.health-step{align-items:center}}
+
+/* Contextual, evidence-led feedback after a failed Linux command. */
+.mistake-coach{margin:8px 0 4px;padding:11px 13px;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:7px;background:var(--panel);font-size:12px;line-height:1.55}
+.mistake-coach[hidden]{display:none}
+.mistake-coach-title{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.mistake-coach-title strong{color:var(--ink)}.mistake-coach-title span{color:var(--amber);font-weight:700}
+.mistake-coach p{margin:5px 0;color:var(--muted)}.mistake-coach-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
+.mistake-coach-next b,.mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
 </style>
 </head>
 <body>
@@ -506,6 +514,11 @@ body.practicing{padding-top:40px}
       <div class="term-bar"><span class="dot" aria-hidden="true"></span><span>ssh rookie@halcyon-web01</span><span class="r">10.0.4.12 · bash</span></div>
       <div class="term-body" id="tbody">
         <div id="tout" role="log" aria-live="polite"></div>
+        <section class="mistake-coach" id="mistakeCoach" aria-label="Command feedback" aria-live="polite" hidden>
+          <div class="mistake-coach-title"><strong>Learn from this result</strong><span data-mistake-category></span></div>
+          <p data-mistake-reason></p><div class="mistake-coach-next"><b>Try next</b><p data-mistake-next></p></div>
+          <small>Learning loop: Understand → Inspect → Correct → Verify</small>
+        </section>
         <button class="btn command-coach-toggle" id="commandCoachToggle" type="button" aria-expanded="false" hidden>Explain last command</button>
         <section class="command-coach" id="commandCoach" aria-label="Contextual command coach" aria-live="polite" hidden>
           <div class="command-coach-head"><strong>Command coach</strong><button class="btn" id="commandCoachClose" type="button">Hide</button></div>
@@ -1414,6 +1427,7 @@ function expandWords(words) {
 
 let clearRequested = false;
 function runLine(line) {
+  clearMistakeCoach();
   let seq;
   try { seq = parse(tokenize(line)); } catch (e) { emit('bash: ' + e.message + '\n', 'err'); S.lastStatus = 2; return; }
   let status = S.lastStatus || 0;
@@ -6056,6 +6070,43 @@ function findSync() {
 const tout = $('#tout'), tin = $('#tin'), tbody = $('#tbody'), tprompt = $('#tprompt');
 const fmtTerm = s => esc(s).replace(/\u0001([dxmfn])/g, '<span class="c-$1">').replace(/\u0001e/g, '</span>');
 function trimOut() { while (tout.childElementCount > 800) tout.firstElementChild.remove(); }
+function clearMistakeCoach() {
+  const panel = document.getElementById('mistakeCoach');
+  if (panel) panel.hidden = true;
+}
+function showMistakeCoach(raw) {
+  const panel = document.getElementById('mistakeCoach');
+  if (!panel) return;
+  const message = String(raw || '').toLowerCase();
+  let category = 'Command or operation failed';
+  let reason = 'The command did not complete. Read the exact error, then inspect the current system state before trying another change.';
+  let next = 'Check the command manual and current context, then repeat the original check after one targeted correction.';
+  if (/command not found/.test(message)) {
+    category = 'Command not found · syntax';
+    reason = 'The shell could not match the first word to an available command. Linux command names are case-sensitive.';
+    next = 'Check spelling and capitalisation with the command reference, or use help to find the correct tool.';
+  } else if (/permission denied|operation not permitted/.test(message)) {
+    category = 'Permission · access';
+    reason = 'The current user or file permissions do not allow this action. It does not automatically mean that elevated access is the right fix.';
+    next = 'Inspect who you are and the target permissions with whoami and ls -l before changing ownership or access.';
+  } else if (/no such file|cannot access|not found/.test(message)) {
+    category = 'Target not found · path';
+    reason = 'The requested file, directory, service or target could not be located in the current context.';
+    next = 'Confirm your location with pwd, then inspect the relevant directory or service name before retrying.';
+  } else if (/is a directory|not a directory/.test(message)) {
+    category = 'Wrong target type';
+    reason = 'The command expected a file or directory of a different type than the one supplied.';
+    next = 'Inspect the target with ls -ld and choose an operation that matches its actual type.';
+  } else if (/invalid option|unrecognized option|usage:/.test(message)) {
+    category = 'Invalid option · command syntax';
+    reason = 'The command recognised the tool but rejected its option or argument format.';
+    next = 'Read the usage line or run the command with --help; add or change one option at a time.';
+  }
+  panel.querySelector('[data-mistake-category]').textContent = category;
+  panel.querySelector('[data-mistake-reason]').textContent = reason;
+  panel.querySelector('[data-mistake-next]').textContent = next;
+  panel.hidden = false;
+}
 function emit(text, cls) {
   if (text === '' || text == null) return;
   if (cls !== 'err') { for (const tp of ECHO_TAPS) tp.v += text; if (OUT_CAPTURE) { OUT_CAPTURE.v += text; return; } }
@@ -6063,6 +6114,7 @@ function emit(text, cls) {
   div.className = 'o' + (cls ? ' ' + cls : '');
   div.innerHTML = fmtTerm(text.replace(/\n$/, ''));
   tout.appendChild(div); trimOut();
+  if (cls === 'err') showMistakeCoach(text);
 }
 function emitSys(html, kind) {
   const div = document.createElement('div');

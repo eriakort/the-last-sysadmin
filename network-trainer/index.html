@@ -5588,12 +5588,58 @@ function openTerminalWindow(focusInput = false) {
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
 }
+function explainNetworkMistake(command, output) {
+  const panel = $('#networkMistakeCoach');
+  if (!panel) return;
+  const text = String(output || '').toLowerCase();
+  let category = 'Command failed · inspect context';
+  let reason = 'The device rejected the command. The exact cause is not clear from this response, so avoid changing configuration until you inspect the prompt and device state.';
+  let next = 'Check the selected device and current prompt, then use its command help to confirm which commands are valid in this mode.';
+  if (/incomplete command/.test(text)) {
+    category = 'Incomplete command · missing argument';
+    reason = 'The command is recognised, but the device needs another keyword or value to complete it.';
+    next = 'Use ? at the current prompt to discover the required next argument, then enter the full command.';
+  } else if (/ambiguous command/.test(text)) {
+    category = 'Ambiguous command · be specific';
+    reason = 'The abbreviation matches more than one command or keyword.';
+    next = 'Type the full keyword instead of relying on an abbreviation, then retry without changing device configuration.';
+  } else if (/invalid input|invalid command|unknown command|unrecognized command/.test(text)) {
+    category = 'Invalid input · syntax or mode';
+    reason = 'The device does not recognise this command at the current prompt. Network CLIs expose different commands in user, privileged and configuration modes.';
+    next = 'Check the prompt suffix and use ? to inspect commands available in the current mode; do not assume a configuration command is valid everywhere.';
+  } else if (/not authorized|authorization|insufficient privilege|permission denied/.test(text)) {
+    category = 'Privilege · access';
+    reason = 'The current CLI privilege level does not permit this operation.';
+    next = 'Check the current privilege level and authenticate through the intended training workflow before retrying.';
+  } else if (/interface.*(not found|does not exist|invalid)|vlan.*(not found|does not exist|invalid)/.test(text)) {
+    category = 'Target not found · device state';
+    reason = 'The interface, VLAN or other named object was not found on the selected device.';
+    next = 'Verify the selected device and inspect its existing interfaces or VLANs before referencing the target again.';
+  }
+  panel.querySelector('[data-network-mistake-category]').textContent = category;
+  panel.querySelector('[data-network-mistake-reason]').textContent = reason;
+  panel.querySelector('[data-network-mistake-next]').textContent = next;
+  panel.hidden = false;
+}
+function clearNetworkMistake() {
+  const panel = $('#networkMistakeCoach');
+  if (panel) panel.hidden = true;
+}
 function wireTerm() {
   const inp = $('#tin');
+  const mistakePanel = document.createElement('section');
+  mistakePanel.id = 'networkMistakeCoach';
+  mistakePanel.className = 'network-mistake-coach';
+  mistakePanel.hidden = true;
+  mistakePanel.setAttribute('aria-label', 'Command feedback');
+  mistakePanel.setAttribute('aria-live', 'polite');
+  mistakePanel.innerHTML = '<div class="network-mistake-title"><strong>Learn from this result</strong><span data-network-mistake-category></span></div><p data-network-mistake-reason></p><div class="network-mistake-next"><b>Try next</b><p data-network-mistake-next></p></div><small>Learning loop: Understand → Inspect → Correct → Verify</small>';
+  const terminalInputRow = inp.closest('.tline');
+  if (terminalInputRow) terminalInputRow.before(mistakePanel);
   inp.addEventListener('keydown', e => {
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') { e.preventDefault(); cycleDeviceSession(-1); return; }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowRight') { e.preventDefault(); cycleDeviceSession(1); return; }
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); if (r.out) termEcho(r.out); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
   });
