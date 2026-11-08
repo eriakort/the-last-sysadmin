@@ -616,3 +616,11 @@ aside{scrollbar-color:#344a60 transparent}
 .coach-content li{margin:4px 0}
 .coach-output{font-size:12px}
 @media(max-width:650px){.knowledge-command-row{grid-template-columns:1fr}.knowledge-coach-btn{justify-self:start}.coach-content{grid-template-columns:1fr}}
+
+/* Shared evidence-led mistake coaching in the network console. */
+.network-mistake-coach{flex:none;margin:8px 12px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:7px;background:var(--panel);font-size:12px;line-height:1.5}
+.network-mistake-coach[hidden]{display:none!important}
+.network-mistake-title{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.network-mistake-title strong{color:var(--ink)}.network-mistake-title span{color:var(--amber);font-weight:700}
+.network-mistake-coach p{margin:5px 0;color:var(--muted)}.network-mistake-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
+.network-mistake-next b,.network-mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
