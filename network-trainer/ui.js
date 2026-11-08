@@ -191,7 +191,7 @@ function dashboardSnapshot() {
     solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
   };
 }
-const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'knowledge', 'journal', 'changes']);
+const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'protocols', 'knowledge', 'journal', 'changes']);
 function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
@@ -206,11 +206,12 @@ function showWorkspaceView(view, options = {}) {
     if (historyMode === 'replace') window.history.replaceState({ networkWorkspaceView: view }, '', url);
     else if (current !== view) window.history.pushState({ networkWorkspaceView: view }, '', url);
   }
-  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
-  if (!overview || !incidents || !infrastructure || !knowledge || !journal || !changes || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), protocols = $('#protocolsView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !protocols || !knowledge || !journal || !changes || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
   infrastructure.hidden = view !== 'infrastructure';
+  protocols.hidden = view !== 'protocols';
   knowledge.hidden = view !== 'knowledge';
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
@@ -224,6 +225,7 @@ function showWorkspaceView(view, options = {}) {
   if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
   if (view === 'incidents') renderIncidentCenter();
   if (view === 'infrastructure') renderInfrastructureView();
+  if (view === 'protocols') renderProtocolLab();
   if (view === 'knowledge') renderKnowledgeCenter();
   if (view === 'journal') renderJournalPage();
   if (view === 'changes') renderChangeManagement();
@@ -1481,6 +1483,72 @@ const KNOWLEDGE_PLAYBOOKS = [
   {title:'Routed subnet is unreachable',steps:['Confirm both router interfaces are up/up and correctly addressed','Inspect the routing table for the destination prefix','Verify next-hop reachability and routing protocol neighbours','Review ACLs and return-path routing before changing configuration']},
   {title:'A recent change caused an outage',steps:['Identify the change window, affected service and scope','Compare current configuration with the last known-good record','Validate the smallest suspected change and its dependencies','Rollback safely if needed, then verify service and document evidence']}
 ];
+
+/* ---------- protocol visual labs ---------- */
+// Each lab starts from an existing, authored mission topology and runs the
+// same pure/headless model functions used by missions and CLI checks.
+function protocolLabPathRows(path, direction) {
+  if (!Array.isArray(path) || !path.length) return '<p class="protocol-muted">No hop evidence was produced for this direction.</p>';
+  return '<ol class="protocol-path" aria-label="' + direction + ' packet path">' + path.map((hop, index) =>
+    '<li><span class="protocol-hop-index">' + (index + 1) + '</span><div><strong>' + esc(hop.deviceName || hop.deviceId) + '</strong><small>' +
+    esc([hop.kind, hop.address].filter(Boolean).join(' · ')) + '</small><p>' +
+    esc([hop.ingressInterface ? 'in ' + hop.ingressInterface : '', hop.egressInterface ? 'out ' + hop.egressInterface : '', hop.detail].filter(Boolean).join(' · ')) +
+    '</p></div><span class="protocol-hop-state">' + esc(hop.state || 'observed') + '</span></li>').join('') + '</ol>';
+}
+function renderProtocolLabResult(kind) {
+  const root = $('#protocolLabResult'); if (!root) return;
+  let title = '', intro = '', facts = '', journey = null, note = '';
+  if (kind === 'dns') {
+    const mission = chapters.find(c => c.id === 'name-wont-resolve');
+    const net = mission.build();
+    const resolver = net.devices.dns1.ifaces.eth0.ip;
+    // This is a successful teaching run: configure the resolver on an isolated
+    // copy, then ask the real DNS resolver and packet-journey engine for evidence.
+    net.devices.h1.resolver = resolver;
+    const answer = M.resolveName(net, 'h1', 'intranet.corp.local');
+    journey = M.packetJourney(net, 'h1', resolver, { proto: 'udp', dport: 53 });
+    title = 'DNS · name resolution';
+    intro = 'A client asks its configured resolver for the A record of intranet.corp.local.';
+    facts = '<div class="protocol-facts"><div><small>Client</small><b>h1 · 10.0.1.10</b></div><div><small>Resolver</small><b>dns1 · ' + esc(M.ipStr(resolver)) + '</b></div><div><small>Query</small><b>A intranet.corp.local</b></div><div><small>Answer</small><b>' + (answer.ok ? esc(M.ipStr(answer.ip)) : esc(answer.reason)) + '</b></div></div>';
+    note = answer.ok && journey.ok ? 'The model resolved the configured DNS record and delivered the UDP/53 request and reply across the simulated routed path.' : 'The model did not complete the lookup: ' + (answer.reason || journey.reason);
+  } else if (kind === 'dhcp') {
+    const mission = chapters.find(c => c.id === 'renew-the-lease');
+    const net = mission.build();
+    const lease = M.dhclient(net, 'h1', 'eth0');
+    title = 'DHCP · obtain a lease';
+    intro = 'A workstation with a stale address requests network configuration from the router DHCP pool.';
+    const pool = net.devices.r1.dhcp;
+    facts = '<div class="protocol-facts"><div><small>Client</small><b>h1 / eth0</b></div><div><small>DHCP server</small><b>r1 · ' + esc(M.ipStr(net.devices.r1.ifaces.eth0.ip)) + '</b></div><div><small>Lease address</small><b>' + (lease.ok ? esc(M.ipStr(lease.ip)) + '/' + lease.prefix : esc(lease.reason)) + '</b></div><div><small>Gateway / DNS</small><b>' + (lease.ok ? esc(M.ipStr(lease.gw)) + ' / ' + esc(M.ipStr(lease.dns)) : 'Not assigned') + '</b></div></div>';
+    facts += '<ol class="protocol-dora"><li><b>Discover</b><span>Client broadcasts to find a DHCP server.</span></li><li><b>Offer</b><span>r1 has an available address in its configured pool.</span></li><li><b>Request</b><span>Client requests the offered configuration.</span></li><li><b>Acknowledge</b><span>' + (lease.ok ? 'The simulator applies the lease and installs gateway and resolver settings.' : 'The lease was not applied.') + '</span></li></ol>';
+    note = lease.ok ? 'Lease allocation is observed from the DHCP model. The four DORA labels explain the protocol sequence; individual broadcast frames are not separately captured by this simulator.' : lease.reason;
+  } else {
+    const mission = chapters.find(c => c.id === 'name-wont-resolve');
+    const net = mission.build();
+    journey = M.packetJourney(net, 'h1', '10.0.2.10', { proto: 'tcp', dport: 80 });
+    title = 'TCP · reach an HTTP service';
+    intro = 'Follow a TCP connection attempt from h1 to the web service at www.';
+    facts = '<div class="protocol-facts"><div><small>Client</small><b>h1 · 10.0.1.10</b></div><div><small>Server</small><b>www · 10.0.2.10</b></div><div><small>Transport</small><b>TCP / destination port 80</b></div><div><small>Service</small><b>HTTP listener in the mission topology</b></div></div>';
+    note = journey.ok ? 'The forwarding engine confirms the TCP/80 path and return path. This lab visualizes reachability and service-port filtering, not individual TCP handshake flags.' : journey.reason;
+  }
+  const delivered = kind === 'dhcp' ? note.indexOf('Lease allocation is observed') === 0 : !!(journey && journey.ok);
+  root.innerHTML = '<div class="protocol-result-head"><div><div class="eyebrow">SIMULATOR EVIDENCE</div><h2>' + esc(title) + '</h2><p>' + esc(intro) + '</p></div><span class="protocol-status ' + (delivered ? 'is-ok' : 'is-note') + '">' + (delivered ? 'Model completed' : 'Review evidence') + '</span></div>' +
+    facts + '<p class="protocol-note">' + esc(note) + '</p>' +
+    (journey ? '<div class="protocol-journey-grid"><section><h3>Request path · ' + esc(journey.protocol.toUpperCase() + (journey.destinationPort ? '/' + journey.destinationPort : '')) + '</h3>' + protocolLabPathRows(journey.request, 'Request') + '</section><section><h3>Reply path</h3>' + protocolLabPathRows(journey.reply, 'Reply') + '</section></div>' : '');
+}
+function renderProtocolLab() {
+  const root = $('#protocolsView'); if (!root) return;
+  root.innerHTML = '<div class="protocol-page"><style>' +
+    '.protocol-page{padding:26px;max-width:1240px;margin:0 auto}.protocol-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}.protocol-heading h1{font-size:30px;margin:3px 0 6px}.protocol-heading p{color:var(--muted);max-width:720px;margin:0}.protocol-sim-label{border:1px solid var(--line);border-radius:20px;padding:6px 10px;color:var(--muted);font-size:11px;letter-spacing:.08em}.protocol-lab-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.protocol-lab-tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}.protocol-lab-tabs button[aria-pressed=true]{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,var(--panel));color:var(--amber)}.protocol-result{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}.protocol-result-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.protocol-result h2{margin:2px 0 5px;font-size:22px}.protocol-result h3{font-size:14px;margin:0 0 10px}.protocol-result p{color:var(--muted)}.protocol-status{border-radius:20px;padding:5px 9px;font-size:11px;border:1px solid var(--line)}.protocol-status.is-ok{color:var(--good);border-color:var(--good)}.protocol-status.is-note{color:var(--amber);border-color:var(--amber)}.protocol-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:18px 0}.protocol-facts>div{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:11px;min-width:0}.protocol-facts small,.protocol-facts b{display:block}.protocol-facts small{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.protocol-facts b{font-size:12px;margin-top:5px;overflow-wrap:anywhere}.protocol-note{border-left:3px solid var(--amber);padding:8px 12px;background:var(--raise);font-size:12px}.protocol-journey-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}.protocol-path{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:7px}.protocol-path li{display:grid;grid-template-columns:25px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}.protocol-hop-index{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--panel);color:var(--amber);font:12px var(--f-mono)}.protocol-path strong,.protocol-path small{display:block}.protocol-path small,.protocol-path p,.protocol-hop-state,.protocol-muted{color:var(--muted);font-size:11px}.protocol-path p{margin:4px 0 0;overflow-wrap:anywhere}.protocol-hop-state{white-space:nowrap}.protocol-dora{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;list-style:none;padding:0;margin:18px 0}.protocol-dora li{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:10px}.protocol-dora b,.protocol-dora span{display:block}.protocol-dora b{color:var(--amber);font-size:12px}.protocol-dora span{color:var(--muted);font-size:11px;margin-top:5px}@media(max-width:760px){.protocol-page{padding:16px}.protocol-facts{grid-template-columns:1fr 1fr}.protocol-journey-grid{grid-template-columns:1fr}.protocol-dora{grid-template-columns:1fr 1fr}}@media(max-width:420px){.protocol-facts,.protocol-dora{grid-template-columns:1fr}}' +
+    '</style><div class="protocol-heading"><div><div class="eyebrow">Understand · observe · compare</div><h1>Network protocol labs</h1><p>Explore how network services exchange information. Each lab starts from a known teaching topology and calls the same network model used by missions and the Workbench.</p></div><span class="protocol-sim-label">SIMULATED NETWORK · NO LIVE TRAFFIC</span></div>' +
+    '<div class="protocol-lab-tabs" role="group" aria-label="Choose a protocol lab"><button type="button" data-protocol-lab="dns" aria-pressed="true">DNS · Name lookup</button><button type="button" data-protocol-lab="dhcp" aria-pressed="false">DHCP · Address lease</button><button type="button" data-protocol-lab="http" aria-pressed="false">TCP · HTTP path</button></div>' +
+    '<section id="protocolLabResult" class="protocol-result" aria-live="polite" aria-label="Protocol lab evidence"></section></div>';
+  root.querySelectorAll('[data-protocol-lab]').forEach(button => button.addEventListener('click', () => {
+    root.querySelectorAll('[data-protocol-lab]').forEach(item => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+    renderProtocolLabResult(button.dataset.protocolLab);
+  }));
+  renderProtocolLabResult('dns');
+}
+
 let KNOWLEDGE_COACH_MODE = 'guided';
 let KNOWLEDGE_COACH_COMMAND = null;
 function renderKnowledgeCenter() {
@@ -2074,6 +2142,7 @@ function boot() {
         <button class="nav-item" id="navIncidents" title="Review and work incident tickets" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
         <button class="nav-item" id="navWorkbench" title="Operate the active network simulation" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
         <button class="nav-item" id="navInfrastructure" title="Inspect devices, links and infrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
+        <button class="nav-item" id="navProtocols" title="Explore how network protocols exchange packets" data-view="protocols" type="button"><span class="nav-glyph">⇄</span>Protocol labs</button>
         <div class="nav-section">Reference & records</div>
         <button class="nav-item" id="navKnowledge" title="Browse command references and troubleshooting playbooks" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
         <button class="nav-item" id="navJournal" title="Review saved investigation notes and evidence" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
@@ -2101,6 +2170,7 @@ function boot() {
     <section id="overview" aria-label="Operations overview"></section>
     <section id="incidentsView" aria-label="Incident management" hidden></section>
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
+    <section id="protocolsView" aria-label="Interactive network protocol labs" hidden></section>
     <section id="knowledgeView" aria-label="Network knowledge centre" hidden></section>
     <section id="journalView" aria-label="Engineering journal" hidden></section>
     <section id="changeView" aria-label="Change management" hidden></section>
@@ -2127,6 +2197,7 @@ function boot() {
   $('#navWorkbench').addEventListener('click', () => { if (MODE==='build') reloadMission(0); else showWorkspaceView('workbench'); });
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
+  $('#navProtocols').addEventListener('click', () => showWorkspaceView('protocols'));
   $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
   $('#navJournal').addEventListener('click', () => showWorkspaceView('journal'));
   $('#navChanges').addEventListener('click', () => showWorkspaceView('changes'));
