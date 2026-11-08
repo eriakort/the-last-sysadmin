@@ -598,3 +598,21 @@ aside{scrollbar-color:#344a60 transparent}
 /* Keyboard access for topology links, drawings and notes. */
 #topo .edge:focus-visible,#topo .topo-drawing:focus-visible,#topo .topo-note:focus-visible{outline:none;filter:drop-shadow(0 0 4px var(--amber));stroke:var(--amber);stroke-width:4;}
 #topo .topo-note:focus-visible rect{stroke:var(--amber);stroke-width:3;}
+
+/* Network Learning Coach */
+.knowledge-command-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:stretch}
+.knowledge-command-row .knowledge-command{width:100%}
+.knowledge-coach-btn{align-self:center;white-space:nowrap}
+.network-command-coach{margin-top:12px;padding:14px;border:1px solid var(--amber);border-radius:9px;background:color-mix(in srgb,var(--panel) 88%,var(--amber));}
+.coach-empty{color:var(--muted);font-size:12px}
+.coach-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.coach-head h3{margin:4px 0;font:600 15px ui-monospace,monospace;color:var(--good)}
+.coach-head p,.coach-content p{margin:4px 0 9px;font-size:12px;color:var(--muted)}
+.coach-head label{display:grid;gap:4px;font-size:11px;color:var(--muted)}
+.coach-content{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px}
+.coach-content>div{min-width:0;padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--raise)}
+.coach-content b{font-size:11px;color:var(--amber)}
+.coach-content ol{margin:6px 0;padding-left:20px;font-size:12px}
+.coach-content li{margin:4px 0}
+.coach-output{font-size:12px}
+@media(max-width:650px){.knowledge-command-row{grid-template-columns:1fr}.knowledge-coach-btn{justify-self:start}.coach-content{grid-template-columns:1fr}}
