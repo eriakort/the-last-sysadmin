@@ -5457,6 +5457,8 @@ const KNOWLEDGE_PLAYBOOKS = [
   {title:'Routed subnet is unreachable',steps:['Confirm both router interfaces are up/up and correctly addressed','Inspect the routing table for the destination prefix','Verify next-hop reachability and routing protocol neighbours','Review ACLs and return-path routing before changing configuration']},
   {title:'A recent change caused an outage',steps:['Identify the change window, affected service and scope','Compare current configuration with the last known-good record','Validate the smallest suspected change and its dependencies','Rollback safely if needed, then verify service and document evidence']}
 ];
+let KNOWLEDGE_COACH_MODE = 'guided';
+let KNOWLEDGE_COACH_COMMAND = null;
 function renderKnowledgeCenter() {
   const root = $('#knowledgeView'); if (!root) return;
   root.innerHTML = `
