@@ -7,6 +7,7 @@ const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
+const D = require('./net-design-academy');
 const S = require('./net-scenario');
 const NC = require('./net-classroom');
 
@@ -38,7 +39,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /* ---------- persistence ---------- */
-function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], configArchives: Array.isArray(p.configArchives) ? p.configArchives : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
+function loadProg() { try { const p = JSON.parse(localStorage.getItem('nettrainer') || '{}'); return { done: p.done || {}, xp: p.xp || 0, theme: p.theme || '', journal: Array.isArray(p.journal) ? p.journal : [], configArchives: Array.isArray(p.configArchives) ? p.configArchives : [], tickets: p.tickets && typeof p.tickets === 'object' ? p.tickets : {}, changes: Array.isArray(p.changes) ? p.changes : [], designAcademy: p.designAcademy && typeof p.designAcademy === 'object' ? p.designAcademy : {}, changeSequence: Number(p.changeSequence) || 0 }; } catch (e) { return { done: {}, xp: 0, theme: '', journal: [], tickets: {} }; } }
 function saveProg() { try { localStorage.setItem('nettrainer', JSON.stringify(PROG)); } catch (e) {} }
 const rankFor = xp => { let r = RANKS[0][1]; for (const [t, n] of RANKS) if (xp >= t) r = n; return r; };
 function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); PROG.theme = t; saveProg(); }
@@ -191,7 +192,7 @@ function dashboardSnapshot() {
     solved: chapters.filter(c => PROG.done[c.id]).length, total: chapters.length
   };
 }
-const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'protocols', 'knowledge', 'journal', 'changes']);
+const WORKSPACE_VIEWS = new Set(['overview', 'incidents', 'workbench', 'build', 'infrastructure', 'protocols', 'design', 'knowledge', 'journal', 'changes']);
 function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
@@ -206,12 +207,13 @@ function showWorkspaceView(view, options = {}) {
     if (historyMode === 'replace') window.history.replaceState({ networkWorkspaceView: view }, '', url);
     else if (current !== view) window.history.pushState({ networkWorkspaceView: view }, '', url);
   }
-  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), protocols = $('#protocolsView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
-  if (!overview || !incidents || !infrastructure || !protocols || !knowledge || !journal || !changes || !cols) return;
+  const overview = $('#overview'), incidents = $('#incidentsView'), infrastructure = $('#infrastructureView'), protocols = $('#protocolsView'), design = $('#designView'), knowledge = $('#knowledgeView'), journal = $('#journalView'), changes = $('#changeView'), cols = $('#cols');
+  if (!overview || !incidents || !infrastructure || !protocols || !design || !knowledge || !journal || !changes || !cols) return;
   overview.hidden = view !== 'overview';
   incidents.hidden = view !== 'incidents';
   infrastructure.hidden = view !== 'infrastructure';
   protocols.hidden = view !== 'protocols';
+  design.hidden = view !== 'design';
   knowledge.hidden = view !== 'knowledge';
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
@@ -226,6 +228,7 @@ function showWorkspaceView(view, options = {}) {
   if (view === 'incidents') renderIncidentCenter();
   if (view === 'infrastructure') renderInfrastructureView();
   if (view === 'protocols') renderProtocolLab();
+  if (view === 'design') renderDesignAcademy();
   if (view === 'knowledge') renderKnowledgeCenter();
   if (view === 'journal') renderJournalPage();
   if (view === 'changes') renderChangeManagement();
@@ -2021,6 +2024,23 @@ async function renderClassroom(sb, body) {
 }
 
 
+/* ---------- enterprise network design academy ---------- */
+let DESIGN_CASE='small-office';
+function renderDesignAcademy(){
+ const root=$('#designView');if(!root)return;
+ PROG.designAcademy=PROG.designAcademy&&typeof PROG.designAcademy==='object'?PROG.designAcademy:{};
+ const selected=D.getCase(DESIGN_CASE),saved=PROG.designAcademy[selected.id]||{},answers=saved.answers||{};
+ const tabs=D.CASES.map(c=>'<button type="button" class="design-case-tab'+(c.id===selected.id?' active':'')+'" data-design-case="'+esc(c.id)+'" aria-pressed="'+(c.id===selected.id?'true':'false')+'"><b>'+esc(c.title)+'</b><small>'+esc(c.level)+' · '+esc(c.duration)+'</small></button>').join('');
+ const fields=selected.decisions.map(d=>'<label class="design-decision"><span><b>'+esc(d.label)+'</b><small>Choose the architecture decision that best meets the brief.</small></span><select name="'+esc(d.id)+'" required aria-label="'+esc(d.label)+'"><option value="">Select a design decision…</option>'+d.options.map(o=>'<option value="'+esc(o[0])+'"'+(answers[d.id]===o[0]?' selected':'')+'>'+esc(o[1])+'</option>').join('')+'</select></label>').join('');
+ const result=saved.result?'<section class="design-review" aria-live="polite"><div class="design-review-head"><div><span class="eyebrow">Design review</span><h2>'+saved.result.score+' / '+saved.result.total+' decisions aligned</h2></div><strong class="'+(saved.result.passed?'passed':'needs-work')+'">'+saved.result.percent+'%</strong></div><p>'+(saved.result.passed?'All decisions meet the stated design objectives. Review the rationale and consider how you would validate this architecture in a real change review.':'Review the gaps below, revise your decisions and submit another design review.')+'</p><div class="design-feedback">'+saved.result.feedback.map(f=>'<article class="'+(f.correct?'good':'gap')+'"><b>'+(f.correct?'✓ ':'↻ ')+esc(f.label)+'</b><p>'+esc(f.explanation)+'</p><small>'+(f.correct?'Aligned with the brief':'Revisit this decision; the current selection does not meet the design objective')+'</small></article>').join('')+'</div></section>':'<p class="design-empty">Complete the four architecture decisions and request a review. Your work is saved on this device.</p>';
+ root.innerHTML='<div class="design-page"><style>'+
+ '.design-page{max-width:1180px;margin:0 auto;padding:26px}.design-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}.design-head h1{font-size:30px;margin:3px 0 6px}.design-head p{color:var(--muted);max-width:760px;margin:0}.design-label{border:1px solid var(--line);border-radius:20px;padding:6px 10px;color:var(--muted);font-size:11px;letter-spacing:.07em}.design-case-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:18px 0}.design-case-tab{text-align:left;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);cursor:pointer}.design-case-tab.active{border-color:var(--amber);box-shadow:inset 0 -2px var(--amber);background:color-mix(in srgb,var(--amber) 8%,var(--panel))}.design-case-tab b,.design-case-tab small{display:block}.design-case-tab small{color:var(--muted);font-size:11px;margin-top:4px}.design-brief,.design-form,.design-review{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:18px;margin-top:12px}.design-brief h2{margin:3px 0 7px;font-size:21px}.design-brief p{color:var(--muted);margin:0}.design-constraints{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:13px}.design-constraints span{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--raise);font-size:12px}.design-form-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.design-form h2{margin:0;font-size:18px}.design-decision{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,1.3fr);gap:16px;align-items:center;padding:13px 0;border-top:1px solid var(--line)}.design-decision b,.design-decision small{display:block}.design-decision small{color:var(--muted);font-size:11px;margin-top:3px}.design-decision select{width:100%;min-width:0;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:10px;font:inherit}.design-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.design-review-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.design-review h2{margin:2px 0;font-size:20px}.design-review-head>strong{font-size:24px;color:var(--amber)}.design-review-head>strong.passed{color:var(--good)}.design-review-head>strong.needs-work{color:var(--bad)}.design-review>p,.design-empty{color:var(--muted)}.design-feedback{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.design-feedback article{padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}.design-feedback article.good{border-left:3px solid var(--good)}.design-feedback article.gap{border-left:3px solid var(--bad)}.design-feedback p{font-size:12px;color:var(--muted);margin:6px 0}.design-feedback small{font-size:10px;color:var(--muted)}@media(max-width:760px){.design-page{padding:15px}.design-case-tabs,.design-constraints,.design-feedback{grid-template-columns:1fr}.design-decision{grid-template-columns:1fr;gap:8px}}'+
+ '</style><header class="design-head"><div><div class="eyebrow">Network architecture · guided academy</div><h1>Enterprise Network Design Academy</h1><p>Practise making defensible architecture decisions. Read the business brief, account for its constraints, then review your design against explicit engineering principles.</p></div><span class="design-label">SIMULATED DESIGN EXERCISES</span></header><nav class="design-case-tabs" aria-label="Design scenarios">'+tabs+'</nav><section class="design-brief"><div class="eyebrow">Design brief · '+esc(selected.level)+'</div><h2>'+esc(selected.title)+'</h2><p>'+esc(selected.brief)+'</p><div class="design-constraints">'+selected.constraints.map(x=>'<span>• '+esc(x)+'</span>').join('')+'</div></section><form id="designReviewForm" class="design-form"><div class="design-form-head"><h2>Architecture decisions</h2><span class="sub">Four decisions · evidence-based review</span></div>'+fields+'<div class="design-actions"><button type="submit" class="btn primary">Review my design</button><button type="button" class="btn" id="designReset">Reset this brief</button></div></form>'+result+'</div>';
+ root.querySelectorAll('[data-design-case]').forEach(b=>b.addEventListener('click',()=>{DESIGN_CASE=b.dataset.designCase;renderDesignAcademy();}));
+ root.querySelector('#designReviewForm').addEventListener('submit',e=>{e.preventDefault();const data=new FormData(e.currentTarget),submitted={};selected.decisions.forEach(d=>submitted[d.id]=String(data.get(d.id)||''));if(selected.decisions.some(d=>!submitted[d.id])){flashStatus('Complete all four architecture decisions before review.');return;}const review=D.evaluate(selected.id,submitted);PROG.designAcademy[selected.id]={answers:submitted,result:review,reviewedAt:new Date().toISOString()};saveProg();addJournalEntry({type:'design review',text:selected.title+' · '+review.score+'/'+review.total+' decisions aligned'});renderDesignAcademy();});
+ root.querySelector('#designReset').addEventListener('click',()=>{delete PROG.designAcademy[selected.id];saveProg();renderDesignAcademy();});
+}
+
 /* ---------- change management ---------- */
 let CHANGE_SELECTED = null;
 const CHANGE_STATES = ['draft','submitted','approved','implementing','verified','rolled-back'];
@@ -2143,6 +2163,7 @@ function boot() {
         <button class="nav-item" id="navWorkbench" title="Operate the active network simulation" data-view="workbench" type="button"><span class="nav-glyph">⌘</span>Workbench</button>
         <button class="nav-item" id="navInfrastructure" title="Inspect devices, links and infrastructure" data-view="infrastructure" type="button"><span class="nav-glyph">▤</span>Infrastructure</button>
         <button class="nav-item" id="navProtocols" title="Explore how network protocols exchange packets" data-view="protocols" type="button"><span class="nav-glyph">⇄</span>Protocol labs</button>
+        <button class="nav-item" id="navDesign" title="Practise enterprise network architecture decisions" data-view="design" type="button"><span class="nav-glyph">⌘</span>Design academy</button>
         <div class="nav-section">Reference & records</div>
         <button class="nav-item" id="navKnowledge" title="Browse command references and troubleshooting playbooks" data-view="knowledge" type="button"><span class="nav-glyph">⌕</span>Knowledge</button>
         <button class="nav-item" id="navJournal" title="Review saved investigation notes and evidence" data-view="journal" type="button"><span class="nav-glyph">▧</span>Journal</button>
@@ -2171,6 +2192,7 @@ function boot() {
     <section id="incidentsView" aria-label="Incident management" hidden></section>
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
     <section id="protocolsView" aria-label="Interactive network protocol labs" hidden></section>
+    <section id="designView" aria-label="Enterprise network design academy" hidden></section>
     <section id="knowledgeView" aria-label="Network knowledge centre" hidden></section>
     <section id="journalView" aria-label="Engineering journal" hidden></section>
     <section id="changeView" aria-label="Change management" hidden></section>
@@ -2198,6 +2220,7 @@ function boot() {
   $('#navIncidents').addEventListener('click', () => showWorkspaceView('incidents'));
   $('#navInfrastructure').addEventListener('click', () => showWorkspaceView('infrastructure'));
   $('#navProtocols').addEventListener('click', () => showWorkspaceView('protocols'));
+  $('#navDesign').addEventListener('click', () => showWorkspaceView('design'));
   $('#navKnowledge').addEventListener('click', () => showWorkspaceView('knowledge'));
   $('#navJournal').addEventListener('click', () => showWorkspaceView('journal'));
   $('#navChanges').addEventListener('click', () => showWorkspaceView('changes'));

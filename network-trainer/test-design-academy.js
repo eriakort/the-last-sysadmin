@@ -1,0 +1,11 @@
+const path=require('path');const{chromium}=require('playwright');const URL='file://'+path.join(process.cwd(),'index.html?view=design');
+(async()=>{const browser=await chromium.launch();const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(250);
+if(!(await page.locator('#designView').isVisible()))throw Error('Design academy route did not render');
+if(!(await page.locator('h1').filter({hasText:'Enterprise Network Design Academy'}).count()))throw Error('Academy heading missing');
+for(const [name,value] of Object.entries({segmentation:'role-vlans',addressing:'vlsm-private',resilience:'dual-uplink',security:'default-deny'}))await page.selectOption('#designReviewForm select[name="'+name+'"]',value);
+await page.click('#designReviewForm button[type="submit"]');await page.waitForTimeout(50);
+if(!(await page.locator('.design-review').isVisible())||!(await page.locator('.design-review').innerText()).includes('4 / 4'))throw Error('Perfect design review did not score 4 / 4');
+await page.click('[data-design-case="campus"]');if(!(await page.locator('#designReviewForm select[name="hierarchy"]').count()))throw Error('Scenario switch did not update decisions');
+await page.reload({waitUntil:'load'});await page.waitForTimeout(200);if(!(await page.locator('#designView').isVisible()))throw Error('Design route did not survive reload');
+await browser.close();if(errors.length)throw Error('Browser errors: '+errors.join('; '));console.log('Enterprise network design academy UI tests passed.');
+})().catch(e=>{console.error(e);process.exit(1);});
