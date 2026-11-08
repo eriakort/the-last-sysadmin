@@ -19,7 +19,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  await solve("sudo chmod 640 /srv/halcyon/export/sync_out.sh");
  await solve("sudo mkdir -p /mnt/backups && sudo mount /dev/vdb1 /mnt/backups");
  await solve("echo '/dev/vdb1 /mnt/backups ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab");
- await solve("sudo mkdir -p /mnt/restore && sudo tar -czf /mnt/backups/etc-backup.tar.gz -C / etc && sudo tar -xzf /mnt/backups/etc-backup.tar.gz -C /mnt/restore");
+ await solve("sudo mkdir -p /mnt/restore && sudo tar -czf /mnt/backups/etc-backup.tar.gz /etc && sudo tar -xzf /mnt/backups/etc-backup.tar.gz -C /mnt/restore");
  await page.waitForTimeout(120);
  if(await page.locator('#practiceBar').isVisible())fail('Lab did not complete all six objectives; terminal: '+await page.locator('#tout').innerText());
  await page.click('#btnOpsRecoveryLab');await page.waitForTimeout(50);
