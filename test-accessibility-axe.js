@@ -20,7 +20,8 @@ const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html
  try{
   const root=await browser.newPage();await root.goto(rootUrl,{waitUntil:'load'});await root.waitForTimeout(250);
   await scan(root,'Linux Sysadmin initial workspace');await root.close();
-  const net=await browser.newPage();await net.goto(networkUrl,{waitUntil:'load'});await net.waitForTimeout(250);
+  const net=await browser.newPage(),runtimeErrors=[];net.on('pageerror',error=>runtimeErrors.push(error.stack||error.message));net.on('console',message=>{if(message.type()==='error')runtimeErrors.push('console: '+message.text());});await net.goto(networkUrl,{waitUntil:'load'});await net.waitForTimeout(250);
+  if(!(await net.locator('#btnSet').count()))throw new Error('Network Trainer did not finish booting; runtime errors: '+(runtimeErrors.join(' | ')||'none captured'));
   await scan(net,'Network Trainer workbench');
   await net.locator('#btnSet').click();await net.waitForTimeout(80);await scan(net,'Network Trainer settings dialog');
   await net.keyboard.press('Escape');await net.locator('#btnSearch').click();await net.waitForTimeout(80);await scan(net,'Network Trainer search palette');
