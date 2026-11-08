@@ -693,14 +693,17 @@ function packetJourney(net, srcDev, destination, opts = {}) {
   const describe = (path, direction, ok, reason) => (path || []).map((id, index) => {
     const dev = net.devices[id] || {};
     const outgoing = path[index + 1] || null;
-    const link = outgoing && (net.links || []).find(l =>
-      (l.a[0] === id && l.b[0] === outgoing) || (l.b[0] === id && l.a[0] === outgoing));
+    let transit = null;
+    if (outgoing) for (const name of Object.keys(dev.ifaces || {})) {
+      const peer = l2Domain(net, id, name).find(([peerId]) => peerId === outgoing);
+      if (peer) { transit = { local: name, peer: peer[1] }; break; }
+    }
     const local = Object.entries(dev.ifaces || {}).find(([, iface]) => iface.up !== false && iface.ip != null);
     return {
       index: index + 1, deviceId: id, deviceName: dev.label || dev.hostname || id,
       kind: dev.kind || 'device', address: local ? ipStr(local[1].ip) : null,
-      nextDeviceId: outgoing, localInterface: link ? (link.a[0] === id ? link.a[1] : link.b[1]) : null,
-      peerInterface: link ? (link.a[0] === id ? link.b[1] : link.a[1]) : null,
+      nextDeviceId: outgoing, localInterface: transit ? transit.local : null,
+      peerInterface: transit ? transit.peer : null,
       state: index === path.length - 1 ? (ok ? 'delivered' : 'stopped') : 'forwarded',
       direction, detail: index === path.length - 1 ? reason : (outgoing ? 'Forwarded toward ' + (net.devices[outgoing].label || net.devices[outgoing].hostname || outgoing) : 'Packet entered this device')
     };
