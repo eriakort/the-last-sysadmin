@@ -53,6 +53,9 @@ jobs:
       - name: Linux authored-mission playback tests
         run: npm run test:play
 
+      - name: Linux server health dashboard browser tests
+        run: npm run test:health
+
       - name: Linux guided-learning pilot tests
         run: npm run test:learning
 
