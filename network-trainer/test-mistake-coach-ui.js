@@ -9,8 +9,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
-  await page.locator('#navWorkbench').click();
-  await page.locator('#tin').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#overviewWorkbench').click();
+  await page.waitForFunction(() => {
+    const workspace = document.getElementById('cols');
+    const input = document.getElementById('tin');
+    return workspace && !workspace.hidden && input && input.getClientRects().length > 0;
+  }, null, { timeout: 5000 });
   await page.locator('#tin').fill('show not-a-real-command');
   await page.locator('#tin').press('Enter');
   await page.waitForFunction(() => {
