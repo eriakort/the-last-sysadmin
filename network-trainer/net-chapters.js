@@ -960,7 +960,7 @@ const chapters = [
       ['r1','show standby brief'],['r2','show standby brief'],['hq','ping isp'],
       ['r1','enable'],['r1','write memory'],['r2','enable'],['r2','write memory']
     ]
-  }
+  },
 
   {
     id: 'cross-track-web-availability-network',
