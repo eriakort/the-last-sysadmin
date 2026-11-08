@@ -1058,6 +1058,47 @@ const chapters = [
     ],
     solution: [['r1','enable'],['r1','show access-lists ADMIN-EDGE'],['r1','configure terminal'],['r1','ip access-list extended ADMIN-EDGE'],['r1','no 10'],['r1','no 20'],['r1','no 30'],['r1','10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','20 permit tcp 10.0.3.0 0.0.0.255 host 10.0.2.10 eq 80'],['r1','30 deny ip any any'],['r1','end'],['r1','show access-lists ADMIN-EDGE'],['r1','write memory']]
   },
+  {
+    id: 'cross-track-contractor-containment-network',
+    chapter: 'Integrated Operations · Cross-discipline case',
+    title: 'Contain the suspicious SSH source',
+    story: 'Security has confirmed that repeated SSH access attempts from 198.51.100.200 are associated with the former contractor account. Restrict that source from the jump host without disrupting the operations team or the public HTTPS portal.',
+    objective: 'On r1, replace the overly broad SSH rule with a source-specific deny for 198.51.100.200 to jump01 TCP/22. Permit SSH from the operations subnet, preserve HTTPS to web01, and retain a final deny. Verify all three paths and save the configuration.',
+    ticket: { id: 'INC-XD-2064', from: 'Security operations · containment request', priority: 'P1', symptom: 'A former contractor account is associated with repeated SSH activity from 198.51.100.200. Contain that source at the network boundary while preserving legitimate administration and public web access.' },
+    diagnose: { q: 'Which ACL change contains the confirmed source without causing an avoidable service outage?', options: ['Deny 198.51.100.200 to jump01 on TCP/22, permit SSH from the operations subnet, and preserve HTTPS to web01', 'Deny all traffic from every external address', 'Permit SSH from any source and rely only on account controls'], answer: 0, because: 'Containment should target the confirmed source and service. Preserve the known-good management path and the separate public HTTPS service; broad blocking would create an unnecessary outage.' },
+    console: 'r1',
+    hints: ['Inspect show access-lists INCIDENT-IN and identify the broad SSH permit.', 'Replace the rules in first-match order: deny the confirmed source to jump01 TCP/22, permit the operations subnet to jump01 TCP/22, permit HTTPS to web01, then deny other traffic.', 'Verify attacker SSH is blocked, operations SSH still works, and attacker HTTPS to web01 remains available.'],
+    build: () => {
+      const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24), eth2: iface('198.51.100.1', 24) });
+      fw.acls = [
+        { aclName: 'INCIDENT-IN', seq: 10, action: 'allow', proto: 'tcp', src: null, srcWildcard: null, dst: ip('10.0.2.10'), dstWildcard: 0, dport: 22 },
+        { aclName: 'INCIDENT-IN', seq: 20, action: 'allow', proto: 'tcp', src: null, srcWildcard: null, dst: ip('10.0.2.20'), dstWildcard: 0, dport: 443 },
+        { aclName: 'INCIDENT-IN', seq: 30, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null }
+      ];
+      fw.ifaces.eth0.accessGroups = { in: 'INCIDENT-IN' };
+      fw.ifaces.eth2.accessGroups = { in: 'INCIDENT-IN' };
+      return { devices: {
+        ops01: H('ops01', '10.0.1.10', 24, '10.0.1.1'),
+        jump01: SRV('jump01', '10.0.2.10', 24, '10.0.2.1', { 22: 'ssh' }),
+        web01: SRV('web01', '10.0.2.20', 24, '10.0.2.1', { 443: 'https' }),
+        attacker: H('attacker', '198.51.100.200', 24, '198.51.100.1'),
+        r1: fw,
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }]),
+        sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [
+        L('ops01', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('jump01', 'eth0', 'sw2', 'p1'), L('web01', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3'),
+        L('attacker', 'eth0', 'sw3', 'p1'), L('r1', 'eth2', 'sw3', 'p2')
+      ] };
+    },
+    success: [
+      { type: 'acl_blocks', src: 'attacker', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
+      { type: 'reachable', a: 'ops01', b: 'jump01', proto: 'tcp', dport: 22 },
+      { type: 'reachable', a: 'attacker', b: 'web01', proto: 'tcp', dport: 443 }
+    ],
+    solution: [['r1','enable'],['r1','show access-lists INCIDENT-IN'],['r1','configure terminal'],['r1','ip access-list extended INCIDENT-IN'],['r1','no 10'],['r1','no 20'],['r1','no 30'],['r1','10 deny tcp host 198.51.100.200 host 10.0.2.10 eq 22'],['r1','20 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','30 permit tcp any host 10.0.2.20 eq 443'],['r1','40 deny ip any any'],['r1','end'],['r1','show access-lists INCIDENT-IN'],['r1','write memory']]
+  },
 ];
 
 module.exports = { chapters };
