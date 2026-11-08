@@ -1035,7 +1035,7 @@ const chapters = [
         { aclName: 'ADMIN-EDGE', seq: 20, action: 'allow', proto: 'tcp', src: ip('10.0.3.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 80 },
         { aclName: 'ADMIN-EDGE', seq: 30, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null }
       ];
-      fw.ifaces.eth1.accessGroups = { in: 'ADMIN-EDGE' };
+      fw.ifaces.eth0.accessGroups = { in: 'ADMIN-EDGE' };
       return { devices: {
         ops01: H('ops01', '10.0.1.10', 24, '10.0.1.1'),
         jump01: SRV('jump01', '10.0.2.10', 24, '10.0.2.1', { 22: 'ssh', 80: 'http' }),
