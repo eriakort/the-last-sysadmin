@@ -1017,6 +1017,46 @@ const chapters = [
     ],
     solution: [['r1','enable'],['r1','show access-lists ADMIN-IN'],['r1','show ip interface eth0'],['r1','configure terminal'],['r1','ip access-list extended ADMIN-IN'],['r1','no 10'],['r1','no 20'],['r1','10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','20 deny ip any any'],['r1','end'],['r1','show access-lists ADMIN-IN'],['r1','write memory']]
   },
+
+  {
+    id: 'cross-track-ssh-hardening-network',
+    chapter: 'Integrated Operations · Cross-discipline case',
+    title: 'Restrict SSH to the operations subnet',
+    story: 'A security review found that every workstation can reach jump01 over SSH. The Linux team is restoring Fail2Ban, but network access must also follow least privilege. Restrict TCP/22 to the operations subnet while preserving the client subnet\'s HTTP access.',
+    objective: 'On r1, change ADMIN-EDGE so only ops01 can reach jump01 on TCP/22, client01 cannot use SSH, and client01 can still reach the web service on TCP/80. Verify all three outcomes and save the configuration.',
+    ticket: { id: 'INC-XD-2053', from: 'Security operations · access hardening', priority: 'P1', symptom: 'SSH to jump01 is reachable from the user subnet. Tighten the management boundary without interrupting the internal web portal.' },
+    diagnose: { q: 'The current ACL permits TCP/22 from any source. Which change best follows least privilege?', options: ['Permit SSH only from the operations subnet, preserve the web rule, then deny other traffic', 'Permit all traffic from both subnets', 'Remove the ACL and rely on the server banner'], answer: 0, because: 'Administrative access should be limited to its management source network. Keep the required HTTP rule separate and retain an explicit deny for all other traffic.' },
+    console: 'r1',
+    hints: ['Inspect show access-lists ADMIN-EDGE and confirm which source networks need SSH and HTTP.', 'Remove the existing sequences, then add a TCP/22 permit for 10.0.1.0/24, a TCP/80 permit for 10.0.3.0/24, and a final deny.', 'Verify ops01 to jump01 TCP/22 succeeds, client01 to jump01 TCP/22 is blocked, and client01 to jump01 TCP/80 succeeds.'],
+    build: () => {
+      const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24), eth2: iface('10.0.3.1', 24) });
+      fw.acls = [
+        { aclName: 'ADMIN-EDGE', seq: 10, action: 'allow', proto: 'tcp', src: null, srcWildcard: null, dst: ip('10.0.2.10'), dstWildcard: 0, dport: 22 },
+        { aclName: 'ADMIN-EDGE', seq: 20, action: 'allow', proto: 'tcp', src: ip('10.0.3.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 80 },
+        { aclName: 'ADMIN-EDGE', seq: 30, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null }
+      ];
+      fw.ifaces.eth1.accessGroups = { in: 'ADMIN-EDGE' };
+      return { devices: {
+        ops01: H('ops01', '10.0.1.10', 24, '10.0.1.1'),
+        jump01: SRV('jump01', '10.0.2.10', 24, '10.0.2.1', { 22: 'ssh', 80: 'http' }),
+        client01: H('client01', '10.0.3.20', 24, '10.0.3.1'),
+        r1: fw,
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }]),
+        sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [
+        L('ops01', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('jump01', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2'),
+        L('client01', 'eth0', 'sw3', 'p1'), L('r1', 'eth2', 'sw3', 'p2')
+      ] };
+    },
+    success: [
+      { type: 'reachable', a: 'ops01', b: 'jump01', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'client01', dst: '10.0.2.10', proto: 'tcp', dport: 22 },
+      { type: 'reachable', a: 'client01', b: 'jump01', proto: 'tcp', dport: 80 }
+    ],
+    solution: [['r1','enable'],['r1','show access-lists ADMIN-EDGE'],['r1','configure terminal'],['r1','ip access-list extended ADMIN-EDGE'],['r1','no 10'],['r1','no 20'],['r1','no 30'],['r1','10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','20 permit tcp 10.0.3.0 0.0.0.255 host 10.0.2.10 eq 80'],['r1','30 deny ip any any'],['r1','end'],['r1','show access-lists ADMIN-EDGE'],['r1','write memory']]
+  },
 ];
 
 module.exports = { chapters };

@@ -6266,6 +6266,7 @@ function completeMission() {
   }
   if (PRACTICE.active && m.id === 'cross-track-web-availability-linux') crossTrackWrite('linux');
   if (PRACTICE.active && m.id === 'cross-track-remote-admin-linux') crossTrackWrite('remoteLinux');
+  if (PRACTICE.active && m.id === 'cross-track-ssh-hardening-linux') crossTrackWrite('hardeningLinux');
   emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
@@ -6681,6 +6682,14 @@ const CROSS_TRACK_REMOTE_LINUX_MISSION=[{
  check_type:'service_state',check_arg1:'ssh',check_arg2:'active',
  onStart:()=>{if(S.services&&S.services.ssh)S.services.ssh.active=false;}
 }];
+const CROSS_TRACK_HARDENING_LINUX_MISSION=[{
+ id:'cross-track-ssh-hardening-linux',title:'Restore brute-force protection',
+ story:'The security review found repeated SSH authentication failures, but the host is no longer applying automatic bans. The Fail2Ban service is stopped. Inspect the unit, restore it and verify that protection is active.',
+ objective:'Inspect fail2ban.service, restart it with appropriate privileges, and verify that the service is active.',
+ hints:['Use systemctl status fail2ban to inspect the unit before changing anything.','Use sudo systemctl restart fail2ban, then verify with systemctl is-active fail2ban.'],
+ check_type:'service_state',check_arg1:'fail2ban',check_arg2:'active',
+ onStart:()=>{if(S.services&&S.services.fail2ban)S.services.fail2ban.active=false;}
+}];
 function closeCrossTrackCase(){const root=document.getElementById('crossTrackCaseDialog');if(root)root.remove();}
 function openCrossTrackCase(){
  closeCrossTrackCase();const state=crossTrackRead();
@@ -6692,6 +6701,8 @@ function openCrossTrackCase(){
  +'<div class="ops-lab-card'+(state.network?' complete':'')+'"><div class="ops-lab-status">'+(state.network?'✓ Network task demonstrated':'2 · Network Sysadmin')+'</div><h3>Restore client access</h3><p>Correct the stale local name record, then verify name resolution, IP reachability and the web service port.</p><div class="ops-lab-actions"><button class="btn" type="button" data-cross-network>Open Network task</button></div></div>'
  +'<div class="ops-lab-card'+(state.remoteLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteLinux?'✓ Linux task demonstrated':'3 · Linux Sysadmin')+'</div><h3>Restore SSH on jump01</h3><p>Inspect the SSH daemon, restart it safely and confirm the service is active.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-remote-linux>Start Linux task</button></div></div>'
  +'<div class="ops-lab-card'+(state.remoteNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteNetwork?'✓ Network task demonstrated':'4 · Network Sysadmin')+'</div><h3>Repair the management access policy</h3><p>Correct ACL order to permit SSH while continuing to deny unrelated services.</p><div class="ops-lab-actions"><button class="btn" type="button" data-remote-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.hardeningLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningLinux?'✓ Linux task demonstrated':'5 · Linux Sysadmin')+'</div><h3>Restore brute-force protection</h3><p>Inspect the Fail2Ban unit, restore the service and verify its state.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-hardening-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.hardeningNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningNetwork?'✓ Network task demonstrated':'6 · Network Sysadmin')+'</div><h3>Limit SSH to the operations subnet</h3><p>Apply least-privilege ACL rules while preserving client web access.</p><div class="ops-lab-actions"><button class="btn" type="button" data-hardening-network>Open Network task</button></div></div>'
  +'<p class="ops-lab-safety">Simulation only. Both environments run in the browser and do not connect to real servers or network devices. Completion is stored locally in this browser profile.</p></section>';
  root.addEventListener('click',function(event){
   if(event.target===root||event.target.closest('[data-cross-close]')){closeCrossTrackCase();return;}
@@ -6699,6 +6710,8 @@ function openCrossTrackCase(){
   if(event.target.closest('[data-cross-network]')){window.location.href='network-trainer/index.html?crossTrack=web-availability';return;}
   if(event.target.closest('[data-remote-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_REMOTE_LINUX_MISSION,'Cross-discipline Remote Access');return;}
   if(event.target.closest('[data-remote-network]')){window.location.href='network-trainer/index.html?crossTrack=remote-admin';return;}
+  if(event.target.closest('[data-hardening-linux]')){closeCrossTrackCase();playAuthored(CROSS_TRACK_HARDENING_LINUX_MISSION,'Cross-discipline SSH Hardening');return;}
+  if(event.target.closest('[data-hardening-network]')){window.location.href='network-trainer/index.html?crossTrack=ssh-hardening';return;}
  });
  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeCrossTrackCase();});
  document.body.appendChild(root);const close=root.querySelector('[data-cross-close]');if(close)close.focus();
