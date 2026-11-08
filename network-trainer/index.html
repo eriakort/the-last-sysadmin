@@ -5863,10 +5863,37 @@ function renderProtocolLab() {
 
 let KNOWLEDGE_COACH_MODE = 'guided';
 let KNOWLEDGE_COACH_COMMAND = null;
+function networkLearningRecommendation() {
+  const completed = chapters.filter(chapter => !!PROG.done[chapter.id]).length;
+  const total = chapters.length;
+  const journal = Array.isArray(PROG.journal) ? PROG.journal : [];
+  const commands = journal.filter(entry => entry && entry.type === 'command');
+  const recent = commands.slice(0, 20);
+  const errors = recent.filter(entry => entry.result === 'error' || /invalid input|unknown command|incomplete command|ambiguous command|not found/i.test(String(entry.output || '')));
+  const signal = errors.map(entry => [entry.command, entry.output].filter(Boolean).join(' ')).join(' ').toLowerCase();
+  let focus = { title: 'Command context and verification', command: 'show ip interface brief', reason: 'No repeated command-error pattern stands out yet. Practise checking device state before changing configuration.', source: 'Recommended starting point' };
+  if (errors.length && /vlan|spanning|stp|trunk|switch/.test(signal)) focus = { title: 'Switching and VLAN verification', command: 'show vlan brief', reason: 'Recent command errors mention switching, VLANs or spanning-tree. Revisit VLAN membership and Layer 2 state before changing ports.', source: errors.length + ' recent command error' + (errors.length === 1 ? '' : 's') };
+  else if (errors.length && /route|ospf|bgp|gateway/.test(signal)) focus = { title: 'Routing and path verification', command: 'show ip route', reason: 'Recent command errors mention routes, gateways or routing protocols. Practise confirming the routing table and next hop before troubleshooting end-to-end reachability.', source: errors.length + ' recent command error' + (errors.length === 1 ? '' : 's') };
+  else if (errors.length && /acl|access-list|firewall|blocked|policy/.test(signal)) focus = { title: 'Traffic policy and ACLs', command: 'show access-lists', reason: 'Recent command errors mention filtering or policy. Review rule order, match conditions and the evidence needed to distinguish a policy drop from a path failure.', source: errors.length + ' recent command error' + (errors.length === 1 ? '' : 's') };
+  else if (errors.length && /interface|link|port|ethernet/.test(signal)) focus = { title: 'Interface state and link diagnosis', command: 'show ip interface brief', reason: 'Recent command errors mention interfaces, links or ports. Practise checking administrative and operational state before changing interface settings.', source: errors.length + ' recent command error' + (errors.length === 1 ? '' : 's') };
+  return { completed, total, journalCount: journal.length, commandCount: commands.length, errorCount: errors.length, focus };
+}
+function renderNetworkLearningPlan() {
+  const plan = networkLearningRecommendation();
+  return `<section class="knowledge-playbooks" aria-label="Personal learning plan">
+    <div class="knowledge-section-head"><div><h2>Your learning plan</h2><span>Evidence-led guidance from your saved missions and Workbench journal</span></div><span class="help-key">${plan.completed}/${plan.total} MISSIONS</span></div>
+    <div class="knowledge-playbook-grid">
+      <article class="knowledge-playbook"><div class="eyebrow">YOUR PROGRESS</div><h3>${plan.completed} of ${plan.total} missions complete</h3><p>${plan.total ? Math.round(plan.completed / plan.total * 100) : 0}% of the current network mission path completed.</p><p class="dim">${plan.journalCount} journal entries · ${plan.commandCount} recorded commands</p></article>
+      <article class="knowledge-playbook"><div class="eyebrow">RECOMMENDED FOCUS</div><h3>${esc(plan.focus.title)}</h3><p>${esc(plan.focus.reason)}</p><p class="dim">Based on: ${esc(plan.focus.source)}</p><div class="row"><button class="btn primary sm" id="coachPracticeFocus" type="button">Practise ${esc(plan.focus.command)}</button></div></article>
+      <article class="knowledge-playbook"><div class="eyebrow">INVESTIGATION HABIT</div><h3>Inspect → change → verify</h3><p>Capture the initial state, make one controlled change, then repeat the same check and record the result. A successful command is evidence of its own output, not proof of end-to-end recovery.</p><p class="dim">${plan.errorCount} recent command errors considered · no simulator state changed</p></article>
+    </div>
+  </section>`;
+}
 function renderKnowledgeCenter() {
   const root = $('#knowledgeView'); if (!root) return;
   root.innerHTML = `
     <div class="knowledge-page-heading"><div><div class="eyebrow">Field reference · network operations</div><h1>Network knowledge</h1><p>Practical command references and repeatable troubleshooting workflows. Select a command to send it to the active Workbench console, or open the coach to understand when and why to use it.</p></div><span class="help-key">L1 / L2 FIELD GUIDE</span></div>
+    ${renderNetworkLearningPlan()}
     <section class="knowledge-playbooks"><div class="knowledge-section-head"><h2>Troubleshooting playbooks</h2><span>Work methodically · capture evidence</span></div><div class="knowledge-playbook-grid">${KNOWLEDGE_PLAYBOOKS.map((p,i)=>`<article class="knowledge-playbook"><div class="eyebrow">PLAYBOOK 0${i+1}</div><h3>${esc(p.title)}</h3><ol>${p.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`).join('')}</div></section>
     <section class="knowledge-library"><div class="knowledge-section-head"><div><h2>Command reference</h2><p>Search by command, task or description. Availability depends on the selected simulator device and CLI mode.</p></div></div><div class="knowledge-toolbar"><input id="knowledgeSearch" type="search" placeholder="Search commands and tasks…" aria-label="Search commands"><select id="knowledgeCategory" aria-label="Filter command category"><option value="all">All categories</option>${[...new Set(KNOWLEDGE_COMMANDS.map(x=>x.cat))].map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div id="knowledgeCommands" class="knowledge-command-list">${renderKnowledgeCommands(KNOWLEDGE_COMMANDS)}</div>
       <section class="network-command-coach" id="networkCommandCoach" aria-live="polite" aria-label="Network command coach"><div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div></section>
@@ -5875,6 +5902,8 @@ function renderKnowledgeCenter() {
   const search=root.querySelector('#knowledgeSearch'), category=root.querySelector('#knowledgeCategory'), list=root.querySelector('#knowledgeCommands');
   const filter=()=>{const q=search.value.trim().toLowerCase(), cat=category.value; const matches=KNOWLEDGE_COMMANDS.filter(x=>(cat==='all'||x.cat===cat)&&(!q||[x.cmd,x.cat,x.desc].join(' ').toLowerCase().includes(q))); list.innerHTML=renderKnowledgeCommands(matches); wireKnowledgeCommands(root);};
   search.addEventListener('input',filter); category.addEventListener('change',filter); wireKnowledgeCommands(root);
+  const practice = root.querySelector('#coachPracticeFocus');
+  if (practice) practice.addEventListener('click', () => { const command = networkLearningRecommendation().focus.command; showWorkspaceView('workbench'); const input = $('#tin'); if (input) { input.value = command; openTerminalWindow(true); } });
 }
 function renderKnowledgeCommands(items) {
   return items.map(x=>`<article class="knowledge-command-row"><button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button><button class="btn sm knowledge-coach-btn" type="button" data-knowledge-coach="${esc(x.cmd)}">Coach</button></article>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
