@@ -987,6 +987,36 @@ const chapters = [
     ],
     solution: [['workstation', 'enable'], ['workstation', 'configure terminal'], ['workstation', 'ip host portal.halcyon.local 10.60.0.20'], ['workstation', 'end']]
   },
+
+  {
+    id: 'cross-track-remote-admin-network',
+    chapter: 'Integrated Operations · Cross-discipline case',
+    title: 'Restore secure SSH access to jump01',
+    story: 'The Linux team is restoring the SSH daemon on jump01. The service was stopped, but network access is also failing: an inbound management ACL has a broad deny above the intended SSH permit. Repair the policy narrowly and preserve the default deny.',
+    objective: 'On r1, correct ADMIN-IN so ops01 can reach jump01 over TCP/22 while TCP/80 remains blocked. Verify both outcomes and save the configuration.',
+    ticket: { id: 'INC-XD-2052', from: 'NOC · remote administration', priority: 'P1', symptom: 'Operations staff cannot reach jump01 over SSH. The host is reachable by IP from the routed network, but the management ACL may be blocking the session.' },
+    diagnose: { q: 'show access-lists ADMIN-IN shows sequence 10 denying all IP traffic and sequence 20 permitting SSH from the operations subnet. Why does SSH still fail?', options: ['The first-match deny shadows the later SSH permit', 'The server needs a new default gateway', 'The switch has disabled its management VLAN'], answer: 0, because: 'The ACL is evaluated from the lowest sequence number upward. The broad deny matches first, so the SSH permit is never evaluated. Move the narrow permit ahead of the default deny.' },
+    console: 'r1',
+    hints: ['Inspect show access-lists ADMIN-IN and show ip interface eth0 before changing the policy.', 'Enter configuration mode and edit the named extended ACL. Remove sequences 10 and 20 before rebuilding them.', 'Add 10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22, then 20 deny ip any any. Verify SSH is reachable and HTTP remains blocked.'],
+    build: () => {
+      const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) });
+      fw.acls = [
+        { aclName: 'ADMIN-IN', seq: 10, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null },
+        { aclName: 'ADMIN-IN', seq: 20, action: 'allow', proto: 'tcp', src: ip('10.0.1.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 22 }
+      ];
+      fw.ifaces.eth0.accessGroups = { in: 'ADMIN-IN' };
+      return { devices: {
+        ops01: H('ops01', '10.0.1.10', 24, '10.0.1.1'),
+        jump01: SRV('jump01', '10.0.2.10', 24, '10.0.2.1', { 22: 'ssh', 80: 'http' }),
+        r1: fw, sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [L('ops01', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('jump01', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')] };
+    },
+    success: [
+      { type: 'reachable', a: 'ops01', b: 'jump01', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'ops01', dst: '10.0.2.10', proto: 'tcp', dport: 80 }
+    ],
+    solution: [['r1','enable'],['r1','show access-lists ADMIN-IN'],['r1','show ip interface eth0'],['r1','configure terminal'],['r1','ip access-list extended ADMIN-IN'],['r1','no 10'],['r1','no 20'],['r1','10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','20 deny ip any any'],['r1','end'],['r1','show access-lists ADMIN-IN'],['r1','write memory']]
+  },
 ];
 
 module.exports = { chapters };

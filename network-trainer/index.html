@@ -3772,6 +3772,36 @@ const chapters = [
     ],
     solution: [['workstation', 'enable'], ['workstation', 'configure terminal'], ['workstation', 'ip host portal.halcyon.local 10.60.0.20'], ['workstation', 'end']]
   },
+
+  {
+    id: 'cross-track-remote-admin-network',
+    chapter: 'Integrated Operations · Cross-discipline case',
+    title: 'Restore secure SSH access to jump01',
+    story: 'The Linux team is restoring the SSH daemon on jump01. The service was stopped, but network access is also failing: an inbound management ACL has a broad deny above the intended SSH permit. Repair the policy narrowly and preserve the default deny.',
+    objective: 'On r1, correct ADMIN-IN so ops01 can reach jump01 over TCP/22 while TCP/80 remains blocked. Verify both outcomes and save the configuration.',
+    ticket: { id: 'INC-XD-2052', from: 'NOC · remote administration', priority: 'P1', symptom: 'Operations staff cannot reach jump01 over SSH. The host is reachable by IP from the routed network, but the management ACL may be blocking the session.' },
+    diagnose: { q: 'show access-lists ADMIN-IN shows sequence 10 denying all IP traffic and sequence 20 permitting SSH from the operations subnet. Why does SSH still fail?', options: ['The first-match deny shadows the later SSH permit', 'The server needs a new default gateway', 'The switch has disabled its management VLAN'], answer: 0, because: 'The ACL is evaluated from the lowest sequence number upward. The broad deny matches first, so the SSH permit is never evaluated. Move the narrow permit ahead of the default deny.' },
+    console: 'r1',
+    hints: ['Inspect show access-lists ADMIN-IN and show ip interface eth0 before changing the policy.', 'Enter configuration mode and edit the named extended ACL. Remove sequences 10 and 20 before rebuilding them.', 'Add 10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22, then 20 deny ip any any. Verify SSH is reachable and HTTP remains blocked.'],
+    build: () => {
+      const fw = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) });
+      fw.acls = [
+        { aclName: 'ADMIN-IN', seq: 10, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null },
+        { aclName: 'ADMIN-IN', seq: 20, action: 'allow', proto: 'tcp', src: ip('10.0.1.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 22 }
+      ];
+      fw.ifaces.eth0.accessGroups = { in: 'ADMIN-IN' };
+      return { devices: {
+        ops01: H('ops01', '10.0.1.10', 24, '10.0.1.1'),
+        jump01: SRV('jump01', '10.0.2.10', 24, '10.0.2.1', { 22: 'ssh', 80: 'http' }),
+        r1: fw, sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [L('ops01', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('jump01', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')] };
+    },
+    success: [
+      { type: 'reachable', a: 'ops01', b: 'jump01', proto: 'tcp', dport: 22 },
+      { type: 'acl_blocks', src: 'ops01', dst: '10.0.2.10', proto: 'tcp', dport: 80 }
+    ],
+    solution: [['r1','enable'],['r1','show access-lists ADMIN-IN'],['r1','show ip interface eth0'],['r1','configure terminal'],['r1','ip access-list extended ADMIN-IN'],['r1','no 10'],['r1','no 20'],['r1','10 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','20 deny ip any any'],['r1','end'],['r1','show access-lists ADMIN-IN'],['r1','write memory']]
+  },
 ];
 
 module.exports = { chapters };
@@ -4393,6 +4423,7 @@ function renderOverview() {
     </section>
     <div class="overview-grid">
       <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>The unavailable Halcyon portal</h2></div><span class="ticket-state ${crossTrack.linux && crossTrack.network ? 'state-resolved' : 'state-investigating'}">${crossTrack.linux && crossTrack.network ? 'case complete' : 'two-track case'}</span></div><p>Coordinate Linux service recovery with network name-resolution and reachability checks. Each discipline is verified in its own simulator.</p><div class="cross-track-status"><span>${crossTrack.linux ? '✓' : '○'} Linux service recovery</span><span>${crossTrack.network ? '✓' : '○'} Network access recovery</span></div><div class="oi-foot"><button class="btn sm primary" id="crossTrackStart">Start network task</button><button class="btn sm" id="crossTrackLinux">Open Linux case</button></div></section>
+      <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>Restore secure remote administration</h2></div><span class="ticket-state ${crossTrack.remoteLinux && crossTrack.remoteNetwork ? 'state-resolved' : 'state-investigating'}">${crossTrack.remoteLinux && crossTrack.remoteNetwork ? 'case complete' : 'two-track case'}</span></div><p>Restore the SSH daemon on Linux and repair the network management ACL without exposing unrelated services.</p><div class="cross-track-status"><span>${crossTrack.remoteLinux ? '✓' : '○'} Linux SSH service</span><span>${crossTrack.remoteNetwork ? '✓' : '○'} Network SSH policy</span></div><div class="oi-foot"><button class="btn sm primary" id="remoteAdminStart">Start network task</button><button class="btn sm" id="remoteAdminLinux">Open Linux task</button></div></section>
       <section class="overview-panel inventory-panel"><div class="overview-panel-head"><div><span class="eyebrow">Current lab topology</span><h2>Device health</h2></div><button class="text-action" id="healthWorkbench">Inspect topology →</button></div>
         <div class="overview-table-wrap"><table class="overview-table"><thead><tr><th>Device</th><th>Primary IP</th><th>Status</th><th>Ports up</th></tr></thead><tbody>${deviceRows || '<tr><td colspan="4">No devices in this scenario.</td></tr>'}</tbody></table></div>
         <p class="overview-footnote">Health is calculated from the active simulator scenario and interface/link state. It is not external monitoring.</p>
@@ -4420,6 +4451,8 @@ function renderOverview() {
   click('progressStats', openStats);
   click('crossTrackStart', () => { if (crossIndex >= 0) reloadMission(crossIndex); });
   click('crossTrackLinux', () => { window.location.href='../index.html?crossTrack=web-availability'; });
+  click('remoteAdminStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-remote-admin-network'); if(index>=0) reloadMission(index); });
+  click('remoteAdminLinux', () => { window.location.href='../index.html?crossTrack=remote-admin'; });
   root.querySelectorAll('[data-overview-ticket]').forEach(btn => btn.addEventListener('click', () => {
     const t = d.active.find(x => x.id === btn.dataset.overviewTicket); if (!t) return;
     setTicketState(t.id, 'investigating', 'You'); showWorkspaceView('workbench'); reloadMission(t.index);
@@ -5106,6 +5139,7 @@ function doCheck() {
   if (done) {
     const id = RUN.mission.id, ms = Date.now() - TSTART;
     if (id === 'cross-track-web-availability-network') markCrossTrackProgress('network');
+    if (id === 'cross-track-remote-admin-network') markCrossTrackProgress('remoteNetwork');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ All objectives met — ticket resolved.';
