@@ -4091,7 +4091,7 @@ function evaluate(id,net){
   const config=d=>d.ospf&&d.ospf.processId===10&&d.ospf.routerId!=null&&(d.ospf.networks||[]).length>=2&&(d.ospf.passiveInterfaces||[]).includes('eth1')&&(d.startupConfig||'').includes('router ospf 10');
   add('Both routers have unique OSPF identities',config(a)&&config(b)&&a.ospf.routerId!==b.ospf.routerId,'Configure process 10 and unique router IDs on both routers');
   add('Both transit interfaces form an adjacency',na.some(n=>n.id==='r2'&&n.state==='FULL'),'Enable OSPF on the shared transit subnet; do not make eth0 passive');
-  add('The user LAN is passive on both routers',(a.ospf.passiveInterfaces||[]).includes('eth1')&&(b.ospf.passiveInterfaces||[]).includes('eth1'),'Keep eth1 passive to advertise the LAN without forming a neighbour there');
+  add('The user LAN is passive on both routers',(a.ospf&&a.ospf.passiveInterfaces||[]).includes('eth1')&&(b.ospf&&b.ospf.passiveInterfaces||[]).includes('eth1'),'Keep eth1 passive to advertise the LAN without forming a neighbour there');
   add('Remote LAN route is learned',routes.some(r=>M.ipStr(r.dest)==='10.0.2.0'&&r.mask===24),'R1 should learn 10.0.2.0/24 through OSPF');
   add('Both configurations are saved',(a.startupConfig||'').includes('router ospf 10')&&(b.startupConfig||'').includes('router ospf 10'),'Save the running configuration on both routers');
  }
