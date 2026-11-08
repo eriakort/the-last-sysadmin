@@ -77,6 +77,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     else fail('incident timeline is missing the investigation handoff');
   } else fail('active incident does not offer a Workbench investigation action');
 
+  // The default queue filter is Open incidents. Include resolved tickets before
+  // resolving the selected record so the render keeps that same ticket selected.
+  await page.locator('#incidentStatus').selectOption('all');
   await page.locator('#incidentStatus').selectOption('resolved');
   const closure = page.locator('#incidentDetail .incident-closure-review');
   if (await closure.count() === 1) {
