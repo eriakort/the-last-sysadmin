@@ -295,6 +295,23 @@ test('SNAT masquerade lets a private network reach the internet (reply returns)'
   ok(C.reachable(mk([{ kind: 'snat', oif: 'eth1', srcNet: M.cidr('10.0.1.0/24') }]), 'pc', 'site'), 'masquerade makes it round-trip');
 });
 
+test('packet journey reports the real request and reply hops from the forwarding engine', () => {
+  const net = twoSubnets();
+  const journey = M.packetJourney(net, 'h1', '10.0.2.10');
+  if (!journey.ok) throw new Error('expected a successful round trip');
+  if (journey.request.map(h => h.deviceId).join(',') !== 'h1,r1,h2') throw new Error('unexpected request path: ' + journey.request.map(h => h.deviceId));
+  if (journey.reply.map(h => h.deviceId).join(',') !== 'h2,r1,h1') throw new Error('unexpected reply path: ' + journey.reply.map(h => h.deviceId));
+  if (journey.request[1].kind !== 'router' || journey.request[1].localInterface !== 'eth0' || journey.request[1].ingressInterface !== 'eth0' || journey.request[1].egressInterface !== 'eth1') throw new Error('router ingress/egress interface evidence missing');
+  if (journey.request[journey.request.length - 1].state !== 'delivered') throw new Error('destination should be marked delivered');
+});
+test('packet journey preserves the actual forwarding failure and does not fabricate a reply', () => {
+  const net = twoSubnets(); net.devices.h1.routes = [];
+  const journey = M.packetJourney(net, 'h1', '10.0.2.10');
+  if (journey.ok || !/no route/i.test(journey.requestResult)) throw new Error('expected the engine no-route failure');
+  if (journey.reply.length !== 0 || journey.replyResult !== 'Not attempted') throw new Error('reply must not be fabricated after request failure');
+  if (journey.request[journey.request.length - 1].state !== 'stopped') throw new Error('failed hop should be marked stopped');
+});
+
 /* ---------- runner ---------- */
 let failed = 0;
 for (const [name, fn] of tests) {
