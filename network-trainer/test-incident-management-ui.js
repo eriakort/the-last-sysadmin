@@ -94,10 +94,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   await page.locator('#incidentStatus').selectOption('resolved');
   const closure = page.locator('#incidentDetail .incident-closure-review');
   if (await closure.count() === 1) {
-    const reviewText = await closure.innerText();
-    if (reviewText.includes('Evidence-bearing entries') && reviewText.includes('Handover questions'))
+    // Read authored DOM text rather than rendered innerText: the interface
+    // intentionally styles section labels, and text-transform must not affect
+    // a content-presence assertion.
+    const reviewText = (await closure.textContent()).replace(/\\s+/g, ' ').toLowerCase();
+    if (reviewText.includes('evidence-bearing entries') && reviewText.includes('handover questions'))
       ok('resolved incidents expose an evidence-aware closure review and shift-handover prompts');
-    else fail('closure review is missing evidence metrics or handover guidance');
+    else fail('closure review content mismatch: ' + reviewText.slice(0, 1200));
     const reportEvent = page.waitForEvent('download');
     await page.locator('#incidentExportReport').click();
     const report = await reportEvent;
