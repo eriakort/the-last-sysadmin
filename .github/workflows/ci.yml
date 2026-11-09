@@ -91,6 +91,12 @@ jobs:
       - name: Network Trainer browser UI tests
         run: npm --prefix network-trainer run test:ui
 
+      - name: Network Trainer topology keyboard tests (Firefox)
+        run: cd network-trainer && PLAYWRIGHT_BROWSER=firefox node test-topology-objects-keyboard-ui.js
+
+      - name: Network Trainer topology keyboard tests (WebKit)
+        run: cd network-trainer && PLAYWRIGHT_BROWSER=webkit node test-topology-objects-keyboard-ui.js
+
       - name: Verify Network Trainer generated file remains current
         run: git diff --exit-code -- network-trainer/index.html
 
