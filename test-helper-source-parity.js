@@ -28,10 +28,13 @@ function declaration(name) {
   throw new Error('Could not parse browser function: ' + name);
 }
 
-function browserFunction(name) {
-  return vm.runInNewContext(declaration(name), { TextEncoder, Date, Math, String, pad: H.pad });
+function browserFunction(name, dependencies = {}) {
+  return vm.runInNewContext(declaration(name), {
+    TextEncoder, Date, Math, String, pad: H.pad, ...dependencies
+  });
 }
 
+const browserEsc = browserFunction('esc');
 const cases = [
   ['pad', [3], [3, 3], [100, 2]],
   ['esc', ['<a href="x">&'], ['plain']],
@@ -45,7 +48,8 @@ const cases = [
 
 let passed = 0;
 for (const [name, ...args] of cases) {
-  const browser = browserFunction(name);
+  const dependencies = name === 'md' ? { esc: browserEsc } : {};
+  const browser = browserFunction(name, dependencies);
   for (const input of args) {
     assert.deepStrictEqual(browser(...input), H[name](...input), name + ' differs between browser and Node implementations');
     passed++;
