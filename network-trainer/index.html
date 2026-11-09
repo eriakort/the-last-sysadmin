@@ -6002,7 +6002,16 @@ function wireTopo() {
     const resolveText=el=>{if(!el||!el.closest)return null;const direct=el.closest('.topo-text');if(direct)return direct;const g=el.closest('.topo-text-group');return g?g.querySelector('.topo-text'):null;};
     const label=resolveLabel(e.target), text=resolveText(e.target), note=e.target.closest&&e.target.closest('.topo-note');
     if(canBuild()&&!TEXT_INSERT_MODE&&e.button===0&&note){const index=Number(note.dataset.noteIndex),item=RUN.net.notes&&RUN.net.notes[index];if(item){const p=svgPoint(svg,e.clientX,e.clientY);NOTE_DRAG={index,start:p,x:Number(item.x)||40,y:Number(item.y)||40,before:topologySnapshot(),moved:false,el:note};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}}
-    const resizeTarget=e.target.closest&&e.target.closest('[data-resize-kind]');
+    // WebKit can target an overlapping SVG edge/label instead of the small device
+    // resize circle. Resolve resize handles geometrically as a fallback so the
+    // drag remains reliable even when SVG paint-order hit testing differs.
+    let resizeTarget=e.target.closest&&e.target.closest('[data-resize-kind]');
+    if(!resizeTarget&&e.button===0){
+      resizeTarget=[...svg.querySelectorAll('[data-resize-kind]')].find(handle=>{
+        const r=handle.getBoundingClientRect();
+        return e.clientX>=r.left-5&&e.clientX<=r.right+5&&e.clientY>=r.top-5&&e.clientY<=r.bottom+5;
+      })||null;
+    }
     if(canBuild()&&e.button===0&&resizeTarget){const p=svgPoint(svg,e.clientX,e.clientY),kind=resizeTarget.dataset.resizeKind,id=resizeTarget.dataset.dev||resizeTarget.dataset.deviceLabel,labelKind=resizeTarget.dataset.labelKind;const initial=kind==='device'?Math.max(.5,Math.min(2.5,Number((RUN.net.deviceSizes||{})[id])||1)):Math.max(7,Math.min(32,Number((((RUN.net.deviceLabelSizes||{})[id]||{})[labelKind]))||(labelKind==='type'?10:12)));RESIZE_DRAG={kind,id,labelKind,start:p,initial,before:topologySnapshot(),moved:false};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}
     if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
     if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
