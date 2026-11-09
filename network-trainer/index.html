@@ -7299,6 +7299,7 @@ function boot() {
   const initialWorkspaceView = workspaceViewFromUrl();
   if (initialWorkspaceView === 'build') enterBuild({historyMode:'replace'});
   else { reloadMission(0, { historyMode: 'none' }); showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' }); }
+  if (initialWorkspaceView === 'knowledge' && new URLSearchParams(window.location.search).get('dailyReview') === '1') startNetworkRecall();
   renderOverview();
   initCloud();
 }
