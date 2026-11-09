@@ -5856,7 +5856,51 @@ function protocolLabPathRows(path, direction) {
     esc([hop.ingressInterface ? 'in ' + hop.ingressInterface : '', hop.egressInterface ? 'out ' + hop.egressInterface : '', hop.detail].filter(Boolean).join(' · ')) +
     '</p></div><span class="protocol-hop-state">' + esc(hop.state || 'observed') + '</span></li>').join('') + '</ol>';
 }
+function renderAdvancedProtocolLab(kind) {
+  const root = $('#protocolLabResult'); if (!root) return;
+  let title = '', intro = '', facts = '', note = '', rows = [], completed = false;
+  if (kind === 'ospf') {
+    const net = chapters.find(c => c.id === 'ospf-neighbor').build();
+    net.devices.r1.ifaces.eth1.ospf = '0'; net.devices.r2.ifaces.eth0.ospf = '0'; net.devices.r2.ifaces.eth1.ospf = '0';
+    const neighbors = M.ospfNeighbors(net, 'r1'), routes = M.ospfLearned(net, 'r1');
+    const route = routes.find(r => r.dest === M.ip('10.0.8.0') && r.mask === 24), reach = M.ping(net, 'hq', M.ip('10.0.8.10'));
+    title = 'OSPF · neighbor and route learning'; intro = 'Enable matching area 0 on the transit link, then advertise the branch LAN through the same OSPF process.';
+    facts = '<div class="protocol-facts"><div><small>Router</small><b>r1 · 10.0.12.1</b></div><div><small>Adjacency</small><b>' + (neighbors.some(n => n.id === 'r2') ? 'FULL · r2' : 'No neighbor') + '</b></div><div><small>Learned prefix</small><b>' + (route ? '10.0.8.0/24 · OSPF' : 'Not learned') + '</b></div><div><small>End-to-end</small><b>' + (reach.ok ? 'HQ → branch reachable' : 'Not reachable') + '</b></div></div>';
+    rows = [['r1 eth1','Area 0 enabled','Transit adjacency'],['r2 eth0','Area 0 enabled','Matching area forms the neighbor relationship'],['r2 eth1','Area 0 enabled','Branch LAN is included in advertisements']];
+    note = 'Observed from ospfNeighbors(), ospfLearned() and ping(). This teaching model uses a bounded single-area view; it does not simulate every OSPF packet or election.';
+    completed = !!(route && reach.ok && neighbors.some(n => n.id === 'r2'));
+  } else if (kind === 'bgp') {
+    const net = chapters.find(c => c.id === 'bgp-neighbor').build();
+    net.devices.r1.bgp = {asn:65001,neighbors:[{ip:M.ip('10.0.12.2'),remoteAs:65002}],networks:['10.0.1.0/24']};
+    net.devices.r2.bgp = {asn:65002,neighbors:[{ip:M.ip('10.0.12.1'),remoteAs:65001}],networks:['10.0.8.0/24']};
+    const session = M.bgpSessions(net,'r1').find(s => s.peer === 'r2'), routes = M.bgpLearned(net,'r1');
+    const route = routes.find(r => r.dest === M.ip('10.0.8.0') && r.mask === 24), reach = M.ping(net,'hq',M.ip('10.0.8.10'));
+    title = 'BGP · establish a peer and learn a prefix'; intro = 'A reachable neighbor is not enough: both autonomous systems need matching peer statements, and the remote router must advertise a valid network.';
+    facts = '<div class="protocol-facts"><div><small>Local AS</small><b>r1 · 65001</b></div><div><small>Remote AS</small><b>r2 · 65002</b></div><div><small>Session</small><b>' + (session && session.up ? 'Established' : (session ? session.reason : 'Missing')) + '</b></div><div><small>Learned prefix</small><b>' + (route ? '10.0.8.0/24 · BGP' : 'Not learned') + '</b></div></div>';
+    rows = [['r1','AS 65001 · neighbor 10.0.12.2 remote-as 65002','Local peer configuration'],['r2','AS 65002 · neighbor 10.0.12.1 remote-as 65001','Mutual neighbor configuration'],['r2','network 10.0.8.0/24','Advertises the branch LAN']];
+    note = 'Observed from bgpSessions() and bgpLearned(). This deterministic model covers bounded eBGP peering and prefix learning, not the full BGP finite-state machine or path-selection policy.';
+    completed = !!(session && session.up && route && reach.ok);
+  } else {
+    const net = chapters.find(c => c.id === 'wan-gateway-failover').build(), r1 = net.devices.r1, r2 = net.devices.r2;
+    r1.ifaces.lan.hsrp = {group:10,virtualIp:M.ip('10.20.0.1'),priority:110,track:[{iface:'wan',decrement:30}]};
+    r2.ifaces.lan.hsrp = {group:10,virtualIp:M.ip('10.20.0.1'),priority:100};
+    r1.ifaces.wan.hsrp = {group:20,virtualIp:M.ip('203.0.113.254'),priority:110};
+    r2.ifaces.wan.hsrp = {group:20,virtualIp:M.ip('203.0.113.254'),priority:100};
+    const before=M.hsrpStatus(net,'r1','lan'), standby=M.hsrpStatus(net,'r2','lan');
+    r1.ifaces.wan.up=false;
+    const after=M.hsrpStatus(net,'r2','lan'), wanAfter=M.hsrpStatus(net,'r2','wan');
+    title = 'HSRP · first-hop redundancy and failover'; intro = 'Two routers share a virtual gateway. The preferred router tracks its WAN interface; when that uplink fails, the standby takes over.';
+    facts = '<div class="protocol-facts"><div><small>Virtual gateway</small><b>10.20.0.1</b></div><div><small>Before failure</small><b>' + (before&&before.state) + ' · r1 / ' + (standby&&standby.state) + ' · r2</b></div><div><small>Tracked fault</small><b>r1 WAN · down</b></div><div><small>After failure</small><b>' + (after&&after.state) + ' · r2 active</b></div></div>';
+    rows = [['LAN group 10','10.20.0.1','Shared virtual gateway'],['Before fault','r1 Active · r2 Standby','Higher priority on r1'],['After r1 WAN failure','r2 Active','Tracked priority decrement allows takeover'],['WAN group 20','r2 · '+(wanAfter&&wanAfter.state),'Standby router remains eligible on the WAN segment']];
+    note = 'Observed from hsrpStatus() before and after changing the simulated r1 WAN interface state. This models deterministic election and interface tracking, not HSRP hello timers or packet-level convergence.';
+    completed = !!(before&&before.state==='Active'&&standby&&standby.state==='Standby'&&after&&after.state==='Active');
+  }
+  const table='<div class="protocol-evidence"><h3>Configuration and observed state</h3><ul>'+rows.map(row=>'<li><b>'+esc(row[0])+'</b><span>'+esc(row[1])+'</span><small>'+esc(row[2])+'</small></li>').join('')+'</ul></div>';
+  root.innerHTML='<div class="protocol-result-head"><div><div class="eyebrow">CANONICAL MODEL EVIDENCE</div><h2>'+esc(title)+'</h2><p>'+esc(intro)+'</p></div><span class="protocol-status '+(completed?'is-ok':'is-note')+'">'+(completed?'Model completed':'Review evidence')+'</span></div>'+facts+table+'<p class="protocol-note">'+esc(note)+'</p>';
+}
+
 function renderProtocolLabResult(kind) {
+  if (kind === 'ospf' || kind === 'bgp' || kind === 'hsrp') return renderAdvancedProtocolLab(kind);
   const root = $('#protocolLabResult'); if (!root) return;
   let title = '', intro = '', facts = '', journey = null, note = '';
   if (kind === 'dns') {
@@ -5901,7 +5945,7 @@ function renderProtocolLab() {
   root.innerHTML = '<div class="protocol-page"><style>' +
     '.protocol-page{padding:26px;max-width:1240px;margin:0 auto}.protocol-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}.protocol-heading h1{font-size:30px;margin:3px 0 6px}.protocol-heading p{color:var(--muted);max-width:720px;margin:0}.protocol-sim-label{border:1px solid var(--line);border-radius:20px;padding:6px 10px;color:var(--muted);font-size:11px;letter-spacing:.08em}.protocol-lab-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.protocol-lab-tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}.protocol-lab-tabs button[aria-pressed=true]{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,var(--panel));color:var(--amber)}.protocol-result{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}.protocol-result-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.protocol-result h2{margin:2px 0 5px;font-size:22px}.protocol-result h3{font-size:14px;margin:0 0 10px}.protocol-result p{color:var(--muted)}.protocol-status{border-radius:20px;padding:5px 9px;font-size:11px;border:1px solid var(--line)}.protocol-status.is-ok{color:var(--good);border-color:var(--good)}.protocol-status.is-note{color:var(--amber);border-color:var(--amber)}.protocol-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:18px 0}.protocol-facts>div{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:11px;min-width:0}.protocol-facts small,.protocol-facts b{display:block}.protocol-facts small{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.protocol-facts b{font-size:12px;margin-top:5px;overflow-wrap:anywhere}.protocol-note{border-left:3px solid var(--amber);padding:8px 12px;background:var(--raise);font-size:12px}.protocol-journey-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}.protocol-path{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:7px}.protocol-path li{display:grid;grid-template-columns:25px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}.protocol-hop-index{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--panel);color:var(--amber);font:12px var(--f-mono)}.protocol-path strong,.protocol-path small{display:block}.protocol-path small,.protocol-path p,.protocol-hop-state,.protocol-muted{color:var(--muted);font-size:11px}.protocol-path p{margin:4px 0 0;overflow-wrap:anywhere}.protocol-hop-state{white-space:nowrap}.protocol-dora{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;list-style:none;padding:0;margin:18px 0}.protocol-dora li{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:10px}.protocol-dora b,.protocol-dora span{display:block}.protocol-dora b{color:var(--amber);font-size:12px}.protocol-dora span{color:var(--muted);font-size:11px;margin-top:5px}@media(max-width:760px){.protocol-page{padding:16px}.protocol-facts{grid-template-columns:1fr 1fr}.protocol-journey-grid{grid-template-columns:1fr}.protocol-dora{grid-template-columns:1fr 1fr}}@media(max-width:420px){.protocol-facts,.protocol-dora{grid-template-columns:1fr}}' +
     '</style><div class="protocol-heading"><div><div class="eyebrow">Understand · observe · compare</div><h1>Network protocol labs</h1><p>Explore how network services exchange information. Each lab starts from a known teaching topology and calls the same network model used by missions and the Workbench.</p></div><span class="protocol-sim-label">SIMULATED NETWORK · NO LIVE TRAFFIC</span></div>' +
-    '<div class="protocol-lab-tabs" role="group" aria-label="Choose a protocol lab"><button type="button" data-protocol-lab="dns" aria-pressed="true">DNS · Name lookup</button><button type="button" data-protocol-lab="dhcp" aria-pressed="false">DHCP · Address lease</button><button type="button" data-protocol-lab="http" aria-pressed="false">TCP · HTTP path</button><button type="button" data-protocol-lab="journey" aria-pressed="false">Packet journey · step through</button></div>' +
+    '<div class="protocol-lab-tabs" role="group" aria-label="Choose a protocol lab"><button type="button" data-protocol-lab="dns" aria-pressed="true">DNS · Name lookup</button><button type="button" data-protocol-lab="dhcp" aria-pressed="false">DHCP · Address lease</button><button type="button" data-protocol-lab="http" aria-pressed="false">TCP · HTTP path</button><button type="button" data-protocol-lab="journey" aria-pressed="false">Packet journey · step through</button><button type="button" data-protocol-lab="ospf" aria-pressed="false">OSPF · routing</button><button type="button" data-protocol-lab="bgp" aria-pressed="false">BGP · peering</button><button type="button" data-protocol-lab="hsrp" aria-pressed="false">HSRP · failover</button></div>' +
     '<section id="protocolLabResult" class="protocol-result" aria-live="polite" aria-label="Protocol lab evidence"></section></div>';
   root.querySelectorAll('[data-protocol-lab]').forEach(button => button.addEventListener('click', () => {
     root.querySelectorAll('[data-protocol-lab]').forEach(item => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
