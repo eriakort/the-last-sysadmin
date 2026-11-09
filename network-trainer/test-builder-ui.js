@@ -50,6 +50,15 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#navWorkbench');
   await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'workbench');
 
+  // Theme-aware controls must retain readable contrast in Paper (light) mode.
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'paper'));
+  await page.waitForTimeout(30);
+  const paperButton = page.locator('#btnSearch');
+  const paperColors = await paperButton.evaluate(el => ({ color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
+  if (paperColors.color === 'rgb(26, 34, 48)' && paperColors.background === 'rgb(243, 246, 250)') ok('shared action buttons use readable light-theme foreground and background colors');
+  else fail('Paper theme button contrast is incorrect: ' + JSON.stringify(paperColors));
+  await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
   // --- enter build mode ---
   await page.click('#btnBuild'); await page.waitForTimeout(150);
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
