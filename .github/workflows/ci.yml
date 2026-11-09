@@ -43,6 +43,12 @@ jobs:
       - name: Automated accessibility scans (axe-core + Playwright)
         run: npm run test:a11y
 
+      - name: Automated accessibility scans (Firefox)
+        run: PLAYWRIGHT_BROWSER=firefox npm run test:a11y
+
+      - name: Automated accessibility scans (WebKit)
+        run: PLAYWRIGHT_BROWSER=webkit npm run test:a11y
+
       - name: Linux browser smoke test
         run: npm run smoke
 
