@@ -11,7 +11,9 @@
     "test:ui:firefox": "PLAYWRIGHT_BROWSER=firefox node test-ui.js",
     "test:ui:webkit": "PLAYWRIGHT_BROWSER=webkit node test-ui.js",
     "test:ticket-queue:firefox": "PLAYWRIGHT_BROWSER=firefox node test-ticket-queue-ui.js",
-    "test:ticket-queue:webkit": "PLAYWRIGHT_BROWSER=webkit node test-ticket-queue-ui.js"
+    "test:ticket-queue:webkit": "PLAYWRIGHT_BROWSER=webkit node test-ticket-queue-ui.js",
+    "test:incidents:firefox": "PLAYWRIGHT_BROWSER=firefox node test-incident-management-ui.js",
+    "test:incidents:webkit": "PLAYWRIGHT_BROWSER=webkit node test-incident-management-ui.js"
   },
   "devDependencies": {
     "playwright": "^1.40.0"
