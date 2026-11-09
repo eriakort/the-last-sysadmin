@@ -230,6 +230,42 @@ function l2Domain(net, startDev, startIface) {
   return endpoints;
 }
 
+
+/* ---------- ARP (deterministic Layer 2 resolution) ---------- */
+// Resolves an IPv4 neighbor only when it is reachable in the source interface's
+// current broadcast domain. This models the ARP request/reply outcome, not timers.
+function arpResolve(net, srcDev, srcIface, targetIp) {
+  const source = net.devices[srcDev], iface = source && source.ifaces && source.ifaces[srcIface];
+  if (!source || !iface || iface.up === false || iface.ip == null) {
+    return { ok: false, reason: 'Source interface is unavailable', targetIp };
+  }
+  const target = ip(targetIp);
+  if (!sameNet(iface.ip, target, iface.mask)) {
+    return { ok: false, reason: 'Target is outside the source subnet; resolve the next-hop gateway instead', targetIp: ipStr(target) };
+  }
+  const first = neighbor(net, srcDev, srcIface);
+  if (!first) return { ok: false, reason: 'No Layer 2 neighbor is connected to the source interface', targetIp: ipStr(target) };
+  const [firstId, firstPort] = first, firstDevice = net.devices[firstId];
+  const vlan = firstDevice && firstDevice.kind === 'switch'
+    ? switchIngressVlan(firstDevice.ifaces[firstPort], null) : null;
+  const candidates = firstDevice && firstDevice.kind === 'switch'
+    ? l2Domain(net, srcDev, srcIface) : [first];
+  const match = candidates.find(([id, name]) => {
+    const device = net.devices[id], port = device && device.ifaces && device.ifaces[name];
+    return device && device.kind !== 'switch' && port && port.up !== false && port.ip === target;
+  });
+  if (!match) {
+    return { ok: false, reason: 'No device with that address is present in the same Layer 2 broadcast domain', targetIp: ipStr(target), vlan };
+  }
+  const [targetDeviceId, targetIface] = match, destination = net.devices[targetDeviceId], targetPort = destination.ifaces[targetIface];
+  return {
+    ok: true, sourceDeviceId: srcDev, sourceIface: srcIface, sourceIp: ipStr(iface.ip),
+    sourceMac: stableMac(srcDev, srcIface, source, iface), targetDeviceId, targetIface,
+    targetIp: ipStr(target), targetMac: stableMac(targetDeviceId, targetIface, destination, targetPort),
+    vlan, broadcastMac: 'ff:ff:ff:ff:ff:ff', scope: 'local broadcast domain'
+  };
+}
+
 /* ---------- device lookups ---------- */
 const ownsIp = (dev, addr) => Object.values(dev.ifaces || {}).some(f => f.up !== false && f.ip === addr);
 function directIface(dev, addr) {                 // iface whose subnet contains addr
@@ -732,7 +768,7 @@ function packetJourney(net, srcDev, destination, opts = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
-  neighbor, l2Domain, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
