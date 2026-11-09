@@ -85,7 +85,7 @@ h1{font-size:20px;margin:6px 0}
 .tk-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .tk-id{font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.06em;color:var(--muted);font-weight:600}
 .tk-pri{font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:999px;border:1px solid var(--line)}
-.tk-pri.tk-p1{color:#fff;background:var(--bad);border-color:var(--bad)}
+.tk-pri.tk-p1{color:#26070b;background:var(--bad);border-color:var(--bad)}
 .tk-pri.tk-p2{color:var(--amber);border-color:var(--amber)}
 .tk-pri.tk-p3{color:var(--muted)}
 .tk-from{font-size:11.5px;color:var(--muted);margin-top:4px}

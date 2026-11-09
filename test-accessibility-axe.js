@@ -1,11 +1,14 @@
 'use strict';
 const path=require('path');
 const {chromium}=require('playwright');
+const {spawnSync}=require('child_process');
 const axe=require('axe-core');
+const build=spawnSync(process.execPath,[path.join(process.cwd(),'network-trainer','build-ui.js')],{encoding:'utf8'});
+if(build.status!==0)throw new Error('Network Trainer build failed before accessibility scan: '+(build.stderr||build.stdout));
 const rootUrl='file://'+path.join(process.cwd(),'index.html');
 const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html?view=workbench');
 (async()=>{
- const browser=await chromium.launch(),failures=[];
+ const browser=await chromium.launch({args:['--allow-file-access-from-files']}),failures=[];
  async function install(page){await page.addScriptTag({content:axe.source});}
  async function scan(page,label){
   const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']}}));
@@ -52,7 +55,7 @@ const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html
   await scan(net,'Network Trainer topology Build workspace');
 
   // Reload to reset the authoring workspace before scanning independent dialogs.
-  await net.goto(networkUrl,{waitUntil:'load'});await net.waitForTimeout(180);
+  await net.goto(networkUrl,{waitUntil:'load'});await net.waitForTimeout(180);await install(net);
   await net.locator('#btnQueue').click();await net.waitForTimeout(100);
   if(!(await net.locator('#modal [role=dialog]').count()))throw new Error('Network Trainer incident queue dialog did not open');
   await scan(net,'Network Trainer incident queue dialog');await closeNetworkModal(net);
