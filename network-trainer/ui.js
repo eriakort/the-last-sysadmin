@@ -1260,7 +1260,7 @@ function runTopologyContextAction(action, target) {
     case 'edit-text': editTopologyText(target.index); break;
     case 'delete-text': if(RUN.net.texts&&RUN.net.texts[target.index]){rememberTopology();RUN.net.texts.splice(target.index,1);refresh();} break;
     case 'clear-device-label': { if(RUN.net.devices[target.id]){rememberTopology();RUN.net.hiddenDeviceLabels=RUN.net.hiddenDeviceLabels||{};RUN.net.hiddenDeviceLabels[target.id]=RUN.net.hiddenDeviceLabels[target.id]||{};RUN.net.hiddenDeviceLabels[target.id][target.labelKind]=true;refresh();} break; }
-    case 'restore-device-label': { const hidden=RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id];if(hidden){rememberTopology();delete hidden[target.labelKind];if(!Object.keys(hidden).length)delete RUN.net.hiddenDeviceLabels[target.id];refresh();}break; }
+    case 'restore-device-label': case 'restore-device-label-name': case 'restore-device-label-type': { const kind=action.endsWith('-name')?'name':action.endsWith('-type')?'type':target.labelKind,hidden=RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id];if(hidden){rememberTopology();delete hidden[kind];if(!Object.keys(hidden).length)delete RUN.net.hiddenDeviceLabels[target.id];refresh();}break; }
     case 'add-text': { const value=prompt('Canvas text (max 160 characters):','New text');if(value===null||!value.trim())break;const p=target.point||(TOPO_VIEW?[TOPO_VIEW[0]+TOPO_VIEW[2]/2,TOPO_VIEW[1]+TOPO_VIEW[3]/2]:[100,100]);rememberTopology();RUN.net.texts=RUN.net.texts||[];RUN.net.texts.push({text:value.trim().slice(0,160),x:p[0],y:p[1],fontSize:14,color:'#e5b85c'});refresh();break;}
     case 'paste': pasteTopologySelection(); break;
     case 'add-note': {
@@ -1300,7 +1300,9 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const groups = {
     device: [
       ['Configure / inspect', 'configure'], ['Connect to another device', 'connect'], ['Duplicate device', 'duplicate'],
-      ['Copy selection', 'copy'], ['Rename display label', 'rename'], ['Center on device', 'focus'], ['Delete device', 'delete-device', true]
+      ['Copy selection', 'copy'], ['Rename display label', 'rename'],
+      ...(['name','type'].filter(k=>RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id]&&RUN.net.hiddenDeviceLabels[target.id][k]).map(k=>['Restore '+k+' label','restore-device-label-'+k])),
+      ['Center on device', 'focus'], ['Delete device', 'delete-device', true]
     ],
     link: [
       [RUN.net.links[target.index] && RUN.net.links[target.index].up === false ? 'Bring link up' : 'Take link down', 'toggle-link'],
