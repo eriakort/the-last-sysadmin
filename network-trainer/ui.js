@@ -202,7 +202,7 @@ function renderTopo() {
     const labelPositions=(net.deviceLabelPositions&&net.deviceLabelPositions[id])||{};
     const nameAt=labelPositions.name||[x+24,y+48], typeAt=labelPositions.type||[x+24,y+62];
     const typeText=d.displayType||(d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind);
-    s += `<text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move">${esc(d.label||id)}</text><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move">${esc(typeText+(ip?' · '+ip:''))}</text>`;
+    s += `<text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(d.label||id)}</text><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(typeText+(ip?' · '+ip:''))}</text>`;
   }
   return s + '</svg>';
 }
@@ -1420,7 +1420,7 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
-  if (ANNOTATION_DRAG) { const p=svgPoint(svg,e.clientX,e.clientY),d=ANNOTATION_DRAG,dx=p[0]-d.start[0],dy=p[1]-d.start[1]; if(Math.hypot(dx,dy)>2)d.moved=true; const x=d.value.x+dx,y=d.value.y+dy;d.el.setAttribute('x',x);d.el.setAttribute('y',y);return; }
+  if (ANNOTATION_DRAG) { const p=svgPoint(svg,e.clientX,e.clientY),d=ANNOTATION_DRAG,dx=p[0]-d.start[0],dy=p[1]-d.start[1]; if(Math.hypot(dx,dy)>0.5)d.moved=true; const x=d.value.x+dx,y=d.value.y+dy;d.el.setAttribute('x',x);d.el.setAttribute('y',y);return; }
   if (BOX) { const p=svgPoint(svg,e.clientX,e.clientY);BOX.current=p;const x=Math.min(BOX.start[0],p[0]),y=Math.min(BOX.start[1],p[1]);BOX.el.setAttribute('x',x);BOX.el.setAttribute('y',y);BOX.el.setAttribute('width',Math.abs(p[0]-BOX.start[0]));BOX.el.setAttribute('height',Math.abs(p[1]-BOX.start[1]));return; }
   if (PAN) {
     const dx = (e.clientX - PAN.x) * PAN.view[2] / Math.max(1, PAN.width);
