@@ -121,6 +121,12 @@ jobs:
       - name: Network Trainer change management UI tests (WebKit)
         run: npm --prefix network-trainer run test:changes:webkit
 
+      - name: Network Trainer infrastructure inventory UI tests (Firefox)
+        run: npm --prefix network-trainer run test:inventory:firefox
+
+      - name: Network Trainer infrastructure inventory UI tests (WebKit)
+        run: npm --prefix network-trainer run test:inventory:webkit
+
       - name: Network Trainer topology keyboard tests (Firefox)
         run: cd network-trainer && PLAYWRIGHT_BROWSER=firefox node test-topology-objects-keyboard-ui.js
 
