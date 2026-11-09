@@ -1,8 +1,11 @@
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium, firefox, webkit } = require('playwright');
+const browserName = process.env.PLAYWRIGHT_BROWSER || 'chromium';
+const browserType = { chromium, firefox, webkit }[browserName];
+if (!browserType) throw new Error('Unsupported PLAYWRIGHT_BROWSER: ' + browserName);
 const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await browserType.launch();
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -51,7 +54,6 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.keyboard.press('Home');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(50);
-  const svg=page.locator('#topo');
   const edgeFocus=page.locator('#topo .edge').first();
   if(!(await edgeFocus.evaluate(el=>el===document.activeElement))) throw new Error('Link context menu did not restore focus');
   await page.once('dialog',d=>d.accept('Keyboard note'));
@@ -73,5 +75,5 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForSelector('.topo-context-menu');await page.keyboard.press('Escape');
   if(!(await page.locator('#topo .topo-drawing').first().evaluate(el=>el===document.activeElement)))throw new Error('Drawing context menu did not restore focus');
   if(errors.length)throw new Error(errors.join(' | '));
-  await browser.close(); console.log('TOPOLOGY OBJECT KEYBOARD TEST OK');
+  await browser.close(); console.log('TOPOLOGY OBJECT KEYBOARD TEST OK ('+browserName+')');
 })().catch(e=>{console.error(e);process.exit(1);});
