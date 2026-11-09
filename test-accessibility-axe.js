@@ -1,7 +1,10 @@
 'use strict';
 const path=require('path');
 const {chromium}=require('playwright');
+const {spawnSync}=require('child_process');
 const axe=require('axe-core');
+const build=spawnSync(process.execPath,[path.join(process.cwd(),'network-trainer','build-ui.js')],{encoding:'utf8'});
+if(build.status!==0)throw new Error('Network Trainer build failed before accessibility scan: '+(build.stderr||build.stdout));
 const rootUrl='file://'+path.join(process.cwd(),'index.html');
 const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html?view=workbench');
 (async()=>{
