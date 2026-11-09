@@ -7,7 +7,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(120);
  await page.evaluate(()=>{
   const linux=JSON.parse(localStorage.getItem('last-sysadmin-v1')||'{}');
-  linux.done=['bearings','find-the-logs'];linux.commandSkills=['pwd','grep'];linux.times=[{id:'bearings',ms:65000,hints:1}];
+  linux.done=['bearings','handover'];linux.commandSkills=['whoami','grep'];linux.times=[{id:'bearings',ms:65000,hints:1}];
   localStorage.setItem('last-sysadmin-v1',JSON.stringify(linux));
   localStorage.setItem('nettrainer',JSON.stringify({done:{'first-contact':true,'wrong-subnet':true},journal:[{title:'private note'}],changes:[{id:1}]}));
  });
