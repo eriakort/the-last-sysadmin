@@ -441,6 +441,23 @@ body.practicing{padding-top:40px}
 .mistake-coach p{margin:5px 0;color:var(--muted)}.mistake-coach-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
 .mistake-coach-next b,.mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
 
+
+/* Evidence-based professional skill portfolio */
+.portfolio-dialog{width:min(820px,100%);max-height:min(88vh,900px);overflow:auto}
+.portfolio-intro{color:var(--muted);font-size:13px;margin:8px 0 16px}
+.portfolio-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.portfolio-stat{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.portfolio-stat strong{display:block;font:600 21px var(--f-display);color:var(--green)}
+.portfolio-stat span{display:block;color:var(--muted);font-size:11px}
+.portfolio-track{border:1px solid var(--line);border-radius:8px;padding:12px;margin:10px 0;background:var(--panel)}
+.portfolio-track h3{font:600 15px var(--f-display);margin:0 0 8px;color:var(--amber)}
+.portfolio-evidence{display:grid;gap:5px;max-height:220px;overflow:auto}
+.portfolio-evidence li{font-size:12px;padding:6px 8px;background:var(--raise);border-radius:5px;overflow-wrap:anywhere}
+.portfolio-muted{color:var(--muted);font-size:11px}
+.portfolio-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+@media(max-width:600px){.portfolio-stats{grid-template-columns:1fr 1fr}.portfolio-dialog{padding:14px}}
+@media print{body *{visibility:hidden!important}#portfolioDialog,#portfolioDialog *{visibility:visible!important}#portfolioDialog{position:absolute!important;inset:0!important;background:white!important;color:black!important;max-height:none!important;overflow:visible!important;padding:0!important}#portfolioDialog .bash-workshop-dialog{box-shadow:none!important;border:0!important;background:white!important;color:black!important;max-height:none!important;overflow:visible!important}#portfolioDialog .portfolio-track,#portfolioDialog .portfolio-stat{background:white!important;color:black!important;border:1px solid #999!important}#portfolioDialog .portfolio-actions,#portfolioDialog [data-portfolio-close]{display:none!important}}
+
 /* Adaptive spaced recall */
 .revision-dialog{width:min(700px,100%)}
 .revision-summary{color:var(--muted);font-size:13px;margin:10px 0 16px}
@@ -513,6 +530,7 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
       <button class="btn" id="btnCrossTrackCase" type="button" title="Work a service outage across Linux and network operations">Integrated case</button>
       <button class="btn" id="btnRevisionReview" type="button" title="Recall completed concepts using spaced practice">Recall review</button>
+      <button class="btn" id="btnSkillPortfolio" type="button" title="Review and export evidence of skills demonstrated in both learning tracks">Skill portfolio</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6728,6 +6746,49 @@ function openOpsRecoveryLab(){
 
 
  
+
+/* Evidence-based portfolio: read-only aggregation of locally saved simulation outcomes. */
+function portfolioReadStored(key){
+  try{const value=JSON.parse(localStorage.getItem(key)||'{}');return value&&typeof value==='object'?value:{};}catch(e){return {};}
+}
+function portfolioSnapshot(){
+  const linux=portfolioReadStored(KEY),network=portfolioReadStored('nettrainer');
+  const completedLinux=(Array.isArray(linux.done)?linux.done:[]).map(id=>{
+    const m=MISSIONS.find(item=>item.id===id);if(!m)return null;
+    const timing=(Array.isArray(linux.times)?linux.times:[]).filter(t=>t.id===id).slice(-1)[0];
+    return{id:m.id,title:m.title,chapter:CHAPTERS[m.ch]&&CHAPTERS[m.ch].name||'Linux',skillArea:CHAPTERS[m.ch]&&CHAPTERS[m.ch].topic||'Linux administration',evidence:'Completed simulated mission',durationMs:timing&&Number.isFinite(Number(timing.ms))?Number(timing.ms):null,hints:timing&&Number.isFinite(Number(timing.hints))?Number(timing.hints):null};
+  }).filter(Boolean);
+  const networkDone=network.done&&typeof network.done==='object'?Object.keys(network.done).filter(id=>network.done[id]):[];
+  const networkEvidence=networkDone.map(id=>({id,title:id.replace(/[-_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),skillArea:'Network operations',evidence:'Completed simulated network mission'}));
+  const commandSkills=Array.isArray(linux.commandSkills)?linux.commandSkills.filter(x=>typeof x==='string'&&x.length<100):[];
+  return{schemaVersion:1,generatedAt:new Date().toISOString(),evidenceBasis:'Local completion records from educational simulations; not a certification or proof of work on production systems.',summary:{linuxMissions:completedLinux.length,networkMissions:networkEvidence.length,commandDrills:commandSkills.length,networkJournalEntries:Array.isArray(network.journal)?network.journal.length:0},tracks:{linux:{missions:completedLinux,commandDrills:commandSkills},network:{missions:networkEvidence,journalEntryCount:Array.isArray(network.journal)?network.journal.length:0,configurationChanges:Array.isArray(network.changes)?network.changes.length:0,configurationArchives:Array.isArray(network.configArchives)?network.configArchives.length:0}}};
+}
+function closeSkillPortfolio(){const root=document.getElementById('portfolioDialog');if(root)root.remove();}
+function openSkillPortfolio(){
+  closeSkillPortfolio();const data=portfolioSnapshot(),root=document.createElement('div');root.id='portfolioDialog';root.className='bash-workshop-backdrop';
+  const li=data.tracks.linux.missions.map(item=>'<li><strong>'+esc(item.title)+'</strong> <span class="portfolio-muted">· '+esc(item.skillArea)+'</span>'+(item.durationMs!=null?' <span class="portfolio-muted">· '+esc(fmtDur(item.durationMs))+'</span>':'')+'</li>').join('');
+  const ni=data.tracks.network.missions.map(item=>'<li><strong>'+esc(item.title)+'</strong> <span class="portfolio-muted">· '+esc(item.skillArea)+'</span></li>').join('');
+  const drills=data.tracks.linux.commandDrills.map(name=>'<li>'+esc(name)+'</li>').join('');
+  root.innerHTML='<section class="bash-workshop-dialog portfolio-dialog" role="dialog" aria-modal="true" aria-labelledby="portfolioTitle"><div class="bash-workshop-head"><div><div class="eyebrow">Career evidence · Local learning record</div><h2 id="portfolioTitle">Professional skill portfolio</h2></div><button class="btn" type="button" data-portfolio-close>Close</button></div>'
+    +'<p class="portfolio-intro">A transparent record of completed practice in both learning tracks. Counts come from saved simulation outcomes; they are not certifications, production experience or externally verified credentials.</p>'
+    +'<div class="portfolio-stats"><div class="portfolio-stat"><strong>'+data.summary.linuxMissions+'</strong><span>Linux missions completed</span></div><div class="portfolio-stat"><strong>'+data.summary.networkMissions+'</strong><span>Network missions completed</span></div><div class="portfolio-stat"><strong>'+data.summary.commandDrills+'</strong><span>Command drills demonstrated</span></div></div>'
+    +'<section class="portfolio-track"><h3>Linux system administration</h3><p class="portfolio-muted">Mission completions are grouped by their authored skill area. Optional recorded durations are shown only when available.</p><ul class="portfolio-evidence">'+(li||'<li>No completed Linux missions recorded yet.</li>')+'</ul>'
+    +(drills?'<h3>Command skills demonstrated</h3><ul class="portfolio-evidence">'+drills+'</ul>':'')+'</section>'
+    +'<section class="portfolio-track"><h3>Network operations</h3><p class="portfolio-muted">'+data.summary.networkMissions+' completed simulated network missions · '+data.tracks.network.journalEntryCount+' saved journal entries · '+data.tracks.network.configurationChanges+' recorded configuration changes.</p><ul class="portfolio-evidence">'+(ni||'<li>No completed network missions recorded yet.</li>')+'</ul></section>'
+    +'<p class="portfolio-muted">Evidence is read from this browser profile only. This view does not upload, alter or merge either track’s progress. Export contains completion summaries, not terminal history, credentials or journal text.</p>'
+    +'<div class="portfolio-actions"><button class="btn primary" type="button" data-portfolio-export>Export evidence JSON</button><button class="btn" type="button" data-portfolio-print>Print / save as PDF</button></div></section>';
+  root.addEventListener('click',event=>{
+    if(event.target===root||event.target.closest('[data-portfolio-close]')){closeSkillPortfolio();return;}
+    if(event.target.closest('[data-portfolio-export]')){
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download='the-last-sysadmin-skill-portfolio.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+    }
+    if(event.target.closest('[data-portfolio-print]'))window.print();
+  });
+  root.addEventListener('keydown',event=>{if(event.key==='Escape')closeSkillPortfolio();});
+  document.body.appendChild(root);const close=root.querySelector('[data-portfolio-close]');if(close)close.focus();
+}
+
 /* Adaptive spaced recall: schedule only completed, structured learning checkpoints. */
 const REVISION_KEY='lsa-spaced-revision-v1';
 const REVISION_DAY=24*60*60*1000;
@@ -7071,6 +7132,8 @@ function boot(restored) {
   if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
   const opsButton=document.getElementById('btnOpsRecoveryLab');
   if(opsButton&&!opsButton.dataset.bound){opsButton.dataset.bound='true';opsButton.addEventListener('click',openOpsRecoveryLab);}
+  const portfolioButton=document.getElementById('btnSkillPortfolio');
+  if(portfolioButton&&!portfolioButton.dataset.bound){portfolioButton.dataset.bound='true';portfolioButton.addEventListener('click',openSkillPortfolio);}
   const revisionButton=document.getElementById('btnRevisionReview');
   if(revisionButton&&!revisionButton.dataset.bound){revisionButton.dataset.bound='true';revisionButton.addEventListener('click',openRevisionReview);}
   revisionBackfill();
