@@ -1,6 +1,7 @@
 const path=require('path');
 const {chromium}=require('playwright');
 const URL='file://'+path.join(process.cwd(),'index.html');
+// Regression contract: requests unlock strictly one at a time after evidence-backed closure.
 (async()=>{
  const browser=await chromium.launch(),page=await browser.newPage(),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
