@@ -61,35 +61,11 @@ function layout(net) {
 }
 const primaryIp = dev => { for (const n in dev.ifaces) { const f = dev.ifaces[n]; if (f.up !== false && f.ip != null) return M.ipStr(f.ip); } return null; };
 const NODE_ICONS = {
-  host: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-    <rect x="6" y="2" width="36" height="22" rx="2"/>
-    <path d="M18 24v6M30 24v6M14 30h20"/>
-    <path d="M12 8h24M12 13h16" opacity=".5"/>
-  </g>`,
-  server: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-    <rect x="14" y="1" width="20" height="34" rx="2"/>
-    <path d="M18 7h12M18 12h12M18 17h12"/>
-    <circle cx="20" cy="26" r="1.4" fill="currentColor" stroke="none"/>
-    <circle cx="26" cy="26" r="1.4" fill="currentColor" stroke="none"/>
-  </g>`,
-  switch: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-    <rect x="4" y="10" width="40" height="16" rx="2"/>
-    <circle cx="12" cy="18" r="2" fill="currentColor" stroke="none"/>
-    <circle cx="20" cy="18" r="2" fill="currentColor" stroke="none"/>
-    <circle cx="28" cy="18" r="2" fill="currentColor" stroke="none"/>
-    <circle cx="36" cy="18" r="2" fill="currentColor" stroke="none"/>
-    <path d="M24 4v6M20 6l4-4 4 4M24 26v6M20 30l4 4 4-4"/>
-  </g>`,
-  router: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="24" cy="18" r="9"/>
-    <path d="M24 2v7M24 27v7M8 18h7M33 18h7"/>
-    <path d="M24 5l-3 3h6zM24 31l-3-3h6zM11 18l3-3v6zM37 18l-3-3v6z" fill="currentColor" stroke="none"/>
-  </g>`,
-  firewall: `<g class="ico" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-    <rect x="6" y="4" width="36" height="28" rx="1"/>
-    <path d="M6 13h36M6 22h36"/>
-    <path d="M16 4v9M28 13v9M18 22v10"/>
-  </g>`
+  host: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"M25 13 44 5v20l-19 9z\"/><path class=\"iso-front\" d=\"m7 5 18 8v21L7 26z\"/><path class=\"iso-top\" d=\"M7 5 26 -3 44 5 25 13z\"/><path class=\"iso-screen\" d=\"m11 7 13 6v13l-13-6z\"/><path class=\"iso-screen-glint\" d=\"m13 9 9 4v7l-9-4z\"/><path class=\"iso-stand\" d=\"m24 34 4 2v3l-4-2zM18 38l8-4 8 4-8 4z\"/><path class=\"iso-detail\" d=\"m30 16 10-4M30 21l10-4\"/></g>",
+  server: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m26 5 16-7v29l-16 8z\"/><path class=\"iso-front\" d=\"m9-2 17 7v30L9 27z\"/><path class=\"iso-top\" d=\"m9-2 17-8 16 8-16 7z\"/><path class=\"iso-detail\" d=\"m13 2 10 4v5L13 7zM13 11l10 4v5l-10-4zM13 20l10 4v5l-10-4z\"/><circle class=\"iso-led\" cx=\"22\" cy=\"9\" r=\"1.15\"/><circle class=\"iso-led\" cx=\"22\" cy=\"18\" r=\"1.15\"/><circle class=\"iso-led\" cx=\"22\" cy=\"27\" r=\"1.15\"/><path class=\"iso-detail\" d=\"m31 7 7-3M31 13l7-3M31 19l7-3M31 25l7-3\"/></g>",
+  switch: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 12 20-9v14l-20 9z\"/><path class=\"iso-front\" d=\"m4 3 21 9v14L4 17z\"/><path class=\"iso-top\" d=\"m4 3 20-9 21 9-20 9z\"/><path class=\"iso-port\" d=\"m9 7 3 1.5v3L9 10zM15 9.5l3 1.5v3L15 12zM21 12l3 1.5v3L21 15z\"/><path class=\"iso-port-side\" d=\"m29 13 3-1.4v3L29 16zM35 10.3l3-1.4v3L35 13z\"/><path class=\"iso-detail\" d=\"m9 14 12 5M29 20l12-5\"/></g>",
+  router: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 16 20-9v13l-20 9z\"/><path class=\"iso-front\" d=\"m4 7 21 9v13L4 20z\"/><path class=\"iso-top\" d=\"m4 7 20-9 21 9-20 9z\"/><path class=\"iso-antenna\" d=\"m11 3-1-8M37 5l3-9\"/><path class=\"iso-port\" d=\"m9 12 3 1.3v3L9 15zM16 15l3 1.3v3L16 18zM23 18l3 1.3v3L23 21z\"/><path class=\"iso-detail\" d=\"m31 19 10-4\"/></g>",
+  firewall: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 13 20-9v20l-20 9z\"/><path class=\"iso-front\" d=\"m4 4 21 9v20L4 24z\"/><path class=\"iso-top\" d=\"m4 4 20-9 21 9-20 9z\"/><path class=\"iso-brick\" d=\"m7 8 8 3.5v5L7 13zM17 12.5l6 2.5v5l-6-2.5zM7 17l8 3.5v5L7 22zM17 21.5l6 2.5v5l-6-2.5z\"/><path class=\"iso-shield\" d=\"m32 11 6-2.5v6l-6 3z\"/><path class=\"iso-detail\" d=\"m34 12 1.5 1.5 3-4\"/></g>"
 };
 const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
 function linkDown(net, l) { if (l.up === false) return true; const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; }; return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1])); }
@@ -1855,17 +1831,18 @@ function openStats() {
 const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
 function renderPalette() {
   if (!canBuild()) return '';
-  const add = PALETTE.map(([k, n]) => `<button class="btn sm pal" data-add="${k}" title="Add a ${n.toLowerCase()} to the topology canvas">＋ ${n}</button>`).join('');
-  const wiring = WIRE ? `<span class="wire-on">click another device to connect <b>${esc(WIRE)}</b></span>` : '';
+  const add = PALETTE.map(([k, n]) => '<button class="btn sm pal" data-add="' + k + '" title="Add a ' + n.toLowerCase() + ' to the topology canvas"><svg class="palette-device-icon" viewBox="0 -12 48 58" aria-hidden="true">' + NODE_ICONS[k] + '</svg><span>' + n + '</span><span class="palette-add" aria-hidden="true">＋</span></button>').join('');
+  const wiring = WIRE ? '<span class="wire-on">click another device to connect <b>' + esc(WIRE) + '</b></span>' : '';
   const layerState = Object.assign({}, TOPO_LAYERS, RUN.net.layerVisibility || {});
   const drawingTools = [['select','Select'],['line','Line'],['arrow','Arrow'],['rect','Rectangle'],['ellipse','Ellipse'],['freehand','Freehand']];
-  return `<div class="builder"><div class="label">Build · topology designer</div>
-    <div class="pal-row"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ${TOPO_UNDO.length?'':'disabled'}>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ${TOPO_REDO.length?'':'disabled'}>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ${TOPO_SELECTED.size||SEL?'':'disabled'}>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ${TOPO_CLIPBOARD?'':'disabled'}>Paste</button><span class="dim">${TOPO_SELECTED.size} selected · Shift-click or Shift-drag to select</span></div>
-    <div class="pal-row">${add}</div>
-    <div class="pal-row"><button class="btn sm" id="wireBtn" title="Connect the selected device to another device">${WIRE ? '✕ cancel' : '🔗 Wire'}</button>${SEL && RUN.net.devices[SEL] ? `<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ${esc(SEL)}</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>` : ''}${LINK_SEL!=null ? `<button class="btn sm" id="delLink" data-link-index="${LINK_SEL}">Remove selected link</button>` : ''}<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ${TOPO_SELECTED.size||SEL?'':'disabled'}>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>
-    <div class="pal-row"><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="${TOPO_GRID}">${TOPO_GRID?'▦ Grid on':'▦ Grid off'}</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="${TOPO_SNAP}">${TOPO_SNAP?'⌖ Snap on':'⌖ Snap off'}</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">${TOPO_SHOW_PORTS?'Hide ports':'Show ports'}</button>${wiring}</div>
-    <div class="label2">Drawing tools</div><div class="pal-row">${drawingTools.map(([k,n])=>`<button class="btn sm draw-tool${DRAW_TOOL===k?' active':''}" data-draw-tool="${k}" aria-pressed="${DRAW_TOOL===k}" title="${n} drawing tool">${n}</button>`).join('')}<button class="btn sm" id="delDrawing" title="Remove the selected drawing" ${DRAWING_SEL==null?'disabled':''}>Remove drawing</button></div>
-    <div class="label2">Layer visibility</div><div class="pal-row">${Object.keys(layerState).map(k=>`<label class=\"dim\"><input type=\"checkbox\" data-topo-layer=\"${k}\"${layerState[k]?' checked':''}/> ${k}</label>`).join('')}</div>\n    <div class="pal-hint dim">Right-click a device, link or empty canvas for contextual actions · drag to move devices · ${TOPO_SNAP?'snap-to-grid enabled':'free positioning'}.</div></div>`;
+  return '<div class="builder"><div class="builder-heading"><div><span class="builder-kicker">DESIGN WORKSPACE</span><h3>Topology builder</h3><p>Place infrastructure, then connect interfaces on the canvas.</p></div><span class="builder-step">01 <i>／</i> DESIGN</span></div>' +
+    '<div class="builder-section-head"><span>Device library</span><small>Choose a device to add</small></div><div class="device-palette">' + add + '</div>' +
+    '<div class="pal-row builder-history"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ' + (TOPO_UNDO.length?'':'disabled') + '>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ' + (TOPO_REDO.length?'':'disabled') + '>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ' + (TOPO_CLIPBOARD?'':'disabled') + '>Paste</button><span class="dim">' + TOPO_SELECTED.size + ' selected · Shift-click or Shift-drag to select</span></div>' +
+    '<div class="builder-section-head"><span>Canvas actions</span><small>Arrange and annotate</small></div><div class="pal-row">' + wiring + '<button class="btn sm" id="wireBtn" title="Connect the selected device to another device">' + (WIRE ? '✕ Cancel wire' : '↗ Wire devices') + '</button>' + (SEL && RUN.net.devices[SEL] ? '<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ' + esc(SEL) + '</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>' : '') + (LINK_SEL!=null ? '<button class="btn sm" id="delLink" data-link-index="' + LINK_SEL + '">Remove selected link</button>' : '') + '<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>' +
+    '<div class="pal-row canvas-toggles"><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="' + TOPO_GRID + '">' + (TOPO_GRID?'▦ Grid on':'▦ Grid off') + '</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="' + TOPO_SNAP + '">' + (TOPO_SNAP?'⌖ Snap on':'⌖ Snap off') + '</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">' + (TOPO_SHOW_PORTS?'Hide ports':'Show ports') + '</button></div>' +
+    '<div class="builder-section-head"><span>Drawing tools</span><small>Document your design</small></div><div class="pal-row">' + drawingTools.map(([k,n]) => '<button class="btn sm draw-tool' + (DRAW_TOOL===k?' active':'') + '" data-draw-tool="' + k + '" aria-pressed="' + (DRAW_TOOL===k) + '" title="' + n + ' drawing tool">' + n + '</button>').join('') + '<button class="btn sm" id="delDrawing" title="Remove the selected drawing" ' + (DRAWING_SEL==null?'disabled':'') + '>Remove drawing</button></div>' +
+    '<div class="builder-section-head"><span>Canvas layers</span><small>Show or hide detail</small></div><div class="pal-row layer-controls">' + Object.keys(layerState).map(k => '<label class="dim"><input type="checkbox" data-topo-layer="' + k + '"' + (layerState[k]?' checked':'') + '/> ' + k + '</label>').join('') + '</div>' +
+    '<div class="pal-hint dim">Right-click a device, link or empty canvas for contextual actions · drag to move devices · ' + (TOPO_SNAP?'snap-to-grid enabled':'free positioning') + '.</div></div>';
 }
 function describeCheck(s) {
   switch (s.type) {

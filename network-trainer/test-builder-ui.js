@@ -54,6 +54,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#btnBuild'); await page.waitForTimeout(150);
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
   if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
+  if (await page.locator('#config .device-palette .pal').count() === 5 && await page.locator('#config .palette-device-icon').count() === 5) ok('five-device palette has compact isometric previews');
+  else fail('device palette is missing one or more illustrated device types');
   if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas; topology=' + (await page.locator('#topoWrap').innerText().catch(() => '<unavailable>')));
   const emptyCanvas = await page.locator('#topo').boundingBox();
   await page.click('[data-draw-tool="rect"]');
@@ -87,6 +89,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
   if (built.includes('h1') && built.includes('h2')) ok('placed h1 and h2 (' + built.join(', ') + ')'); else fail('endpoints not placed: ' + JSON.stringify(built));
+  if (await page.locator('#topo .node .device-art .iso-top').count() === 2 && await page.locator('#topo .node .device-art .iso-front').count() === 2 && await page.locator('#topo .node .device-art .iso-side').count() === 2) ok('host nodes render as layered isometric SVG devices');
+  else fail('host device artwork is missing isometric faces');
 
   // --- modern topology designer controls ---
   await page.click('#topo .node[data-dev="h1"]'); await page.waitForTimeout(50);
@@ -256,6 +260,23 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     if (remaining === 1) ok('selected link can be removed independently');
     else fail('selected link removal did not update topology (remaining links: ' + remaining + ')');
   } else fail('selecting a topology link did not expose remove action');
+
+  // Verify every supported device kind uses the same isometric SVG visual language.
+  for (const kind of ['server', 'switch', 'router', 'firewall']) {
+    await addDev(kind);
+    const device = page.locator('#topo .node').last();
+    if (await device.locator('.device-art .iso-top').count() === 1 &&
+        await device.locator('.device-art .iso-front').count() === 1 &&
+        await device.locator('.device-art .iso-side').count() === 1) ok(kind + ' renders with top, front and side SVG faces');
+    else fail(kind + ' is missing an isometric device face');
+    await page.click('#delDev');
+    await page.waitForTimeout(40);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.locator('#config .device-palette').isVisible() &&
+      await page.locator('#config .device-palette .pal').count() === 5 &&
+      await page.locator('#topo').isVisible()) ok('device palette and topology remain available on a narrow viewport');
+  else fail('narrow viewport hides the palette or topology canvas');
 
   // --- exit build returns to the campaign ---
   await browser.close();
