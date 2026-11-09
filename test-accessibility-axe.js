@@ -53,6 +53,7 @@ const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html
 
   // Reload to reset the authoring workspace before scanning independent dialogs.
   await net.goto(networkUrl,{waitUntil:'load'});await net.waitForTimeout(180);
+  await install(net); // Navigation replaces the document and removes the previously injected axe runtime.
   await net.locator('#btnQueue').click();await net.waitForTimeout(100);
   if(!(await net.locator('#modal [role=dialog]').count()))throw new Error('Network Trainer incident queue dialog did not open');
   await scan(net,'Network Trainer incident queue dialog');await closeNetworkModal(net);
