@@ -1437,7 +1437,7 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
-  if (NOTE_DRAG) {const d=NOTE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];if(Math.hypot(dx,dy)>1)d.moved=true;if(d.moved)d.el.setAttribute('transform','translate('+(d.x+dx)+','+(d.y+dy)+')');return;}
+  if (NOTE_DRAG) {const d=NOTE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];if(Math.hypot(dx,dy)>1)d.moved=true;if(d.moved){d.nextX=d.x+dx;d.nextY=d.y+dy;d.el.setAttribute('transform','translate('+d.nextX+','+d.nextY+')');}return;}
   if (DRAWING_DRAG) {
     const d=DRAWING_DRAG,item=RUN.net.drawings[d.index],p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];
     if(Math.hypot(dx,dy)>1)d.moved=true;
@@ -1471,7 +1471,7 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
-  if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index],svg=$('#topo'),p=svg&&svgPoint(svg,window.__lastPointerX||0,window.__lastPointerY||0);const el=d.el,match=(el.getAttribute('transform')||'').match(/translate\\(([-\\d.]+)[ ,]([-\\d.]+)\\)/);if(item&&match){item.x=Number(match[1]);item.y=Number(match[2]);rememberTopology(d.before);}refresh();return;}
+  if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
   if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
