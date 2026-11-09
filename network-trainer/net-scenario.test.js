@@ -99,6 +99,24 @@ test('a build-from-scratch scenario is authorable, serializable, and solvable', 
   assert(run.done() === true, 'grader accepts the built network:\n' + run.status());
 });
 
+test('editable device labels and free canvas text survive scenario export and mission creation', () => {
+  const topo = {
+    devices: { h1: { id: 'h1', kind: 'host', label: 'Gateway', displayType: 'Edge router', ifaces: { eth0: { up: true } } } },
+    links: [],
+    deviceLabelPositions: { h1: { name: [220, 96], type: [248, 124] } },
+    texts: [{ text: 'WAN handoff', x: 360, y: 180, fontSize: 16, color: '#e5b85c' }]
+  };
+  const start = S.fromTopology(topo);
+  assert(start.deviceLabelPositions.h1.name[0] === 220, 'custom device name label position is retained');
+  assert(start.deviceLabelPositions.h1.type[1] === 124, 'custom device type label position is retained');
+  assert(start.texts[0].text === 'WAN handoff', 'free canvas text is retained');
+  const decoded = S.fromJSON(S.toJSON({ title: 'Editable diagram', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
+  const net = S.toMission(decoded).build();
+  assert(net.devices.h1.label === 'Gateway' && net.devices.h1.displayType === 'Edge router', 'custom name and type text survive scenario round-trip');
+  assert(net.deviceLabelPositions.h1.name[1] === 96, 'independent label coordinates survive scenario round-trip');
+  assert(net.texts[0].x === 360, 'free text coordinates survive scenario round-trip');
+});
+
 test('topology annotations survive scenario export and mission creation', () => {
   const topo = { devices: {}, links: [], notes: [{ text: 'Core uplink', x: 144, y: 72 }] };
   const start = S.fromTopology(topo);
