@@ -36,6 +36,16 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=protocols');
   if (!(await page.locator('#protocolLabResult').innerText()).includes('Return path')) throw new Error('Packet journey did not switch to the observed reply path');
   await page.locator('[data-journey-scenario="http"]').click();
   if (!(await page.locator('#protocolLabResult').innerText()).includes('TCP / 80')) throw new Error('HTTP packet journey scenario did not load');
+  for (const [lab, expected] of [['ospf','FULL · r2'],['bgp','Established'],['hsrp','r2 Active']]) {
+    await page.locator('[data-protocol-lab="' + lab + '"]').click();
+    output = await page.locator('#protocolLabResult').innerText();
+    if (!output.includes(expected) || !output.includes('CANONICAL MODEL EVIDENCE')) throw new Error(lab.toUpperCase() + ' lab did not show model-derived protocol evidence');
+  }
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await mobile.goto(URL, { waitUntil: 'load' });
+  await mobile.locator('[data-protocol-lab="hsrp"]').click();
+  if (!(await mobile.locator('#protocolLabResult').isVisible())) throw new Error('Advanced protocol labs are not visible on a narrow viewport');
+  await mobile.close();
   if (errors.length) throw new Error('Browser errors: ' + errors.join(' | '));
   console.log('✓ TCP/HTTP lab shows the engine-observed request and reply path');
   await browser.close();
