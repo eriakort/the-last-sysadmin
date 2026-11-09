@@ -22,7 +22,7 @@ assert.strictEqual(state['show ip route'].lapses, 1);
 assert.strictEqual(state['show ip route'].dueAt, now + 5 * R.DAY_MS);
 assert.strictEqual(state['show ip route'].lastResult, 'needs-practice');
 assert.strictEqual(R.review(state, 'missing command', true, now), null);
-assert.strictEqual(R.add(state, '', now)[''].dueAt, undefined);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(R.add(state, '', now), ''), false, 'blank concept IDs must not be added');
 const malformed = { bad: { dueAt: 'not-a-date' }, unknown: { dueAt: now } };
 assert.strictEqual(R.items(malformed, guide, now).length, 0, 'malformed and unknown concepts are ignored');
 assert.strictEqual(state['show ip route'].dueAt, now + 5 * R.DAY_MS, 'operations must not mutate input state');
