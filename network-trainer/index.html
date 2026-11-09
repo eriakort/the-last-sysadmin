@@ -4259,6 +4259,7 @@ const CASES=[
 function getCase(id){return CASES.find(c=>c.id===id)||CASES[0];}
 function evaluate(id,answers){const design=getCase(id),feedback=design.decisions.map(d=>({id:d.id,label:d.label,correct:!!answers&&answers[d.id]===d.correct,selected:answers&&answers[d.id]||'',explanation:d.why}));const score=feedback.filter(x=>x.correct).length;return{caseId:design.id,score,total:design.decisions.length,percent:Math.round(score/design.decisions.length*100),passed:score===design.decisions.length,feedback};}
 module.exports={CASES,getCase,evaluate};
+
 });
 __def("./net-automation-workshop", function(module, exports, require){
 // Guided network automation playbooks backed by the real simulator CLI and model.
