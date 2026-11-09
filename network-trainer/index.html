@@ -6330,11 +6330,11 @@ function renderAuthor() {
   return `<div class="eyebrow">Author · design a scenario</div>
     <h1>Build a scenario</h1>
     <p class="dim">Place the devices the student starts with and address what they're given. Then set the objectives they must build toward. ▶ Play to test it yourself.</p>
-    <div class="label">Title</div><input id="aTitle" class="wide" value="${esc(a.title)}"/>
+    <label class="label" for="aTitle">Title</label><input id="aTitle" class="wide" value="${esc(a.title)}"/>
     <div class="label">Objective / brief</div><textarea id="aObj" class="wide" rows="2" placeholder="What the student must achieve">${esc(a.objective)}</textarea>
     <div class="label">Objectives (success checks)</div>
     <div class="rev-list">${checkRows}</div>
-    <div class="addrow"><select id="chkType">${typeOpts}</select></div>
+    <div class="addrow"><label class="sr-only" for="chkType">Objective check type</label><select id="chkType">${typeOpts}</select></div>
     <div class="addrow" id="chkArgs"></div>
     <div class="addrow"><button class="btn sm" id="addChk">＋ Add objective</button></div>
     <div class="row"><button class="btn" id="exportScn">⬇ Export</button>
