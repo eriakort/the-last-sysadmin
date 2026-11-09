@@ -1457,7 +1457,7 @@ function wireTopo() {
     });
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
-      if ((e.ctrlKey || e.metaKey || e.shiftKey) && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id))TOPO_SELECTED.delete(id);else TOPO_SELECTED.add(id); if(TOPO_SELECTED.has(id))SEL=id;else if(SEL===id)SEL=[...TOPO_SELECTED][0]||null; refresh(); return; }
+      if ((e.ctrlKey || e.metaKey || e.shiftKey) && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id)){TOPO_SELECTED.delete(id);if(SEL===id){const next=[...TOPO_SELECTED][0]||null;if(next)selectDevice(next);else{persistTerminalSession();SEL=null;refresh();}}else refresh();}else{TOPO_SELECTED.add(id);selectDevice(id);} return; }
       if (WIRE) {                                      // wiring: connect the armed device to this one
         if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
         WIRE = null; refresh(); return;
@@ -1475,7 +1475,6 @@ function wireTopo() {
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
       if(TOPO_SELECTED.size!==1||!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
-      SEL=id;
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
@@ -1527,7 +1526,7 @@ function onDragUp() {
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
   if (!d.moved) selectDevice(d.id);
-  else { rememberTopology(d.before); refresh(); }
+  else { if(SEL!==d.id)selectDevice(d.id); rememberTopology(d.before); refresh(); }
 }
 function zoomTopology(factor) {
   const svg = $('#topo'); if (!svg) return;
