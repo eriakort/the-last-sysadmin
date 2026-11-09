@@ -149,7 +149,7 @@ function renderTopo() {
     s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="44" rx="6" fill="transparent"/>${ico}</g>`;
     const labelPositions=(net.deviceLabelPositions&&net.deviceLabelPositions[id])||{};
     const nameAt=labelPositions.name||[x+24,y+48], typeAt=labelPositions.type||[x+24,y+62];
-    const typeText=d.displayType||d.kind;
+    const typeText=d.displayType||(d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind);
     s += `<text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move">${esc(d.label||id)}</text><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move">${esc(typeText+(ip?' · '+ip:''))}</text>`;
   }
   return s + '</svg>';
@@ -1250,7 +1250,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const first = menu.querySelector('button:not(:disabled)'); if (first) first.focus();
 }
 
-function editTopologyDeviceLabel(id,kind) { const d=RUN&&RUN.net&&RUN.net.devices[id];if(!d)return;const isName=kind==='name',current=isName?(d.label||id):(d.displayType||d.kind),value=prompt(isName?'Device name label (blank uses device ID):':'Device type label (blank uses device type):',current);if(value===null)return;rememberTopology();if(isName){if(value.trim())d.label=value.trim().slice(0,48);else delete d.label;}else{if(value.trim())d.displayType=value.trim().slice(0,48);else delete d.displayType;}refresh();}
+function editTopologyDeviceLabel(id,kind) { const d=RUN&&RUN.net&&RUN.net.devices[id];if(!d)return;const isName=kind==='name',defaultType=d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind,current=isName?(d.label||id):(d.displayType||defaultType),value=prompt(isName?'Device name label (blank uses device ID):':'Device type label (blank uses device type):',current);if(value===null)return;rememberTopology();if(isName){if(value.trim())d.label=value.trim().slice(0,48);else delete d.label;}else{if(value.trim())d.displayType=value.trim().slice(0,48);else delete d.displayType;}refresh();}
 function editTopologyText(index) { const item=RUN&&RUN.net&&RUN.net.texts&&RUN.net.texts[index];if(!item)return;const value=prompt('Edit canvas text (leave blank to remove):',item.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.texts.splice(index,1);else item.text=value.trim().slice(0,160);refresh();}
 function wireTopo() {
   const svg = $('#topo');
