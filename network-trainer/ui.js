@@ -28,7 +28,7 @@ let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared 
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
-let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false;
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
@@ -1066,7 +1066,7 @@ function restoreTopology(snapshot) {
   Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
   TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
   if (SEL && !RUN.net.devices[SEL]) SEL = null;
-  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; refresh();
+  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
 }
 function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
 function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
@@ -1254,6 +1254,7 @@ function editTopologyDeviceLabel(id,kind) { const d=RUN&&RUN.net&&RUN.net.device
 function editTopologyText(index) { const item=RUN&&RUN.net&&RUN.net.texts&&RUN.net.texts[index];if(!item)return;const value=prompt('Edit canvas text (leave blank to remove):',item.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.texts.splice(index,1);else item.text=value.trim().slice(0,160);refresh();}
 function wireTopo() {
   const svg = $('#topo');
+  if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.');}});TEXT_INSERT_CANCEL_BOUND=true;}
   if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
     const node = e.target.closest && e.target.closest('.node');
@@ -1386,7 +1387,7 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
-  if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const p=svgPoint($('#topo'),d.start[0]===null?0:0,0);void p;const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
+  if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
@@ -1460,7 +1461,7 @@ function wireConfig() {
   }));
   const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{rememberTopology(); const id=B.cloneDevice(RUN.net,SEL);TOPO_SELECTED=new Set([id]);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
   const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;rememberTopology();RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
-  const textBtn=$('#textBtn');if(textBtn)textBtn.addEventListener('click',()=>{TEXT_INSERT_MODE=true;DRAW_TOOL='select';flashStatus('Click anywhere on the topology canvas to place text. Press Escape to cancel.');});
+  const textBtn=$('#textBtn');if(textBtn)textBtn.addEventListener('click',()=>{TEXT_INSERT_MODE=!TEXT_INSERT_MODE;DRAW_TOOL='select';textBtn.classList.toggle('active',TEXT_INSERT_MODE);flashStatus(TEXT_INSERT_MODE?'Click anywhere on the topology canvas to place text.':'Text insertion cancelled.');});
   const labelDev=$('#labelDev');if(labelDev)labelDev.addEventListener('click',()=>{if(!SEL||!RUN.net.devices[SEL])return;const d=RUN.net.devices[SEL],value=prompt('Device display label (leave blank to use its ID):',d.label||'');if(value===null)return;rememberTopology();if(value.trim())d.label=value.trim().slice(0,32);else delete d.label;refresh();});
   const zoneBtn=$('#zoneBtn');if(zoneBtn)zoneBtn.addEventListener('click',()=>{const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]);if(!ids.length&&SEL)ids.push(SEL);if(!ids.length)return;const name=prompt('Zone name (max 32 characters):','Core network');if(name===null||!name.trim())return;const points=ids.map(id=>nodePos(id));const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const x=Math.max(0,Math.min(...xs)-24),y=Math.max(0,Math.min(...ys)-28),right=Math.max(...xs)+84,bottom=Math.max(...ys)+96;rememberTopology();RUN.net.zones=RUN.net.zones||[];RUN.net.zones.push({name:name.trim().slice(0,32),x,y,w:Math.max(140,right-x),h:Math.max(110,bottom-y),color:'#60a5fa',devices:ids});refresh();});
   document.querySelectorAll('#config [data-topo-layer]').forEach(c=>c.addEventListener('change',()=>{TOPO_LAYERS[c.dataset.topoLayer]=c.checked;RUN.net.layerVisibility=RUN.net.layerVisibility||{};RUN.net.layerVisibility[c.dataset.topoLayer]=c.checked;refresh();}));
