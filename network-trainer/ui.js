@@ -31,7 +31,7 @@ let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SH
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_CAPTURE_SELECT = true, TOPO_DELETE_KEY_BOUND = false;
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
-let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, RESIZE_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
@@ -232,13 +232,14 @@ function renderTopo() {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
-    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="44" rx="6" fill="transparent"/>${ico}</g>`;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="60" height="48" rx="6" fill="transparent"/><g class="device-art-scale" transform="translate(24 18) scale(${Math.max(.5,Math.min(2.5,Number((net.deviceSizes||{})[id])||1))}) translate(-24 -18)">${ico}</g></g><circle class="topo-device-resize" data-resize-kind="device" data-dev="${esc(id)}" cx="${x+68}" cy="${y+50}" r="7" role="button" tabindex="0" aria-label="Resize device ${esc(id)}" fill="#38bdf8" stroke="#eafaff" stroke-width="1.5" pointer-events="all"/>`;
     const labelPositions=(net.deviceLabelPositions&&net.deviceLabelPositions[id])||{};
+    const labelSizes=(net.deviceLabelSizes&&net.deviceLabelSizes[id])||{}, hiddenLabels=(net.hiddenDeviceLabels&&net.hiddenDeviceLabels[id])||{};
     const nameAt=labelPositions.name||[x+24,y+48], typeAt=labelPositions.type||[x+24,y+62];
     const typeText=d.displayType||(d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind);
     const nameW=Math.max(40, String(d.label||id).length*7.5), typeW=Math.max(40, String(typeText+(ip?' · '+ip:'')).length*6.5);
-    s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="name"><rect class="device-label-hit" x="${nameAt[0]-nameW/2}" y="${nameAt[1]-14}" width="${nameW}" height="18" fill="transparent" pointer-events="all"/><text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(d.label||id)}</text></g>`;
-    s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="type"><rect class="device-label-hit" x="${typeAt[0]-typeW/2}" y="${typeAt[1]-12}" width="${typeW}" height="16" fill="transparent" pointer-events="all"/><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(typeText+(ip?' · '+ip:''))}</text></g>`;
+    if(!hiddenLabels.name){const fs=Math.max(7,Math.min(32,Number(labelSizes.name)||12)),w=Math.max(40,String(d.label||id).length*fs*.62);s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="name"><rect class="device-label-hit" x="${nameAt[0]-w/2}" y="${nameAt[1]-fs*1.1}" width="${w}" height="${fs*1.6}" fill="transparent" pointer-events="all"/><text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" font-size="${fs}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" style="cursor:move" pointer-events="bounding-box">${esc(d.label||id)}</text><circle class="topo-label-resize" data-resize-kind="label" data-device-label="${esc(id)}" data-label-kind="name" cx="${nameAt[0]+w/2+5}" cy="${nameAt[1]-fs/2}" r="4.5" fill="#38bdf8" stroke="#eafaff" stroke-width="1.3" role="button" tabindex="0" aria-label="Resize device name label"/></g>`;}
+    if(!hiddenLabels.type){const fs=Math.max(7,Math.min(28,Number(labelSizes.type)||10)),w=Math.max(40,String(typeText+(ip?' · '+ip:'')).length*fs*.62);s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="type"><rect class="device-label-hit" x="${typeAt[0]-w/2}" y="${typeAt[1]-fs*1.1}" width="${w}" height="${fs*1.6}" fill="transparent" pointer-events="all"/><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" font-size="${fs}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10 Delete" style="cursor:move" pointer-events="bounding-box">${esc(typeText+(ip?' · '+ip:''))}</text><circle class="topo-label-resize" data-resize-kind="label" data-device-label="${esc(id)}" data-label-kind="type" cx="${typeAt[0]+w/2+5}" cy="${typeAt[1]-fs/2}" r="4.5" fill="#38bdf8" stroke="#eafaff" stroke-width="1.3" role="button" tabindex="0" aria-label="Resize device type label"/></g>`;}
   }
   return s + '</svg>';
 }
@@ -1258,7 +1259,8 @@ function runTopologyContextAction(action, target) {
     case 'reset-device-label': { const positions=RUN.net.deviceLabelPositions&&RUN.net.deviceLabelPositions[target.id]; if(positions){rememberTopology();delete positions[target.labelKind];if(!Object.keys(positions).length)delete RUN.net.deviceLabelPositions[target.id];refresh();} break; }
     case 'edit-text': editTopologyText(target.index); break;
     case 'delete-text': if(RUN.net.texts&&RUN.net.texts[target.index]){rememberTopology();RUN.net.texts.splice(target.index,1);refresh();} break;
-    case 'clear-device-label': { const d=RUN.net.devices[target.id]; if(d){rememberTopology();if(target.labelKind==='name')delete d.label;else delete d.displayType;refresh();} break; }
+    case 'clear-device-label': { if(RUN.net.devices[target.id]){rememberTopology();RUN.net.hiddenDeviceLabels=RUN.net.hiddenDeviceLabels||{};RUN.net.hiddenDeviceLabels[target.id]=RUN.net.hiddenDeviceLabels[target.id]||{};RUN.net.hiddenDeviceLabels[target.id][target.labelKind]=true;refresh();} break; }
+    case 'restore-device-label': case 'restore-device-label-name': case 'restore-device-label-type': { const kind=action.endsWith('-name')?'name':action.endsWith('-type')?'type':target.labelKind,hidden=RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id];if(hidden){rememberTopology();delete hidden[kind];if(!Object.keys(hidden).length)delete RUN.net.hiddenDeviceLabels[target.id];refresh();}break; }
     case 'add-text': { const value=prompt('Canvas text (max 160 characters):','New text');if(value===null||!value.trim())break;const p=target.point||(TOPO_VIEW?[TOPO_VIEW[0]+TOPO_VIEW[2]/2,TOPO_VIEW[1]+TOPO_VIEW[3]/2]:[100,100]);rememberTopology();RUN.net.texts=RUN.net.texts||[];RUN.net.texts.push({text:value.trim().slice(0,160),x:p[0],y:p[1],fontSize:14,color:'#e5b85c'});refresh();break;}
     case 'paste': pasteTopologySelection(); break;
     case 'add-note': {
@@ -1294,10 +1296,13 @@ function showTopologyContextMenu(e, kind, target = {}) {
     LINK_SEL = null; DRAWING_SEL = null;
   }
   if (kind !== 'device') refresh();
+  const hiddenLabel=RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id]&&RUN.net.hiddenDeviceLabels[target.id][target.labelKind];
   const groups = {
     device: [
       ['Configure / inspect', 'configure'], ['Connect to another device', 'connect'], ['Duplicate device', 'duplicate'],
-      ['Copy selection', 'copy'], ['Rename display label', 'rename'], ['Center on device', 'focus'], ['Delete device', 'delete-device', true]
+      ['Copy selection', 'copy'], ['Rename display label', 'rename'],
+      ...(['name','type'].filter(k=>RUN.net.hiddenDeviceLabels&&RUN.net.hiddenDeviceLabels[target.id]&&RUN.net.hiddenDeviceLabels[target.id][k]).map(k=>['Restore '+k+' label','restore-device-label-'+k])),
+      ['Center on device', 'focus'], ['Delete device', 'delete-device', true]
     ],
     link: [
       [RUN.net.links[target.index] && RUN.net.links[target.index].up === false ? 'Bring link up' : 'Take link down', 'toggle-link'],
@@ -1305,7 +1310,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
     ],
     drawing: [['Remove drawing', 'delete-drawing', true]],
     note: [['Edit note', 'edit-note'], ['Remove note', 'delete-note', true]],
-    'device-label': [['Edit label text', 'edit-device-label'], ['Reset label text', 'clear-device-label', true], ['Reset label position', 'reset-device-label']],
+    'device-label': hiddenLabel ? [['Restore label','restore-device-label']] : [['Edit label text','edit-device-label'],['Delete label','clear-device-label',true],['Reset label position','reset-device-label']],
     text: [['Edit text', 'edit-text'], ['Remove text', 'delete-text', true]],
     canvas: [
       ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
@@ -1414,6 +1419,17 @@ function wireTopo() {
     const resolveText=el=>{if(!el||!el.closest)return null;const direct=el.closest('.topo-text');if(direct)return direct;const g=el.closest('.topo-text-group');return g?g.querySelector('.topo-text'):null;};
     const label=resolveLabel(e.target), text=resolveText(e.target), note=e.target.closest&&e.target.closest('.topo-note');
     if(canBuild()&&!TEXT_INSERT_MODE&&e.button===0&&note){const index=Number(note.dataset.noteIndex),item=RUN.net.notes&&RUN.net.notes[index];if(item){const p=svgPoint(svg,e.clientX,e.clientY);NOTE_DRAG={index,start:p,x:Number(item.x)||40,y:Number(item.y)||40,before:topologySnapshot(),moved:false,el:note};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}}
+    // WebKit can target an overlapping SVG edge/label instead of the small device
+    // resize circle. Resolve resize handles geometrically as a fallback so the
+    // drag remains reliable even when SVG paint-order hit testing differs.
+    let resizeTarget=e.target.closest&&e.target.closest('[data-resize-kind]');
+    if(!resizeTarget&&e.button===0){
+      resizeTarget=[...svg.querySelectorAll('[data-resize-kind]')].find(handle=>{
+        const r=handle.getBoundingClientRect();
+        return e.clientX>=r.left-5&&e.clientX<=r.right+5&&e.clientY>=r.top-5&&e.clientY<=r.bottom+5;
+      })||null;
+    }
+    if(canBuild()&&e.button===0&&resizeTarget){const p=svgPoint(svg,e.clientX,e.clientY),kind=resizeTarget.dataset.resizeKind,id=resizeTarget.dataset.dev||resizeTarget.dataset.deviceLabel,labelKind=resizeTarget.dataset.labelKind;const initial=kind==='device'?Math.max(.5,Math.min(2.5,Number((RUN.net.deviceSizes||{})[id])||1)):Math.max(7,Math.min(32,Number((((RUN.net.deviceLabelSizes||{})[id]||{})[labelKind]))||(labelKind==='type'?10:12)));RESIZE_DRAG={kind,id,labelKind,start:p,initial,before:topologySnapshot(),moved:false};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}
     if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
     if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
     const existingDrawing = e.target.closest('.topo-drawing');
@@ -1486,6 +1502,7 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
+  if(RESIZE_DRAG){const d=RESIZE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),delta=p[0]-d.start[0];if(Math.abs(delta)>1)d.moved=true;const value=d.kind==='device'?Math.max(.5,Math.min(2.5,d.initial+delta/42)):Math.max(7,Math.min(32,d.initial+delta/5));if(d.kind==='device'){RUN.net.deviceSizes=RUN.net.deviceSizes||{};RUN.net.deviceSizes[d.id]=Math.round(value*100)/100;const art=svg.querySelector('.node[data-dev="'+CSS.escape(d.id)+'"] .device-art-scale');if(art)art.setAttribute('transform','translate(24 18) scale('+value+') translate(-24 -18)');}else{RUN.net.deviceLabelSizes=RUN.net.deviceLabelSizes||{};RUN.net.deviceLabelSizes[d.id]=RUN.net.deviceLabelSizes[d.id]||{};RUN.net.deviceLabelSizes[d.id][d.labelKind]=Math.round(value*10)/10;const labelEl=svg.querySelector('.device-label[data-device-label="'+CSS.escape(d.id)+'"][data-label-kind="'+d.labelKind+'"]');if(labelEl)labelEl.setAttribute('font-size',value);}return;}
   if (NOTE_DRAG) {const d=NOTE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];if(Math.hypot(dx,dy)>1)d.moved=true;if(d.moved){d.nextX=d.x+dx;d.nextY=d.y+dy;d.el.setAttribute('transform','translate('+d.nextX+','+d.nextY+')');}return;}
   if (DRAWING_DRAG) {
     const d=DRAWING_DRAG,item=RUN.net.drawings[d.index],p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];
@@ -1520,6 +1537,7 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
+  if(RESIZE_DRAG){const d=RESIZE_DRAG;RESIZE_DRAG=null;if(d.moved)rememberTopology(d.before);refresh();return;}
   if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
   if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}

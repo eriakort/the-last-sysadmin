@@ -79,7 +79,7 @@ svg#topo{max-width:100%;height:auto}
 .node.sel .ico{color:var(--amber);filter:drop-shadow(0 0 4px var(--amber))}
 .node .n-id{fill:var(--ink);font-size:12px;font-weight:600}
 .node .n-sub{fill:var(--muted);font-size:10px}
-.device-label{fill:var(--ink);font-size:12px;font-weight:650;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;cursor:move;user-select:none}.device-label.type-label{fill:var(--muted);font-size:10px;font-weight:500}.device-label:focus,.topo-text:focus{outline:none;filter:drop-shadow(0 0 4px var(--amber))}.topo-text{font-weight:650;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;cursor:move;user-select:none}.topo-text.insert-ready{cursor:crosshair}
+.topo-device-resize,.topo-label-resize{cursor:nwse-resize;touch-action:none}.topo-device-resize:hover,.topo-label-resize:hover{filter:drop-shadow(0 0 3px var(--amber))}.device-label{fill:var(--ink);font-size:12px;font-weight:650;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;cursor:move;user-select:none}.device-label.type-label{fill:var(--muted);font-size:10px;font-weight:500}.device-label:focus,.topo-text:focus{outline:none;filter:drop-shadow(0 0 4px var(--amber))}.topo-text{font-weight:650;paint-order:stroke;stroke:var(--bg);stroke-width:3px;stroke-linejoin:round;cursor:move;user-select:none}.topo-text.insert-ready{cursor:crosshair}
 .n-id{fill:var(--ink);font-size:13px;font-weight:600}
 .n-sub{fill:var(--muted);font-size:10.5px;font-family:ui-monospace,monospace}
 #flows{flex:none;max-height:132px;overflow:auto;border-top:1px solid var(--line);background:#0c161c;font-size:12px}
