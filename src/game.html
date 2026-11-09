@@ -427,6 +427,34 @@ body.practicing{padding-top:40px}
 .mistake-coach-next b,.mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
 
 
+
+/* Virtual IT company service desk */
+.company-desk-dialog{width:min(900px,100%);max-height:min(90vh,920px);overflow:auto}
+.company-desk-intro{font-size:12.5px;color:var(--muted);margin:8px 0 14px}
+.company-desk-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.company-desk-metric{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:10px}
+.company-desk-metric strong{display:block;font:600 20px var(--f-display);color:var(--green)}
+.company-desk-metric span{font-size:10px;color:var(--muted)}
+.company-request{border:1px solid var(--line);border-radius:9px;padding:13px;margin:10px 0;background:var(--panel)}
+.company-request[data-locked="true"]{opacity:.68}
+.company-request-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.company-request-head h3{font:600 15px var(--f-display);margin:0;flex:1 1 220px}
+.company-request-meta{display:flex;gap:7px;flex-wrap:wrap;color:var(--muted);font-size:10px;margin:7px 0}
+.company-request p{font-size:12px;color:var(--muted);margin:7px 0}
+.company-request-status{font-size:10px;border:1px solid var(--line);border-radius:20px;padding:3px 8px;text-transform:uppercase;letter-spacing:.06em}
+.company-request-status[data-status="resolved"]{color:var(--green);border-color:var(--green)}
+.company-request-status[data-status="investigating"],.company-request-status[data-status="ready"]{color:var(--amber)}
+.company-request-progress{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:10px 0}
+.company-request-step{background:var(--raise);border-radius:6px;padding:8px;font-size:11px}
+.company-request-step b{display:block;margin-bottom:3px}
+.company-request-step[data-done="true"]{color:var(--green)}
+.company-request-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.company-request-notes{margin-top:10px;border-top:1px solid var(--line);padding-top:9px}
+.company-request-notes textarea{width:100%;min-height:58px;resize:vertical;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;font:12px var(--f-body)}
+.company-request-note{font-size:11px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--line)}
+.company-desk-foot{font-size:11px;color:var(--muted);margin:14px 0 2px}
+@media(max-width:600px){.company-desk-summary{grid-template-columns:1fr 1fr}.company-request-progress{grid-template-columns:1fr}.company-desk-dialog{padding:13px}}
+
 /* Evidence-based professional skill portfolio */
 .portfolio-dialog{width:min(820px,100%);max-height:min(88vh,900px);overflow:auto}
 .portfolio-intro{color:var(--muted);font-size:13px;margin:8px 0 16px}
@@ -516,6 +544,7 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnCrossTrackCase" type="button" title="Work a service outage across Linux and network operations">Integrated case</button>
       <button class="btn" id="btnRevisionReview" type="button" title="Recall completed concepts using spaced practice">Recall review</button>
       <button class="btn" id="btnSkillPortfolio" type="button" title="Review and export evidence of skills demonstrated in both learning tracks">Skill portfolio</button>
+      <button class="btn" id="btnCompanyDesk" type="button" title="Work persistent service requests for the simulated Halcyon IT company">Company service desk</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6732,6 +6761,75 @@ function openOpsRecoveryLab(){
 
  
 
+
+/* Virtual IT company: persistent service requests linked to canonical cross-track simulator outcomes. */
+const COMPANY_DESK_KEY='lsa-virtual-company-desk-v1';
+const COMPANY_REQUESTS=[
+ {id:'SR-2401',title:'Halcyon portal unavailable',department:'Sales & Customer Experience',priority:'P1',impact:'Company-wide customer portal',summary:'Customers cannot reach the public portal. The application service is stopped and client name resolution is stale.',linux:'linux',network:'network',linuxLabel:'Restore the Halcyon web service',networkLabel:'Repair client DNS and verify delivery',linuxMission:'web',networkQuery:'web-availability'},
+ {id:'SR-2402',title:'Operations team locked out of jump host',department:'IT Operations',priority:'P2',impact:'Systems administration team',summary:'The jump host responds to network checks, but SSH administration is unavailable. Restore the host service and repair the management access policy.',linux:'remoteLinux',network:'remoteNetwork',linuxLabel:'Restore SSH on jump01',networkLabel:'Repair the management ACL',linuxMission:'remote',networkQuery:'remote-admin'},
+ {id:'SR-2403',title:'SSH protection is no longer active',department:'Security Operations',priority:'P1',impact:'Administrative access exposed to repeated attempts',summary:'Host-level brute-force protection is stopped and the network policy needs to be restricted to the operations subnet.',linux:'hardeningLinux',network:'hardeningNetwork',linuxLabel:'Restore Fail2Ban protection',networkLabel:'Limit SSH to the operations subnet',linuxMission:'hardening',networkQuery:'ssh-hardening'},
+ {id:'SR-2404',title:'Former contractor access requires containment',department:'Identity & Security',priority:'P1',impact:'Privileged access and remote administration',summary:'Correlated evidence identifies a former contractor account with unnecessary sudo rights and a suspicious SSH source. Remove privilege and contain the source while preserving legitimate access.',linux:'contractorLinux',network:'contractorNetwork',linuxLabel:'Revoke contractor sudo privileges',networkLabel:'Contain the suspicious SSH source',linuxMission:'contractor',networkQuery:'contractor-containment'}
+];
+function companyDeskRead(){try{const v=JSON.parse(localStorage.getItem(COMPANY_DESK_KEY)||'{}');return v&&typeof v==='object'?v:{requests:{}};}catch(e){return {requests:{}};}}
+function companyDeskWrite(data){try{localStorage.setItem(COMPANY_DESK_KEY,JSON.stringify(data));}catch(e){}}
+function companyRequestState(request,progress,desk){
+ const saved=desk.requests&&desk.requests[request.id]||{},linux=!!progress[request.linux],network=!!progress[request.network],notes=Array.isArray(saved.notes)?saved.notes:[];
+ const ready=linux&&network,status=ready?(notes.length?'resolved':'ready'):(saved.claimedAt||saved.startedAt||notes.length||linux||network?'investigating':'new');
+ return {...saved,notes,linux,network,ready,status};
+}
+function companyDeskSnapshot(){
+ const progress=crossTrackRead(),desk=companyDeskRead();let priorClosed=true;
+ return COMPANY_REQUESTS.map(request=>{
+  const state=companyRequestState(request,progress,desk),locked=!priorClosed;
+  const item={...request,...state,locked};
+  if(state.status!=='resolved')priorClosed=false;
+  return item;
+ });
+}
+function companyDeskSaveRequest(id,mutate){
+ const data=companyDeskRead();data.requests=data.requests&&typeof data.requests==='object'?data.requests:{};
+ const old=data.requests[id]&&typeof data.requests[id]==='object'?data.requests[id]:{};
+ data.requests[id]={...old,...mutate(old),updatedAt:new Date().toISOString()};data.updatedAt=new Date().toISOString();companyDeskWrite(data);
+}
+function closeCompanyDesk(){const root=document.getElementById('companyDeskDialog');if(root)root.remove();}
+function openCompanyDesk(){
+ closeCompanyDesk();const rows=companyDeskSnapshot(),resolved=rows.filter(x=>x.status==='resolved').length,active=rows.filter(x=>x.status==='investigating'||x.status==='ready').length;
+ const root=document.createElement('div');root.id='companyDeskDialog';root.className='bash-workshop-backdrop';
+ const render=()=>{
+  const current=companyDeskSnapshot();
+  const cards=current.map(item=>{
+   const notes=item.notes.slice(0,4).map(note=>'<div class="company-request-note"><b>'+esc(new Date(note.at).toLocaleString())+'</b> · '+esc(note.text)+'</div>').join('');
+   const statusLabel=item.locked?'Locked · close prior request':item.status==='ready'?'Ready for closure':item.status==='resolved'?'Resolved':item.status==='investigating'?'In progress':'New';
+   return '<article class="company-request" data-company-request="'+esc(item.id)+'" data-locked="'+item.locked+'"><div class="company-request-head"><h3>'+esc(item.title)+'</h3><span class="tk-pri tk-'+item.priority.toLowerCase()+'">'+esc(item.priority)+'</span><span class="company-request-status" data-status="'+item.status+'">'+statusLabel+'</span></div>'
+    +'<div class="company-request-meta"><span>'+esc(item.id)+'</span><span>'+esc(item.department)+'</span><span>Impact: '+esc(item.impact)+'</span></div><p>'+esc(item.summary)+'</p>'
+    +'<div class="company-request-progress"><div class="company-request-step" data-done="'+item.linux+'"><b>'+(item.linux?'✓':'○')+' Linux Sysadmin</b>'+esc(item.linuxLabel)+'</div><div class="company-request-step" data-done="'+item.network+'"><b>'+(item.network?'✓':'○')+' Network Sysadmin</b>'+esc(item.networkLabel)+'</div></div>'
+    +'<div class="company-request-actions">'+(item.locked?'':(item.status==='new'?'<button class="btn sm primary" data-company-claim="'+item.id+'">Accept request</button>':''))
+    +(item.locked?'':'<button class="btn sm" data-company-linux="'+item.id+'">Open Linux task</button><button class="btn sm" data-company-network="'+item.id+'">Open network task</button>')
+    +'</div>'+(item.locked?'':('<div class="company-request-notes"><label for="companyNote-'+item.id+'">Investigation / handover note (required before closure)</label><textarea id="companyNote-'+item.id+'" maxlength="400" placeholder="Record the observed evidence, action taken and verification…"></textarea><div class="company-request-actions"><button class="btn sm" data-company-note="'+item.id+'">Save note</button></div>'+notes+'</div>'))
+    +'</article>';
+  }).join('');
+  root.innerHTML='<section class="bash-workshop-dialog company-desk-dialog" role="dialog" aria-modal="true" aria-labelledby="companyDeskTitle"><div class="bash-workshop-head"><div><div class="eyebrow">Halcyon Digital · simulated IT operations</div><h2 id="companyDeskTitle">Company service desk</h2></div><button class="btn" type="button" data-company-close>Close</button></div>'
+   +'<p class="company-desk-intro">Work the company queue from customer impact through investigation, cross-team remediation and documented closure. Requests persist in this browser profile and unlock in sequence as earlier work is completed.</p>'
+   +'<div class="company-desk-summary"><div class="company-desk-metric"><strong>'+resolved+'</strong><span>Requests resolved</span></div><div class="company-desk-metric"><strong>'+active+'</strong><span>In progress / ready</span></div><div class="company-desk-metric"><strong>'+rows.length+'</strong><span>Total company requests</span></div></div>'
+   +cards
+   +'<p class="company-desk-foot">Resolution requires both simulator objectives and at least one saved investigation / handover note. Completion is read from the existing Linux and Network learning records; the desk does not create a second simulation engine or alter campaign progress. All systems, departments and requests are fictional and browser-simulated.</p></section>';
+ };
+ render();
+ root.addEventListener('click',event=>{
+  if(event.target===root||event.target.closest('[data-company-close]')){closeCompanyDesk();return;}
+  const claim=event.target.closest('[data-company-claim]');
+  if(claim){companyDeskSaveRequest(claim.dataset.companyClaim,old=>({claimedAt:old.claimedAt||new Date().toISOString()}));render();return;}
+  const note=event.target.closest('[data-company-note]');
+  if(note){const id=note.dataset.companyNote,field=root.querySelector('#companyNote-'+id),value=field&&field.value.trim();if(!value){if(field){field.focus();field.setCustomValidity('Add a short evidence or handover note before saving.');field.reportValidity();}return;}companyDeskSaveRequest(id,old=>({notes:[...(Array.isArray(old.notes)?old.notes:[]),{at:new Date().toISOString(),text:value.slice(0,400)}].slice(-20)}));render();return;}
+  const linux=event.target.closest('[data-company-linux]');
+  if(linux){const item=COMPANY_REQUESTS.find(x=>x.id===linux.dataset.companyLinux);if(!item)return;companyDeskSaveRequest(item.id,old=>({startedAt:old.startedAt||new Date().toISOString()}));closeCompanyDesk();const mission={web:CROSS_TRACK_LINUX_MISSION,remote:CROSS_TRACK_REMOTE_LINUX_MISSION,hardening:CROSS_TRACK_HARDENING_LINUX_MISSION,contractor:CROSS_TRACK_CONTAINMENT_LINUX_MISSION}[item.linuxMission];playAuthored(mission,'Halcyon Digital · '+item.id);return;}
+  const network=event.target.closest('[data-company-network]');
+  if(network){const item=COMPANY_REQUESTS.find(x=>x.id===network.dataset.companyNetwork);if(!item)return;companyDeskSaveRequest(item.id,old=>({startedAt:old.startedAt||new Date().toISOString()}));window.location.href='network-trainer/index.html?crossTrack='+encodeURIComponent(item.networkQuery);}
+ });
+ root.addEventListener('keydown',event=>{if(event.key==='Escape')closeCompanyDesk();});
+ document.body.appendChild(root);const close=root.querySelector('[data-company-close]');if(close)close.focus();
+}
+
 /* Evidence-based portfolio: read-only aggregation of locally saved simulation outcomes. */
 function portfolioReadStored(key){
   try{const value=JSON.parse(localStorage.getItem(key)||'{}');return value&&typeof value==='object'?value:{};}catch(e){return {};}
@@ -7117,6 +7215,8 @@ function boot(restored) {
   if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
   const opsButton=document.getElementById('btnOpsRecoveryLab');
   if(opsButton&&!opsButton.dataset.bound){opsButton.dataset.bound='true';opsButton.addEventListener('click',openOpsRecoveryLab);}
+  const companyDeskButton=document.getElementById('btnCompanyDesk');
+  if(companyDeskButton&&!companyDeskButton.dataset.bound){companyDeskButton.dataset.bound='true';companyDeskButton.addEventListener('click',openCompanyDesk);}
   const portfolioButton=document.getElementById('btnSkillPortfolio');
   if(portfolioButton&&!portfolioButton.dataset.bound){portfolioButton.dataset.bound='true';portfolioButton.addEventListener('click',openSkillPortfolio);}
   const revisionButton=document.getElementById('btnRevisionReview');
