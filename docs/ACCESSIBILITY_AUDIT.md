@@ -1,6 +1,7 @@
-# Accessibility audit — baseline
+# Accessibility audit — baseline and remediation status
 
-Date: 2026-11-07
+Baseline review date: 2026-11-07  
+Status reviewed: 2026-11-09
 
 ## Scope and method
 
@@ -8,7 +9,23 @@ This is a source-level baseline review of the Linux Sysadmin page (`src/game.htm
 
 This is not a WCAG conformance claim. No assistive-technology user testing, automated axe scan, contrast measurement, or manual screen-reader session has been performed yet. The current CI browser suites exercise workflows, but they are not dedicated accessibility tests.
 
-## Findings
+## Current status review — 2026-11-09
+
+The findings below preserve the original 2026-11-07 source-review record. They are historical findings, not a claim that every item remains open. Since that baseline, the repository has added keyboard interaction support for topology objects, dialog/search focus handling, accessible names and status announcements, and automated axe scans in CI.
+
+A source review of the current `network-trainer/ui.js` confirms that topology devices, links, drawings, and notes are exposed as focusable controls; Enter/Space activation and Shift+F10/Context Menu invocation are wired for supported objects. Devices can be moved with Alt+Arrow keys and links can be created by focusing a source device, pressing `c`, then focusing a destination and pressing Enter. This is implementation evidence only: the real-browser manual keyboard and screen-reader worksheet remains **not run**, so practical usability and focus behavior are not signed off.
+
+| Area | Current evidence | Status |
+|---|---|---|
+| Topology keyboard access | Focusable devices, links, drawings and notes; keyboard activation/context menus; device movement and link creation shortcuts in source | Implemented in source; manual validation pending |
+| Network dialog/search focus | Initial focus, focus containment, Escape handling and focus restoration covered by the Batch 4 remediation and browser tests | Automated coverage present; manual validation pending |
+| Accessible names and status | Icon-only controls and topology controls named; polite atomic status region added | Implemented; broader assistive-technology validation pending |
+| Automated accessibility scans | axe-core scans for Linux workspace/server-health dialog and Network workbench, settings, search, Build, incident queue and statistics states | CI coverage present |
+| Manual keyboard and screen-reader validation | Execution worksheet exists, but no real browser/AT session has been recorded | **Not run** |
+
+Do not infer WCAG conformance from the automated scans or source review. Keep the manual worksheet status unchanged until a person completes it against a recorded build and browser/assistive-technology combination.
+
+## Baseline findings (2026-11-07)
 
 ### P0 — Keyboard access to the topology builder is incomplete
 
@@ -111,3 +128,10 @@ Implemented in the Batch 5 remediation pull request:
 - Made the Network Trainer mission/build status region a polite, atomic status announcement so validation and completion results are announced without moving focus.
 - Added a Playwright + axe-core scan for the Linux Sysadmin initial workspace and server-health dialog, plus the Network Trainer workbench, settings dialog, search palette, topology Build workspace, incident queue dialog, and statistics dialog. CI installs the pinned axe-core version and fails on serious or critical WCAG 2.1 A/AA and best-practice violations; lower-impact findings remain visible in the scan output for follow-up.
 - This automated gate is not a substitute for manual keyboard and screen-reader validation.
+
+
+## Follow-up priorities
+
+1. Complete and record the manual keyboard-only and screen-reader worksheet on a real browser/assistive-technology setup.
+2. Use the worksheet results to verify topology focus order, context-menu focus restoration, non-drag editing, dialog behavior, zoom/theme visibility, and live announcements; file focused defects for anything that does not work in practice.
+3. Expand automated keyboard regression tests where the manual run exposes gaps. Existing axe scans are automated accessibility checks, not a substitute for task completion with assistive technology.
