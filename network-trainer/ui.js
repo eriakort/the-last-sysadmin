@@ -18,7 +18,7 @@ const REWARD = 100, HINT_COST = 25;
 const RANKS = [[0, 'Cadet'], [120, 'Apprentice'], [280, 'Technician'], [460, 'Engineer'], [640, 'Senior Engineer'], [820, 'Network Architect']];
 const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber', 'Amber CRT'], ['green', 'Green Phosphor'], ['paper', 'Paper (light)']];
 
-let RUN = null, SEL = null, HINTS = 0, PROG = loadProg();
+let RUN = null, SEL = null, HINTS = 0, PROG = loadProg(), LAST_COMMAND = null;
 let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer
 let DIAGNOSED = false;                              // diagnosis gate cleared?
 let HIST = [], HISTI = -1;                         // terminal command history
@@ -1069,7 +1069,7 @@ function runMission(m, solvedKey, options = {}) {
   showWorkspaceView('workbench', options); RUN = startMission(m); SEL = RUN.mission.console;
   TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; PAN = null; INSPECTOR_TAB = 'overview';
   TERM_SESSIONS[SEL] = { history: [], index: -1, output: '' };
-  HINTS = 0; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]);
+  HINTS = 0; LAST_COMMAND = null; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]);
   startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear();
   termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`);
 }
@@ -1079,12 +1079,18 @@ function stopTimer() { if (TICK) { clearInterval(TICK); TICK = null; } }
 function termEcho(s) { const o = $('#tout'); o.textContent += s + '\n'; o.scrollTop = o.scrollHeight; persistTerminalSession(); }
 function termClear() { const o = $('#tout'); if (o) o.textContent = ''; persistTerminalSession(); }
 function nextUnsolved() { const cur = chapters.findIndex(c => c.id === RUN.mission.id); for (let k = 1; k <= chapters.length; k++) { const i = (cur + k) % chapters.length; if (!PROG.done[chapters[i].id]) return i; } return -1; }
+function missionOutcomeFeedback(done) {
+  const last = LAST_COMMAND;
+  const configCommand = !!(last && /^(?:hostname|interface|ip address|ip route|ip access-list|access-list|switchport|vlan|router|network|router-id|passive-interface|bgp|standby|ntp|logging|no )\b/i.test(last.line.trim()));
+  const result = F.classifyOutcome({ commandAccepted: !!(last && last.accepted && configCommand), configurationValid: !!(last && last.accepted && configCommand), objectiveMet: done });
+  return '<div class="mission-feedback"><b>' + esc(result.title) + '</b><div>' + esc(result.reason) + '</div><div><b>Next step:</b> ' + esc(result.next) + '</div></div>';
+}
 function doCheck() {
-  const box = $('#status'); const done = RUN.done();
+  const box = $('#status'); const done = RUN.done(), feedback = missionOutcomeFeedback(done);
   if (RUN.mission.authored) {                         // authored scenario: no XP / progress, just pass/fail
     box.className = done ? 'ok' : 'bad';
-    box.innerHTML = done ? '✓ Scenario complete — the network meets every objective.'
-      : 'Not there yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
+    box.innerHTML = (done ? '✓ Scenario complete — the network meets every objective.' : 'Not there yet:') + feedback
+      + (done ? '' : '<ul>' + RUN.results().filter(r => !r.ok).map(r => '<li>' + esc(r.reason) + '</li>').join('') + '</ul>');
     if (done && AUTHUSER && PLAYING_DBID) {           // an assigned scenario: record the attempt for the teacher
       const dbid = PLAYING_DBID, ms = Date.now() - TSTART;
       getSB().then(sb => { if (sb) NC.recordAttempt(sb, AUTHUSER.id, dbid, { passed: true, ms, hints: HINTS }); });
@@ -1110,10 +1116,10 @@ function doCheck() {
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
     const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);
     box.className = 'ok';
-    box.innerHTML = msg + (ni >= 0 ? ' <button class="btn sm" id="next">Next ticket →</button>' : (allDone ? `<div class="finale">🎓 All ${chapters.length} tickets cleared — final rank <b>${rankFor(PROG.xp)}</b>, ${PROG.xp} XP.</div>` : ''));
+    box.innerHTML = msg + feedback + (ni >= 0 ? ' <button class="btn sm" id="next">Next ticket →</button>' : (allDone ? `<div class="finale">🎓 All ${chapters.length} tickets cleared — final rank <b>${rankFor(PROG.xp)}</b>, ${PROG.xp} XP.</div>` : ''));
     const nb = $('#next'); if (nb) nb.addEventListener('click', () => reloadMission(ni));
   } else {
-    box.className = 'bad'; box.innerHTML = 'Not resolved yet:<ul>' + RUN.results().filter(r => !r.ok).map(r => `<li>${esc(r.reason)}</li>`).join('') + '</ul>';
+    box.className = 'bad'; box.innerHTML = 'Not resolved yet:' + feedback + '<ul>' + RUN.results().filter(r => !r.ok).map(r => '<li>' + esc(r.reason) + '</li>').join('') + '</ul>';
   }
 }
 
@@ -2063,7 +2069,7 @@ function wireTerm() {
   inp.addEventListener('keydown', e => {
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') { e.preventDefault(); cycleDeviceSession(-1); return; }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowRight') { e.preventDefault(); cycleDeviceSession(1); return; }
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); LAST_COMMAND = { line, accepted: r.code === 0 }; if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
   });
