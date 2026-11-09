@@ -3,6 +3,7 @@
 // terminal + mission flow, now with saved progress, XP, ranks, a hints economy,
 // themes, and settings — the sysadmin game's "feel".
 const M = require('./net-model');
+const F = require('../src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const { makeCLI } = require('./net-cli');
@@ -1758,34 +1759,11 @@ function openTerminalWindow(focusInput = false) {
 function explainNetworkMistake(command, output) {
   const panel = $('#networkMistakeCoach');
   if (!panel) return;
-  const text = String(output || '').toLowerCase();
-  let category = 'Command failed · inspect context';
-  let reason = 'The device rejected the command. The exact cause is not clear from this response, so avoid changing configuration until you inspect the prompt and device state.';
-  let next = 'Check the selected device and current prompt, then use its command help to confirm which commands are valid in this mode.';
-  if (/incomplete command/.test(text)) {
-    category = 'Incomplete command · missing argument';
-    reason = 'The command is recognised, but the device needs another keyword or value to complete it.';
-    next = 'Use ? at the current prompt to discover the required next argument, then enter the full command.';
-  } else if (/ambiguous command/.test(text)) {
-    category = 'Ambiguous command · be specific';
-    reason = 'The abbreviation matches more than one command or keyword.';
-    next = 'Type the full keyword instead of relying on an abbreviation, then retry without changing device configuration.';
-  } else if (/invalid input|invalid command|unknown command|unrecognized command/.test(text)) {
-    category = 'Invalid input · syntax or mode';
-    reason = 'The device does not recognise this command at the current prompt. Network CLIs expose different commands in user, privileged and configuration modes.';
-    next = 'Check the prompt suffix and use ? to inspect commands available in the current mode; do not assume a configuration command is valid everywhere.';
-  } else if (/not authorized|authorization|insufficient privilege|permission denied/.test(text)) {
-    category = 'Privilege · access';
-    reason = 'The current CLI privilege level does not permit this operation.';
-    next = 'Check the current privilege level and authenticate through the intended training workflow before retrying.';
-  } else if (/interface.*(not found|does not exist|invalid)|vlan.*(not found|does not exist|invalid)/.test(text)) {
-    category = 'Target not found · device state';
-    reason = 'The interface, VLAN or other named object was not found on the selected device.';
-    next = 'Verify the selected device and inspect its existing interfaces or VLANs before referencing the target again.';
-  }
-  panel.querySelector('[data-network-mistake-category]').textContent = category;
-  panel.querySelector('[data-network-mistake-reason]').textContent = reason;
-  panel.querySelector('[data-network-mistake-next]').textContent = next;
+  const feedback = F.classifyCommandFailure({ discipline: 'network', command, output });
+  panel.querySelector('[data-network-mistake-category]').textContent = feedback.title;
+  panel.querySelector('[data-network-mistake-reason]').textContent = feedback.reason;
+  panel.querySelector('[data-network-mistake-next]').textContent = feedback.next;
+  panel.dataset.feedbackCategory = feedback.category;
   panel.hidden = false;
 }
 function clearNetworkMistake() {
