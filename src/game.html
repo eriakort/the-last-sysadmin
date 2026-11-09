@@ -6793,10 +6793,9 @@ function companyDeskSaveRequest(id,mutate){
 }
 function closeCompanyDesk(){const root=document.getElementById('companyDeskDialog');if(root)root.remove();}
 function openCompanyDesk(){
- closeCompanyDesk();const rows=companyDeskSnapshot(),resolved=rows.filter(x=>x.status==='resolved').length,active=rows.filter(x=>x.status==='investigating'||x.status==='ready').length;
- const root=document.createElement('div');root.id='companyDeskDialog';root.className='bash-workshop-backdrop';
+ closeCompanyDesk();const root=document.createElement('div');root.id='companyDeskDialog';root.className='bash-workshop-backdrop';
  const render=()=>{
-  const current=companyDeskSnapshot();
+  const current=companyDeskSnapshot(),resolved=current.filter(x=>x.status==='resolved').length,active=current.filter(x=>x.status==='investigating'||x.status==='ready').length;
   const cards=current.map(item=>{
    const notes=item.notes.slice(0,4).map(note=>'<div class="company-request-note"><b>'+esc(new Date(note.at).toLocaleString())+'</b> · '+esc(note.text)+'</div>').join('');
    const statusLabel=item.locked?'Locked · close prior request':item.status==='ready'?'Ready for closure':item.status==='resolved'?'Resolved':item.status==='investigating'?'In progress':'New';
@@ -6820,7 +6819,7 @@ function openCompanyDesk(){
   const claim=event.target.closest('[data-company-claim]');
   if(claim){companyDeskSaveRequest(claim.dataset.companyClaim,old=>({claimedAt:old.claimedAt||new Date().toISOString()}));render();return;}
   const note=event.target.closest('[data-company-note]');
-  if(note){const id=note.dataset.companyNote,field=root.querySelector('#companyNote-'+id),value=field&&field.value.trim();if(!value){if(field){field.focus();field.setCustomValidity('Add a short evidence or handover note before saving.');field.reportValidity();}return;}companyDeskSaveRequest(id,old=>({notes:[...(Array.isArray(old.notes)?old.notes:[]),{at:new Date().toISOString(),text:value.slice(0,400)}].slice(-20)}));render();return;}
+  if(note){const id=note.dataset.companyNote,field=root.querySelector('#companyNote-'+id),value=field&&field.value.trim();if(!value){if(field){field.focus();field.setCustomValidity('Add a short evidence or handover note before saving.');field.reportValidity();}return;}if(field)field.setCustomValidity('');companyDeskSaveRequest(id,old=>({notes:[...(Array.isArray(old.notes)?old.notes:[]),{at:new Date().toISOString(),text:value.slice(0,400)}].slice(-20)}));render();return;}
   const linux=event.target.closest('[data-company-linux]');
   if(linux){const item=COMPANY_REQUESTS.find(x=>x.id===linux.dataset.companyLinux);if(!item)return;companyDeskSaveRequest(item.id,old=>({startedAt:old.startedAt||new Date().toISOString()}));closeCompanyDesk();const mission={web:CROSS_TRACK_LINUX_MISSION,remote:CROSS_TRACK_REMOTE_LINUX_MISSION,hardening:CROSS_TRACK_HARDENING_LINUX_MISSION,contractor:CROSS_TRACK_CONTAINMENT_LINUX_MISSION}[item.linuxMission];playAuthored(mission,'Halcyon Digital · '+item.id);return;}
   const network=event.target.closest('[data-company-network]');
