@@ -62,6 +62,9 @@ jobs:
       - name: Linux adaptive spaced-recall browser tests
         run: node test-spaced-revision-ui.js
 
+      - name: Evidence-based skill portfolio browser tests
+        run: node test-skill-portfolio-ui.js
+
       - name: Build Network Trainer
         run: npm run build:net
 
