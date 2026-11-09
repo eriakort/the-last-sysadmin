@@ -20,7 +20,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  const body=await dialog.innerText();
  for(const expected of ['Daily practice','Suggested 10-minute session','Recall · Practise · Reflect','Linux administration','Network operations','Command-line skills','Integrated operations','Review 1 due concept','Continue Linux','Open Network Sysadmin','3','2'])if(!body.includes(expected))throw new Error('daily practice view missing: '+expected);
  if(body.includes('private note'))throw new Error('skill map exposed private network journal content');
- if(await page.locator('#dailyPracticeDialog').evaluate(el=>el.scrollWidth>el.clientWidth+2))throw new Error('daily practice dialog overflows on mobile');
+ if(await page.locator('.daily-practice-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+2))throw new Error('daily practice dialog overflows on mobile');
  await page.click('[data-dp-review]');
  if(!(await page.locator('#revisionReviewDialog [role="dialog"]').isVisible()))throw new Error('daily plan did not open existing spaced-recall flow');
  await page.click('[data-revision-close]');
