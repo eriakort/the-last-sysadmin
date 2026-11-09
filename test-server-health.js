@@ -37,7 +37,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
     if (!attention.includes('CPU pressure needs investigation')) fail('High process CPU should produce actionable attention guidance');
     if (!(await page.locator('.health-state').textContent()).includes('Needs attention')) fail('A resource warning must affect the overall health state');
     await page.click('#healthRefresh');
-    if ((await page.locator('.health-resource').count()) !== 3) fail('Refresh lost resource cards');
+    if ((await page.locator('.health-resource').count()) !== 6) fail('Refresh lost one or more health indicators');
     const node = page.locator('[data-health-node]').first();
     const expectedDetail = await node.getAttribute('data-health-detail');
     await node.click();
