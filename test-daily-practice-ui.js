@@ -26,6 +26,8 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  for(const expected of ['Daily practice','Suggested 10-minute session','Recall · Practise · Reflect','Linux administration','Network operations','Command-line skills','Integrated operations','Linux recall · 1 due','Network recall · 1 due','show ip route','2 missed recalls','Continue Linux','Open Network Sysadmin','3','2'])if(!normalized.includes(expected.toLocaleLowerCase()))throw new Error('daily practice view missing: '+expected);
  if(body.includes('private note'))throw new Error('skill map exposed private network journal content');
  if(!(await dialog.innerText()).includes('show ip route')||!(await dialog.innerText()).includes('needed extra recall practice'))throw new Error('adaptive focus did not prioritize the concept with the most recall lapses');
+ const focusAction=dialog.locator('[data-dp-focus]');
+ if(await focusAction.innerText()!=='Open Network Knowledge'||!(await focusAction.getAttribute('href')).includes('view=knowledge'))throw new Error('network adaptive focus did not provide a direct Knowledge action');
  if(await page.locator('.daily-practice-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+2))throw new Error('daily practice dialog overflows on mobile');
  await page.click('[data-dp-close]');
  await page.evaluate(()=>{
@@ -37,6 +39,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  });
  await page.click('#btnDailyPractice');
  if(!(await page.locator('#dailyPracticeDialog').innerText()).includes('Routing and path verification'))throw new Error('adaptive focus did not infer a routing practice recommendation from recent command errors');
+ if(await page.locator('[data-dp-focus]').innerText()!=='Open Network Knowledge')throw new Error('routing recommendation did not link to Network Knowledge');
 
  const networkReview=page.locator('[data-dp-network-review]');
  if(!(await networkReview.getAttribute('href')).includes('view=knowledge')||!(await networkReview.getAttribute('href')).includes('dailyReview=1'))throw new Error('network recall deep link missing knowledge view or auto-review flag');
