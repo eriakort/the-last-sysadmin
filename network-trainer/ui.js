@@ -1060,7 +1060,10 @@ function wireSessionTabs() {
 }
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
-  $('#topoWrap').innerHTML = renderTopo(); refreshFlows(); $('#config').innerHTML = renderConfig();
+  const terminalRestore=$('#terminalRestore');
+  $('#topoWrap').innerHTML = renderTopo();
+  if(terminalRestore)$('#topoWrap').appendChild(terminalRestore);
+  refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
   const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
