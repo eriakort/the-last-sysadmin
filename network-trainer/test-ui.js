@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const { URL: NodeURL } = require('url');
 const { chromium, firefox, webkit } = require('playwright');
 const browserName = process.env.PLAYWRIGHT_BROWSER || 'chromium';
 const browserType = ({ chromium, firefox, webkit })[browserName];
@@ -11,7 +12,7 @@ const root = path.resolve(process.cwd());
 const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp' };
 const server = http.createServer((req, res) => {
   let pathname;
-  try { pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname); }
+  try { pathname = decodeURIComponent(new NodeURL(req.url, 'http://127.0.0.1').pathname); }
   catch { res.writeHead(400).end('Bad request'); return; }
   const file = path.resolve(root, '.' + pathname);
   if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403).end('Forbidden'); return; }
