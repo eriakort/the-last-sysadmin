@@ -5700,7 +5700,7 @@ function wireTopo() {
   if (svg) svg.addEventListener('pointerdown', e => {
     const label=e.target.closest&&e.target.closest('.device-label'), text=e.target.closest&&e.target.closest('.topo-text');
     if(canBuild()&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
-    if (TEXT_INSERT_MODE && canBuild() && e.button===0) { e.preventDefault(); return; }
+    if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
     if (e.target.closest('.node') || (DRAW_TOOL === 'select' && e.target.closest('.topo-drawing')) || WIRE || e.button !== 0) return;
     if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
     if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
