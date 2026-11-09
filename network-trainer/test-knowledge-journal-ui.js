@@ -36,17 +36,21 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('command search did not filter the library');
 
   await page.locator('[data-knowledge-coach="show spanning-tree"]').click();
-  if (await page.locator('#networkCommandCoach').isVisible() && (await page.locator('#networkCommandCoach').innerText()).includes('NETWORK LEARNING COACH'))
-    ok('Network Learning Coach explains a command in context');
-  else fail('Network Learning Coach did not open');
+  if (await page.locator('#networkCommandCoach').isVisible() && (await page.locator('#networkCommandCoach').innerText()).includes('How to interpret the output') && (await page.locator('#networkCommandCoach').innerText()).includes('Common pitfall'))
+    ok('Network Learning Coach shows command-specific output interpretation and pitfalls');
+  else fail('Network Learning Coach did not show its command-specific guidance');
   await page.locator('#networkCoachMode').selectOption('assisted');
-  if ((await page.locator('#networkCommandCoach').innerText()).includes('Check the selected device'))
-    ok('coach mode switches to concise assistance');
+  if ((await page.locator('#networkCommandCoach').innerText()).includes('Where to run it') && (await page.locator('#networkCommandCoach').innerText()).includes('What to look for'))
+    ok('assisted mode gives targeted device and output cues');
   else fail('assisted coach mode did not update');
   await page.locator('#networkCoachMode').selectOption('challenge');
-  if ((await page.locator('#networkCommandCoach').innerText()).includes('Your task'))
-    ok('challenge mode prompts independent reasoning');
-  else fail('challenge mode did not show a task');
+  if ((await page.locator('#networkCommandCoach').innerText()).includes('Challenge') && await page.locator('#networkCoachAnswer').isHidden())
+    ok('challenge mode withholds the explanation until requested');
+  else fail('challenge mode did not present an unrevealed challenge');
+  await page.locator('#networkCoachReveal').click();
+  if (await page.locator('#networkCoachAnswer').isVisible() && (await page.locator('#networkCoachAnswer').innerText()).includes('redundant path'))
+    ok('challenge explanation can be revealed on demand');
+  else fail('challenge explanation did not reveal');
   await page.locator('#networkCoachMode').selectOption('guided');
   await page.locator('#networkCoachPractice').click();
   if (await page.locator('#tin').inputValue() === 'show spanning-tree')
