@@ -24,7 +24,8 @@ aside{background:var(--panel);overflow:auto;padding:16px;border-left:1px solid v
 #brief{border-left:none}
 .done{color:var(--good);font-weight:600}
 main{display:flex;flex-direction:column;min-width:0}
-#topoWrap{flex:1;overflow:auto;padding:16px;display:flex;align-items:center;justify-content:center}
+#topoWrap{position:relative;flex:1;overflow:auto;padding:16px;display:flex;align-items:center;justify-content:center}
+.terminal-restore{position:absolute;top:12px;right:12px;z-index:25;white-space:nowrap}
 svg#topo{max-width:100%;height:auto}
 .edge{stroke:#44506a;stroke-width:2}
 .topo-drawing{cursor:pointer;pointer-events:all}.topo-drawing.selected{stroke:#38bdf8;stroke-width:4}.topo-drawing.draft{pointer-events:none}.draw-tool.active{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 18%,var(--raise));color:var(--ink);box-shadow:inset 0 0 0 1px var(--amber)}
@@ -231,8 +232,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 .qt-meta{display:flex;gap:6px 14px;flex-wrap:wrap;color:var(--muted);font-size:10px}
 .qt-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:650px){.queue-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-ticket{grid-template-columns:1fr}.qt-actions{justify-content:flex-start}.queue-toolbar .dim{width:100%;margin:0}}
-@media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
-</style><link rel="stylesheet" href="./workstation.css"></head>
+@media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}</style><link rel="stylesheet" href="./workstation.css"></head>
 <body><div id="app"></div><script>
 // ---- tiny CommonJS shim ----
 var __mods = {};
@@ -4610,6 +4610,7 @@ let WIRE = null;                                   // first endpoint picked whil
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
+let TOPO_CAPTURE_SELECT = true, TOPO_DELETE_KEY_BOUND = false;
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
 let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
@@ -5833,6 +5834,7 @@ function runTopologyContextAction(action, target) {
     case 'reset-device-label': { const positions=RUN.net.deviceLabelPositions&&RUN.net.deviceLabelPositions[target.id]; if(positions){rememberTopology();delete positions[target.labelKind];if(!Object.keys(positions).length)delete RUN.net.deviceLabelPositions[target.id];refresh();} break; }
     case 'edit-text': editTopologyText(target.index); break;
     case 'delete-text': if(RUN.net.texts&&RUN.net.texts[target.index]){rememberTopology();RUN.net.texts.splice(target.index,1);refresh();} break;
+    case 'clear-device-label': { const d=RUN.net.devices[target.id]; if(d){rememberTopology();if(target.labelKind==='name')delete d.label;else delete d.displayType;refresh();} break; }
     case 'add-text': { const value=prompt('Canvas text (max 160 characters):','New text');if(value===null||!value.trim())break;const p=target.point||(TOPO_VIEW?[TOPO_VIEW[0]+TOPO_VIEW[2]/2,TOPO_VIEW[1]+TOPO_VIEW[3]/2]:[100,100]);rememberTopology();RUN.net.texts=RUN.net.texts||[];RUN.net.texts.push({text:value.trim().slice(0,160),x:p[0],y:p[1],fontSize:14,color:'#e5b85c'});refresh();break;}
     case 'paste': pasteTopologySelection(); break;
     case 'add-note': {
@@ -5879,7 +5881,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
     ],
     drawing: [['Remove drawing', 'delete-drawing', true]],
     note: [['Edit note', 'edit-note'], ['Remove note', 'delete-note', true]],
-    'device-label': [['Edit label text', 'edit-device-label'], ['Reset label position', 'reset-device-label']],
+    'device-label': [['Edit label text', 'edit-device-label'], ['Reset label text', 'clear-device-label', true], ['Reset label position', 'reset-device-label']],
     text: [['Edit text', 'edit-text'], ['Remove text', 'delete-text', true]],
     canvas: [
       ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
@@ -5928,6 +5930,7 @@ function editTopologyDeviceLabel(id,kind) { const d=RUN&&RUN.net&&RUN.net.device
 function editTopologyText(index) { const item=RUN&&RUN.net&&RUN.net.texts&&RUN.net.texts[index];if(!item)return;const value=prompt('Edit canvas text (leave blank to remove):',item.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.texts.splice(index,1);else item.text=value.trim().slice(0,160);refresh();}
 function wireTopo() {
   const svg = $('#topo');
+  if(!TOPO_DELETE_KEY_BOUND){document.addEventListener('keydown',e=>{if(!canBuild()||!RUN||!['Delete','Backspace'].includes(e.key)||/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||''))return;const text=e.target&&e.target.closest&&e.target.closest('.topo-text');if(text){e.preventDefault();runTopologyContextAction('delete-text',{index:Number(text.dataset.textIndex)});return;}const label=e.target&&e.target.closest&&e.target.closest('.device-label');if(label){e.preventDefault();runTopologyContextAction('clear-device-label',{id:label.dataset.deviceLabel,labelKind:label.dataset.labelKind});}});TOPO_DELETE_KEY_BOUND=true;}
   if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.');}});TEXT_INSERT_CANCEL_BOUND=true;}
   if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
@@ -6002,9 +6005,10 @@ function wireTopo() {
         try{svg.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); return;
       }
     }
-    if (e.target.closest('.node') || WIRE || e.button !== 0) return;
+    if (e.target.closest('.node') || WIRE) return;
+    if (e.button===1 || e.altKey || e.button!==0) { const vb=svg.viewBox.baseVal,rect=svg.getBoundingClientRect();PAN={x:e.clientX,y:e.clientY,view:[vb.x,vb.y,vb.width,vb.height],width:rect.width,height:rect.height};svg.classList.add('panning');try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return; }
     if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
-    if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
+    if (canBuild() && (TOPO_CAPTURE_SELECT || e.shiftKey)) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p,additive:e.ctrlKey||e.metaKey||e.shiftKey}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return; }
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
     PAN = { x:e.clientX, y:e.clientY, view:[vb.x,vb.y,vb.width,vb.height], width:rect.width, height:rect.height };
     svg.classList.add('panning');
@@ -6031,7 +6035,7 @@ function wireTopo() {
     });
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
-      if (e.shiftKey && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id))TOPO_SELECTED.delete(id);else TOPO_SELECTED.add(id); SEL=id; refresh(); return; }
+      if ((e.ctrlKey || e.metaKey || e.shiftKey) && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id))TOPO_SELECTED.delete(id);else TOPO_SELECTED.add(id); if(TOPO_SELECTED.has(id))SEL=id;else if(SEL===id)SEL=[...TOPO_SELECTED][0]||null; refresh(); return; }
       if (WIRE) {                                      // wiring: connect the armed device to this one
         if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
         WIRE = null; refresh(); return;
@@ -6048,7 +6052,8 @@ function wireTopo() {
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
-      if(!TOPO_SELECTED.has(id)){TOPO_SELECTED=new Set([id]);SEL=id;}
+      if(TOPO_SELECTED.size!==1||!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
+      SEL=id;
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
@@ -6095,7 +6100,7 @@ function onDragUp() {
   if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
   if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
-  if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
+  if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);const captured=Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;});TOPO_SELECTED=b.additive?new Set([...TOPO_SELECTED,...captured]):new Set(captured);SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
@@ -6172,6 +6177,7 @@ function wireConfig() {
   const labelDev=$('#labelDev');if(labelDev)labelDev.addEventListener('click',()=>{if(!SEL||!RUN.net.devices[SEL])return;const d=RUN.net.devices[SEL],value=prompt('Device display label (leave blank to use its ID):',d.label||'');if(value===null)return;rememberTopology();if(value.trim())d.label=value.trim().slice(0,32);else delete d.label;refresh();});
   const zoneBtn=$('#zoneBtn');if(zoneBtn)zoneBtn.addEventListener('click',()=>{const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]);if(!ids.length&&SEL)ids.push(SEL);if(!ids.length)return;const name=prompt('Zone name (max 32 characters):','Core network');if(name===null||!name.trim())return;const points=ids.map(id=>nodePos(id));const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const x=Math.max(0,Math.min(...xs)-24),y=Math.max(0,Math.min(...ys)-28),right=Math.max(...xs)+84,bottom=Math.max(...ys)+96;rememberTopology();RUN.net.zones=RUN.net.zones||[];RUN.net.zones.push({name:name.trim().slice(0,32),x,y,w:Math.max(140,right-x),h:Math.max(110,bottom-y),color:'#60a5fa',devices:ids});refresh();});
   document.querySelectorAll('#config [data-topo-layer]').forEach(c=>c.addEventListener('change',()=>{TOPO_LAYERS[c.dataset.topoLayer]=c.checked;RUN.net.layerVisibility=RUN.net.layerVisibility||{};RUN.net.layerVisibility[c.dataset.topoLayer]=c.checked;refresh();}));
+  const captureBtn=$('#captureSelectBtn');if(captureBtn)captureBtn.addEventListener('click',()=>{TOPO_CAPTURE_SELECT=!TOPO_CAPTURE_SELECT;refresh();});
   const gridBtn=$('#gridBtn');if(gridBtn)gridBtn.addEventListener('click',()=>{TOPO_GRID=!TOPO_GRID;refresh();});
   const snapBtn=$('#snapBtn');if(snapBtn)snapBtn.addEventListener('click',()=>{TOPO_SNAP=!TOPO_SNAP;refresh();});
   const portsBtn=$('#portsBtn');if(portsBtn)portsBtn.addEventListener('click',()=>toggleTopologyPorts());
@@ -6655,7 +6661,7 @@ function mountTerminalWindow() {
   const restore = document.createElement('button');
   restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
   restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
-  restore.hidden = false; document.body.appendChild(restore);
+  restore.hidden = false; const canvas=$('#topoWrap'); (canvas||document.body).appendChild(restore);
   const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
   if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
     win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
@@ -6755,9 +6761,9 @@ function renderPalette() {
   const drawingTools = [['select','Select'],['line','Line'],['arrow','Arrow'],['rect','Rectangle'],['ellipse','Ellipse'],['freehand','Freehand']];
   return '<div class="builder"><div class="builder-heading"><div><span class="builder-kicker">DESIGN WORKSPACE</span><h3>Topology builder</h3><p>Place infrastructure, then connect interfaces on the canvas.</p></div><span class="builder-step">01 <i>／</i> DESIGN</span></div>' +
     '<div class="builder-section-head"><span>Device library</span><small>Choose a device to add</small></div><div class="device-palette">' + add + '</div>' +
-    '<div class="pal-row builder-history"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ' + (TOPO_UNDO.length?'':'disabled') + '>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ' + (TOPO_REDO.length?'':'disabled') + '>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ' + (TOPO_CLIPBOARD?'':'disabled') + '>Paste</button><span class="dim">' + TOPO_SELECTED.size + ' selected · Shift-click or Shift-drag to select</span></div>' +
+    '<div class="pal-row builder-history"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ' + (TOPO_UNDO.length?'':'disabled') + '>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ' + (TOPO_REDO.length?'':'disabled') + '>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ' + (TOPO_CLIPBOARD?'':'disabled') + '>Paste</button><span class="dim">' + TOPO_SELECTED.size + ' selected · Ctrl-click to add/remove · drag canvas to capture</span></div>' +
     '<div class="builder-section-head"><span>Canvas actions</span><small>Arrange and annotate</small></div><div class="pal-row">' + wiring + '<button class="btn sm" id="wireBtn" title="Connect the selected device to another device">' + (WIRE ? '✕ Cancel wire' : '↗ Wire devices') + '</button>' + (SEL && RUN.net.devices[SEL] ? '<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ' + esc(SEL) + '</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>' : '') + (LINK_SEL!=null ? '<button class="btn sm" id="delLink" data-link-index="' + LINK_SEL + '">Remove selected link</button>' : '') + '<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="textBtn" title="Insert independently movable text anywhere on the canvas">＋ Text</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>' +
-    '<div class="pal-row canvas-toggles"><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="' + TOPO_GRID + '">' + (TOPO_GRID?'▦ Grid on':'▦ Grid off') + '</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="' + TOPO_SNAP + '">' + (TOPO_SNAP?'⌖ Snap on':'⌖ Snap off') + '</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">' + (TOPO_SHOW_PORTS?'Hide ports':'Show ports') + '</button></div>' +
+    '<div class="pal-row canvas-toggles"><button class="btn sm" id="captureSelectBtn" title="Enable or disable click-and-drag capture selection" aria-pressed="' + TOPO_CAPTURE_SELECT + '">' + (TOPO_CAPTURE_SELECT?'▣ Capture select on':'▣ Capture select off') + '</button><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="' + TOPO_GRID + '">' + (TOPO_GRID?'▦ Grid on':'▦ Grid off') + '</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="' + TOPO_SNAP + '">' + (TOPO_SNAP?'⌖ Snap on':'⌖ Snap off') + '</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">' + (TOPO_SHOW_PORTS?'Hide ports':'Show ports') + '</button></div>' +
     '<div class="builder-section-head"><span>Drawing tools</span><small>Document your design</small></div><div class="pal-row">' + drawingTools.map(([k,n]) => '<button class="btn sm draw-tool' + (DRAW_TOOL===k?' active':'') + '" data-draw-tool="' + k + '" aria-pressed="' + (DRAW_TOOL===k) + '" title="' + n + ' drawing tool">' + n + '</button>').join('') + '<button class="btn sm" id="delDrawing" title="Remove the selected drawing" ' + (DRAWING_SEL==null?'disabled':'') + '>Remove drawing</button></div>' +
     '<div class="builder-section-head"><span>Canvas layers</span><small>Show or hide detail</small></div><div class="pal-row layer-controls">' + Object.keys(layerState).map(k => '<label class="dim"><input type="checkbox" data-topo-layer="' + k + '"' + (layerState[k]?' checked':'') + '/> ' + k + '</label>').join('') + '</div>' +
     '<div class="pal-hint dim">Right-click a device, link or empty canvas for contextual actions · drag to move devices · ' + (TOPO_SNAP?'snap-to-grid enabled':'free positioning') + '.</div></div>';
