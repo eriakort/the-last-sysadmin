@@ -48,6 +48,19 @@ test('cloneDevice copies configuration without links and offsets the canvas posi
   assert(t.pos[id][0] === 152 && t.pos[id][1] === 104, 'clone is offset from source');
   assert(t.links.length === 0, 'clone does not duplicate physical links');
 });
+test('clone and remove keep detached device label metadata consistent', () => {
+  const t = B.blank();
+  B.addDevice(t, 'router', 'r1');
+  t.pos = { r1: [100, 80] };
+  t.deviceLabelPositions = { r1: { name: [140, 140], type: [160, 158] } };
+  const copy = B.cloneDevice(t, 'r1');
+  assert(copy === 'r2', 'clone receives the next router id');
+  assert(t.deviceLabelPositions.r2.name[0] === 172 && t.deviceLabelPositions.r2.name[1] === 172, 'cloned name label is offset with the device');
+  assert(t.deviceLabelPositions.r2.type[0] === 192 && t.deviceLabelPositions.r2.type[1] === 190, 'cloned type label is offset with the device');
+  B.removeDevice(t, 'r1');
+  assert(!t.deviceLabelPositions.r1, 'removing a device also removes its detached label positions');
+});
+
 test('removeDevice also drops links that touched it', () => {
   const t = B.blank();
   B.addDevice(t, 'host', 'h1'); B.addDevice(t, 'switch', 'sw1'); B.addLink(t, 'h1', 'sw1');
