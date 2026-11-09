@@ -1,0 +1,33 @@
+const path=require('path');
+const {chromium}=require('playwright');
+const URL='file://'+path.join(process.cwd(),'index.html');
+(async()=>{
+ const browser=await chromium.launch(),page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(150);
+ await page.evaluate(()=>{
+  localStorage.setItem('last-sysadmin-v1',JSON.stringify({done:['bearings','workspace','errors'],commandSkills:['whoami','grep','pwd']}));
+  localStorage.setItem('nettrainer',JSON.stringify({done:{'first-contact':true,'wrong-subnet':true},journal:[{title:'private note must not appear'}]}));
+  localStorage.setItem('lsa-cross-track-web-availability-v1',JSON.stringify({linux:true,network:true,updatedAt:new Date().toISOString()}));
+  localStorage.setItem('lsa-spaced-revision-v1',JSON.stringify({seeded:true,items:{bearings:{stage:0,dueAt:0,lapses:0,reviews:0}}}));
+ });
+ await page.reload({waitUntil:'load'});await page.waitForTimeout(120);
+ const trigger=page.locator('#btnDailyPractice');
+ if(!(await trigger.isVisible()))throw new Error('daily practice entry point missing');
+ await trigger.click();
+ const dialog=page.locator('#dailyPracticeDialog [role="dialog"]');
+ if(!(await dialog.isVisible()))throw new Error('daily practice dialog did not open');
+ const body=await dialog.innerText();
+ for(const expected of ['Daily practice','Suggested 10-minute session','Recall · Practise · Reflect','Linux administration','Network operations','Command-line skills','Integrated operations','Review 1 due concept','Continue Linux','Open Network Sysadmin','3','2'])if(!body.includes(expected))throw new Error('daily practice view missing: '+expected);
+ if(body.includes('private note'))throw new Error('skill map exposed private network journal content');
+ if(await page.locator('#dailyPracticeDialog').evaluate(el=>el.scrollWidth>el.clientWidth+2))throw new Error('daily practice dialog overflows on mobile');
+ await page.click('[data-dp-review]');
+ if(!(await page.locator('#revisionReviewDialog [role="dialog"]').isVisible()))throw new Error('daily plan did not open existing spaced-recall flow');
+ await page.click('[data-revision-close]');
+ await page.click('#btnDailyPractice');await page.click('[data-dp-portfolio]');
+ if(!(await page.locator('#portfolioDialog [role="dialog"]').isVisible()))throw new Error('daily plan did not open existing skill portfolio');
+ await page.click('[data-portfolio-close]');
+ if(errors.length)throw new Error('browser errors: '+errors.join('; '));
+ console.log('✓ Daily practice builds a private, mobile-friendly session from existing Linux, network, command and cross-track evidence');
+ await browser.close();
+})().catch(error=>{console.error(error);process.exit(1);});
