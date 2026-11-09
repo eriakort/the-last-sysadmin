@@ -93,3 +93,6 @@ jobs:
 
       - name: Verify Network Trainer generated file remains current
         run: git diff --exit-code -- network-trainer/index.html
+
+      - name: Measure generated page transfer sizes
+        run: node tools/check-performance-budget.js
