@@ -51,6 +51,11 @@ for m in m4-enroll-by-email m6-missions m7-scenarios m10-authored-delivery; do
   run "$REPO/supabase/$m.sql" >/dev/null 2>&1
 done
 
+echo "Applying net-scenarios.sql (Network Trainer classroom delivery)..."
+run "$REPO/supabase/net-scenarios.sql" >/dev/null
+echo "Re-applying net-scenarios.sql (idempotency check)..."
+run "$REPO/supabase/net-scenarios.sql" >/dev/null 2>&1
+
 echo "Running adversarial RLS tests (M1)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m1-rls-test.sql"
 
@@ -66,6 +71,9 @@ echo "Running authored-mission delivery tests (M10)..."
 echo
 echo "Running transactional progress-sync tests (M11)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m11-progress-sync-test.sql"
+
+echo "Running Network Trainer scenario isolation and delivery tests..."
+"${PSQL[@]}" -d "$DB" -f "$HERE/net-scenarios-test.sql"
 
 echo "Cleaning up..."
 "${ADMIN[@]}" -c "drop database if exists $DB with (force);" >/dev/null
