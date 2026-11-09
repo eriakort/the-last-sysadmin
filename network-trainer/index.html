@@ -4565,7 +4565,7 @@ let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared 
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
-let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
@@ -5658,7 +5658,7 @@ function restoreTopology(snapshot) {
   Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
   TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
   if (SEL && !RUN.net.devices[SEL]) SEL = null;
-  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; DRAWING_DRAG = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
+  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; DRAWING_DRAG = null; NOTE_DRAG = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
 }
 function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
 function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
@@ -5903,7 +5903,8 @@ function wireTopo() {
   if (svg) svg.addEventListener('pointerdown', e => {
     const resolveLabel=el=>{if(!el||!el.closest)return null;const direct=el.closest('.device-label');if(direct)return direct;const g=el.closest('.device-label-group');return g?g.querySelector('.device-label'):null;};
     const resolveText=el=>{if(!el||!el.closest)return null;const direct=el.closest('.topo-text');if(direct)return direct;const g=el.closest('.topo-text-group');return g?g.querySelector('.topo-text'):null;};
-    const label=resolveLabel(e.target), text=resolveText(e.target);
+    const label=resolveLabel(e.target), text=resolveText(e.target), note=e.target.closest&&e.target.closest('.topo-note');
+    if(canBuild()&&!TEXT_INSERT_MODE&&e.button===0&&note){const index=Number(note.dataset.noteIndex),item=RUN.net.notes&&RUN.net.notes[index];if(item){const p=svgPoint(svg,e.clientX,e.clientY);NOTE_DRAG={index,start:p,x:Number(item.x)||40,y:Number(item.y)||40,before:topologySnapshot(),moved:false,el:note};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}}
     if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
     if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
     const existingDrawing = e.target.closest('.topo-drawing');
@@ -5972,6 +5973,7 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
+  if (NOTE_DRAG) {const d=NOTE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];if(Math.hypot(dx,dy)>1)d.moved=true;if(d.moved){d.nextX=d.x+dx;d.nextY=d.y+dy;d.el.setAttribute('transform','translate('+d.nextX+','+d.nextY+')');}return;}
   if (DRAWING_DRAG) {
     const d=DRAWING_DRAG,item=RUN.net.drawings[d.index],p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];
     if(Math.hypot(dx,dy)>1)d.moved=true;
@@ -6005,6 +6007,7 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
+  if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
   if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
