@@ -1,7 +1,7 @@
 /* The Last Sysadmin - offline service worker */
 const CACHE_PREFIX = 'last-sysadmin-v';
-const CACHE = CACHE_PREFIX + '81';
-const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'src/feedback.js'];
+const CACHE = CACHE_PREFIX + '82';
+const ASSETS = ['.', 'index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'src/feedback.js', 'daily-practice.js'];
 
 self.addEventListener('install', (event) => {
   // addAll is intentionally atomic: a partial precache must not replace a
