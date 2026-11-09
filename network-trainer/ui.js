@@ -29,7 +29,7 @@ let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared 
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
-let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
@@ -89,9 +89,40 @@ function drawingMarkup(d, index) {
   const common = `class="topo-drawing${selected}" data-drawing-index="${index}" role="button" tabindex="0" aria-label="${esc((d.type || 'topology') + ' drawing ' + (index + 1))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" fill="${hitFill}" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"`;
   if (d.type === 'freehand') { const points=Array.isArray(d.points)?d.points:[]; return `<path ${common} d="${points.map((p,i)=>(i?'L':'M')+(Number(p[0])||0)+' '+(Number(p[1])||0)).join(' ')}"/>`; }
   const x1=Number(d.x1)||0,y1=Number(d.y1)||0,x2=Number(d.x2)||0,y2=Number(d.y2)||0;
-  if (d.type === 'rect') return `<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`;
-  if (d.type === 'ellipse') return `<ellipse ${common} cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" rx="${Math.abs(x2-x1)/2}" ry="${Math.abs(y2-y1)/2}"/>`;
-  return `<line ${common} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${d.type==='arrow'?'marker-end="url(#topoArrow)"':''}/>`;
+  const handles = selected ? `<circle class="topo-drawing-handle" data-drawing-index="${index}" data-drawing-handle="start" cx="${x1}" cy="${y1}" r="5" fill="#38bdf8" stroke="#eafaff" stroke-width="1.5" vector-effect="non-scaling-stroke" pointer-events="all"/><circle class="topo-drawing-handle" data-drawing-index="${index}" data-drawing-handle="end" cx="${x2}" cy="${y2}" r="5" fill="#38bdf8" stroke="#eafaff" stroke-width="1.5" vector-effect="non-scaling-stroke" pointer-events="all"/>` : '';
+  if (d.type === 'rect') return `<g>${`<rect ${common} x="${Math.min(x1,x2)}" y="${Math.min(y1,y2)}" width="${Math.abs(x2-x1)}" height="${Math.abs(y2-y1)}" rx="3"/>`}${handles}</g>`;
+  if (d.type === 'ellipse') return `<g>${`<ellipse ${common} cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" rx="${Math.abs(x2-x1)/2}" ry="${Math.abs(y2-y1)/2}"/>`}${handles}</g>`;
+  return `<g>${`<line ${common} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${d.type==='arrow'?'marker-end="url(#topoArrow)"':''}/>`}${handles}</g>`;
+}
+function hitTestTopologyDrawing(point) {
+  const drawings = RUN && RUN.net && RUN.net.drawings || [];
+  const segmentDistance = (p,a,b) => {
+    const dx=b[0]-a[0],dy=b[1]-a[1],len=dx*dx+dy*dy;
+    const t=len?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/len)):0;
+    return Math.hypot(p[0]-(a[0]+t*dx),p[1]-(a[1]+t*dy));
+  };
+  let best=null,bestDistance=14;
+  drawings.forEach((d,index)=>{
+    let distance=Infinity;
+    if(d.type==='freehand'){
+      const pts=Array.isArray(d.points)?d.points:[];
+      for(let i=1;i<pts.length;i++)distance=Math.min(distance,segmentDistance(point,pts[i-1],pts[i]));
+      if(pts.length===1)distance=Math.hypot(point[0]-pts[0][0],point[1]-pts[0][1]);
+    }else{
+      const a=[Number(d.x1)||0,Number(d.y1)||0],b=[Number(d.x2)||0,Number(d.y2)||0];
+      if(d.type==='rect'){
+        const x1=Math.min(a[0],b[0]),x2=Math.max(a[0],b[0]),y1=Math.min(a[1],b[1]),y2=Math.max(a[1],b[1]);
+        if(point[0]>=x1&&point[0]<=x2&&point[1]>=y1&&point[1]<=y2)distance=0;
+        else distance=Math.min(segmentDistance(point,[x1,y1],[x2,y1]),segmentDistance(point,[x2,y1],[x2,y2]),segmentDistance(point,[x2,y2],[x1,y2]),segmentDistance(point,[x1,y2],[x1,y1]));
+      }else if(d.type==='ellipse'){
+        const cx=(a[0]+b[0])/2,cy=(a[1]+b[1])/2,rx=Math.max(1,Math.abs(b[0]-a[0])/2),ry=Math.max(1,Math.abs(b[1]-a[1])/2);
+        const normalized=Math.abs(Math.hypot((point[0]-cx)/rx,(point[1]-cy)/ry)-1)*Math.min(rx,ry);
+        distance=normalized;
+      }else distance=segmentDistance(point,a,b);
+    }
+    if(distance<bestDistance){bestDistance=distance;best=index;}
+  });
+  return best;
 }
 function updateDrawingPreview(d) {
   const el=d.el, x1=d.start[0],y1=d.start[1],p=d.current||d.start,x2=p[0],y2=p[1];
@@ -1121,7 +1152,7 @@ function restoreTopology(snapshot) {
   Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
   TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
   if (SEL && !RUN.net.devices[SEL]) SEL = null;
-  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
+  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; DRAWING_DRAG = null; NOTE_DRAG = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
 }
 function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
 function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
@@ -1366,10 +1397,24 @@ function wireTopo() {
   if (svg) svg.addEventListener('pointerdown', e => {
     const resolveLabel=el=>{if(!el||!el.closest)return null;const direct=el.closest('.device-label');if(direct)return direct;const g=el.closest('.device-label-group');return g?g.querySelector('.device-label'):null;};
     const resolveText=el=>{if(!el||!el.closest)return null;const direct=el.closest('.topo-text');if(direct)return direct;const g=el.closest('.topo-text-group');return g?g.querySelector('.topo-text'):null;};
-    const label=resolveLabel(e.target), text=resolveText(e.target);
+    const label=resolveLabel(e.target), text=resolveText(e.target), note=e.target.closest&&e.target.closest('.topo-note');
+    if(canBuild()&&!TEXT_INSERT_MODE&&e.button===0&&note){const index=Number(note.dataset.noteIndex),item=RUN.net.notes&&RUN.net.notes[index];if(item){const p=svgPoint(svg,e.clientX,e.clientY);NOTE_DRAG={index,start:p,x:Number(item.x)||40,y:Number(item.y)||40,before:topologySnapshot(),moved:false,el:note};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();e.stopPropagation();return;}}
     if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
     if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
-    if (e.target.closest('.node') || (DRAW_TOOL === 'select' && e.target.closest('.topo-drawing')) || WIRE || e.button !== 0) return;
+    const existingDrawing = e.target.closest('.topo-drawing');
+    const existingHandle = e.target.closest('.topo-drawing-handle');
+    const pointerDrawing = canBuild() && e.button === 0 && !existingDrawing && !existingHandle && !e.target.closest('.node')
+      ? hitTestTopologyDrawing(svgPoint(svg,e.clientX,e.clientY)) : null;
+    if (canBuild() && e.button === 0 && (existingDrawing || existingHandle || pointerDrawing !== null)) {
+      const index = Number((existingHandle || existingDrawing) ? (existingHandle || existingDrawing).dataset.drawingIndex : pointerDrawing), item = RUN.net.drawings && RUN.net.drawings[index];
+      if (item) {
+        DRAWING_SEL = index; const p = svgPoint(svg,e.clientX,e.clientY), handle = e.target.closest('.topo-drawing-handle');
+        DRAWING_DRAG = { index, handle: handle ? handle.dataset.drawingHandle : null, start:p, before:topologySnapshot(), original:JSON.parse(JSON.stringify(item)), moved:false };
+        const shape = svg.querySelector('.topo-drawing[data-drawing-index="'+index+'"]'); if(shape)shape.classList.add('selected');
+        try{svg.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); e.stopPropagation(); return;
+      }
+    }
+    if (e.target.closest('.node') || WIRE || e.button !== 0) return;
     if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
     if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
     const vb = svg.viewBox.baseVal, rect = svg.getBoundingClientRect();
@@ -1425,6 +1470,21 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
+  if (NOTE_DRAG) {const d=NOTE_DRAG,p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];if(Math.hypot(dx,dy)>1)d.moved=true;if(d.moved){d.nextX=d.x+dx;d.nextY=d.y+dy;d.el.setAttribute('transform','translate('+d.nextX+','+d.nextY+')');}return;}
+  if (DRAWING_DRAG) {
+    const d=DRAWING_DRAG,item=RUN.net.drawings[d.index],p=svgPoint(svg,e.clientX,e.clientY),dx=p[0]-d.start[0],dy=p[1]-d.start[1];
+    if(Math.hypot(dx,dy)>1)d.moved=true;
+    if(item&&d.moved){
+      if(item.type==='freehand')item.points=d.original.points.map(pt=>[pt[0]+dx,pt[1]+dy]);
+      else if(d.handle==='start'){item.x1=d.original.x1+dx;item.y1=d.original.y1+dy;}
+      else if(d.handle==='end'){item.x2=d.original.x2+dx;item.y2=d.original.y2+dy;}
+      else {item.x1=d.original.x1+dx;item.y1=d.original.y1+dy;item.x2=d.original.x2+dx;item.y2=d.original.y2+dy;}
+      const shape=svg.querySelector('.topo-drawing[data-drawing-index="'+d.index+'"]');
+      if(shape){if(item.type==='freehand')shape.setAttribute('d',item.points.map((pt,i)=>(i?'L':'M')+pt[0]+' '+pt[1]).join(' '));else if(item.type==='rect'){shape.setAttribute('x',Math.min(item.x1,item.x2));shape.setAttribute('y',Math.min(item.y1,item.y2));shape.setAttribute('width',Math.abs(item.x2-item.x1));shape.setAttribute('height',Math.abs(item.y2-item.y1));}else if(item.type==='ellipse'){shape.setAttribute('cx',(item.x1+item.x2)/2);shape.setAttribute('cy',(item.y1+item.y2)/2);shape.setAttribute('rx',Math.abs(item.x2-item.x1)/2);shape.setAttribute('ry',Math.abs(item.y2-item.y1)/2);}else{shape.setAttribute('x1',item.x1);shape.setAttribute('y1',item.y1);shape.setAttribute('x2',item.x2);shape.setAttribute('y2',item.y2);}}
+      svg.querySelectorAll('.topo-drawing-handle[data-drawing-index="'+d.index+'"]').forEach(h=>{const start=h.dataset.drawingHandle==='start';h.setAttribute('cx',start?item.x1:item.x2);h.setAttribute('cy',start?item.y1:item.y2);});
+    }
+    return;
+  }
   if (ANNOTATION_DRAG) { const p=svgPoint(svg,e.clientX,e.clientY),d=ANNOTATION_DRAG,dx=p[0]-d.start[0],dy=p[1]-d.start[1]; if(Math.hypot(dx,dy)>0.5)d.moved=true; const x=d.value.x+dx,y=d.value.y+dy;d.el.setAttribute('x',x);d.el.setAttribute('y',y);return; }
   if (BOX) { const p=svgPoint(svg,e.clientX,e.clientY);BOX.current=p;const x=Math.min(BOX.start[0],p[0]),y=Math.min(BOX.start[1],p[1]);BOX.el.setAttribute('x',x);BOX.el.setAttribute('y',y);BOX.el.setAttribute('width',Math.abs(p[0]-BOX.start[0]));BOX.el.setAttribute('height',Math.abs(p[1]-BOX.start[1]));return; }
   if (PAN) {
@@ -1444,6 +1504,8 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
+  if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
+  if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
