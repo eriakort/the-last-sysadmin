@@ -3,7 +3,7 @@
  */
 (function(){
  'use strict';
- const KEYS={linux:'last-sysadmin-v1',network:'nettrainer',revision:'lsa-spaced-revision-v1',cross:'lsa-cross-track-web-availability-v1'};
+ const KEYS={linux:'last-sysadmin-v1',network:'nettrainer',revision:'lsa-spaced-revision-v1',networkRecall:'nettrainer-recall-v1',cross:'lsa-cross-track-web-availability-v1'};
  const read=(key)=>{try{const value=JSON.parse(localStorage.getItem(key)||'{}');return value&&typeof value==='object'?value:{};}catch(_){return {};}};
  const esc=(value)=>String(value==null?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const names=(values,limit)=>values.slice(-limit).map(value=>'<li>'+esc(String(value).replace(/[-_]/g,' '))+'</li>').join('');
@@ -15,7 +15,9 @@
   const crossDone=Object.keys(cross).filter(key=>key!=='updatedAt'&&cross[key]===true);
   const items=revision.items&&typeof revision.items==='object'?Object.values(revision.items):[];
   const due=items.filter(item=>item&&Number.isFinite(Number(item.dueAt))&&Number(item.dueAt)<=Date.now()).length;
-  return{linuxDone,networkDone,commands,crossDone,due};
+  const networkRecallItems=Object.values(read(KEYS.networkRecall));
+  const networkRecallDue=networkRecallItems.filter(item=>item&&Number.isFinite(Number(item.dueAt))&&Number(item.dueAt)<=Date.now()).length;
+  return{linuxDone,networkDone,commands,crossDone,due,networkRecallDue,networkRecallSaved:networkRecallItems.filter(item=>item&&Number.isFinite(Number(item.dueAt))).length};
  }
  let trigger=null,dialog=null;
  function close(){if(dialog){dialog.remove();dialog=null;}if(trigger&&trigger.isConnected)trigger.focus();}
@@ -25,7 +27,7 @@
  function open(){
   if(dialog)close();trigger=document.activeElement;
   const data=snapshot();dialog=document.createElement('div');dialog.id='dailyPracticeDialog';dialog.className='daily-practice-backdrop';
-  const review=data.due?'<button class="daily-action primary" type="button" data-dp-review>Review '+data.due+' due concept'+(data.due===1?'':'s')+'</button>':'<p class="daily-muted">No recall reviews are due. New completed learning checkpoints will appear here automatically.</p>';
+  const review=(data.due||data.networkRecallDue)?'<div class="daily-review-actions">'+(data.due?'<button class="daily-action primary" type="button" data-dp-review>Linux recall · '+data.due+' due</button>':'')+(data.networkRecallDue?'<a class="daily-action primary" data-dp-network-review href="network-trainer/?view=knowledge&amp;dailyReview=1">Network recall · '+data.networkRecallDue+' due</a>':'')+'</div>':'<p class="daily-muted">No recall reviews are due. New completed learning checkpoints will appear here automatically.</p>';
   dialog.innerHTML='<section class="daily-practice-dialog" role="dialog" aria-modal="true" aria-labelledby="dailyPracticeTitle">'
    +'<header class="daily-practice-head"><div><span class="daily-eyebrow">Your learning routine</span><h2 id="dailyPracticeTitle">Daily practice</h2></div><button type="button" class="daily-action" data-dp-close aria-label="Close daily practice">Close</button></header>'
    +'<p class="daily-intro">A short, repeatable session built from your saved learning progress. Start with recall, then practise in either track. Your progress stays in this browser profile.</p>'
@@ -37,6 +39,7 @@
    +card('Network operations',data.networkDone.length,'Completed simulated network missions',names(data.networkDone,3),'network')
    +card('Command-line skills',data.commands.length,'Commands demonstrated in practice',names(data.commands,4),'commands')
    +card('Integrated operations',data.crossDone.length,'Cross-track objectives recorded',names(data.crossDone,4),'integrated')
+   +card('Network recall',data.networkRecallDue+' due',data.networkRecallSaved+' saved concepts · separate network review schedule', '', 'network-recall')
    +'</div><p class="daily-foot">The map reads the existing Linux, Network, spaced-recall and cross-track records. It does not change campaign progress, expose journal text, or send data to a server.</p></section>';
   dialog.addEventListener('click',event=>{
    if(event.target===dialog||event.target.closest('[data-dp-close]')){close();return;}
@@ -61,7 +64,7 @@
   .daily-session h3,.daily-map-title h3{font:600 18px var(--f-display);margin:3px 0 10px}
   .daily-session ol{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding-left:22px}
   .daily-session li{padding-right:8px}.daily-session li strong,.daily-session li span{display:block}.daily-session li span{font-size:12px;color:var(--muted)}
-  .daily-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .daily-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.daily-review-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .daily-action{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font:600 12px var(--f-body);text-decoration:none;cursor:pointer}
   .daily-action:hover,.daily-action:focus-visible{border-color:var(--amber);outline:2px solid transparent}
   .daily-action.primary{background:var(--amber);border-color:var(--amber);color:var(--on-amber)}
@@ -69,6 +72,7 @@
   .daily-map-node{position:relative;min-width:0;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--raise)}
   .daily-map-node:before{content:"";position:absolute;left:20px;top:-13px;height:13px;border-left:1px solid var(--muted);opacity:.5}
   .daily-map-node-head{justify-content:flex-start}.daily-map-dot{width:13px;height:13px;flex:none;border:2px solid var(--blue);border-radius:50%;box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 12%,transparent)}
+  .daily-map-node.network-recall .daily-map-dot{border-color:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 12%,transparent)}
   .daily-map-node.network .daily-map-dot{border-color:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 12%,transparent)}
   .daily-map-node.commands .daily-map-dot{border-color:var(--amber);box-shadow:0 0 0 4px color-mix(in srgb,var(--amber) 12%,transparent)}
   .daily-map-node.integrated .daily-map-dot{border-color:var(--violet);box-shadow:0 0 0 4px color-mix(in srgb,var(--violet) 12%,transparent)}
@@ -78,7 +82,7 @@
   .daily-map-node li{font-size:11px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:4px 7px;text-transform:capitalize}
   .daily-map-node small{font-size:11px;color:var(--muted)}
   .daily-foot{border-top:1px solid var(--line);padding-top:12px;margin-top:16px}
-  @media(max-width:620px){.daily-practice-backdrop{padding:7px}.daily-practice-dialog{padding:14px;max-height:95vh}.daily-session ol{grid-template-columns:1fr;gap:8px}.daily-skill-map{grid-template-columns:1fr}.daily-actions{display:grid;grid-template-columns:1fr 1fr}.daily-action{width:100%;text-align:center}}
+  @media(max-width:620px){.daily-practice-backdrop{padding:7px}.daily-practice-dialog{padding:14px;max-height:95vh}.daily-session ol{grid-template-columns:1fr;gap:8px}.daily-skill-map{grid-template-columns:1fr}.daily-actions,.daily-review-actions{display:grid;grid-template-columns:1fr 1fr}.daily-action{width:100%;text-align:center}}
   @media(prefers-reduced-motion:reduce){.daily-practice-dialog *{scroll-behavior:auto!important}}
   `;document.head.appendChild(style);
  }
