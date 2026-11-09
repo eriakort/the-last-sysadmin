@@ -426,6 +426,23 @@ body.practicing{padding-top:40px}
 .mistake-coach p{margin:5px 0;color:var(--muted)}.mistake-coach-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
 .mistake-coach-next b,.mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
 
+/* Adaptive spaced recall */
+.revision-dialog{width:min(700px,100%)}
+.revision-summary{color:var(--muted);font-size:13px;margin:10px 0 16px}
+.revision-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin:0 0 12px}
+.revision-question{background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:18px}
+.revision-question h3{font-size:18px;line-height:1.4;margin:0 0 14px}
+.revision-choices{display:grid;gap:8px}
+.revision-choice{width:100%;text-align:left;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer}
+.revision-choice:hover:not(:disabled),.revision-choice:focus-visible{border-color:var(--blue);outline:2px solid transparent}
+.revision-choice:disabled{opacity:.7;cursor:default}
+.revision-feedback{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px}
+.revision-feedback.good{border-color:var(--green)}.revision-feedback.retry{border-color:var(--amber)}
+.revision-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.revision-empty{padding:20px;border:1px dashed var(--line);border-radius:10px;color:var(--muted);text-align:center}
+.revision-count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--amber);color:#17202a;font-size:10px;font-weight:800}
+@media(max-width:650px){.revision-dialog{padding:16px}.revision-question{padding:13px}}
+ 
 /* Bash scripting workshop */
 .bash-workshop-backdrop{position:fixed;inset:0;z-index:120;background:rgba(3,8,14,.78);display:flex;align-items:center;justify-content:center;padding:20px}
 .bash-workshop-dialog{width:min(900px,100%);max-height:min(88vh,900px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 80px #0009;padding:22px}
@@ -480,6 +497,7 @@ body.practicing{padding-top:40px}
       <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
       <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
       <button class="btn" id="btnCrossTrackCase" type="button" title="Work a service outage across Linux and network operations">Integrated case</button>
+      <button class="btn" id="btnRevisionReview" type="button" title="Recall completed concepts using spaced practice">Recall review</button>
       <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
       <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
       <button class="btn" id="btnNew" type="button">New game</button>
@@ -6248,6 +6266,7 @@ async function recordAttempt(m) {
 function completeMission() {
   const m = MISSIONS[S.mission], gain = rewardFor(m);
   S.xp += gain; S.done.push(m.id);
+  revisionScheduleMission(m);
   let timeStr = '';
   if (S.tracker && S.missionStart) {
     const ms = Date.now() - S.missionStart; const hn = S.hints[m.id] || 0;
@@ -6693,6 +6712,118 @@ function openOpsRecoveryLab(){
 }
 
 
+ 
+/* Adaptive spaced recall: schedule only completed, structured learning checkpoints. */
+const REVISION_KEY='lsa-spaced-revision-v1';
+const REVISION_DAY=24*60*60*1000;
+const REVISION_INTERVALS=[1,3,7,14,30];
+function revisionRead(){
+  try{
+    const value=JSON.parse(localStorage.getItem(REVISION_KEY)||'{}');
+    if(!value||typeof value!=='object'||Array.isArray(value))return{seeded:false,items:{}};
+    if(!value.items||typeof value.items!=='object'||Array.isArray(value.items))value.items={};
+    return value;
+  }catch(e){return{seeded:false,items:{}};}
+}
+function revisionWrite(value){try{localStorage.setItem(REVISION_KEY,JSON.stringify(value));}catch(e){}}
+function revisionEligible(m){
+  return !!(m&&m.learning&&typeof m.learning.question==='string'&&Array.isArray(m.learning.choices)&&m.learning.choices.length>1&&typeof m.learning.answer==='string');
+}
+function revisionMission(id){return MISSIONS.find(m=>m.id===id)||null;}
+function revisionBackfill(){
+  const state=revisionRead();if(state.seeded)return;
+  const completed=(S.done||[]).map(revisionMission).filter(revisionEligible).slice(-10);
+  const now=Date.now();
+  completed.forEach((m,index)=>{
+    if(!state.items[m.id])state.items[m.id]={stage:0,dueAt:now+(index+1)*REVISION_DAY,lapses:0,reviews:0};
+  });
+  state.seeded=true;revisionWrite(state);
+}
+function revisionScheduleMission(m){
+  if(!revisionEligible(m))return;
+  const state=revisionRead();
+  if(!state.items[m.id])state.items[m.id]={stage:0,dueAt:Date.now()+REVISION_DAY,lapses:0,reviews:0};
+  revisionWrite(state);revisionUpdateButton();
+}
+function revisionItems(){
+  const state=revisionRead();
+  return Object.keys(state.items).map(id=>{
+    const mission=revisionMission(id),record=state.items[id];
+    if(!revisionEligible(mission)||!record||!Number.isFinite(Number(record.dueAt)))return null;
+    return{id:id,mission:mission,record:record,dueAt:Number(record.dueAt)};
+  }).filter(Boolean).sort((a,b)=>a.dueAt-b.dueAt);
+}
+function revisionDueCount(){const now=Date.now();return revisionItems().filter(item=>item.dueAt<=now).length;}
+function revisionUpdateButton(){
+  const button=document.getElementById('btnRevisionReview');if(!button)return;
+  const due=revisionDueCount();
+  button.textContent=due?'Recall review · '+due+' due':'Recall review';
+  button.setAttribute('aria-label',due+' spaced-recall reviews due now');
+}
+function revisionDaysLabel(ms){
+  const days=Math.max(1,Math.ceil(ms/REVISION_DAY));
+  return days===1?'1 day':days+' days';
+}
+function closeRevisionReview(){
+  const root=document.getElementById('revisionReviewDialog');if(root)root.remove();
+}
+function openRevisionReview(){
+  closeRevisionReview();
+  const root=document.createElement('div');root.id='revisionReviewDialog';root.className='bash-workshop-backdrop';
+  root.innerHTML='<section class="bash-workshop-dialog revision-dialog" role="dialog" aria-modal="true" aria-labelledby="revisionTitle">'
+    +'<div class="bash-workshop-head"><div><div class="eyebrow">Learning science · Spaced practice</div><h2 id="revisionTitle">Recall review</h2></div><button class="btn" type="button" data-revision-close aria-label="Close recall review">Close</button></div>'
+    +'<p class="revision-summary">Bring important Linux concepts back to mind before they fade. Correct recalls earn longer intervals; missed concepts return sooner. Your schedule stays on this device and does not alter campaign progress.</p>'
+    +'<div id="revisionContent" aria-live="polite"></div></section>';
+  let queue=revisionItems().filter(item=>item.dueAt<=Date.now()),index=0,answered=false;
+  const content=()=>root.querySelector('#revisionContent');
+  function renderCard(){
+    answered=false;
+    if(!queue.length){
+      const next=revisionItems()[0];
+      if(next){
+        content().innerHTML='<div class="revision-empty"><strong>No reviews due right now.</strong><p>Your next concept is scheduled in '+revisionDaysLabel(next.dueAt-Date.now())+'. You can practise it early if you want.</p><button class="btn" type="button" data-revision-early>Review next concept early</button></div>';
+      }else{
+        content().innerHTML='<div class="revision-empty"><strong>Your review deck is ready to grow.</strong><p>Complete a mission with a learning checkpoint. Its concept will return here for recall practice tomorrow.</p></div>';
+      }
+      return;
+    }
+    const item=queue[index],m=item.mission,l=m.learning;
+    content().innerHTML='<div class="revision-meta"><span>Card '+(index+1)+' of '+queue.length+'</span><span>Lasting mastery · '+REVISION_INTERVALS[Math.min(4,Math.max(0,Number(item.record.stage)||0))]+'-day interval</span></div>'
+      +'<article class="revision-question"><h3>'+esc(l.question)+'</h3><div class="revision-choices">'+l.choices.map(choice=>'<button class="revision-choice" type="button" data-revision-choice="'+esc(choice.value)+'">'+esc(choice.label)+'</button>').join('')+'</div>'
+      +'<div class="revision-feedback" id="revisionFeedback" role="status" aria-live="polite">Choose the answer you can recall without looking it up.</div>'
+      +'<div class="revision-actions" id="revisionActions"></div></article>';
+  }
+  root.addEventListener('click',function(event){
+    if(event.target===root||event.target.closest('[data-revision-close]')){closeRevisionReview();return;}
+    if(event.target.closest('[data-revision-early]')){const next=revisionItems()[0];if(next){queue=[next];index=0;renderCard();}return;}
+    if(event.target.closest('[data-revision-next]')){index++;if(index>=queue.length)queue=[];renderCard();return;}
+    const choice=event.target.closest('[data-revision-choice]');
+    if(!choice||answered||!queue[index])return;
+    answered=true;
+    const item=queue[index],m=item.mission,l=m.learning,correct=choice.dataset.revisionChoice===l.answer;
+    const state=revisionRead(),record=state.items[item.id]||{stage:0,lapses:0,reviews:0};
+    if(correct){
+      record.stage=Math.min(REVISION_INTERVALS.length-1,Math.max(0,Number(record.stage)||0)+1);
+      record.reviews=(Number(record.reviews)||0)+1;
+      record.dueAt=Date.now()+REVISION_INTERVALS[record.stage]*REVISION_DAY;
+      record.lastResult='recalled';
+    }else{
+      record.stage=0;record.lapses=(Number(record.lapses)||0)+1;
+      record.dueAt=Date.now()+REVISION_DAY;record.lastResult='missed';
+    }
+    record.lastReviewedAt=Date.now();state.items[item.id]=record;revisionWrite(state);revisionUpdateButton();
+    root.querySelectorAll('[data-revision-choice]').forEach(button=>{button.disabled=true;if(button.dataset.revisionChoice===l.answer)button.setAttribute('aria-pressed','true');});
+    const feedback=root.querySelector('#revisionFeedback');
+    feedback.className='revision-feedback '+(correct?'good':'retry');
+    feedback.innerHTML=(correct?'<strong>Correct recall.</strong>':'<strong>Not quite — the concept will return sooner.</strong>')+'<p>'+esc(l.review||l.concept||'Review the explanation, then apply it in the terminal.')+'</p><p>'+(correct?'Next review in '+REVISION_INTERVALS[record.stage]+' days.':'Try again tomorrow after a short break.')+'</p>';
+    root.querySelector('#revisionActions').innerHTML='<button class="btn primary" type="button" data-revision-next>Continue</button>';
+  });
+  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeRevisionReview();});
+  document.body.appendChild(root);renderCard();
+  const close=root.querySelector('[data-revision-close]');if(close)close.focus();
+}
+
+
 /* Cross-discipline case: one service outage, two independently verified disciplines. */
 const CROSS_TRACK_KEY='lsa-cross-track-web-availability-v1';
 function crossTrackRead(){try{const value=JSON.parse(localStorage.getItem(CROSS_TRACK_KEY)||'{}');return value&&typeof value==='object'?value:{};}catch(e){return {};}}
@@ -6781,6 +6912,7 @@ function render() {
   if (!rackExpanded) leds.classList.add('collapsed');
   else leds.classList.add('expanded');
   $('#doneCount').textContent = `${S.done.length} of ${MISSIONS.length} tickets resolved`;
+  revisionUpdateButton();
   const bt = $('#btnTimer'); if (bt) bt.classList.toggle('on', !!S.tracker);
   const cs = $('#clockStat'); if (cs) cs.hidden = !(S.tracker && !S.finished);
   const sp = $('#speed'); const times = S.times || [];
@@ -6924,6 +7056,9 @@ function boot(restored) {
   if(bashButton&&!bashButton.dataset.bound){bashButton.dataset.bound='true';bashButton.addEventListener('click',openBashWorkshop);}
   const opsButton=document.getElementById('btnOpsRecoveryLab');
   if(opsButton&&!opsButton.dataset.bound){opsButton.dataset.bound='true';opsButton.addEventListener('click',openOpsRecoveryLab);}
+  const revisionButton=document.getElementById('btnRevisionReview');
+  if(revisionButton&&!revisionButton.dataset.bound){revisionButton.dataset.bound='true';revisionButton.addEventListener('click',openRevisionReview);}
+  revisionBackfill();
   const crossButton=document.getElementById('btnCrossTrackCase');
   if(crossButton&&!crossButton.dataset.bound){crossButton.dataset.bound='true';crossButton.addEventListener('click',openCrossTrackCase);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));

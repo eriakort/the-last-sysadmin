@@ -59,6 +59,9 @@ jobs:
       - name: Linux guided-learning pilot tests
         run: npm run test:learning
 
+      - name: Linux adaptive spaced-recall browser tests
+        run: node test-spaced-revision-ui.js
+
       - name: Build Network Trainer
         run: npm run build:net
 
