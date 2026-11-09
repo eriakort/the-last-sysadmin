@@ -17,7 +17,7 @@ function declaration(name) {
     const c = browserSource[i];
     if (quote) {
       if (escaped) escaped = false;
-      else if (c === '\\\\') escaped = true;
+      else if (c === '\\') escaped = true;
       else if (c === quote) quote = null;
       continue;
     }
