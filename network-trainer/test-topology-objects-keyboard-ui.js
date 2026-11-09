@@ -17,7 +17,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const secondId = await nodes.nth(1).getAttribute('data-dev');
   const position = async id => {
     const transform = await page.locator('#topo .node[data-dev="'+id+'"]').getAttribute('transform');
-    const match = /translate\\(([-\\d.]+),\\s*([-\\d.]+)\\)/.exec(transform || '');
+    const match = /translate\(([-\d.]+),\s*([-\d.]+)\)/.exec(transform || '');
     if (!match) throw new Error('Device transform is missing for '+id);
     return [Number(match[1]), Number(match[2])];
   };
@@ -31,8 +31,6 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const afterLargeMove = await position(firstId);
   if (afterLargeMove[0] - afterMove[0] !== 40 || afterLargeMove[1] !== afterMove[1]) throw new Error('Shift+Alt+ArrowRight did not move the device by the larger 40-unit step');
   if (!(await page.locator('#topo .node[data-dev="'+firstId+'"]').evaluate(el=>el===document.activeElement))) throw new Error('Device focus was not restored after large keyboard movement');
-  await page.locator('#topo .node[data-dev="'+firstId+'"]').focus();
-  await page.keyboard.press('c');
   await page.locator('#topo .node[data-dev="'+secondId+'"]').focus();
   await page.keyboard.press('Space');
   if (!(await page.locator('#topo .node[data-dev="'+secondId+'"]').evaluate(el=>el.classList.contains('sel')))) throw new Error('Space did not activate the focused device');
