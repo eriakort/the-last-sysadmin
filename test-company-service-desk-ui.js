@@ -1,0 +1,31 @@
+const path=require('path');
+const {chromium}=require('playwright');
+const URL='file://'+path.join(process.cwd(),'index.html');
+// Regression contract: requests unlock strictly one at a time after evidence-backed closure.
+(async()=>{
+ const browser=await chromium.launch(),page=await browser.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(120);
+ await page.evaluate(()=>{localStorage.removeItem('lsa-virtual-company-desk-v1');localStorage.setItem('lsa-cross-track-web-availability-v1',JSON.stringify({}));});
+ await page.reload({waitUntil:'load'});await page.waitForTimeout(80);await page.click('#btnCompanyDesk');
+ let dialog=page.locator('#companyDeskDialog [role="dialog"]');
+ if(!(await dialog.isVisible()))throw new Error('company service desk did not open');
+ if(!(await dialog.innerText()).includes('SR-2401'))throw new Error('first service request missing');
+ if(await page.locator('[data-company-request="SR-2402"][data-locked="true"]').count()!==1)throw new Error('second request should remain locked until the first is resolved');
+ await page.click('[data-company-claim="SR-2401"]');
+ if(!(await dialog.innerText()).includes('In progress'))throw new Error('accepting request did not persist in-progress state');
+ await page.locator('#companyNote-SR-2401').fill('Checked service status and DNS; captured before-and-after evidence.');
+ await page.click('[data-company-note="SR-2401"]');
+ if(!(await dialog.innerText()).includes('Checked service status and DNS'))throw new Error('investigation note was not displayed');
+ await page.evaluate(()=>localStorage.setItem('lsa-cross-track-web-availability-v1',JSON.stringify({linux:true,network:true})));
+ await page.reload({waitUntil:'load'});await page.waitForTimeout(80);await page.click('#btnCompanyDesk');dialog=page.locator('#companyDeskDialog [role="dialog"]');
+ if(!/resolved/i.test(await dialog.innerText())){const diagnostic=await page.evaluate(()=>({progress:localStorage.getItem('lsa-cross-track-web-availability-v1'),desk:localStorage.getItem('lsa-virtual-company-desk-v1')}));throw new Error('simulator outcomes plus note did not resolve request; dialog='+await dialog.innerText()+'; storage='+JSON.stringify(diagnostic));}
+ if(!(await dialog.innerText()).includes('SR-2402'))throw new Error('next request did not unlock after closure');
+ if(await page.locator('[data-company-request="SR-2402"][data-locked="true"]').count())throw new Error('next request remained locked after prior request resolved');
+ if(await page.locator('[data-company-request="SR-2403"][data-locked="true"]').count()!==1)throw new Error('later requests should remain locked until their predecessor is resolved');
+ await page.click('[data-company-close]');
+ if(await page.locator('#companyDeskDialog').count())throw new Error('company service desk did not close');
+ if(errors.length)throw new Error('browser errors: '+errors.join('; '));
+ console.log('✓ Virtual company queue persists ownership and notes, requires cross-track evidence for closure, and unlocks the next request');
+ await browser.close();
+})().catch(error=>{console.error(error);process.exit(1);});

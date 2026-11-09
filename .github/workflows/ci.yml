@@ -65,6 +65,9 @@ jobs:
       - name: Evidence-based skill portfolio browser tests
         run: node test-skill-portfolio-ui.js
 
+      - name: Virtual IT company service desk browser tests
+        run: node test-company-service-desk-ui.js
+
       - name: Build Network Trainer
         run: npm run build:net
 
