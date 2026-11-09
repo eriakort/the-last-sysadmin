@@ -54,6 +54,9 @@ function checkMatches(fs, path, re) {
   const n = walk(fs, path);
   if (!n) return { ok: false, reason: 'file missing' };
   if (n.type !== 'file') return { ok: false, reason: 'not a file' };
+  // RegExp instances with global/sticky flags retain lastIndex between calls.
+  // Reset it so repeated mission checks are deterministic.
+  re.lastIndex = 0;
   if (re.test(String(n.content || ''))) return { ok: true };
   return { ok: false, reason: 'regex mismatch' };
 }
