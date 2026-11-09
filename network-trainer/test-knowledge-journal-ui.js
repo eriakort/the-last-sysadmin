@@ -36,6 +36,32 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('command search did not filter the library');
 
   await page.locator('[data-knowledge-coach="show spanning-tree"]').click();
+  await page.locator('#networkCoachRecallAdd').click();
+  if ((await page.locator('#networkCoachRecallAdd').innerText()).includes('In recall deck')) ok('coach can save a command concept into the spaced-recall deck');
+  else fail('coach did not confirm the concept was saved');
+  await page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('nettrainer-recall-v1') || '{}');
+    state['show spanning-tree'].dueAt = Date.now() - 1000;
+    localStorage.setItem('nettrainer-recall-v1', JSON.stringify(state));
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.locator('#navKnowledge').click();
+  if (await page.locator('#networkRecallStart').isEnabled() && (await page.locator('#networkRecallDue').innerText()).includes('1 due')) ok('saved recall cards become available when their due date arrives');
+  else fail('due recall card was not surfaced after reload');
+  await page.locator('#networkRecallStart').click();
+  if ((await page.locator('#networkRecallCard').innerText()).includes('redundant path') && await page.locator('#networkRecallAnswer').isHidden()) ok('recall review presents the challenge before revealing its explanation');
+  else fail('recall card did not withhold its explanation');
+  await page.locator('#networkRecallReveal').click();
+  if (await page.locator('#networkRecallAnswer').isVisible()) ok('learner can reveal the command-specific explanation');
+  else fail('recall explanation did not reveal');
+  await page.locator('#networkRecallRemembered').click();
+  const recallAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('nettrainer-recall-v1') || '{}')['show spanning-tree']);
+  if (recallAfter.stage === 1 && recallAfter.reviews === 1 && recallAfter.dueAt > Date.now() + 2 * 86400000) ok('successful self-rated recall advances to a longer three-day interval and persists');
+  else fail('successful recall did not advance the interval');
+  if ((await page.locator('#networkRecallDue').innerText()).includes('0 due')) ok('review count refreshes when the due card is completed');
+  else fail('due count did not refresh after review');
+
+  await page.locator('[data-knowledge-coach="show spanning-tree"]').click();
   if (await page.locator('#networkCommandCoach').isVisible() && (await page.locator('#networkCommandCoach').innerText()).includes('How to interpret the output') && (await page.locator('#networkCommandCoach').innerText()).includes('Common pitfall'))
     ok('Network Learning Coach shows command-specific output interpretation and pitfalls');
   else fail('Network Learning Coach did not show its command-specific guidance');
