@@ -19,7 +19,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  if(!(await dialog.innerText()).includes('Checked service status and DNS'))throw new Error('investigation note was not displayed');
  await page.evaluate(()=>localStorage.setItem('lsa-cross-track-web-availability-v1',JSON.stringify({linux:true,network:true})));
  await page.reload({waitUntil:'load'});await page.waitForTimeout(80);await page.click('#btnCompanyDesk');dialog=page.locator('#companyDeskDialog [role="dialog"]');
- if(!(await dialog.innerText()).includes('Resolved'))throw new Error('simulator outcomes plus note did not resolve request');
+ if(!(await dialog.innerText()).includes('Resolved')){const diagnostic=await page.evaluate(()=>({progress:localStorage.getItem('lsa-cross-track-web-availability-v1'),desk:localStorage.getItem('lsa-virtual-company-desk-v1')}));throw new Error('simulator outcomes plus note did not resolve request; dialog='+await dialog.innerText()+'; storage='+JSON.stringify(diagnostic));}
  if(!(await dialog.innerText()).includes('SR-2402'))throw new Error('next request did not unlock after closure');
  if(await page.locator('[data-company-request="SR-2402"][data-locked="true"]').count())throw new Error('next request remained locked after prior request resolved');
  if(await page.locator('[data-company-request="SR-2403"][data-locked="true"]').count()!==1)throw new Error('later requests should remain locked until their predecessor is resolved');
