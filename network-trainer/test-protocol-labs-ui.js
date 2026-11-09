@@ -46,6 +46,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=protocols');
   await mobile.locator('[data-protocol-lab="hsrp"]').click();
   if (!(await mobile.locator('#protocolLabResult').isVisible())) throw new Error('Advanced protocol labs are not visible on a narrow viewport');
   await mobile.close();
+  for (const [lab, expected] of [['arp','Resolved MAC'],['vlan','802.1Q tag'],['stp','sw3 · priority 4096']]) {
+    await page.locator('[data-protocol-lab="' + lab + '"]').click();
+    output = await page.locator('#protocolLabResult').innerText();
+    if (!output.includes(expected) || !output.includes('CANONICAL LAYER 2 MODEL EVIDENCE')) throw new Error(lab.toUpperCase() + ' lab did not show Layer 2 model evidence');
+  }
   if (errors.length) throw new Error('Browser errors: ' + errors.join(' | '));
   console.log('✓ TCP/HTTP lab shows the engine-observed request and reply path');
   await browser.close();
