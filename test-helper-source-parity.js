@@ -51,7 +51,8 @@ for (const [name, ...args] of cases) {
   const dependencies = name === 'md' ? { esc: browserEsc } : {};
   const browser = browserFunction(name, dependencies);
   for (const input of args) {
-    assert.deepStrictEqual(browser(...input), H[name](...input), name + ' differs between browser and Node implementations');
+    const browserResult = JSON.parse(JSON.stringify(browser(...input)));
+    assert.deepStrictEqual(browserResult, H[name](...input), name + ' differs between browser and Node implementations');
     passed++;
   }
 }
