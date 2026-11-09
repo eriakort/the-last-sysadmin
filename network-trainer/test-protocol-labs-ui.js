@@ -49,7 +49,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=protocols');
   for (const [lab, expected] of [['arp','Resolved MAC'],['vlan','802.1Q tag'],['stp','sw3 · priority 4096']]) {
     await page.locator('[data-protocol-lab="' + lab + '"]').click();
     output = await page.locator('#protocolLabResult').innerText();
-    if (!output.includes(expected) || !output.includes('CANONICAL LAYER 2 MODEL EVIDENCE')) throw new Error(lab.toUpperCase() + ' lab did not show Layer 2 model evidence');
+    const visibleText = output.toLocaleUpperCase();
+    if (!visibleText.includes(expected.toLocaleUpperCase()) || !visibleText.includes('CANONICAL LAYER 2 MODEL EVIDENCE')) throw new Error(lab.toUpperCase() + ' lab did not show Layer 2 model evidence: ' + output);
   }
   if (errors.length) throw new Error('Browser errors: ' + errors.join(' | '));
   console.log('✓ TCP/HTTP lab shows the engine-observed request and reply path');
