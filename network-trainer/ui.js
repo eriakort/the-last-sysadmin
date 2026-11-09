@@ -6,6 +6,7 @@ const M = require('./net-model');
 const F = require('./../src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
+const LC = require('./net-learning-coach');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
@@ -1855,21 +1856,26 @@ function renderKnowledgeCommands(items) {
   return items.map(x=>`<article class="knowledge-command-row"><button class="knowledge-command" type="button" data-knowledge-cmd="${esc(x.cmd)}"><span><code>${esc(x.cmd)}</code><small>${esc(x.cat)}</small></span><span>${esc(x.desc)}</span></button><button class="btn sm knowledge-coach-btn" type="button" data-knowledge-coach="${esc(x.cmd)}">Coach</button></article>`).join('') || '<p class="dim">No matching commands. Try a broader search.</p>';
 }
 function renderNetworkCommandCoach(command) {
-  const root=$('#networkCommandCoach'), item=KNOWLEDGE_COMMANDS.find(x=>x.cmd===command);
-  if(!root||!item)return;
-  KNOWLEDGE_COACH_COMMAND=command;
-  const guided=[
-    'Start with the question: what fact are you trying to confirm?',
-    'Run the command on the device that owns the relevant interface, route, VLAN or policy.',
-    'Compare the result with the expected design and the incident scope before making a change.'
-  ];
-  const hint='Check the selected device and CLI mode first. Similar commands may exist on different platforms, but their syntax and output are not interchangeable.';
-  const challenge='Without running it yet, explain what evidence this command should provide and what you would inspect next if the result is unexpected.';
-  const learning=KNOWLEDGE_COACH_MODE==='guided'?'<ol>'+guided.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ol>':KNOWLEDGE_COACH_MODE==='assisted'?'<p>'+esc(hint)+'</p>':'<p>'+esc(challenge)+'</p>';
-  root.innerHTML='<div class="coach-head"><div><div class="eyebrow">NETWORK LEARNING COACH</div><h3>'+esc(item.cmd)+'</h3><p>'+esc(item.desc)+'</p></div><label>Learning mode <select id="networkCoachMode" aria-label="Learning mode"><option value="guided" '+(KNOWLEDGE_COACH_MODE==='guided'?'selected':'')+'>Guided</option><option value="assisted" '+(KNOWLEDGE_COACH_MODE==='assisted'?'selected':'')+'>Assisted</option><option value="challenge" '+(KNOWLEDGE_COACH_MODE==='challenge'?'selected':'')+'>Challenge</option></select></label></div><div class="coach-content"><div><b>Purpose</b><p>'+esc(item.desc)+'</p><b>'+(KNOWLEDGE_COACH_MODE==='challenge'?'Your task':'How to approach it')+'</b>'+learning+'</div><div class="coach-output"><b>How to interpret the result</b><p>Look for the state, values and device/port identifiers relevant to your question. A successful command only confirms what it displays; it does not by itself prove end-to-end connectivity or that the incident is resolved.</p><p class="dim">Output varies by simulated device, configuration and CLI context. Use the evidence in the Workbench rather than memorising a fixed output.</p></div></div><div class="row"><button class="btn primary" id="networkCoachPractice" type="button">Practice in Workbench</button><button class="btn" id="networkCoachClose" type="button">Close coach</button></div>';
-  root.querySelector('#networkCoachMode').addEventListener('change',e=>{KNOWLEDGE_COACH_MODE=e.target.value;renderNetworkCommandCoach(command);});
-  root.querySelector('#networkCoachPractice').addEventListener('click',()=>{showWorkspaceView('workbench');const input=$('#tin');if(input){input.value=item.cmd;openTerminalWindow(true);}});
-  root.querySelector('#networkCoachClose').addEventListener('click',()=>{KNOWLEDGE_COACH_COMMAND=null;root.innerHTML='<div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div>';});
+  const root = $('#networkCommandCoach'), item = KNOWLEDGE_COMMANDS.find(x => x.cmd === command);
+  const guide = LC.getGuide(command);
+  if (!root || !item || !guide) return;
+  KNOWLEDGE_COACH_COMMAND = command;
+  const mode = KNOWLEDGE_COACH_MODE, challenge = mode === 'challenge';
+  const guidance = mode === 'guided'
+    ? '<ol><li>Start with the incident question: ' + esc(guide.purpose) + '</li><li>Run it on: ' + esc(guide.runOn) + '</li><li>Compare the evidence with the expected design before changing anything.</li></ol>'
+    : mode === 'assisted'
+      ? '<p><b>Where to run it:</b> ' + esc(guide.runOn) + '</p><p><b>What to look for:</b> ' + esc(guide.lookFor) + '</p>'
+      : '<div class="coach-challenge"><b>Challenge</b><p>' + esc(guide.challenge) + '</p><button class="btn sm" id="networkCoachReveal" type="button">Reveal explanation</button><p id="networkCoachAnswer" hidden>' + esc(guide.answer) + '</p></div>';
+  root.innerHTML = '<div class="coach-head"><div><div class="eyebrow">NETWORK LEARNING COACH</div><h3>' + esc(item.cmd) + '</h3><p>' + esc(guide.purpose) + '</p></div><label>Learning mode <select id="networkCoachMode" aria-label="Learning mode"><option value="guided" ' + (mode === 'guided' ? 'selected' : '') + '>Guided</option><option value="assisted" ' + (mode === 'assisted' ? 'selected' : '') + '>Assisted</option><option value="challenge" ' + (challenge ? 'selected' : '') + '>Challenge</option></select></label></div>' +
+    '<div class="coach-content"><div><b>' + (challenge ? 'Test your understanding' : 'How to approach it') + '</b>' + guidance +
+    '<div class="coach-detail"><b>How to interpret the output</b><p>' + esc(guide.interpret) + '</p><p><b>Evidence to look for:</b> ' + esc(guide.lookFor) + '</p></div>' +
+    '<div class="coach-detail"><b>Common pitfall</b><p>' + esc(guide.pitfall) + '</p></div><div class="coach-detail"><b>Next step</b><p>' + esc(guide.next) + '</p></div></div></div>' +
+    '<div class="row"><button class="btn primary" id="networkCoachPractice" type="button">Practice in Workbench</button><button class="btn" id="networkCoachClose" type="button">Close coach</button></div>';
+  root.querySelector('#networkCoachMode').addEventListener('change', e => { KNOWLEDGE_COACH_MODE = e.target.value; renderNetworkCommandCoach(command); });
+  const reveal = root.querySelector('#networkCoachReveal');
+  if (reveal) reveal.addEventListener('click', () => { const answer = root.querySelector('#networkCoachAnswer'); answer.hidden = false; reveal.disabled = true; reveal.textContent = 'Explanation revealed'; });
+  root.querySelector('#networkCoachPractice').addEventListener('click', () => { showWorkspaceView('workbench'); const input = $('#tin'); if (input) { input.value = item.cmd; openTerminalWindow(true); } });
+  root.querySelector('#networkCoachClose').addEventListener('click', () => { KNOWLEDGE_COACH_COMMAND = null; root.innerHTML = '<div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div>'; });
 }
 function wireKnowledgeCommands(root) {
   root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; openTerminalWindow(true);}}));
