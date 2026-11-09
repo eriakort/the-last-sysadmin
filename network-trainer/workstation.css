@@ -624,3 +624,55 @@ aside{scrollbar-color:#344a60 transparent}
 .network-mistake-title strong{color:var(--ink)}.network-mistake-title span{color:var(--amber);font-weight:700}
 .network-mistake-coach p{margin:5px 0;color:var(--muted)}.network-mistake-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
 .network-mistake-next b,.network-mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
+
+/* Isometric topology device family and refined builder palette */
+.device-art{overflow:visible;fill:none;stroke:currentColor;stroke-width:1.15;stroke-linecap:round;stroke-linejoin:round}
+.device-art .iso-top{fill:currentColor;fill-opacity:.25;stroke-opacity:.95}
+.device-art .iso-front{fill:currentColor;fill-opacity:.09;stroke-opacity:.9}
+.device-art .iso-side{fill:currentColor;fill-opacity:.18;stroke-opacity:.85}
+.device-art .iso-screen{fill:#07131d;fill-opacity:.9;stroke:currentColor;stroke-width:1.3}
+.device-art .iso-screen-glint{fill:currentColor;fill-opacity:.18;stroke:none}
+.device-art .iso-stand{fill:currentColor;fill-opacity:.22;stroke-opacity:.8}
+.device-art .iso-detail{stroke:currentColor;stroke-opacity:.62;fill:none}
+.device-art .iso-port{fill:currentColor;fill-opacity:.78;stroke:none}
+.device-art .iso-port-side{fill:currentColor;fill-opacity:.5;stroke:none}
+.device-art .iso-led{fill:var(--good);stroke:var(--bg);stroke-width:.6}
+.device-art .iso-antenna{stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+.device-art .iso-brick{fill:currentColor;fill-opacity:.18;stroke:currentColor;stroke-opacity:.5}
+.device-art .iso-shield{fill:var(--bg);fill-opacity:.75;stroke:currentColor;stroke-width:1}
+.node .device-art{filter:drop-shadow(0 3px 2px rgba(0,0,0,.24))}
+.node.sel .device-art{filter:drop-shadow(0 0 5px var(--amber))}
+.node.sel .device-art path,.node.sel .device-art circle{stroke:var(--amber)}
+.builder{padding:12px;border-color:color-mix(in srgb,var(--amber) 55%,var(--line));background:linear-gradient(155deg,color-mix(in srgb,var(--panel) 92%,var(--amber)),var(--panel) 58%);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.builder-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:2px 1px 12px;border-bottom:1px solid var(--line)}
+.builder-heading h3{margin:3px 0 2px;font-size:16px;letter-spacing:-.02em;color:var(--ink)}
+.builder-heading p{margin:0;max-width:210px;color:var(--muted);font-size:10.5px;line-height:1.45}
+.builder-kicker{font:700 8px ui-monospace,monospace;letter-spacing:.15em;color:var(--amber)}
+.builder-step{flex:none;margin-top:5px;color:var(--muted);font:700 9px ui-monospace,monospace;letter-spacing:.08em;white-space:nowrap}
+.builder-step i{font-style:normal;color:var(--amber)}
+.builder-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin:13px 0 7px}
+.builder-section-head>span{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+.builder-section-head small{font-size:9px;color:var(--muted);text-align:right}
+.device-palette{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.btn.pal{position:relative;display:flex;align-items:center;gap:8px;min-width:0;min-height:54px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:linear-gradient(145deg,var(--raise),color-mix(in srgb,var(--panel) 80%,var(--bg)));text-align:left;transition:border-color .15s,background .15s,transform .15s}
+.btn.pal:hover{border-color:var(--amber);background:var(--raise);transform:translateY(-1px)}
+.btn.pal:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.btn.pal>span:first-of-type{font-size:11px;font-weight:700;color:var(--ink)}
+.palette-device-icon{flex:none;width:39px;height:36px;overflow:visible;color:var(--muted)}
+.pal[data-add="host"] .palette-device-icon{color:var(--host)}
+.pal[data-add="server"] .palette-device-icon{color:#60a5fa}
+.pal[data-add="switch"] .palette-device-icon{color:var(--switch)}
+.pal[data-add="router"] .palette-device-icon{color:var(--router)}
+.pal[data-add="firewall"] .palette-device-icon{color:var(--fw)}
+.palette-add{margin-left:auto;color:var(--amber);font-size:14px}
+.builder-history{align-items:center;margin:10px 0 2px;padding-top:9px;border-top:1px solid var(--line)}
+.builder-history .dim{width:100%;font-size:9px}
+.builder .pal-row{gap:5px;align-items:center}
+.builder .pal-row .btn{font-size:10px;padding:5px 7px}
+.builder .wire-on{flex-basis:100%;font-size:10px}
+.builder .layer-controls{gap:8px 12px}
+.builder .layer-controls label{display:flex;align-items:center;gap:4px;font-size:10px;text-transform:capitalize}
+.builder .layer-controls input{accent-color:var(--amber)}
+.builder .pal-hint{padding-top:8px;margin-top:9px;border-top:1px solid var(--line);font-size:9px;line-height:1.5}
+@media(max-width:760px){.builder{padding:11px}.device-palette{grid-template-columns:repeat(2,minmax(0,1fr))}.builder-heading p{max-width:none}.builder .pal-row .btn{flex:0 1 auto}}
+@media(prefers-reduced-motion:reduce){.btn.pal{transition:none}.btn.pal:hover{transform:none}}
