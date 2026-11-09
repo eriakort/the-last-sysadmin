@@ -33,6 +33,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
   network.journal=[{type:'command',command:'show ip route',output:'Invalid input detected',result:'error'}];
   localStorage.setItem('nettrainer',JSON.stringify(network));
   localStorage.setItem('nettrainer-recall-v1',JSON.stringify({'show ip route':{stage:0,dueAt:0,reviews:0,lapses:0}}));
+  localStorage.setItem('lsa-spaced-revision-v1',JSON.stringify({seeded:true,items:{bearings:{stage:0,dueAt:0,lapses:0,reviews:0}}}));
  });
  await page.click('#btnDailyPractice');
  if(!(await page.locator('#dailyPracticeDialog').innerText()).includes('Routing and path verification'))throw new Error('adaptive focus did not infer a routing practice recommendation from recent command errors');
