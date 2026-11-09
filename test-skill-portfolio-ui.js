@@ -1,0 +1,30 @@
+const path=require('path');
+const {chromium}=require('playwright');
+const URL='file://'+path.join(process.cwd(),'index.html');
+(async()=>{
+ const browser=await chromium.launch(),page=await browser.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(120);
+ await page.evaluate(()=>{
+  const linux=JSON.parse(localStorage.getItem('last-sysadmin-v1')||'{}');
+  linux.done=['bearings','handover'];linux.commandSkills=['whoami','grep'];linux.times=[{id:'bearings',ms:65000,hints:1}];
+  localStorage.setItem('last-sysadmin-v1',JSON.stringify(linux));
+  localStorage.setItem('nettrainer',JSON.stringify({done:{'first-contact':true,'wrong-subnet':true},journal:[{title:'private note'}],changes:[{id:1}]}));
+ });
+ await page.reload({waitUntil:'load'});await page.waitForTimeout(100);
+ await page.click('#btnSkillPortfolio');
+ const dialog=page.locator('#portfolioDialog [role="dialog"]');
+ if(!(await dialog.isVisible()))throw new Error('portfolio dialog did not open');
+ const body=await dialog.innerText();
+ for(const text of ['Professional skill portfolio','2','Get your bearings','First Contact','Command skills demonstrated','not certifications'])if(!body.includes(text))throw new Error('portfolio missing expected evidence: '+text);
+ if(body.includes('private note'))throw new Error('portfolio exposed journal note contents');
+ const downloadPromise=page.waitForEvent('download');await page.click('[data-portfolio-export]');const download=await downloadPromise;
+ if(download.suggestedFilename()!=='the-last-sysadmin-skill-portfolio.json')throw new Error('portfolio export filename mismatch');
+ const file=await download.path();const fs=require('fs');const exported=JSON.parse(fs.readFileSync(file,'utf8'));
+ if(exported.summary.linuxMissions!==2||exported.summary.networkMissions!==2||exported.summary.commandDrills!==2)throw new Error('export did not preserve cross-track evidence counts');
+ await page.click('[data-portfolio-close]');
+ if(await page.locator('#portfolioDialog').count())throw new Error('portfolio dialog did not close');
+ if(errors.length)throw new Error('browser errors: '+errors.join('; '));
+ console.log('✓ Skill portfolio aggregates Linux and network evidence, exports a privacy-limited JSON record, and closes cleanly');
+ await browser.close();
+})().catch(error=>{console.error(error);process.exit(1);});

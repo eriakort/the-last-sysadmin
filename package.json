@@ -8,7 +8,7 @@
     "verify": "node verify.js",
     "test": "node test-feedback-model.js && node test-helpers.js && node test-progress-sync.js && node test-service-worker.js && node test-accessibility-foundation.js",
     "check": "npm run build && npm run test && npm run verify && node tools/check-fresh.js",
-    "test:all": "npm run check && npm run smoke && node test-bash-workshop-ui.js && node test-linux-ops-workshop-ui.js && npm run test:ui:firefox && npm run test:ui:webkit && npm run test:ui && npm run test:a11y && npm run test:play && npm run test:learning && node test-spaced-revision-ui.js && npm run test:health && npm run build:net && npm --prefix network-trainer test && npm --prefix network-trainer run test:ui",
+    "test:all": "npm run check && npm run smoke && node test-bash-workshop-ui.js && node test-linux-ops-workshop-ui.js && npm run test:ui:firefox && npm run test:ui:webkit && npm run test:ui && npm run test:a11y && npm run test:play && npm run test:learning && node test-spaced-revision-ui.js && node test-skill-portfolio-ui.js && npm run test:health && npm run build:net && npm --prefix network-trainer test && npm --prefix network-trainer run test:ui",
     "smoke": "node smoke.js",
     "test:ui": "node test-classroom-ui.js",
     "test:play": "node test-authored-playback.js",
