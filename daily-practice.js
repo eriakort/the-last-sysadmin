@@ -15,9 +15,36 @@
   const crossDone=Object.keys(cross).filter(key=>key!=='updatedAt'&&cross[key]===true);
   const items=revision.items&&typeof revision.items==='object'?Object.values(revision.items):[];
   const due=items.filter(item=>item&&Number.isFinite(Number(item.dueAt))&&Number(item.dueAt)<=Date.now()).length;
-  const networkRecallItems=Object.values(read(KEYS.networkRecall));
-  const networkRecallDue=networkRecallItems.filter(item=>item&&Number.isFinite(Number(item.dueAt))&&Number(item.dueAt)<=Date.now()).length;
-  return{linuxDone,networkDone,commands,crossDone,due,networkRecallDue,networkRecallSaved:networkRecallItems.filter(item=>item&&Number.isFinite(Number(item.dueAt))).length};
+  const networkRecallItems=Object.entries(read(KEYS.networkRecall)).map(([command,record])=>({command,record})).filter(item=>item.record&&Number.isFinite(Number(item.record.dueAt)));
+  const networkRecallDue=networkRecallItems.filter(item=>Number(item.record.dueAt)<=Date.now()).length;
+  const focus=adaptiveFocus(linux,network,revision,networkRecallItems);
+  return{linuxDone,networkDone,commands,crossDone,due,networkRecallDue,networkRecallSaved:networkRecallItems.length,focus};
+ }
+ function adaptiveFocus(linux,network,revision,networkRecallItems){
+  const linuxItems=revision.items&&typeof revision.items==='object'?Object.entries(revision.items):[];
+  const linuxGap=linuxItems.filter(([,record])=>record&&Number(record.lapses)>0).sort((a,b)=>(Number(b[1].lapses)||0)-(Number(a[1].lapses)||0))[0];
+  const networkGap=networkRecallItems.filter(item=>Number(item.record.lapses)>0).sort((a,b)=>(Number(b.record.lapses)||0)-(Number(a.record.lapses)||0))[0];
+  if(networkGap&&(!linuxGap||Number(networkGap.record.lapses)>=Number(linuxGap[1].lapses))){
+   return{title:networkGap.command,reason:'This network concept has needed extra recall practice. Revisit the command explanation and try its challenge again.',source:'Network recall · '+Number(networkGap.record.lapses)+' missed recall'+(Number(networkGap.record.lapses)===1?'':'s'),track:'network'};
+  }
+  if(linuxGap){
+   const id=linuxGap[0],timing=(Array.isArray(linux.times)?linux.times:[]).filter(item=>item&&item.id===id).slice(-1)[0];
+   return{title:timing&&timing.title||id.replace(/[-_]/g,' '),reason:'This Linux learning checkpoint has been missed during recall. Revisit its explanation, then try to answer before revealing the guidance.',source:'Linux recall · '+Number(linuxGap[1].lapses)+' missed recall'+(Number(linuxGap[1].lapses)===1?'':'s'),track:'linux'};
+  }
+  const journal=Array.isArray(network.journal)?network.journal:[];
+  const errors=journal.filter(item=>item&&item.type==='command'&&(item.result==='error'||/invalid input|unknown command|incomplete command|ambiguous command|not found/i.test(String(item.output||'')))).slice(0,20);
+  const signal=errors.map(item=>[item.command,item.output].filter(Boolean).join(' ')).join(' ').toLowerCase();
+  if(errors.length){
+   let title='Command context and verification',reason='Recent network command errors suggest revisiting the inspect → change → verify workflow.';
+   if(/vlan|spanning|stp|trunk|switch/.test(signal)){title='Switching and VLAN verification';reason='Recent errors mention switching or VLANs. Revisit VLAN membership, trunk allowances and spanning-tree state.';}
+   else if(/route|ospf|bgp|gateway/.test(signal)){title='Routing and path verification';reason='Recent errors mention routing or gateways. Revisit route selection and next-hop reachability.';}
+   else if(/acl|access-list|firewall|blocked|policy/.test(signal)){title='Traffic policy and ACLs';reason='Recent errors mention filtering or policy. Revisit rule order, match conditions and traffic direction.';}
+   else if(/interface|link|port|ethernet/.test(signal)){title='Interface state and link diagnosis';reason='Recent errors mention interfaces or links. Revisit administrative state, operational state and port configuration.';}
+   return{title,reason,source:'Network command history · '+errors.length+' recent error'+(errors.length===1?'':'s'),track:'network'};
+  }
+  const hinted=(Array.isArray(linux.times)?linux.times:[]).filter(item=>item&&Number(item.hints)>0).slice(-10);
+  if(hinted.length){const item=hinted[hinted.length-1];return{title:item.title||'Recent Linux mission',reason:'You used hints on a recent Linux mission. Revisit the relevant learning checkpoint and try the task again without hints.',source:'Linux mission history · hints used',track:'linux'};}
+  return{title:'Build your next checkpoint',reason:'No repeated learning gap is recorded yet. Complete a guided task in either track to give the learning plan more evidence.',source:'Not enough evidence yet',track:'both'};
  }
  let trigger=null,dialog=null;
  function close(){if(dialog){dialog.remove();dialog=null;}if(trigger&&trigger.isConnected)trigger.focus();}
@@ -27,10 +54,12 @@
  function open(){
   if(dialog)close();trigger=document.activeElement;
   const data=snapshot();dialog=document.createElement('div');dialog.id='dailyPracticeDialog';dialog.className='daily-practice-backdrop';
+  const focusCard='<section class="daily-focus" aria-label="Adaptive practice recommendation"><div><span class="daily-eyebrow">Recommended focus · '+esc(data.focus.source)+'</span><h3>'+esc(data.focus.title)+'</h3><p>'+esc(data.focus.reason)+'</p></div><span class="daily-focus-track">'+(data.focus.track==='both'?'Either track':data.focus.track==='network'?'Network Trainer':'Linux')+'</span></section>';
   const review=(data.due||data.networkRecallDue)?'<div class="daily-review-actions">'+(data.due?'<button class="daily-action primary" type="button" data-dp-review>Linux recall · '+data.due+' due</button>':'')+(data.networkRecallDue?'<a class="daily-action primary" data-dp-network-review href="network-trainer/?view=knowledge&amp;dailyReview=1">Network recall · '+data.networkRecallDue+' due</a>':'')+'</div>':'<p class="daily-muted">No recall reviews are due. New completed learning checkpoints will appear here automatically.</p>';
   dialog.innerHTML='<section class="daily-practice-dialog" role="dialog" aria-modal="true" aria-labelledby="dailyPracticeTitle">'
    +'<header class="daily-practice-head"><div><span class="daily-eyebrow">Your learning routine</span><h2 id="dailyPracticeTitle">Daily practice</h2></div><button type="button" class="daily-action" data-dp-close aria-label="Close daily practice">Close</button></header>'
    +'<p class="daily-intro">A short, repeatable session built from your saved learning progress. Start with recall, then practise in either track. Your progress stays in this browser profile.</p>'
+   +focusCard
    +'<section class="daily-session"><div><span class="daily-eyebrow">Suggested 10-minute session</span><h3>Recall · Practise · Reflect</h3></div><ol><li><strong>Recall (2 min)</strong><span>Revisit concepts scheduled for review.</span></li><li><strong>Practise (6 min)</strong><span>Complete one Linux or network learning task.</span></li><li><strong>Reflect (2 min)</strong><span>Check your evidence in the skill portfolio.</span></li></ol><div class="daily-actions">'+review+'<a class="daily-action" href="./">Continue Linux</a><a class="daily-action" href="network-trainer/">Open Network Sysadmin</a><button class="daily-action" type="button" data-dp-portfolio>View skill portfolio</button></div></section>'
    +'<div class="daily-map-title"><div><span class="daily-eyebrow">Evidence map</span><h3>Skill progression</h3></div><button class="daily-action" type="button" data-dp-refresh>Refresh</button></div>'
    +'<p class="daily-muted">Each node counts saved completions or demonstrated skills. These are learning records, not certifications or production credentials.</p>'
@@ -60,7 +89,9 @@
   .daily-practice-head h2{font:700 24px var(--f-display);margin:2px 0 0}
   .daily-eyebrow{font:600 11px var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
   .daily-intro,.daily-muted,.daily-foot{font-size:13px;color:var(--muted)}
-  .daily-session{margin:18px 0;padding:16px;background:var(--raise);border:1px solid var(--line);border-radius:10px}
+  .daily-focus{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin:16px 0 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--raise)}
+  .daily-focus h3{font:600 16px var(--f-display);margin:4px 0}.daily-focus p{font-size:12px;color:var(--muted);margin:5px 0 0;max-width:62ch}.daily-focus-track{font-size:11px;color:var(--muted);white-space:nowrap;border:1px solid var(--line);border-radius:5px;padding:4px 7px}
+  .daily-session{margin:12px 0;padding:16px;background:var(--raise);border:1px solid var(--line);border-radius:10px}
   .daily-session h3,.daily-map-title h3{font:600 18px var(--f-display);margin:3px 0 10px}
   .daily-session ol{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding-left:22px}
   .daily-session li{padding-right:8px}.daily-session li strong,.daily-session li span{display:block}.daily-session li span{font-size:12px;color:var(--muted)}
