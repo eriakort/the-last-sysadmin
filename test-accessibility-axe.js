@@ -8,7 +8,7 @@ if(build.status!==0)throw new Error('Network Trainer build failed before accessi
 const rootUrl='file://'+path.join(process.cwd(),'index.html');
 const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html?view=workbench');
 (async()=>{
- const browser=await chromium.launch(),failures=[];
+ const browser=await chromium.launch({args:['--allow-file-access-from-files']}),failures=[];
  async function install(page){await page.addScriptTag({content:axe.source});}
  async function scan(page,label){
   const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']}}));
