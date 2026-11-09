@@ -14,9 +14,10 @@ Run these **in order**. All are safe to re-run.
 5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
 6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
 7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
-8. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
+8. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
+9. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
 
-Skipping any of 3–8 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+Skipping any of 3–9 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
 
 There is no server code — the game talks to Supabase directly with the anon
 key, and RLS is what keeps tenants apart.
@@ -54,6 +55,7 @@ it should and nothing it shouldn't. It covers:
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
 - **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
+- **Network Trainer** — author-only scenario CRUD, mixed-assignment filtering, class-member delivery, outsider denial, and anonymous execution denial.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
 recreates just enough of Supabase (the `auth` schema, `auth.uid()`, the
