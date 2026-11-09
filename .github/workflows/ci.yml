@@ -68,6 +68,9 @@ jobs:
       - name: Virtual IT company service desk browser tests
         run: node test-company-service-desk-ui.js
 
+      - name: Validate daily practice script syntax
+        run: node --check daily-practice.js
+
       - name: Daily practice and skill progression browser tests
         run: node test-daily-practice-ui.js
 
