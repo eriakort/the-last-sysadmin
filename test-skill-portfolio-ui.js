@@ -16,7 +16,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  const dialog=page.locator('#portfolioDialog [role="dialog"]');
  if(!(await dialog.isVisible()))throw new Error('portfolio dialog did not open');
  const body=await dialog.innerText();
- for(const text of ['Professional skill portfolio','2','Get your bearings','First contact','Command skills demonstrated','not certifications'])if(!body.includes(text))throw new Error('portfolio missing expected evidence: '+text);
+ for(const text of ['Professional skill portfolio','2','Get your bearings','First Contact','Command skills demonstrated','not certifications'])if(!body.includes(text))throw new Error('portfolio missing expected evidence: '+text);
  if(body.includes('private note'))throw new Error('portfolio exposed journal note contents');
  const downloadPromise=page.waitForEvent('download');await page.click('[data-portfolio-export]');const download=await downloadPromise;
  if(download.suggestedFilename()!=='the-last-sysadmin-skill-portfolio.json')throw new Error('portfolio export filename mismatch');
