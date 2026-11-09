@@ -12,7 +12,7 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
   const front=await page.locator('#topo .device-art .iso-front').first().evaluate(el=>getComputedStyle(el).fill);
   const side=await page.locator('#topo .device-art .iso-side').first().evaluate(el=>getComputedStyle(el).fill);
   if(fill!=='none'&&front!=='none'&&side!=='none'&&new Set([fill,front,side]).size===3)console.log('  ✓ device illustrations render distinct shaded isometric faces');
-  else errors.push('isometric device faces are not distinctly shaded');
+  else {\n   console.log('  ! isometric face diagnostic',JSON.stringify({top:fill,front,side,topMarkup:await faces.first().evaluate(el=>el.outerHTML),frontMarkup:await page.locator('#topo .device-art .iso-front').first().evaluate(el=>el.outerHTML),sideMarkup:await page.locator('#topo .device-art .iso-side').first().evaluate(el=>el.outerHTML)}));\n   errors.push('isometric device faces are not distinctly shaded');\n  }
  } else errors.push('isometric device artwork missing');
  if(await page.locator('#topoFocus').count() && await page.locator('#topoPorts').count()) console.log('  ✓ topology inspection controls are available'); else errors.push('topology inspection controls missing');
  const before=await svg.getAttribute('viewBox'); await page.locator('#topoFocus').click(); const focused=await svg.getAttribute('viewBox');
