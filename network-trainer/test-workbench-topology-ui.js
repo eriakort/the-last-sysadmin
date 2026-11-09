@@ -6,6 +6,14 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  const browser=await chromium.launch(); const page=await browser.newPage({viewport:{width:1440,height:960}}); const errors=[];
  page.on('pageerror',e=>errors.push(e.message)); await page.goto(URL,{waitUntil:'load'}); await page.waitForTimeout(150);
  const svg=page.locator('#topo');
+ const faces=page.locator('#topo .device-art .iso-top');
+ if(await faces.count()){
+  const fill=await faces.first().evaluate(el=>getComputedStyle(el).fill);
+  const front=await page.locator('#topo .device-art .iso-front').first().evaluate(el=>getComputedStyle(el).fill);
+  const side=await page.locator('#topo .device-art .iso-side').first().evaluate(el=>getComputedStyle(el).fill);
+  if(fill!=='none'&&front!=='none'&&side!=='none'&&new Set([fill,front,side]).size===3)console.log('  ✓ device illustrations render distinct shaded isometric faces');
+  else errors.push('isometric device faces are not distinctly shaded');
+ } else errors.push('isometric device artwork missing');
  if(await page.locator('#topoFocus').count() && await page.locator('#topoPorts').count()) console.log('  ✓ topology inspection controls are available'); else errors.push('topology inspection controls missing');
  const before=await svg.getAttribute('viewBox'); await page.locator('#topoFocus').click(); const focused=await svg.getAttribute('viewBox');
  if(focused!==before) console.log('  ✓ Focus centers the selected device'); else errors.push('Focus did not change the topology viewport');
