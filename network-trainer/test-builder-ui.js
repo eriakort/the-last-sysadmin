@@ -87,6 +87,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   }
   if (await page.locator('#terminalRestore').evaluate(el=>el.parentElement.id==='topoWrap')) ok('device terminal restore control is anchored inside the canvas');
   else fail('device terminal restore control is not anchored to the canvas');
+  await page.click('#navOverview');
+  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>el.parentElement===document.body)) ok('terminal restore remains available outside the workbench');
+  else fail('terminal restore was hidden with the workbench');
+  await page.click('#btnBuild');
+  if (await page.locator('#terminalRestore').evaluate(el=>el.parentElement.id==='topoWrap')) ok('terminal restore returns to the canvas when Build opens');
+  else fail('terminal restore did not return to the Build canvas');
   if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
   if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
