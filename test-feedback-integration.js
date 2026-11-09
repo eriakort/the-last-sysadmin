@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const linux = fs.readFileSync(path.join(__dirname, 'src/game.html'), 'utf8');
+const network = fs.readFileSync(path.join(__dirname, 'network-trainer/ui.js'), 'utf8');
+const feedback = require('./src/feedback');
+assert.match(linux, /LSAFeedback\.classifyOutcome\(\{ objectiveMet: objectiveMet && masteryMet \}\)/, 'Linux mission checks use the shared outcome classifier');
+assert.match(network, /F\.classifyOutcome\(/, 'Network Trainer mission checks use the shared outcome classifier');
+assert.match(network, /LAST_COMMAND = \{ line, accepted: r\.code === 0 \}/, 'Network Trainer retains the latest command result');
+assert.equal(feedback.classifyOutcome({commandAccepted:true,configurationValid:true,objectiveMet:false}).category, 'valid-but-incorrect');
+assert.equal(feedback.classifyOutcome({objectiveMet:false}).category, 'objective-unmet');
+assert.equal(feedback.classifyOutcome({objectiveMet:true}).category, 'success');
+console.log('SHARED FEEDBACK INTEGRATION OK (6 assertions).');

@@ -2872,15 +2872,20 @@ CMDS.check = (a, ctx) => {
     return 0;
   }
   if (m.check) {
-    if (m.check() && (!m.learning || learningMasteryPassed)) { emitSys(head + "<br><br>&check; That looks right &mdash; the server is in the expected state. Marking this ticket resolved.", 'ok'); pendingComplete = true; return 0; }
-    let extra = '';
+    const objectiveMet = !!m.check();
+    const masteryMet = !m.learning || learningMasteryPassed;
+    const outcome = LSAFeedback.classifyOutcome({ objectiveMet: objectiveMet && masteryMet });
+    if (outcome.category === 'success') {
+      emitSys(head + `<br><br>&check; <b>${esc(outcome.title)}</b> — ${esc(outcome.reason)}<br>${esc(outcome.next)}`, 'ok');
+      pendingComplete = true; return 0;
+    }
+    let extra = `<br><br><b>${esc(outcome.title)}</b><br>${esc(outcome.reason)}<br><b>Next step:</b> ${esc(outcome.next)}`;
     const fixed = repairWorld();
     if (fixed) extra += `<br><br>&#9888; The server was missing ${fixed} file${fixed === 1 ? '' : 's'} the game needs &mdash; something got deleted earlier. I restored ${fixed === 1 ? 'it' : 'them'} to the original state, so try the step again.`;
     if (FLAG_DIAG[m.id]) extra += '<br><br>' + FLAG_DIAG[m.id];
     if (m.fail) { const f = m.fail(); if (f) extra += '<br><br>&#9888; ' + md(f); }
     if (m.nudge) { const nu = m.nudge(); if (nu) extra += '<br><br>' + md(nu); }
     if (m.learning && !learningMasteryPassed) extra += '<br><br>Complete the understanding check in the Chapter learning guide on the left, then run <code>check</code> again.';
-    if (!extra) extra = "<br><br>The server is not in the expected state yet. Re-read the objective above; <code>check &lt;path&gt;</code> shows what the game sees at a file or service, <code>repair</code> restores any game files you may have deleted, and <code>hint</code> gives the next step.";
     emitSys(head + extra, 'hint');
     return 0;
   }
