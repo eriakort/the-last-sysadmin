@@ -6,6 +6,10 @@ for(const [name,value] of Object.entries({segmentation:'role-vlans',addressing:'
 await page.click('#designReviewForm button[type="submit"]');await page.waitForTimeout(50);
 if(!(await page.locator('.design-review').isVisible())||!(await page.locator('.design-review').innerText()).includes('4 / 4'))throw Error('Perfect design review did not score 4 / 4');
 await page.click('[data-design-case="campus"]');if(!(await page.locator('#designReviewForm select[name="hierarchy"]').count()))throw Error('Scenario switch did not update decisions');
+await page.click('[data-design-case="hybrid-cloud"]');if(!(await page.locator('#designReviewForm select[name="landingZone"]').count()))throw Error('Hybrid-cloud scenario did not render landing-zone decision');
+for(const [name,value] of Object.entries({landingZone:'segmented-landing-zone',connectivity:'private-redundant',identity:'central-identity',resilience:'tested-recovery'}))await page.selectOption('#designReviewForm select[name="'+name+'"]',value);
+await page.click('#designReviewForm button[type="submit"]');await page.waitForTimeout(50);
+if(!(await page.locator('.design-review').innerText()).includes('4 / 4'))throw Error('Hybrid-cloud design review did not score 4 / 4');
 await page.reload({waitUntil:'load'});await page.waitForTimeout(200);if(!(await page.locator('#designView').isVisible()))throw Error('Design route did not survive reload');
 await browser.close();if(errors.length)throw Error('Browser errors: '+errors.join('; '));console.log('Enterprise network design academy UI tests passed.');
 })().catch(e=>{console.error(e);process.exit(1);});
