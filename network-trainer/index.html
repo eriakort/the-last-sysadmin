@@ -5856,6 +5856,50 @@ function protocolLabPathRows(path, direction) {
     esc([hop.ingressInterface ? 'in ' + hop.ingressInterface : '', hop.egressInterface ? 'out ' + hop.egressInterface : '', hop.detail].filter(Boolean).join(' · ')) +
     '</p></div><span class="protocol-hop-state">' + esc(hop.state || 'observed') + '</span></li>').join('') + '</ol>';
 }
+function renderLayer2ProtocolLab(kind) {
+  const root = $('#protocolLabResult'); if (!root) return;
+  let title='', intro='', facts='', rows=[], note='', completed=false;
+  if (kind === 'arp') {
+    const net=chapters.find(c=>c.id==='access-vlan-repair').build();
+    const blocked=M.arpResolve(net,'h1','eth0','10.20.0.20');
+    net.devices.sw1.ifaces.p1.accessVlan=20; net.devices.sw1.ifaces.p2.accessVlan=20;
+    const resolved=M.arpResolve(net,'h1','eth0','10.20.0.20');
+    title='ARP · resolve a neighbor on the local LAN';
+    intro='A host broadcasts an address-resolution request inside its Layer 2 domain. Routers do not forward that broadcast into another VLAN.';
+    facts='<div class="protocol-facts"><div><small>Requester</small><b>h1 · 10.20.0.10</b></div><div><small>Target</small><b>srv · 10.20.0.20</b></div><div><small>Broadcast</small><b>ff:ff:ff:ff:ff:ff</b></div><div><small>Resolved MAC</small><b>'+esc(resolved.targetMac||'Not resolved')+'</b></div></div>';
+    rows=[['Before repair','VLAN 10 → VLAN 20','ARP broadcast stays inside the original VLAN; no reply is found'],['After repair','Both access ports · VLAN 20','The target is now in the same broadcast domain'],['ARP reply',resolved.targetMac||'Unavailable','Resolved from the target interface MAC in the canonical topology']];
+    note='The ARP helper reports deterministic local-neighbor resolution from the topology and VLAN membership. It does not model ARP timers, cache expiry, gratuitous ARP or packet retransmission.';
+    completed=!blocked.ok&&resolved.ok;
+  } else if (kind === 'vlan') {
+    const net=chapters.find(c=>c.id==='trunk-allowed-vlan').build(), a=net.devices.sw1.ifaces.p2, b=net.devices.sw2.ifaces.p1;
+    const before=M.switchPortAllowsVlan(a,10)&&M.switchPortAllowsVlan(b,10);
+    a.allowedVlans=[10,20]; b.allowedVlans=[10,20];
+    const after=M.switchPortAllowsVlan(a,10)&&M.switchPortAllowsVlan(b,10);
+    const tree=M.spanningTree(net,10);
+    title='802.1Q · carry VLANs across a trunk';
+    intro='Access ports classify untagged endpoint traffic. A trunk carries allowed VLANs between switches and tags non-native VLAN frames.';
+    facts='<div class="protocol-facts"><div><small>VLAN</small><b>10 · Finance</b></div><div><small>Native VLAN</small><b>'+M.switchNativeVlan(a)+'</b></div><div><small>Wire tag</small><b>802.1Q · VLAN 10</b></div><div><small>Trunk state</small><b>'+(after?'Allowed on both ends':'Blocked')+'</b></div></div>';
+    rows=[['Before','VLAN 20 only','VLAN 10 is excluded from both trunk allow-lists'],['After','Allowed VLANs 10,20','Both switch ports accept VLAN 10'],['Frame on wire','802.1Q tag · VID 10','Native VLAN 1 remains untagged in this model'],['Topology','sw1 ↔ sw2','VLAN 10 is carried across the inter-switch link']];
+    note='Allowed-list and native-VLAN details come from switchPortAllowsVlan() and switchNativeVlan(). The model represents tag classification and forwarding eligibility, not serialized Ethernet frame bytes.';
+    completed=!before&&after&&!!tree.switches.sw1;
+  } else {
+    const net=chapters.find(c=>c.id==='break-the-switching-loop').build();
+    net.devices.sw3.stpPriorities={10:4096};
+    const tree=M.spanningTree(net,10);
+    M.learnMacOnSegment(net,'h1','eth0'); M.learnMacOnSegment(net,'srv','eth0');
+    const root=tree.switches.sw1.root, blocked=tree.switches.sw2.ports.p1;
+    const entries=M.switchMacTable(net,'sw1',10);
+    title='STP · elect a root and block the redundant path';
+    intro='Spanning Tree builds a loop-free forwarding tree while retaining the redundant physical link in a blocking role.';
+    facts='<div class="protocol-facts"><div><small>VLAN</small><b>10</b></div><div><small>Root bridge</small><b>'+esc(root||'Not elected')+'</b></div><div><small>sw2 / p1</small><b>'+esc(blocked&&blocked.role+' · '+blocked.state)+'</b></div><div><small>Learned MACs</small><b>'+entries.length+' on sw1</b></div></div>';
+    rows=[['Root bridge','sw3 · priority 4096','Lowest bridge priority wins this deterministic election'],['sw2 / p1',blocked&&blocked.role+' · '+blocked.state,'Redundant path is retained but not forwarding'],['sw1 MAC table',entries.length+' dynamic entries','Learning follows the active spanning-tree paths'],['Endpoint evidence',entries.some(e=>e.device==='h1')?'h1 learned':'h1 missing',entries.some(e=>e.device==='srv')?'srv learned':'srv missing']];
+    note='STP roles and MAC entries come from spanningTree(), learnMacOnSegment() and switchMacTable(). This is a deterministic tree model, not a timed BPDU exchange or full 802.1D/RSTP state machine.';
+    completed=root==='sw3'&&blocked&&blocked.state==='blocking'&&entries.some(e=>e.device==='h1')&&entries.some(e=>e.device==='srv');
+  }
+  const list='<div class="protocol-evidence"><h3>Observed configuration and state</h3><ul>'+rows.map(r=>'<li><b>'+esc(r[0])+'</b><span>'+esc(String(r[1]??''))+'</span><small>'+esc(String(r[2]??''))+'</small></li>').join('')+'</ul></div>';
+  root.innerHTML='<div class="protocol-result-head"><div><div class="eyebrow">CANONICAL LAYER 2 MODEL EVIDENCE</div><h2>'+esc(title)+'</h2><p>'+esc(intro)+'</p></div><span class="protocol-status '+(completed?'is-ok':'is-note')+'">'+(completed?'Model completed':'Review evidence')+'</span></div>'+facts+list+'<p class="protocol-note">'+esc(note)+'</p>';
+}
+
 function renderAdvancedProtocolLab(kind) {
   const root = $('#protocolLabResult'); if (!root) return;
   let title = '', intro = '', facts = '', note = '', rows = [], completed = false;
@@ -5900,6 +5944,7 @@ function renderAdvancedProtocolLab(kind) {
 }
 
 function renderProtocolLabResult(kind) {
+  if (kind === 'arp' || kind === 'vlan' || kind === 'stp') return renderLayer2ProtocolLab(kind);
   if (kind === 'ospf' || kind === 'bgp' || kind === 'hsrp') return renderAdvancedProtocolLab(kind);
   const root = $('#protocolLabResult'); if (!root) return;
   let title = '', intro = '', facts = '', journey = null, note = '';
@@ -5945,7 +5990,7 @@ function renderProtocolLab() {
   root.innerHTML = '<div class="protocol-page"><style>' +
     '.protocol-page{padding:26px;max-width:1240px;margin:0 auto}.protocol-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px}.protocol-heading h1{font-size:30px;margin:3px 0 6px}.protocol-heading p{color:var(--muted);max-width:720px;margin:0}.protocol-sim-label{border:1px solid var(--line);border-radius:20px;padding:6px 10px;color:var(--muted);font-size:11px;letter-spacing:.08em}.protocol-lab-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.protocol-lab-tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:10px 14px;font:inherit;cursor:pointer}.protocol-lab-tabs button[aria-pressed=true]{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 13%,var(--panel));color:var(--amber)}.protocol-result{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}.protocol-result-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.protocol-result h2{margin:2px 0 5px;font-size:22px}.protocol-result h3{font-size:14px;margin:0 0 10px}.protocol-result p{color:var(--muted)}.protocol-status{border-radius:20px;padding:5px 9px;font-size:11px;border:1px solid var(--line)}.protocol-status.is-ok{color:var(--good);border-color:var(--good)}.protocol-status.is-note{color:var(--amber);border-color:var(--amber)}.protocol-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:18px 0}.protocol-facts>div{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:11px;min-width:0}.protocol-facts small,.protocol-facts b{display:block}.protocol-facts small{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.protocol-facts b{font-size:12px;margin-top:5px;overflow-wrap:anywhere}.protocol-note{border-left:3px solid var(--amber);padding:8px 12px;background:var(--raise);font-size:12px}.protocol-journey-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}.protocol-path{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:7px}.protocol-path li{display:grid;grid-template-columns:25px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}.protocol-hop-index{width:23px;height:23px;display:grid;place-items:center;border-radius:50%;background:var(--panel);color:var(--amber);font:12px var(--f-mono)}.protocol-path strong,.protocol-path small{display:block}.protocol-path small,.protocol-path p,.protocol-hop-state,.protocol-muted{color:var(--muted);font-size:11px}.protocol-path p{margin:4px 0 0;overflow-wrap:anywhere}.protocol-hop-state{white-space:nowrap}.protocol-dora{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;list-style:none;padding:0;margin:18px 0}.protocol-dora li{background:var(--raise);border:1px solid var(--line);border-radius:8px;padding:10px}.protocol-dora b,.protocol-dora span{display:block}.protocol-dora b{color:var(--amber);font-size:12px}.protocol-dora span{color:var(--muted);font-size:11px;margin-top:5px}@media(max-width:760px){.protocol-page{padding:16px}.protocol-facts{grid-template-columns:1fr 1fr}.protocol-journey-grid{grid-template-columns:1fr}.protocol-dora{grid-template-columns:1fr 1fr}}@media(max-width:420px){.protocol-facts,.protocol-dora{grid-template-columns:1fr}}' +
     '</style><div class="protocol-heading"><div><div class="eyebrow">Understand · observe · compare</div><h1>Network protocol labs</h1><p>Explore how network services exchange information. Each lab starts from a known teaching topology and calls the same network model used by missions and the Workbench.</p></div><span class="protocol-sim-label">SIMULATED NETWORK · NO LIVE TRAFFIC</span></div>' +
-    '<div class="protocol-lab-tabs" role="group" aria-label="Choose a protocol lab"><button type="button" data-protocol-lab="dns" aria-pressed="true">DNS · Name lookup</button><button type="button" data-protocol-lab="dhcp" aria-pressed="false">DHCP · Address lease</button><button type="button" data-protocol-lab="http" aria-pressed="false">TCP · HTTP path</button><button type="button" data-protocol-lab="journey" aria-pressed="false">Packet journey · step through</button><button type="button" data-protocol-lab="ospf" aria-pressed="false">OSPF · routing</button><button type="button" data-protocol-lab="bgp" aria-pressed="false">BGP · peering</button><button type="button" data-protocol-lab="hsrp" aria-pressed="false">HSRP · failover</button></div>' +
+    '<div class="protocol-lab-tabs" role="group" aria-label="Choose a protocol lab"><button type="button" data-protocol-lab="dns" aria-pressed="true">DNS · Name lookup</button><button type="button" data-protocol-lab="dhcp" aria-pressed="false">DHCP · Address lease</button><button type="button" data-protocol-lab="http" aria-pressed="false">TCP · HTTP path</button><button type="button" data-protocol-lab="journey" aria-pressed="false">Packet journey · step through</button><button type="button" data-protocol-lab="ospf" aria-pressed="false">OSPF · routing</button><button type="button" data-protocol-lab="bgp" aria-pressed="false">BGP · peering</button><button type="button" data-protocol-lab="hsrp" aria-pressed="false">HSRP · failover</button><button type="button" data-protocol-lab="arp" aria-pressed="false">ARP · resolution</button><button type="button" data-protocol-lab="vlan" aria-pressed="false">802.1Q · VLANs</button><button type="button" data-protocol-lab="stp" aria-pressed="false">STP · loop prevention</button></div>' +
     '<section id="protocolLabResult" class="protocol-result" aria-live="polite" aria-label="Protocol lab evidence"></section></div>';
   root.querySelectorAll('[data-protocol-lab]').forEach(button => button.addEventListener('click', () => {
     root.querySelectorAll('[data-protocol-lab]').forEach(item => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
