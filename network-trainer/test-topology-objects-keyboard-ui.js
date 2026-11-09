@@ -13,6 +13,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#config .pal[data-add="host"]');
   await page.waitForFunction(() => document.querySelectorAll('#topo .node').length === 2);
   const nodes = page.locator('#topo .node');
+  // Disable the builder's default 24-unit snap grid so keyboard step assertions measure the configured 10/40-unit movement precisely.
+  if (await page.locator('#snapBtn').getAttribute('aria-pressed') === 'true') await page.click('#snapBtn');
   const firstId = await nodes.nth(0).getAttribute('data-dev');
   const secondId = await nodes.nth(1).getAttribute('data-dev');
   const position = async id => {
