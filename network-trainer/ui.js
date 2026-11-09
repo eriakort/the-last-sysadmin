@@ -27,8 +27,8 @@ let WIRE = null;                                   // first endpoint picked whil
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
-let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true };
-let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null;
+let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
+let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, ANNOTATION_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
 let LAST_NODE_ACTIVATION = { id:null, at:0 }; // double-click detection survives SVG refreshes
 let INSPECTOR_TAB = 'overview', TERM_SESSIONS = {};          // device inspector + per-device console sessions
 let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', priority:'all' };
@@ -131,20 +131,80 @@ function renderTopo() {
   const pos = {};
   for (const id of deviceIds) pos[id] = (net.pos && net.pos[id]) ? net.pos[id] : auto[id];
   LASTPOS = pos;
-  const maxX = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[0])) + 100 : 800, maxY = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[1])) + 80 : 600;
+  // Expand viewBox so free canvas text, independent labels, notes and drawings stay fully inside the interactive SVG area.
+  let minX = 0, minY = 0;
+  let maxX = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[0])) + 100 : 800;
+  let maxY = deviceIds.length ? Math.max(...Object.values(pos).map(p => p[1])) + 80 : 600;
+  const pad = 100;
+  (net.texts || []).forEach(t => {
+    const x = Number(t.x) || 0, y = Number(t.y) || 0;
+    const fs = Math.max(9, Math.min(36, Number(t.fontSize) || 14));
+    const approxW = Math.max(48, String(t.text || "Text").length * fs * 0.62);
+    minX = Math.min(minX, x - approxW / 2 - pad);
+    maxX = Math.max(maxX, x + approxW / 2 + pad);
+    minY = Math.min(minY, y - fs - pad);
+    maxY = Math.max(maxY, y + fs * 0.4 + pad);
+  });
+  Object.values(net.deviceLabelPositions || {}).forEach(lp => {
+    ["name", "type"].forEach(k => {
+      if (Array.isArray(lp[k])) {
+        minX = Math.min(minX, lp[k][0] - pad);
+        maxX = Math.max(maxX, lp[k][0] + pad);
+        minY = Math.min(minY, lp[k][1] - pad);
+        maxY = Math.max(maxY, lp[k][1] + pad);
+      }
+    });
+  });
+  (net.notes || []).forEach(n => {
+    if (n && n.x != null) {
+      minX = Math.min(minX, Number(n.x) - pad);
+      maxX = Math.max(maxX, Number(n.x) + 140 + pad);
+      minY = Math.min(minY, Number(n.y) - pad);
+      maxY = Math.max(maxY, Number(n.y) + 48 + pad);
+    }
+  });
+  (net.drawings || []).forEach(d => {
+    if (d.type === "freehand" && Array.isArray(d.points)) {
+      d.points.forEach(pt => {
+        minX = Math.min(minX, Number(pt[0]) - pad);
+        maxX = Math.max(maxX, Number(pt[0]) + pad);
+        minY = Math.min(minY, Number(pt[1]) - pad);
+        maxY = Math.max(maxY, Number(pt[1]) + pad);
+      });
+    } else if (d.x1 != null) {
+      const xs = [Number(d.x1), Number(d.x2)], ys = [Number(d.y1), Number(d.y2)];
+      minX = Math.min(minX, Math.min(...xs) - pad);
+      maxX = Math.max(maxX, Math.max(...xs) + pad);
+      minY = Math.min(minY, Math.min(...ys) - pad);
+      maxY = Math.max(maxY, Math.max(...ys) + pad);
+    }
+  });
+  const view = TOPO_VIEW || [Math.min(0, minX), Math.min(0, minY), Math.max(maxX - Math.min(0, minX), 800), Math.max(maxY - Math.min(0, minY), 600)];
   const cx = id => pos[id][0] + 24, cy = id => pos[id][1] + 18;
-  const view = TOPO_VIEW || [0, 0, maxX, maxY];
   let s = `<svg id="topo" viewBox="${view.join(' ')}" role="group" aria-label="Network topology">${TOPO_GRID ? '<defs><pattern id="topoGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width=".7"/></pattern></defs><rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#topoGrid)" pointer-events="none"/>' : ''}<defs><marker id="topoArrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L6,3 z" fill="#e5b85c"/></marker></defs>`;
-  if (!deviceIds.length && !(net.drawings||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
+  if (!deviceIds.length && !(net.drawings||[]).length && !(net.texts||[]).length) s += '<text class="canvas-empty" x="400" y="300" text-anchor="middle" fill="var(--muted)" font-size="14">Empty canvas — add a device or draw a network diagram.</text>';
   if (layers.drawings) for (let di=0; di<(net.drawings||[]).length; di++) s += drawingMarkup(net.drawings[di], di);
   if (layers.zones) for (let zi=0; zi<(net.zones||[]).length; zi++) { const z=net.zones[zi]; s += `<g class="topo-zone" data-zone-index="${zi}" pointer-events="none"><rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="10" fill="${z.color||'#2563eb'}" fill-opacity=".09" stroke="${z.color||'#60a5fa'}" stroke-opacity=".72" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+20}" fill="${z.color||'#93c5fd'}" font-size="12" font-weight="700">${esc(z.name||'Network zone')}</text></g>`; }
   if (layers.links) for (let li=0; li<net.links.length; li++) { const l=net.links[li], x1=cx(l.a[0]), y1=cy(l.a[0]), x2=cx(l.b[0]), y2=cy(l.b[0]); s += `<line data-link-index="${li}" data-a="${l.a[0]}" data-b="${l.b[0]}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="edge${linkDown(net, l) ? ' down' : ''}${LINK_SEL===li ? ' selected' : ''}" role="button" tabindex="0" aria-label="${esc('Connection ' + l.a[0] + ' ' + l.a[1] + ' to ' + l.b[0] + ' ' + l.b[1] + (linkDown(net,l) ? ', down' : ', up'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" stroke-width="${LINK_SEL===li ? 4 : 2}"/>`; if (TOPO_SHOW_PORTS) s += `<text class="edge-label" data-link-index="${li}" x="${(x1+x2)/2}" y="${(y1+y2)/2-6}" text-anchor="middle">${esc(l.a[0]+':'+l.a[1]+' ↔ '+l.b[0]+':'+l.b[1])}</text>`; }
   if (layers.notes) for (let ni=0; ni<(net.notes||[]).length; ni++) { const n=net.notes[ni], w=Math.max(110,Math.min(260,String(n.text||'').length*7+18)); s += `<g class="topo-note" data-note-index="${ni}" role="button" tabindex="0" aria-label="${esc('Topology note: ' + (n.text || 'Note'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" transform="translate(${n.x||40},${n.y||40})" style="cursor:pointer"><rect width="${w}" height="30" rx="5" fill="#243746" fill-opacity=".96" stroke="#e5b85c" stroke-width="1.2"/><text x="9" y="19" fill="#fff0c2" font-size="11">${esc(n.text||'Note')}</text></g>`; }
+  if (layers.texts) for (let ti=0; ti<(net.texts||[]).length; ti++) {
+    const t=net.texts[ti];
+    const tx=Number(t.x)||0, ty=Number(t.y)||0, fs=Math.max(9,Math.min(36,Number(t.fontSize)||14));
+    const approxW=Math.max(48, String(t.text||"Text").length*fs*0.62);
+    s += `<g class="topo-text-group" data-text-index="${ti}"><rect class="topo-text-hit" x="${tx-approxW/2}" y="${ty-fs*1.1}" width="${approxW}" height="${fs*1.6}" fill="transparent" pointer-events="all"/><text class="topo-text${TEXT_INSERT_MODE?' insert-ready':''}" data-text-index="${ti}" x="${tx}" y="${ty}" fill="${esc(t.color||'#e5b85c')}" font-size="${fs}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Canvas text: '+(t.text||'Text'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" style="cursor:move;user-select:none" pointer-events="bounding-box">${esc(t.text||'Text')}</text></g>`;
+  }
+
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
     const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
-    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="78" rx="6" fill="transparent"/>${ico}<text x="24" y="48" text-anchor="middle" class="n-id">${esc(d.label||id)}</text><text x="24" y="60" text-anchor="middle" class="n-sub">${ip || d.kind}</text>${d.label ? `<text x="24" y="73" text-anchor="middle" class="n-label" fill="var(--muted)" font-size="9">${esc(id)}</text>` : ''}</g>`;
+    s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="56" height="44" rx="6" fill="transparent"/>${ico}</g>`;
+    const labelPositions=(net.deviceLabelPositions&&net.deviceLabelPositions[id])||{};
+    const nameAt=labelPositions.name||[x+24,y+48], typeAt=labelPositions.type||[x+24,y+62];
+    const typeText=d.displayType||(d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind);
+    const nameW=Math.max(40, String(d.label||id).length*7.5), typeW=Math.max(40, String(typeText+(ip?' · '+ip:'')).length*6.5);
+    s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="name"><rect class="device-label-hit" x="${nameAt[0]-nameW/2}" y="${nameAt[1]-14}" width="${nameW}" height="18" fill="transparent" pointer-events="all"/><text class="device-label name-label" data-device-label="${esc(id)}" data-label-kind="name" x="${nameAt[0]}" y="${nameAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device name label: '+(d.label||id))}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(d.label||id)}</text></g>`;
+    s += `<g class="device-label-group" data-device-label="${esc(id)}" data-label-kind="type"><rect class="device-label-hit" x="${typeAt[0]-typeW/2}" y="${typeAt[1]-12}" width="${typeW}" height="16" fill="transparent" pointer-events="all"/><text class="device-label type-label" data-device-label="${esc(id)}" data-label-kind="type" x="${typeAt[0]}" y="${typeAt[1]}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Device type label: '+typeText)}" aria-keyshortcuts="Enter Space Shift+F10" style="cursor:move" pointer-events="bounding-box">${esc(typeText+(ip?' · '+ip:''))}</text></g>`;
   }
   return s + '</svg>';
 }
@@ -1060,7 +1120,7 @@ function restoreTopology(snapshot) {
   Object.assign(RUN.net, JSON.parse(JSON.stringify(snapshot)));
   TOPO_SELECTED = new Set([...TOPO_SELECTED].filter(id => RUN.net.devices[id]));
   if (SEL && !RUN.net.devices[SEL]) SEL = null;
-  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; refresh();
+  LINK_SEL = null; WIRE = null; DRAWING = null; DRAWING_SEL = null; ANNOTATION_DRAG = null; TEXT_INSERT_MODE = false; refresh();
 }
 function undoTopology() { if (!canBuild() || !TOPO_UNDO.length) return; TOPO_REDO.push(topologySnapshot()); restoreTopology(TOPO_UNDO.pop()); }
 function redoTopology() { if (!canBuild() || !TOPO_REDO.length) return; TOPO_UNDO.push(topologySnapshot()); restoreTopology(TOPO_REDO.pop()); }
@@ -1068,13 +1128,13 @@ function copyTopologySelection() {
   const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]); if(!ids.length && SEL)ids.push(SEL);
   if(!ids.length)return;
   const set=new Set(ids), pos=RUN.net.pos||{};
-  TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id)})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
+  TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id),labelPositions:JSON.parse(JSON.stringify((RUN.net.deviceLabelPositions||{})[id]||{}))})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
   refresh(); // update the Paste control immediately after the clipboard is populated
 }
 function pasteTopologySelection() {
   if(!canBuild()||!TOPO_CLIPBOARD||!TOPO_CLIPBOARD.devices.length)return;
   const before=topologySnapshot(), map={};
-  TOPO_CLIPBOARD.devices.forEach(item=>{const kind=item.device.services?'server':item.device.kind;const prefix={host:'h',server:'srv',switch:'sw',router:'r',firewall:'fw'}[kind]||'h';let n=1;while(RUN.net.devices[prefix+n])n++;const newId=prefix+n;const copy=JSON.parse(JSON.stringify(item.device));copy.id=newId;if(copy.hostname===item.id)copy.hostname=newId;RUN.net.devices[newId]=copy;RUN.net.pos=RUN.net.pos||{};RUN.net.pos[newId]=[item.pos[0]+48,item.pos[1]+48];map[item.id]=newId;});
+  TOPO_CLIPBOARD.devices.forEach(item=>{const kind=item.device.services?'server':item.device.kind;const prefix={host:'h',server:'srv',switch:'sw',router:'r',firewall:'fw'}[kind]||'h';let n=1;while(RUN.net.devices[prefix+n])n++;const newId=prefix+n;const copy=JSON.parse(JSON.stringify(item.device));copy.id=newId;if(copy.hostname===item.id)copy.hostname=newId;RUN.net.devices[newId]=copy;RUN.net.pos=RUN.net.pos||{};RUN.net.pos[newId]=[item.pos[0]+48,item.pos[1]+48];if(item.labelPositions&&Object.keys(item.labelPositions).length){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[newId]={};for(const key of Object.keys(item.labelPositions)){const p=item.labelPositions[key];RUN.net.deviceLabelPositions[newId][key]=[p[0]+48,p[1]+48];}}map[item.id]=newId;});
   TOPO_CLIPBOARD.links.forEach(l=>{if(map[l.a[0]]&&map[l.b[0]])try{B.addLink(RUN.net,map[l.a[0]],map[l.b[0]],l.a[1],l.b[1]);}catch(e){}});
   rememberTopology(before); TOPO_SELECTED=new Set(Object.values(map)); SEL=Object.values(map)[0]||SEL; refresh();
 }
@@ -1149,6 +1209,11 @@ function runTopologyContextAction(action, target) {
         rememberTopology(); RUN.net.notes.splice(target.index, 1); refresh();
       }
       break;
+    case 'edit-device-label': editTopologyDeviceLabel(target.id,target.labelKind); break;
+    case 'reset-device-label': { const positions=RUN.net.deviceLabelPositions&&RUN.net.deviceLabelPositions[target.id]; if(positions){rememberTopology();delete positions[target.labelKind];if(!Object.keys(positions).length)delete RUN.net.deviceLabelPositions[target.id];refresh();} break; }
+    case 'edit-text': editTopologyText(target.index); break;
+    case 'delete-text': if(RUN.net.texts&&RUN.net.texts[target.index]){rememberTopology();RUN.net.texts.splice(target.index,1);refresh();} break;
+    case 'add-text': { const value=prompt('Canvas text (max 160 characters):','New text');if(value===null||!value.trim())break;const p=target.point||(TOPO_VIEW?[TOPO_VIEW[0]+TOPO_VIEW[2]/2,TOPO_VIEW[1]+TOPO_VIEW[3]/2]:[100,100]);rememberTopology();RUN.net.texts=RUN.net.texts||[];RUN.net.texts.push({text:value.trim().slice(0,160),x:p[0],y:p[1],fontSize:14,color:'#e5b85c'});refresh();break;}
     case 'paste': pasteTopologySelection(); break;
     case 'add-note': {
       const value = prompt('Topology note (max 120 characters):', 'Network note');
@@ -1167,7 +1232,9 @@ function showTopologyContextMenu(e, kind, target = {}) {
   if (!canBuild()) return;
   e.preventDefault(); e.stopPropagation();
   closeTopologyContextMenu();
-  if (kind === 'device') {
+  if (kind === 'device-label') { LINK_SEL=null;DRAWING_SEL=null; }
+  else if (kind === 'text') { LINK_SEL=null;DRAWING_SEL=null; }
+  else if (kind === 'device') {
     if (!TOPO_SELECTED.has(target.id)) TOPO_SELECTED = new Set([target.id]);
     LINK_SEL = null; DRAWING_SEL = null;
     selectDevice(target.id);
@@ -1192,18 +1259,20 @@ function showTopologyContextMenu(e, kind, target = {}) {
     ],
     drawing: [['Remove drawing', 'delete-drawing', true]],
     note: [['Edit note', 'edit-note'], ['Remove note', 'delete-note', true]],
+    'device-label': [['Edit label text', 'edit-device-label'], ['Reset label position', 'reset-device-label']],
+    text: [['Edit text', 'edit-text'], ['Remove text', 'delete-text', true]],
     canvas: [
       ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
-      ['Add note here', 'add-note'], ['Paste selection', 'paste', false, !TOPO_CLIPBOARD],
+      ['Add note here', 'add-note'], ['Add text here', 'add-text'], ['Paste selection', 'paste', false, !TOPO_CLIPBOARD],
       ['Select all devices', 'select-all'], ['Fit topology', 'fit'], [TOPO_GRID ? 'Hide grid' : 'Show grid', 'toggle-grid'], [TOPO_SNAP ? 'Disable snap' : 'Enable snap', 'toggle-snap']
     ]
   };
   const labels = groups[kind] || groups.canvas;
   const menu = document.createElement('div');
   menu.className = 'topo-context-menu'; menu.setAttribute('role', 'menu');
-  menu.returnFocus = kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : kind === 'link' ? document.querySelector('#topo .edge[data-link-index="' + target.index + '"]') : kind === 'drawing' ? document.querySelector('#topo .topo-drawing[data-drawing-index="' + target.index + '"]') : kind === 'note' ? document.querySelector('#topo .topo-note[data-note-index="' + target.index + '"]') : document.activeElement;
+  menu.returnFocus = kind === 'device-label' ? document.querySelector('#topo .device-label[data-device-label="' + CSS.escape(target.id) + '"][data-label-kind="' + target.labelKind + '"]') : kind === 'text' ? document.querySelector('#topo .topo-text[data-text-index="' + target.index + '"]') : kind === 'device' ? document.querySelector('#topo .node[data-dev="' + CSS.escape(target.id) + '"]') : kind === 'link' ? document.querySelector('#topo .edge[data-link-index="' + target.index + '"]') : kind === 'drawing' ? document.querySelector('#topo .topo-drawing[data-drawing-index="' + target.index + '"]') : kind === 'note' ? document.querySelector('#topo .topo-note[data-note-index="' + target.index + '"]') : document.activeElement;
   TOPO_CONTEXT_MENU = menu;
-  const heading = kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
+  const heading = kind === 'device-label' ? target.id+' · '+target.labelKind+' label' : kind === 'text' ? 'Canvas text' : kind === 'device' ? target.id : kind === 'link' ? 'Connection' : kind === 'drawing' ? 'Drawing' : kind === 'note' ? 'Note' : 'Canvas';
   menu.innerHTML = '<div class="ctx-heading">' + esc(heading) + '</div>' + labels.map(([label, action, danger, disabled]) =>
     (action === 'add:host' || action === 'add-note' || action === 'paste' || action === 'select-all' || action === 'fit' || action === 'toggle-grid' ? '<div class="ctx-separator"></div>' : '') +
     '<button type="button" role="menuitem" data-action="' + action + '"' + (danger ? ' class="danger"' : '') + (disabled ? ' disabled' : '') + '>' + esc(label) + '</button>'
@@ -1235,15 +1304,22 @@ function showTopologyContextMenu(e, kind, target = {}) {
   const first = menu.querySelector('button:not(:disabled)'); if (first) first.focus();
 }
 
+function editTopologyDeviceLabel(id,kind) { const d=RUN&&RUN.net&&RUN.net.devices[id];if(!d)return;const isName=kind==='name',defaultType=d.services||/^(srv|web|db|dns|www|site)/.test(id)?'server':d.kind,current=isName?(d.label||id):(d.displayType||defaultType),value=prompt(isName?'Device name label (blank uses device ID):':'Device type label (blank uses device type):',current);if(value===null)return;rememberTopology();if(isName){if(value.trim())d.label=value.trim().slice(0,48);else delete d.label;}else{if(value.trim())d.displayType=value.trim().slice(0,48);else delete d.displayType;}refresh();}
+function editTopologyText(index) { const item=RUN&&RUN.net&&RUN.net.texts&&RUN.net.texts[index];if(!item)return;const value=prompt('Edit canvas text (leave blank to remove):',item.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.texts.splice(index,1);else item.text=value.trim().slice(0,160);refresh();}
 function wireTopo() {
   const svg = $('#topo');
+  if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.');}});TEXT_INSERT_CANCEL_BOUND=true;}
   if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
     const node = e.target.closest && e.target.closest('.node');
     const edge = e.target.closest && (e.target.closest('.edge') || e.target.closest('.edge-label'));
     const drawing = e.target.closest && e.target.closest('.topo-drawing');
     const note = e.target.closest && e.target.closest('.topo-note');
-    if (node) showTopologyContextMenu(e, 'device', { id: node.dataset.dev });
+    const deviceLabel = e.target.closest && (e.target.closest('.device-label') || (e.target.closest('.device-label-group') && e.target.closest('.device-label-group').querySelector('.device-label')));
+    const text = e.target.closest && (e.target.closest('.topo-text') || (e.target.closest('.topo-text-group') && e.target.closest('.topo-text-group').querySelector('.topo-text')));
+    if (deviceLabel) showTopologyContextMenu(e, 'device-label', { id: deviceLabel.dataset.deviceLabel, labelKind: deviceLabel.dataset.labelKind });
+    else if (text) showTopologyContextMenu(e, 'text', { index: Number(text.dataset.textIndex) });
+    else if (node) showTopologyContextMenu(e, 'device', { id: node.dataset.dev });
     else if (edge) showTopologyContextMenu(e, 'link', { index: Number(edge.dataset.linkIndex) });
     else if (drawing) showTopologyContextMenu(e, 'drawing', { index: Number(drawing.dataset.drawingIndex) });
     else if (note) showTopologyContextMenu(e, 'note', { index: Number(note.dataset.noteIndex) });
@@ -1254,6 +1330,7 @@ function wireTopo() {
   };
 
   if (svg) svg.addEventListener('click', e => {
+    if (TEXT_INSERT_MODE && canBuild()) { const point=svgPoint(svg,e.clientX,e.clientY), value=prompt('Canvas text (max 160 characters):','New text'); TEXT_INSERT_MODE=false; if(value!==null&&value.trim()){rememberTopology();RUN.net.texts=RUN.net.texts||[];RUN.net.texts.push({text:value.trim().slice(0,160),x:point[0],y:point[1],fontSize:14,color:'#e5b85c'});refresh();} else {refresh();} return; }
     if (DRAW_TOOL !== 'select' && canBuild()) return;
     const target = e.target;
     const note = target && target.closest ? target.closest('.topo-note') : null;
@@ -1282,8 +1359,15 @@ function wireTopo() {
       else if(e.key==='Enter'||e.key===' '){e.preventDefault();const note=RUN.net.notes[index];if(!note)return;const value=prompt('Edit topology note (leave blank to remove):',note.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.notes.splice(index,1);else note.text=value.trim().slice(0,120);refresh();const next=$('#topo .topo-note[data-note-index="'+index+'"]');if(next)next.focus();}
     }));
   }
+  if (svg) svg.addEventListener('dblclick', e => { const labelEl=e.target.closest&&(e.target.closest('.device-label')||(e.target.closest('.device-label-group')&&e.target.closest('.device-label-group').querySelector('.device-label'))), textEl=e.target.closest&&(e.target.closest('.topo-text')||(e.target.closest('.topo-text-group')&&e.target.closest('.topo-text-group').querySelector('.topo-text'))); if(labelEl&&canBuild()){e.preventDefault();editTopologyDeviceLabel(labelEl.dataset.deviceLabel,labelEl.dataset.labelKind);} else if(textEl&&canBuild()){e.preventDefault();editTopologyText(Number(textEl.dataset.textIndex));} });
+  if (svg) svg.querySelectorAll('.device-label,.topo-text').forEach(el=>el.addEventListener('keydown',e=>{const label=el.classList.contains('device-label'),id=el.dataset.deviceLabel,index=Number(el.dataset.textIndex),kind=el.dataset.labelKind;if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();const r=el.getBoundingClientRect();showTopologyContextMenu({preventDefault(){},stopPropagation(){},clientX:r.left+r.width/2,clientY:r.bottom},label?'device-label':'text',label?{id,labelKind:kind}:{index});}else if(e.key==='Enter'||e.key===' '){e.preventDefault();label?editTopologyDeviceLabel(id,kind):editTopologyText(index);}else if(canBuild()&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const dx=e.key==='ArrowLeft'?-10:e.key==='ArrowRight'?10:0,dy=e.key==='ArrowUp'?-10:e.key==='ArrowDown'?10:0;rememberTopology();const x=Number(el.getAttribute('x'))+dx,y=Number(el.getAttribute('y'))+dy;if(label){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[id]=RUN.net.deviceLabelPositions[id]||{};RUN.net.deviceLabelPositions[id][kind]=[x,y];}else{RUN.net.texts[index].x=x;RUN.net.texts[index].y=y;}refresh();const next=label?$('#topo .device-label[data-device-label="'+CSS.escape(id)+'"][data-label-kind="'+kind+'"]'):$('#topo .topo-text[data-text-index="'+index+'"]');if(next)next.focus();}}));
   if (svg) svg.addEventListener('wheel', e => { e.preventDefault(); zoomTopologyAt(svg,e.deltaY>0?1.12:.89,e.clientX,e.clientY); }, { passive:false });
   if (svg) svg.addEventListener('pointerdown', e => {
+    const resolveLabel=el=>{if(!el||!el.closest)return null;const direct=el.closest('.device-label');if(direct)return direct;const g=el.closest('.device-label-group');return g?g.querySelector('.device-label'):null;};
+    const resolveText=el=>{if(!el||!el.closest)return null;const direct=el.closest('.topo-text');if(direct)return direct;const g=el.closest('.topo-text-group');return g?g.querySelector('.topo-text'):null;};
+    const label=resolveLabel(e.target), text=resolveText(e.target);
+    if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
+    if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
     if (e.target.closest('.node') || (DRAW_TOOL === 'select' && e.target.closest('.topo-drawing')) || WIRE || e.button !== 0) return;
     if (DRAW_TOOL !== 'select' && canBuild()) { beginTopologyDrawing(svg,e); return; }
     if (e.shiftKey && canBuild()) { const p=svgPoint(svg,e.clientX,e.clientY); BOX={start:p,current:p}; const r=document.createElementNS('http://www.w3.org/2000/svg','rect');r.setAttribute('class','topo-selection-box');r.setAttribute('x',p[0]);r.setAttribute('y',p[1]);r.setAttribute('width',0);r.setAttribute('height',0);svg.appendChild(r);BOX.el=r;try{svg.setPointerCapture(e.pointerId);}catch(_){}return; }
@@ -1340,6 +1424,7 @@ function wireTopo() {
 function onDragMove(e) {
   const svg = $('#topo'); if (!svg) return;
   if (DRAWING) { updateTopologyDrawing(e); return; }
+  if (ANNOTATION_DRAG) { const p=svgPoint(svg,e.clientX,e.clientY),d=ANNOTATION_DRAG,dx=p[0]-d.start[0],dy=p[1]-d.start[1]; if(Math.hypot(dx,dy)>0.5)d.moved=true; const x=d.value.x+dx,y=d.value.y+dy;d.el.setAttribute('x',x);d.el.setAttribute('y',y);return; }
   if (BOX) { const p=svgPoint(svg,e.clientX,e.clientY);BOX.current=p;const x=Math.min(BOX.start[0],p[0]),y=Math.min(BOX.start[1],p[1]);BOX.el.setAttribute('x',x);BOX.el.setAttribute('y',y);BOX.el.setAttribute('width',Math.abs(p[0]-BOX.start[0]));BOX.el.setAttribute('height',Math.abs(p[1]-BOX.start[1]));return; }
   if (PAN) {
     const dx = (e.clientX - PAN.x) * PAN.view[2] / Math.max(1, PAN.width);
@@ -1358,6 +1443,7 @@ function onDragMove(e) {
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
+  if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
   if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);TOPO_SELECTED=new Set(Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;}));SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
@@ -1431,6 +1517,7 @@ function wireConfig() {
   }));
   const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{rememberTopology(); const id=B.cloneDevice(RUN.net,SEL);TOPO_SELECTED=new Set([id]);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
   const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;rememberTopology();RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
+  const textBtn=$('#textBtn');if(textBtn)textBtn.addEventListener('click',()=>{TEXT_INSERT_MODE=!TEXT_INSERT_MODE;DRAW_TOOL='select';textBtn.classList.toggle('active',TEXT_INSERT_MODE);flashStatus(TEXT_INSERT_MODE?'Click anywhere on the topology canvas to place text.':'Text insertion cancelled.');});
   const labelDev=$('#labelDev');if(labelDev)labelDev.addEventListener('click',()=>{if(!SEL||!RUN.net.devices[SEL])return;const d=RUN.net.devices[SEL],value=prompt('Device display label (leave blank to use its ID):',d.label||'');if(value===null)return;rememberTopology();if(value.trim())d.label=value.trim().slice(0,32);else delete d.label;refresh();});
   const zoneBtn=$('#zoneBtn');if(zoneBtn)zoneBtn.addEventListener('click',()=>{const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]);if(!ids.length&&SEL)ids.push(SEL);if(!ids.length)return;const name=prompt('Zone name (max 32 characters):','Core network');if(name===null||!name.trim())return;const points=ids.map(id=>nodePos(id));const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const x=Math.max(0,Math.min(...xs)-24),y=Math.max(0,Math.min(...ys)-28),right=Math.max(...xs)+84,bottom=Math.max(...ys)+96;rememberTopology();RUN.net.zones=RUN.net.zones||[];RUN.net.zones.push({name:name.trim().slice(0,32),x,y,w:Math.max(140,right-x),h:Math.max(110,bottom-y),color:'#60a5fa',devices:ids});refresh();});
   document.querySelectorAll('#config [data-topo-layer]').forEach(c=>c.addEventListener('change',()=>{TOPO_LAYERS[c.dataset.topoLayer]=c.checked;RUN.net.layerVisibility=RUN.net.layerVisibility||{};RUN.net.layerVisibility[c.dataset.topoLayer]=c.checked;refresh();}));
@@ -1940,7 +2027,7 @@ function renderPalette() {
   return '<div class="builder"><div class="builder-heading"><div><span class="builder-kicker">DESIGN WORKSPACE</span><h3>Topology builder</h3><p>Place infrastructure, then connect interfaces on the canvas.</p></div><span class="builder-step">01 <i>／</i> DESIGN</span></div>' +
     '<div class="builder-section-head"><span>Device library</span><small>Choose a device to add</small></div><div class="device-palette">' + add + '</div>' +
     '<div class="pal-row builder-history"><button class="btn sm" id="topoUndo" title="Undo the last topology change" ' + (TOPO_UNDO.length?'':'disabled') + '>↶ Undo</button><button class="btn sm" id="topoRedo" title="Redo the last undone topology change" ' + (TOPO_REDO.length?'':'disabled') + '>↷ Redo</button><button class="btn sm" id="topoCopy" title="Copy the selected device or group, including internal links" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>Copy</button><button class="btn sm" id="topoPaste" title="Paste a copy of the last copied selection" ' + (TOPO_CLIPBOARD?'':'disabled') + '>Paste</button><span class="dim">' + TOPO_SELECTED.size + ' selected · Shift-click or Shift-drag to select</span></div>' +
-    '<div class="builder-section-head"><span>Canvas actions</span><small>Arrange and annotate</small></div><div class="pal-row">' + wiring + '<button class="btn sm" id="wireBtn" title="Connect the selected device to another device">' + (WIRE ? '✕ Cancel wire' : '↗ Wire devices') + '</button>' + (SEL && RUN.net.devices[SEL] ? '<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ' + esc(SEL) + '</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>' : '') + (LINK_SEL!=null ? '<button class="btn sm" id="delLink" data-link-index="' + LINK_SEL + '">Remove selected link</button>' : '') + '<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>' +
+    '<div class="builder-section-head"><span>Canvas actions</span><small>Arrange and annotate</small></div><div class="pal-row">' + wiring + '<button class="btn sm" id="wireBtn" title="Connect the selected device to another device">' + (WIRE ? '✕ Cancel wire' : '↗ Wire devices') + '</button>' + (SEL && RUN.net.devices[SEL] ? '<button class="btn sm" id="delDev" title="Delete the selected device and its links">🗑 ' + esc(SEL) + '</button><button class="btn sm" id="duplicateDev" title="Duplicate the selected device without its links">⧉ Duplicate</button><button class="btn sm" id="labelDev" title="Change the selected device display label">Label</button>' : '') + (LINK_SEL!=null ? '<button class="btn sm" id="delLink" data-link-index="' + LINK_SEL + '">Remove selected link</button>' : '') + '<button class="btn sm" id="noteBtn" title="Add a note to the topology canvas">＋ Note</button><button class="btn sm" id="textBtn" title="Insert independently movable text anywhere on the canvas">＋ Text</button><button class="btn sm" id="zoneBtn" title="Group selected devices inside a named visual zone" ' + (TOPO_SELECTED.size||SEL?'':'disabled') + '>＋ Zone</button><button class="btn sm" id="arrangeBtn" title="Reset to an automatic layout">⤢ Arrange</button></div>' +
     '<div class="pal-row canvas-toggles"><button class="btn sm" id="gridBtn" title="Show or hide the canvas alignment grid" aria-pressed="' + TOPO_GRID + '">' + (TOPO_GRID?'▦ Grid on':'▦ Grid off') + '</button><button class="btn sm" id="snapBtn" title="Snap moved devices to the grid" aria-pressed="' + TOPO_SNAP + '">' + (TOPO_SNAP?'⌖ Snap on':'⌖ Snap off') + '</button><button class="btn sm" id="portsBtn" title="Show or hide interface names on links">' + (TOPO_SHOW_PORTS?'Hide ports':'Show ports') + '</button></div>' +
     '<div class="builder-section-head"><span>Drawing tools</span><small>Document your design</small></div><div class="pal-row">' + drawingTools.map(([k,n]) => '<button class="btn sm draw-tool' + (DRAW_TOOL===k?' active':'') + '" data-draw-tool="' + k + '" aria-pressed="' + (DRAW_TOOL===k) + '" title="' + n + ' drawing tool">' + n + '</button>').join('') + '<button class="btn sm" id="delDrawing" title="Remove the selected drawing" ' + (DRAWING_SEL==null?'disabled':'') + '>Remove drawing</button></div>' +
     '<div class="builder-section-head"><span>Canvas layers</span><small>Show or hide detail</small></div><div class="pal-row layer-controls">' + Object.keys(layerState).map(k => '<label class="dim"><input type="checkbox" data-topo-layer="' + k + '"' + (layerState[k]?' checked':'') + '/> ' + k + '</label>').join('') + '</div>' +

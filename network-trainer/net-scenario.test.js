@@ -48,6 +48,19 @@ test('cloneDevice copies configuration without links and offsets the canvas posi
   assert(t.pos[id][0] === 152 && t.pos[id][1] === 104, 'clone is offset from source');
   assert(t.links.length === 0, 'clone does not duplicate physical links');
 });
+test('clone and remove keep detached device label metadata consistent', () => {
+  const t = B.blank();
+  B.addDevice(t, 'router', 'r1');
+  t.pos = { r1: [100, 80] };
+  t.deviceLabelPositions = { r1: { name: [140, 140], type: [160, 158] } };
+  const copy = B.cloneDevice(t, 'r1');
+  assert(copy === 'r2', 'clone receives the next router id');
+  assert(t.deviceLabelPositions.r2.name[0] === 172 && t.deviceLabelPositions.r2.name[1] === 172, 'cloned name label is offset with the device');
+  assert(t.deviceLabelPositions.r2.type[0] === 192 && t.deviceLabelPositions.r2.type[1] === 190, 'cloned type label is offset with the device');
+  B.removeDevice(t, 'r1');
+  assert(!t.deviceLabelPositions.r1, 'removing a device also removes its detached label positions');
+});
+
 test('removeDevice also drops links that touched it', () => {
   const t = B.blank();
   B.addDevice(t, 'host', 'h1'); B.addDevice(t, 'switch', 'sw1'); B.addLink(t, 'h1', 'sw1');
@@ -97,6 +110,24 @@ test('a build-from-scratch scenario is authorable, serializable, and solvable', 
   B.setAddress(run.net, 'h1', 'eth0', '10.0.1.10', 24);
   B.setAddress(run.net, 'h2', 'eth0', '10.0.1.20', 24);
   assert(run.done() === true, 'grader accepts the built network:\n' + run.status());
+});
+
+test('editable device labels and free canvas text survive scenario export and mission creation', () => {
+  const topo = {
+    devices: { h1: { id: 'h1', kind: 'host', label: 'Gateway', displayType: 'Edge router', ifaces: { eth0: { up: true } } } },
+    links: [],
+    deviceLabelPositions: { h1: { name: [220, 96], type: [248, 124] } },
+    texts: [{ text: 'WAN handoff', x: 360, y: 180, fontSize: 16, color: '#e5b85c' }]
+  };
+  const start = S.fromTopology(topo);
+  assert(start.deviceLabelPositions.h1.name[0] === 220, 'custom device name label position is retained');
+  assert(start.deviceLabelPositions.h1.type[1] === 124, 'custom device type label position is retained');
+  assert(start.texts[0].text === 'WAN handoff', 'free canvas text is retained');
+  const decoded = S.fromJSON(S.toJSON({ title: 'Editable diagram', start, success: [{ type: 'reachable', a: 'h1', b: 'h1' }] }));
+  const net = S.toMission(decoded).build();
+  assert(net.devices.h1.label === 'Gateway' && net.devices.h1.displayType === 'Edge router', 'custom name and type text survive scenario round-trip');
+  assert(net.deviceLabelPositions.h1.name[1] === 96, 'independent label coordinates survive scenario round-trip');
+  assert(net.texts[0].x === 360, 'free text coordinates survive scenario round-trip');
 });
 
 test('topology annotations survive scenario export and mission creation', () => {

@@ -93,8 +93,8 @@ let URL;
   else fail('terminal solution did not resolve: ' + (await page.textContent('#status')));
 
   // the terminal echoed a command + the topology updated to show h1's new IP
-  const h1sub = await page.$eval('#topo .node[data-dev="h1"] .n-sub', e => e.textContent);
-  if (h1sub === '10.0.1.10') ok('topology reflects the configured address'); else fail('h1 sub = ' + h1sub);
+  const h1sub = await page.$eval('#topo .device-label[data-device-label="h1"][data-label-kind="type"]', e => e.textContent);
+  if (h1sub.includes('10.0.1.10')) ok('detached device type label also reflects the configured address'); else fail('h1 type label = ' + h1sub);
 
   // --- switch to mission 3 and solve via the CONFIG PANEL ---
   await page.selectOption('#pick', { label: 'Routing — Off the local network' }); await page.waitForTimeout(200);

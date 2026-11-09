@@ -139,6 +139,12 @@ jobs:
       - name: Network Trainer topology inspection tests (WebKit)
         run: cd network-trainer && PLAYWRIGHT_BROWSER=webkit node test-workbench-topology-ui.js
 
+      - name: Network Trainer topology text editor tests (Firefox)
+        run: npm --prefix network-trainer run test:text:firefox
+
+      - name: Network Trainer topology text editor tests (WebKit)
+        run: npm --prefix network-trainer run test:text:webkit
+
       - name: Verify Network Trainer generated file remains current
         run: git diff --exit-code -- network-trainer/index.html
 

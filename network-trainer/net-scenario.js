@@ -85,6 +85,8 @@ function toMission(scn) {
 function fromTopology(topo) {
   const out = { devices: clone(topo.devices), links: clone(topo.links) };
   if (topo.pos && Object.keys(topo.pos).length) out.pos = clone(topo.pos);
+  if (topo.deviceLabelPositions && typeof topo.deviceLabelPositions === 'object') out.deviceLabelPositions = clone(topo.deviceLabelPositions);
+  if (Array.isArray(topo.texts) && topo.texts.length) out.texts = clone(topo.texts);
   if (Array.isArray(topo.notes) && topo.notes.length) out.notes = clone(topo.notes);
   if (Array.isArray(topo.zones) && topo.zones.length) out.zones = clone(topo.zones);
   if (Array.isArray(topo.drawings) && topo.drawings.length) out.drawings = clone(topo.drawings);

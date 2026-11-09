@@ -30,6 +30,7 @@ function removeDevice(topo, id) {
   if (!topo.devices[id]) return false;
   delete topo.devices[id];
   if (topo.pos) delete topo.pos[id];
+  if (topo.deviceLabelPositions) delete topo.deviceLabelPositions[id];
   topo.links = topo.links.filter(l => l.a[0] !== id && l.b[0] !== id);
   return true;
 }
@@ -86,6 +87,7 @@ function cloneDevice(topo, id) {
   if (copy.hostname === id) copy.hostname = newId;
   topo.devices[newId] = copy;
   if (topo.pos && topo.pos[id]) topo.pos[newId] = [topo.pos[id][0] + 32, topo.pos[id][1] + 32];
+  if (topo.deviceLabelPositions && topo.deviceLabelPositions[id]) { topo.deviceLabelPositions[newId] = {}; for (const key of Object.keys(topo.deviceLabelPositions[id])) { const p=topo.deviceLabelPositions[id][key]; topo.deviceLabelPositions[newId][key]=[p[0]+32,p[1]+32]; } }
   return newId;
 }
 
