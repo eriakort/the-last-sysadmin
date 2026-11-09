@@ -35,6 +35,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('command search narrows the reference library');
   else fail('command search did not filter the library');
 
+  if (await page.locator('#terminalWindow').isVisible()) await page.locator('#terminalMinimize').evaluate(el => el.click());
   await page.locator('[data-knowledge-coach="show spanning-tree"]').click();
   await page.locator('#networkCoachRecallAdd').click();
   if ((await page.locator('#networkCoachRecallAdd').innerText()).includes('In recall deck')) ok('coach can save a command concept into the spaced-recall deck');
