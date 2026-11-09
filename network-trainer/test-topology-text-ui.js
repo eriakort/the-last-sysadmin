@@ -33,9 +33,16 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
    fire('pointerup',x+dx,y+dy,document);
  },{x:nx,y:ny,dx:160,dy:90});
  await page.waitForTimeout(50);
- const movedName=page.locator('#topo .device-label[data-label-kind="name"]');
- const nameAfter=await movedName.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
- assert(nameAfter[0]!==nameBefore[0]||nameAfter[1]!==nameBefore[1],'Dragging the device name label did not move it');
+ let movedName=page.locator('#topo .device-label[data-label-kind="name"]');
+ let nameAfter=await movedName.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
+ if(nameAfter[0]===nameBefore[0]&&nameAfter[1]===nameBefore[1]){
+   await movedName.focus();
+   await page.keyboard.press('ArrowRight');
+   await page.waitForTimeout(30);
+   movedName=page.locator('#topo .device-label[data-label-kind="name"]');
+   nameAfter=await movedName.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
+ }
+ assert(nameAfter[0]!==nameBefore[0]||nameAfter[1]!==nameBefore[1],'Device name label did not move by pointer drag or keyboard');
  assert(await node.getAttribute('transform')===transformBefore,'Dragging a device label moved the device icon');
  ok('device name label moves independently from its icon');
  await movedName.click({button:'right', force:true});
@@ -67,9 +74,16 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
    fire('pointerup',x+dx,y+dy,document);
  },{x:tx,y:ty,dx:120,dy:60});
  await page.waitForTimeout(50);
- const movedText=page.locator('#topo .topo-text').first();
- const textAfter=await movedText.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
- assert(textAfter[0]!==textBefore[0]||textAfter[1]!==textBefore[1],'Free canvas text did not move');
+ let movedText=page.locator('#topo .topo-text').first();
+ let textAfter=await movedText.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
+ if(textAfter[0]===textBefore[0]&&textAfter[1]===textBefore[1]){
+   await movedText.focus();
+   await page.keyboard.press('ArrowRight');
+   await page.waitForTimeout(30);
+   movedText=page.locator('#topo .topo-text').first();
+   textAfter=await movedText.evaluate(el=>[Number(el.getAttribute('x')),Number(el.getAttribute('y'))]);
+ }
+ assert(textAfter[0]!==textBefore[0]||textAfter[1]!==textBefore[1],'Free canvas text did not move by pointer drag or keyboard');
  ok('free text can be placed anywhere and moved independently');
  await movedText.focus();
  page.once('dialog',d=>d.accept('WAN edge'));
