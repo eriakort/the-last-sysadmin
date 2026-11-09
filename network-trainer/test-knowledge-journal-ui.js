@@ -48,7 +48,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     ok('challenge mode withholds the explanation until requested');
   else fail('challenge mode did not present an unrevealed challenge');
   await page.locator('#networkCoachReveal').click();
-  if (await page.locator('#networkCoachAnswer').isVisible() && (await page.locator('#networkCoachAnswer').innerText()).includes('Spanning Tree'))
+  if (await page.locator('#networkCoachAnswer').isVisible() && (await page.locator('#networkCoachAnswer').innerText()).includes('redundant path'))
     ok('challenge explanation can be revealed on demand');
   else fail('challenge explanation did not reveal');
   await page.locator('#networkCoachMode').selectOption('guided');
