@@ -6,8 +6,12 @@ const URL='file://'+path.join(process.cwd(),'index.html');
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto(URL,{waitUntil:'load'});await page.waitForTimeout(150);
  await page.evaluate(()=>{
-  localStorage.setItem('last-sysadmin-v1',JSON.stringify({done:['bearings','workspace','errors'],commandSkills:['whoami','grep','pwd']}));
-  localStorage.setItem('nettrainer',JSON.stringify({done:{'first-contact':true,'wrong-subnet':true},journal:[{title:'private note must not appear'}]}));
+  const linux=JSON.parse(localStorage.getItem('last-sysadmin-v1')||'{}');
+  linux.done=['bearings','workspace','errors'];linux.commandSkills=['whoami','grep','pwd'];
+  localStorage.setItem('last-sysadmin-v1',JSON.stringify(linux));
+  const network=JSON.parse(localStorage.getItem('nettrainer')||'{}');
+  network.done={'first-contact':true,'wrong-subnet':true};network.journal=[{title:'private note must not appear'}];
+  localStorage.setItem('nettrainer',JSON.stringify(network));
   localStorage.setItem('lsa-cross-track-web-availability-v1',JSON.stringify({linux:true,network:true,updatedAt:new Date().toISOString()}));
   localStorage.setItem('lsa-spaced-revision-v1',JSON.stringify({seeded:true,items:{bearings:{stage:0,dueAt:0,lapses:0,reviews:0}}}));
  });
