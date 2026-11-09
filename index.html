@@ -6824,7 +6824,7 @@ function openCompanyDesk(){
   }).join('');
   root.innerHTML='<section class="bash-workshop-dialog company-desk-dialog" role="dialog" aria-modal="true" aria-labelledby="companyDeskTitle"><div class="bash-workshop-head"><div><div class="eyebrow">Halcyon Digital · simulated IT operations</div><h2 id="companyDeskTitle">Company service desk</h2></div><button class="btn" type="button" data-company-close>Close</button></div>'
    +'<p class="company-desk-intro">Work the company queue from customer impact through investigation, cross-team remediation and documented closure. Requests persist in this browser profile and unlock in sequence as earlier work is completed.</p>'
-   +'<div class="company-desk-summary"><div class="company-desk-metric"><strong>'+resolved+'</strong><span>Requests resolved</span></div><div class="company-desk-metric"><strong>'+active+'</strong><span>In progress / ready</span></div><div class="company-desk-metric"><strong>'+rows.length+'</strong><span>Total company requests</span></div></div>'
+   +'<div class="company-desk-summary"><div class="company-desk-metric"><strong>'+resolved+'</strong><span>Requests resolved</span></div><div class="company-desk-metric"><strong>'+active+'</strong><span>In progress / ready</span></div><div class="company-desk-metric"><strong>'+current.length+'</strong><span>Total company requests</span></div></div>'
    +cards
    +'<p class="company-desk-foot">Resolution requires both simulator objectives and at least one saved investigation / handover note. Completion is read from the existing Linux and Network learning records; the desk does not create a second simulation engine or alter campaign progress. All systems, departments and requests are fictional and browser-simulated.</p></section>';
  };
