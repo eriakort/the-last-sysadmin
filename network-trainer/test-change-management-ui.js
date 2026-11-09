@@ -90,7 +90,9 @@ const listen = () => new Promise(resolve => server.listen(0, '127.0.0.1', () => 
     ok('change record and verification evidence persist after reload');
   else fail('change record did not persist');
   await page.locator('#navJournal').click();
-  if (await page.locator('#journalView').innerText().then(t=>t.includes('change verified'))) ok('change lifecycle is recorded in the Engineering Journal');
+  await page.locator('#journalView h1').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => (document.querySelector('#journalView')?.innerText || '').toLowerCase().includes('change verified'));
+  if (await page.locator('#journalView').innerText().then(t=>t.toLowerCase().includes('change verified'))) ok('change lifecycle is recorded in the Engineering Journal');
   else fail('change lifecycle was not journalled');
 
   await page.setViewportSize({ width: 390, height: 844 });
