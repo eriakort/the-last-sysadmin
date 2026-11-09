@@ -94,6 +94,36 @@ function drawingMarkup(d, index) {
   if (d.type === 'ellipse') return `<g>${`<ellipse ${common} cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" rx="${Math.abs(x2-x1)/2}" ry="${Math.abs(y2-y1)/2}"/>`}${handles}</g>`;
   return `<g>${`<line ${common} x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${d.type==='arrow'?'marker-end="url(#topoArrow)"':''}/>`}${handles}</g>`;
 }
+function hitTestTopologyDrawing(point) {
+  const drawings = RUN && RUN.net && RUN.net.drawings || [];
+  const segmentDistance = (p,a,b) => {
+    const dx=b[0]-a[0],dy=b[1]-a[1],len=dx*dx+dy*dy;
+    const t=len?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/len)):0;
+    return Math.hypot(p[0]-(a[0]+t*dx),p[1]-(a[1]+t*dy));
+  };
+  let best=null,bestDistance=14;
+  drawings.forEach((d,index)=>{
+    let distance=Infinity;
+    if(d.type==='freehand'){
+      const pts=Array.isArray(d.points)?d.points:[];
+      for(let i=1;i<pts.length;i++)distance=Math.min(distance,segmentDistance(point,pts[i-1],pts[i]));
+      if(pts.length===1)distance=Math.hypot(point[0]-pts[0][0],point[1]-pts[0][1]);
+    }else{
+      const a=[Number(d.x1)||0,Number(d.y1)||0],b=[Number(d.x2)||0,Number(d.y2)||0];
+      if(d.type==='rect'){
+        const x1=Math.min(a[0],b[0]),x2=Math.max(a[0],b[0]),y1=Math.min(a[1],b[1]),y2=Math.max(a[1],b[1]);
+        if(point[0]>=x1&&point[0]<=x2&&point[1]>=y1&&point[1]<=y2)distance=0;
+        else distance=Math.min(segmentDistance(point,[x1,y1],[x2,y1]),segmentDistance(point,[x2,y1],[x2,y2]),segmentDistance(point,[x2,y2],[x1,y2]),segmentDistance(point,[x1,y2],[x1,y1]));
+      }else if(d.type==='ellipse'){
+        const cx=(a[0]+b[0])/2,cy=(a[1]+b[1])/2,rx=Math.max(1,Math.abs(b[0]-a[0])/2),ry=Math.max(1,Math.abs(b[1]-a[1])/2);
+        const normalized=Math.abs(Math.hypot((point[0]-cx)/rx,(point[1]-cy)/ry)-1)*Math.min(rx,ry);
+        distance=normalized;
+      }else distance=segmentDistance(point,a,b);
+    }
+    if(distance<bestDistance){bestDistance=distance;best=index;}
+  });
+  return best;
+}
 function updateDrawingPreview(d) {
   const el=d.el, x1=d.start[0],y1=d.start[1],p=d.current||d.start,x2=p[0],y2=p[1];
   if(d.type==='freehand') el.setAttribute('d',d.points.map((q,i)=>(i?'L':'M')+q[0]+' '+q[1]).join(' '));
@@ -1372,8 +1402,11 @@ function wireTopo() {
     if(canBuild()&&!TEXT_INSERT_MODE&&DRAW_TOOL==='select'&&e.button===0&&(label||text)){const kind=label?'device-label':'text',index=text?Number(text.dataset.textIndex):null,id=label?label.dataset.deviceLabel:null,labelKind=label?label.dataset.labelKind:null;const point=svgPoint(svg,e.clientX,e.clientY);const value=label?{x:Number(label.getAttribute('x')),y:Number(label.getAttribute('y'))}:{x:Number(text.getAttribute('x')),y:Number(text.getAttribute('y'))};ANNOTATION_DRAG={kind,index,id,labelKind,start:point,value,before:topologySnapshot(),moved:false,el:label||text};try{svg.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();return;}
     if (TEXT_INSERT_MODE && canBuild() && e.button===0) return;
     const existingDrawing = e.target.closest('.topo-drawing');
-    if (canBuild() && e.button === 0 && (existingDrawing || e.target.closest('.topo-drawing-handle'))) {
-      const index = Number((e.target.closest('.topo-drawing-handle') || existingDrawing).dataset.drawingIndex), item = RUN.net.drawings && RUN.net.drawings[index];
+    const existingHandle = e.target.closest('.topo-drawing-handle');
+    const pointerDrawing = canBuild() && e.button === 0 && !existingDrawing && !existingHandle && !e.target.closest('.node')
+      ? hitTestTopologyDrawing(svgPoint(svg,e.clientX,e.clientY)) : null;
+    if (canBuild() && e.button === 0 && (existingDrawing || existingHandle || pointerDrawing !== null)) {
+      const index = Number((existingHandle || existingDrawing) ? (existingHandle || existingDrawing).dataset.drawingIndex : pointerDrawing), item = RUN.net.drawings && RUN.net.drawings[index];
       if (item) {
         DRAWING_SEL = index; const p = svgPoint(svg,e.clientX,e.clientY), handle = e.target.closest('.topo-drawing-handle');
         DRAWING_DRAG = { index, handle: handle ? handle.dataset.drawingHandle : null, start:p, before:topologySnapshot(), original:JSON.parse(JSON.stringify(item)), moved:false };
