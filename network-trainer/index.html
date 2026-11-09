@@ -238,7 +238,6 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
-
 __def("./../src/feedback", function(module, exports, require){
 'use strict';
 (function (root, factory) {
@@ -276,7 +275,6 @@ __def("./../src/feedback", function(module, exports, require){
 });
 
 });
-
 __def("./net-model", function(module, exports, require){
 // Networking Trainer — M1 engine spike.
 // Pure, headless network model + forwarding engine. No DOM, no UI.
@@ -1056,7 +1054,6 @@ module.exports = {
 };
 
 });
-
 __def("./net-checks", function(module, exports, require){
 // Mission checks — pure functions of the model that return { ok, reason }.
 // These are what a mission's success criteria are built from, and what the
@@ -1201,7 +1198,6 @@ function stpBlocked(net, switchId, port, vlan) {
 module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
 
 });
-
 __def("./net-cli", function(module, exports, require){
 // Networking Trainer — M2: the CLI layer, wired to the M1 forwarding engine.
 // Headless and testable: a CLI is bound to a world (`net`) and a "current
@@ -2776,7 +2772,6 @@ const MAN = {
 module.exports = { makeCLI, resolve, primaryIp };
 
 });
-
 __def("./net-mission", function(module, exports, require){
 // Networking Trainer — M3: the mission layer.
 // A mission is DATA: a starting topology + a list of declarative checks. The
@@ -2878,7 +2873,6 @@ function startMission(mission) {
 module.exports = { evalCheck, startMission };
 
 });
-
 __def("./net-chapters", function(module, exports, require){
 // Networking Trainer — M3: the first chapters (text-only, no UI).
 // Each mission is a starting topology (`build`) + declarative `success` checks,
@@ -3986,7 +3980,6 @@ const chapters = [
 module.exports = { chapters };
 
 });
-
 __def("./net-builder", function(module, exports, require){
 // Builder ops — pure, headless mutations of a topology ({ devices, links }).
 // The design-mode UI and the no-code authoring tool are thin layers over these;
@@ -4092,7 +4085,6 @@ function setAddress(topo, id, iface, ipStr, prefix) {
 module.exports = { KINDS, blank, addDevice, cloneDevice, removeDevice, freePort, ensurePort, addLink, removeLink, setAddress };
 
 });
-
 __def("./net-scenario", function(module, exports, require){
 // Scenario format — a portable, authorable mission. A scenario is plain data:
 // a starting topology, a success spec (the objectives), and the framing text.
@@ -4201,7 +4193,6 @@ function fromJSON(text) {
 module.exports = { CHECKS, validate, toMission, fromTopology, toJSON, fromJSON, clone };
 
 });
-
 __def("./net-classroom", function(module, exports, require){
 // Classroom data-access layer for the network trainer. A thin, headless wrapper
 // over a Supabase client (`sb`) — no DOM, so it's tested against a mock client.
@@ -4264,7 +4255,6 @@ function myAttempts(sb, userId) {
 module.exports = { ATTEMPT_PREFIX, saveScenario, myScenarios, loadScenario, assignScenarios, assignedScenarios, recordAttempt, myAttempts };
 
 });
-
 __def("./net-design-academy", function(module, exports, require){
 // Enterprise network design briefs and deterministic assessment. Pure data/rules only.
 const CASES=[
@@ -4293,7 +4283,6 @@ function evaluate(id,answers){const design=getCase(id),feedback=design.decisions
 module.exports={CASES,getCase,evaluate};
 
 });
-
 __def("./net-automation-workshop", function(module, exports, require){
 // Guided network automation playbooks backed by the real simulator CLI and model.
 // Every exercise runs in an isolated lab; no commands reach external devices.
@@ -4385,7 +4374,6 @@ function evaluateCompliance(id,net){
 module.exports={PLAYBOOKS,getPlaybook,createTopology,createLab,evaluate,clone,captureSnapshot,diffSnapshots,restoreSnapshot,evaluateCompliance};
 
 });
-
 // ---- UI (runs on load) ----
 // Networking Trainer — UI. Runs in the browser on top of the SAME tested modules
 // (loaded via the require() shim the build injects). Topology + config panels +
