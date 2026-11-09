@@ -358,6 +358,20 @@ body.practicing{padding-top:40px}
 }
 
 
+/* Resource utilisation cards for the server health view. */
+.health-resource-section{margin:18px 0 14px}.health-resource-section>h3{margin:0 0 10px;font-size:14px}
+.health-resource-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.health-resource{min-width:0;padding:13px;border:1px solid var(--line);border-radius:9px;background:var(--raise);display:grid;gap:9px}
+.health-resource-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.health-resource-head b{font-size:12px}.health-resource-head strong{font:700 20px var(--mono,monospace);color:var(--good)}
+.health-resource.warn .health-resource-head strong{color:var(--amber)}
+.health-meter{height:8px;border-radius:99px;background:var(--panel);overflow:hidden;border:1px solid var(--line)}
+.health-meter span{display:block;height:100%;border-radius:inherit;background:var(--good);transition:width .2s ease}
+.health-resource.warn .health-meter span{background:var(--amber)}
+.health-resource small{font-size:11px;line-height:1.45;color:var(--muted);overflow-wrap:anywhere}
+.health-resource-note{margin:9px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+@media(max-width:700px){.health-resource-grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.health-meter span{transition:none}}
+
 /* Server health dashboard — read-only, state-derived and opened on demand. */
 #serverHealthDialog:empty{display:none}
 #serverHealthDialog{position:fixed;inset:0;z-index:1200}
@@ -6571,6 +6585,37 @@ function renderHealthDependencyExplorer(listeners) {
   return '<div class="health-dependency-map"><div class="health-dependency-lanes">'+lanes.join('')+'</div><div class="health-dependency-detail" id="healthDependencyDetail" aria-live="polite"><h4>Halcyon web service</h4><p>Inspect with systemctl status halcyon.service.</p></div><p class="health-dependency-legend">Select a node to inspect its evidence. Arrows show observed relationships in this scenario; a missing observation is not proof that a dependency is broken.</p></div>';
 }
 
+function healthResourceSnapshot() {
+  const procs = Array.isArray(S.procs) ? S.procs : [];
+  const top = procs.slice().sort((a,b)=>(b.cpu||0)-(a.cpu||0))[0] || null;
+  // ps/top process percentages are per-core. Normalize their combined demand
+  // against the simulator's four vCPUs; retain top-process pressure separately.
+  const cpuCores = 4;
+  const processCpu = procs.reduce((sum,p)=>sum+Math.max(0,Number(p.cpu)||0),0);
+  const cpu = Math.min(100, processCpu / cpuCores);
+  // Keep the dashboard aligned with the simulator's free(1) model.
+  const memoryTotal = 3936;
+  const memoryUsed = procs.some(p=>(Number(p.cpu)||0)>100) ? 2680 : 1402;
+  const memoryAvailable = memoryTotal - memoryUsed;
+  // Use the exact capacity calculation used by df(1), including deleted-but-open files.
+  const diskTotal = DISK_TOTAL;
+  const diskUsed = Math.min(diskTotal, DISK_BASE + treeSize(S.fs) + (S.held || 0));
+  const diskPercent = diskTotal ? Math.min(100, diskUsed / diskTotal * 100) : 0;
+  const cpuWarn = !!(S.iowait || (top && top.cpu > 80) || cpu >= 85);
+  // Warn before headroom becomes critical; the busy simulator fixture leaves ~32% available.
+  const memoryWarn = memoryAvailable / memoryTotal < 0.35;
+  const diskWarn = diskPercent >= 85 || !!S.inodeBad;
+  return {
+    top, cpu, cpuCores, cpuWarn,
+    memoryTotal, memoryUsed, memoryAvailable,
+    memoryPercent: memoryUsed / memoryTotal * 100, memoryWarn,
+    diskTotal, diskUsed, diskPercent, diskWarn
+  };
+}
+function healthResourceMetric(label, percent, detail, tone, valueText) {
+  const value = Math.max(0,Math.min(100,Number(percent)||0));
+  return '<article class="health-resource '+(tone||'')+'"><div class="health-resource-head"><b>'+esc(label)+'</b><strong>'+esc(valueText)+'</strong></div><div class="health-meter" role="meter" aria-label="'+esc(label)+'" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+value.toFixed(1)+'" aria-valuetext="'+esc(valueText)+'"><span style="width:'+value.toFixed(1)+'%"></span></div><small>'+esc(detail)+'</small></article>';
+}
 function renderServerHealth() {
   const root=document.getElementById('serverHealthDialog'); if(!root)return;
   const services=Object.entries(S.services||{});
@@ -6580,10 +6625,15 @@ function renderServerHealth() {
   const mounts=S.mounts||[];
   const listeners=(S.net&&S.net.listen)||[];
   const top=procs[0];
-  const diskState=S.inodeBad?'warning':'neutral';
+  const resources=healthResourceSnapshot();
   const firewall=S.firewall&&S.firewall.active?'Active':'Inactive';
-  const status=stopped.length||S.inodeBad?'Needs attention':'Operational';
-  root.innerHTML='<div class="health-backdrop" data-health-close></div><section class="health-dialog" role="dialog" aria-modal="true" aria-labelledby="healthTitle"><header><div><div class="eyebrow">SIMULATED HOST · HALCYON-WEB01</div><h2 id="healthTitle">Server health</h2><p>Live view of the current training scenario. Values are derived from the simulator state, not your computer.</p></div><button class="btn" type="button" data-health-close aria-label="Close server health">Close</button></header><div class="health-overview"><span class="health-state '+(status==='Operational'?'ok':'warn')+'">'+status+'</span><span>Mission '+(S.mission+1)+' · '+(S.done||[]).length+' tickets resolved</span></div><div class="health-metrics">'+healthMetric('Services running',running.length+'/'+services.length,'system service state',stopped.length?'warn':'')+healthMetric('Processes',procs.length,'simulated process table','')+healthMetric('Listening sockets',listeners.length,'configured local listeners','')+healthMetric('Mounted filesystems',mounts.length,'active mount records','')+healthMetric('Firewall',firewall,'host firewall state',S.firewall&&S.firewall.active?'':'warn')+healthMetric('Highest CPU process',top?top.cpu+'%':'—',top?top.cmd:'no process data',top&&top.cpu>80?'warn':'')+'</div><div class="health-columns"><section><h3>Service dependency view</h3>'+renderHealthDependencyExplorer(listeners)+'</section><section><h3>Attention points</h3>'+(stopped.length?'<ul>'+stopped.map(([k,s])=>'<li><b>'+esc(s.unit)+'</b> is inactive. Check <code>systemctl status '+esc(s.unit)+'</code> and the journal.</li>').join('')+'</ul>':'<p class="health-good">All currently modelled services are active.</p>')+(S.inodeBad?'<p class="health-warning">The simulator reports inode pressure. Compare <code>df -i</code> with <code>df -h</code>.</p>':'<p>No inode-exhaustion flag is currently set in this scenario.</p>')+(top&&top.cpu>80?'<p class="health-warning">High CPU is attributed to PID '+top.pid+'. Inspect with <code>ps</code> or <code>top</code> before taking action.</p>':'')+'<p>Firewall: '+firewall+'. Verify intended policy before changing rules.</p></section></div>'+renderHealthTroubleshooting(services,stopped,top)+'<footer><span>Read-only overview · use the terminal to investigate and remediate</span><button class="btn primary" type="button" id="healthRefresh">Refresh view</button></footer></section>';
+  const status=stopped.length||S.inodeBad||resources.cpuWarn||resources.memoryWarn||resources.diskWarn?'Needs attention':'Operational';
+  const healthClass=status==='Operational'?'ok':'warn';
+  const resourceCards =
+    healthResourceMetric('CPU demand',resources.cpu,'Combined process demand across '+resources.cpuCores+' simulated vCPUs'+(top?' · busiest PID '+top.pid+' at '+top.cpu+'%':'') ,resources.cpuWarn?'warn':'',resources.cpu.toFixed(1)+'%')+
+    healthResourceMetric('Memory in use',resources.memoryPercent,'Available '+human(resources.memoryAvailable*1024*1024)+' of '+human(resources.memoryTotal*1024*1024),resources.memoryWarn?'warn':'',(resources.memoryPercent).toFixed(1)+'%')+
+    healthResourceMetric('Root filesystem',resources.diskPercent,'Used '+human(resources.diskUsed)+' of '+human(resources.diskTotal)+(S.held?' · includes deleted-open files':''),resources.diskWarn?'warn':'',resources.diskPercent.toFixed(1)+'%');
+  root.innerHTML='<div class="health-backdrop" data-health-close></div><section class="health-dialog" role="dialog" aria-modal="true" aria-labelledby="healthTitle"><header><div><div class="eyebrow">SIMULATED HOST · HALCYON-WEB01</div><h2 id="healthTitle">Server health</h2><p>Live view of the current training scenario. Values are derived from the simulator state, not your computer.</p></div><button class="btn" type="button" data-health-close aria-label="Close server health">Close</button></header><div class="health-overview"><span class="health-state '+healthClass+'">'+status+'</span><span>Mission '+(S.mission+1)+' · '+(S.done||[]).length+' tickets resolved</span></div><section class="health-resource-section" aria-label="Resource utilisation"><h3>Resource utilisation</h3><div class="health-resource-grid">'+resourceCards+'</div><p class="health-resource-note">CPU is normalized from simulated per-process demand across four vCPUs. Memory follows the simulator’s <code>free -h</code> model; filesystem usage follows <code>df -h</code>. These are teaching estimates, not measurements of your device.</p></section><div class="health-metrics">'+healthMetric('Services running',running.length+'/'+services.length,'system service state',stopped.length?'warn':'')+healthMetric('Processes',procs.length,'simulated process table','')+healthMetric('Listening sockets',listeners.length,'configured local listeners','')+healthMetric('Mounted filesystems',mounts.length,'active mount records','')+healthMetric('Firewall',firewall,'host firewall state',S.firewall&&S.firewall.active?'':'warn')+healthMetric('Highest CPU process',top?top.cpu+'%':'—',top?top.cmd:'no process data',top&&top.cpu>80?'warn':'')+'</div><div class="health-columns"><section><h3>Service dependency view</h3>'+renderHealthDependencyExplorer(listeners)+'</section><section><h3>Attention points</h3>'+(stopped.length?'<ul>'+stopped.map(([k,s])=>'<li><b>'+esc(s.unit)+'</b> is inactive. Check <code>systemctl status '+esc(s.unit)+'</code> and the journal.</li>').join('')+'</ul>':'<p class="health-good">All currently modelled services are active.</p>')+(resources.cpuWarn?'<p class="health-warning">CPU pressure needs investigation. The busiest process is '+(top?'PID '+top.pid+' at '+top.cpu+'%':'not available')+'. Check <code>top</code>, <code>ps aux</code> and <code>iostat</code>; high process demand and I/O wait are different conditions.</p>':'<p>Process CPU demand and I/O wait are within the teaching thresholds.</p>')+(resources.memoryWarn?'<p class="health-warning">Memory headroom is low: '+human(resources.memoryAvailable*1024*1024)+' available. Inspect <code>free -h</code> and <code>ps aux</code> before terminating processes.</p>':'<p>Memory availability is above the low-headroom threshold.</p>')+(resources.diskWarn?'<p class="health-warning">Storage needs attention. Check <code>df -h</code> for block capacity and <code>df -i</code> for inode exhaustion.</p>':'<p>Root filesystem capacity is below the warning threshold.</p>')+'<p>Firewall: '+firewall+'. Verify intended policy before changing rules.</p></section></div>'+renderHealthTroubleshooting(services,stopped,top)+'<footer><span>Read-only overview · use the terminal to investigate and remediate</span><button class="btn primary" type="button" id="healthRefresh">Refresh view</button></footer></section>';
   root.querySelectorAll('[data-health-close]').forEach(el=>el.addEventListener('click',closeServerHealth));
   root.querySelector('#healthRefresh').addEventListener('click',renderServerHealth);
   root.querySelectorAll('[data-health-node]').forEach(button=>button.addEventListener('click',()=>{
