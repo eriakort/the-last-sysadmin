@@ -7,6 +7,7 @@ const F = require('./../src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
+const NR = require('./net-spaced-recall');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
@@ -1909,11 +1910,7 @@ function networkRecallWrite(value) {
 }
 function networkRecallItems() {
   const state = networkRecallRead();
-  return Object.keys(state).map(command => {
-    const guide = LC.getGuide(command), record = state[command];
-    if (!guide || !record || !Number.isFinite(Number(record.dueAt))) return null;
-    return { command, guide, record, dueAt: Number(record.dueAt) };
-  }).filter(Boolean).sort((a, b) => a.dueAt - b.dueAt);
+  return NR.items(state, command => LC.getGuide(command), Date.now());
 }
 function networkRecallDueCount(now = Date.now()) {
   return networkRecallItems().filter(item => item.dueAt <= now).length;
@@ -1921,27 +1918,13 @@ function networkRecallDueCount(now = Date.now()) {
 function networkRecallAdd(command) {
   const guide = LC.getGuide(command);
   if (!guide) return false;
-  const state = networkRecallRead();
-  if (!state[command]) state[command] = { stage: 0, dueAt: Date.now() + 86400000, reviews: 0, lapses: 0 };
+  const state = NR.add(networkRecallRead(), command, Date.now());
   networkRecallWrite(state);
   return true;
 }
 function networkRecallReview(command, remembered) {
-  const state = networkRecallRead(), record = state[command];
-  if (!record || !LC.getGuide(command)) return false;
-  const intervals = [1, 3, 7, 14, 30];
-  if (remembered) {
-    record.stage = Math.min(intervals.length - 1, Math.max(0, Number(record.stage) || 0) + 1);
-    record.reviews = (Number(record.reviews) || 0) + 1;
-    record.lastResult = 'recalled';
-    record.dueAt = Date.now() + intervals[record.stage] * 86400000;
-  } else {
-    record.stage = 0;
-    record.lapses = (Number(record.lapses) || 0) + 1;
-    record.lastResult = 'needs-practice';
-    record.dueAt = Date.now() + 86400000;
-  }
-  record.lastReviewedAt = Date.now();
+  const state = NR.review(networkRecallRead(), command, remembered, Date.now());
+  if (!state) return false;
   networkRecallWrite(state);
   return true;
 }
