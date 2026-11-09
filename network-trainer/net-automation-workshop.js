@@ -49,4 +49,40 @@ function evaluate(id,net){
  const score=checks.filter(x=>x.ok).length;
  return{playbookId:id,score,total:checks.length,percent:Math.round(score/checks.length*100),passed:score===checks.length,checks};
 }
-module.exports={PLAYBOOKS,getPlaybook,createTopology,createLab,evaluate,clone};
+
+/* ---------- configuration change control ---------- */
+// Snapshots preserve the canonical simulator device state; they are not device backups.
+function captureSnapshot(net,label){
+ if(!net||!net.devices||typeof net.devices!=='object')throw new Error('A valid simulator network is required');
+ return {label:String(label||'configuration snapshot'),devices:clone(net.devices)};
+}
+function diffSnapshots(before,after){
+ if(!before||!before.devices||!after||!after.devices)return {changes:[],valid:false};
+ const changes=[];
+ const ids=[...new Set([...Object.keys(before.devices),...Object.keys(after.devices)])].sort();
+ function walk(device,path,a,b){
+  const aObj=a!==null&&typeof a==='object',bObj=b!==null&&typeof b==='object';
+  if(aObj&&bObj&&!Array.isArray(a)&&!Array.isArray(b)){
+   const keys=[...new Set([...Object.keys(a),...Object.keys(b)])].sort();
+   for(const key of keys)walk(device,path?path+'.'+key:key,a[key],b[key]);
+   return;
+  }
+  if(JSON.stringify(a)!==JSON.stringify(b))changes.push({device,path,before:a===undefined?null:clone(a),after:b===undefined?null:clone(b)});
+ }
+ for(const id of ids)walk(id,'',before.devices[id],after.devices[id]);
+ return {valid:true,changes,count:changes.length};
+}
+function restoreSnapshot(net,snapshot){
+ if(!net||!snapshot||!snapshot.devices||typeof snapshot.devices!=='object')return false;
+ net.devices=clone(snapshot.devices);
+ return true;
+}
+function evaluateCompliance(id,net){
+ const result=evaluate(id,net),devices=Object.values(net&&net.devices||{});
+ const saved=devices.length>0&&devices.every(d=>typeof d.startupConfig==='string'&&d.startupConfig.trim().length>0);
+ const checks=result.checks.concat([{label:'Every device has a saved startup configuration',ok:saved,detail:'Save the approved running configuration on every device in this change set.'}]);
+ const score=checks.filter(x=>x.ok).length;
+ return {...result,checks,score,total:checks.length,percent:Math.round(score/checks.length*100),passed:score===checks.length};
+}
+
+module.exports={PLAYBOOKS,getPlaybook,createTopology,createLab,evaluate,clone,captureSnapshot,diffSnapshots,restoreSnapshot,evaluateCompliance};
