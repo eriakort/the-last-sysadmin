@@ -628,6 +628,7 @@ body.practicing{padding-top:40px}
   </div>
 </div>
 
+<script src="src/feedback.js"></script>
 <script>
 (() => {
 'use strict';
@@ -6148,31 +6149,10 @@ function clearMistakeCoach() {
 function showMistakeCoach(raw) {
   const panel = document.getElementById('mistakeCoach');
   if (!panel) return;
-  const message = String(raw || '').toLowerCase();
-  let category = 'Command or operation failed';
-  let reason = 'The command did not complete. Read the exact error, then inspect the current system state before trying another change.';
-  let next = 'Check the command manual and current context, then repeat the original check after one targeted correction.';
-  if (/command not found/.test(message)) {
-    category = 'Command not found · syntax';
-    reason = 'The shell could not match the first word to an available command. Linux command names are case-sensitive.';
-    next = 'Check spelling and capitalisation with the command reference, or use help to find the correct tool.';
-  } else if (/permission denied|operation not permitted/.test(message)) {
-    category = 'Permission · access';
-    reason = 'The current user or file permissions do not allow this action. It does not automatically mean that elevated access is the right fix.';
-    next = 'Inspect who you are and the target permissions with whoami and ls -l before changing ownership or access.';
-  } else if (/no such file|cannot access|not found/.test(message)) {
-    category = 'Target not found · path';
-    reason = 'The requested file, directory, service or target could not be located in the current context.';
-    next = 'Confirm your location with pwd, then inspect the relevant directory or service name before retrying.';
-  } else if (/is a directory|not a directory/.test(message)) {
-    category = 'Wrong target type';
-    reason = 'The command expected a file or directory of a different type than the one supplied.';
-    next = 'Inspect the target with ls -ld and choose an operation that matches its actual type.';
-  } else if (/invalid option|unrecognized option|usage:/.test(message)) {
-    category = 'Invalid option · command syntax';
-    reason = 'The command recognised the tool but rejected its option or argument format.';
-    next = 'Read the usage line or run the command with --help; add or change one option at a time.';
-  }
+  const feedback = window.LSAFeedback
+    ? window.LSAFeedback.classifyCommandFailure({ discipline: 'linux', output: raw })
+    : { title: 'Command or operation failed', reason: 'The command did not complete. Inspect the exact error and current state.', next: 'Check the command manual and repeat the original check after one targeted correction.' };
+  const category = feedback.title, reason = feedback.reason, next = feedback.next;
   panel.querySelector('[data-mistake-category]').textContent = category;
   panel.querySelector('[data-mistake-reason]').textContent = reason;
   panel.querySelector('[data-mistake-next]').textContent = next;
