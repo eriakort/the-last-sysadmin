@@ -211,6 +211,20 @@ let URL;
   if (await page.locator('#navWorkbench').getAttribute('title')) ok('workspace navigation includes explanatory tooltips');
   else fail('workspace navigation tooltip is missing');
 
+  // --- cross-track daily practice deep link opens the saved network recall queue ---
+  await page.evaluate(() => localStorage.setItem('nettrainer-recall-v1', JSON.stringify({
+    'show ip route': { stage: 0, dueAt: 0, reviews: 0, lapses: 0 },
+    'show interfaces': { stage: 1, dueAt: Date.now() + 86400000, reviews: 1, lapses: 0 }
+  })));
+  await page.goto('http://127.0.0.1:' + port + '/index.html?view=knowledge&dailyReview=1', { waitUntil: 'load' });
+  await page.waitForTimeout(250);
+  if (!(await page.locator('#knowledgeView').isHidden())) ok('daily practice deep link opens Network Knowledge');
+  else fail('daily practice deep link did not open Network Knowledge');
+  if ((await page.locator('#networkRecallCard').innerText()).includes('show ip route')) ok('daily practice deep link starts the due network recall card');
+  else fail('daily practice deep link did not start the due network recall card: ' + await page.locator('#networkRecallCard').innerText());
+  if ((await page.locator('#networkRecallCard').innerText()).includes('route')) ok('network recall challenge is rendered without changing its schedule');
+  else fail('network recall challenge content was not rendered');
+
   await browser.close();
   await new Promise(resolve => server.close(resolve));
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }
