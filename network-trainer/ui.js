@@ -1074,13 +1074,13 @@ function copyTopologySelection() {
   const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]); if(!ids.length && SEL)ids.push(SEL);
   if(!ids.length)return;
   const set=new Set(ids), pos=RUN.net.pos||{};
-  TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id)})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
+  TOPO_CLIPBOARD={devices:ids.map(id=>({id,device:JSON.parse(JSON.stringify(RUN.net.devices[id])),pos:pos[id]?pos[id].slice():nodePos(id),labelPositions:JSON.parse(JSON.stringify((RUN.net.deviceLabelPositions||{})[id]||{}))})),links:RUN.net.links.filter(l=>set.has(l.a[0])&&set.has(l.b[0])).map(l=>JSON.parse(JSON.stringify(l)))};
   refresh(); // update the Paste control immediately after the clipboard is populated
 }
 function pasteTopologySelection() {
   if(!canBuild()||!TOPO_CLIPBOARD||!TOPO_CLIPBOARD.devices.length)return;
   const before=topologySnapshot(), map={};
-  TOPO_CLIPBOARD.devices.forEach(item=>{const kind=item.device.services?'server':item.device.kind;const prefix={host:'h',server:'srv',switch:'sw',router:'r',firewall:'fw'}[kind]||'h';let n=1;while(RUN.net.devices[prefix+n])n++;const newId=prefix+n;const copy=JSON.parse(JSON.stringify(item.device));copy.id=newId;if(copy.hostname===item.id)copy.hostname=newId;RUN.net.devices[newId]=copy;RUN.net.pos=RUN.net.pos||{};RUN.net.pos[newId]=[item.pos[0]+48,item.pos[1]+48];map[item.id]=newId;});
+  TOPO_CLIPBOARD.devices.forEach(item=>{const kind=item.device.services?'server':item.device.kind;const prefix={host:'h',server:'srv',switch:'sw',router:'r',firewall:'fw'}[kind]||'h';let n=1;while(RUN.net.devices[prefix+n])n++;const newId=prefix+n;const copy=JSON.parse(JSON.stringify(item.device));copy.id=newId;if(copy.hostname===item.id)copy.hostname=newId;RUN.net.devices[newId]=copy;RUN.net.pos=RUN.net.pos||{};RUN.net.pos[newId]=[item.pos[0]+48,item.pos[1]+48];if(item.labelPositions&&Object.keys(item.labelPositions).length){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[newId]={};for(const key of Object.keys(item.labelPositions)){const p=item.labelPositions[key];RUN.net.deviceLabelPositions[newId][key]=[p[0]+48,p[1]+48];}}map[item.id]=newId;});
   TOPO_CLIPBOARD.links.forEach(l=>{if(map[l.a[0]]&&map[l.b[0]])try{B.addLink(RUN.net,map[l.a[0]],map[l.b[0]],l.a[1],l.b[1]);}catch(e){}});
   rememberTopology(before); TOPO_SELECTED=new Set(Object.values(map)); SEL=Object.values(map)[0]||SEL; refresh();
 }
