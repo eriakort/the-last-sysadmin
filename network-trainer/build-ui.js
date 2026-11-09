@@ -54,9 +54,9 @@ svg#topo{max-width:100%;height:auto}
 .node .ico{color:var(--muted)}
 /* Isometric device faces: layered light, front and side planes create a compact 3D equipment look. */
 .node .device-art{overflow:visible;filter:drop-shadow(0 3px 2px rgba(0,0,0,.28))}
-.device-art .iso-top{fill:color-mix(in srgb,currentColor 48%,#fff);stroke:color-mix(in srgb,currentColor 65%,#fff);stroke-width:1.05}
-.device-art .iso-front{fill:color-mix(in srgb,currentColor 30%,#07131a);stroke:color-mix(in srgb,currentColor 48%,#dbeafe);stroke-width:1.05}
-.device-art .iso-side{fill:color-mix(in srgb,currentColor 12%,#02080c);stroke:color-mix(in srgb,currentColor 35%,#94a3b8);stroke-width:1.05}
+.device-art .iso-top{fill:#91b8ca;stroke:#d5eaf2;stroke-width:1.05}
+.device-art .iso-front{fill:#31566b;stroke:#a8c8d7;stroke-width:1.05}
+.device-art .iso-side{fill:#172f40;stroke:#7898aa;stroke-width:1.05}
 .device-art .iso-screen{fill:#102a35;stroke:#8bdcf2;stroke-width:.8}
 .device-art .iso-screen-glint{fill:#8bdcf2;stroke:none;opacity:.78}
 .device-art .iso-detail,.device-art .iso-port,.device-art .iso-port-side{fill:none;stroke:color-mix(in srgb,currentColor 55%,#e2e8f0);stroke-width:1.05}
