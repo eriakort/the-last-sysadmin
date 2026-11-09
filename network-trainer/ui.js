@@ -7,6 +7,7 @@ const F = require('./../src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
+const NR = require('./net-spaced-recall');
 const { makeCLI } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
@@ -1893,6 +1894,63 @@ function networkLearningRecommendation() {
   else if (errors.length && /interface|link|port|ethernet/.test(signal)) focus = { title: 'Interface state and link diagnosis', command: 'show ip interface brief', reason: 'Recent command errors mention interfaces, links or ports. Practise checking administrative and operational state before changing interface settings.', source: errors.length + ' recent command error' + (errors.length === 1 ? '' : 's') };
   return { completed, total, journalCount: journal.length, commandCount: commands.length, errorCount: errors.length, focus };
 }
+
+/* ---------- network spaced recall ---------- */
+const NETWORK_RECALL_KEY = 'nettrainer-recall-v1';
+let NETWORK_RECALL_QUEUE = [];
+let NETWORK_RECALL_INDEX = 0;
+function networkRecallRead() {
+  try {
+    const value = JSON.parse(localStorage.getItem(NETWORK_RECALL_KEY) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch (e) { return {}; }
+}
+function networkRecallWrite(value) {
+  try { localStorage.setItem(NETWORK_RECALL_KEY, JSON.stringify(value)); } catch (e) {}
+}
+function networkRecallItems() {
+  const state = networkRecallRead();
+  return NR.items(state, command => LC.getGuide(command), Date.now());
+}
+function networkRecallDueCount(now = Date.now()) {
+  return networkRecallItems().filter(item => item.dueAt <= now).length;
+}
+function networkRecallAdd(command) {
+  const guide = LC.getGuide(command);
+  if (!guide) return false;
+  const state = NR.add(networkRecallRead(), command, Date.now());
+  networkRecallWrite(state);
+  return true;
+}
+function networkRecallReview(command, remembered) {
+  const state = NR.review(networkRecallRead(), command, remembered, Date.now());
+  if (!state) return false;
+  networkRecallWrite(state);
+  return true;
+}
+function networkRecallPanelMarkup() {
+  const items = networkRecallItems(), due = items.filter(item => item.dueAt <= Date.now()).length;
+  return '<section class="knowledge-playbooks" aria-label="Network spaced recall"><div class="knowledge-section-head"><div><h2>Spaced recall</h2><span>Bring network concepts back to mind over increasing intervals</span></div><span class="help-key" id="networkRecallDue">' + due + ' due · ' + items.length + ' saved</span></div><div class="knowledge-playbook-grid"><article class="knowledge-playbook"><div class="eyebrow">RECALL DECK</div><h3>' + items.length + ' concept' + (items.length === 1 ? '' : 's') + ' saved</h3><p>Save a command-coach challenge to revisit it tomorrow. Rate your recall honestly; concepts you remember return later, while difficult concepts return sooner.</p><button class="btn primary sm" id="networkRecallStart" type="button" ' + (due ? '' : 'disabled') + '>Start review' + (due ? ' · ' + due + ' due' : '') + '</button></article><article class="knowledge-playbook"><div class="eyebrow">HOW IT WORKS</div><h3>Recall before revealing</h3><p>Try to explain the answer from memory before revealing the explanation. This is self-assessed practice, not an automatic command or mission grade.</p></article></div><div id="networkRecallCard" aria-live="polite"></div></section>';
+}
+function renderNetworkRecallCard() {
+  const root = $('#networkRecallCard'); if (!root) return;
+  if (!NETWORK_RECALL_QUEUE.length) {
+    const next = networkRecallItems()[0];
+    root.innerHTML = next
+      ? '<article class="knowledge-playbook"><b>No reviews due right now.</b><p>Your next saved concept is scheduled for ' + esc(new Date(next.dueAt).toLocaleString()) + '.</p></article>'
+      : '<article class="knowledge-playbook"><b>Your recall deck is empty.</b><p>Open a command coach and choose “Add to recall deck” to save a concept for tomorrow.</p></article>';
+    return;
+  }
+  const command = NETWORK_RECALL_QUEUE[NETWORK_RECALL_INDEX], item = networkRecallItems().find(x => x.command === command);
+  if (!item) { NETWORK_RECALL_QUEUE = []; renderNetworkRecallCard(); return; }
+  root.innerHTML = '<article class="knowledge-playbook"><div class="knowledge-section-head"><div><div class="eyebrow">RECALL CARD ' + (NETWORK_RECALL_INDEX + 1) + ' OF ' + NETWORK_RECALL_QUEUE.length + '</div><h3>' + esc(command) + '</h3></div><span class="help-key">' + ([1,3,7,14,30][Math.min(4, Math.max(0, Number(item.record.stage) || 0))]) + '-day interval</span></div><p class="diag-q">' + esc(item.guide.challenge) + '</p><div class="row"><button class="btn sm" id="networkRecallReveal" type="button">Reveal explanation</button></div><div id="networkRecallAnswer" class="coach-detail" hidden><b>Explanation</b><p>' + esc(item.guide.answer) + '</p><p class="dim">Rate how well you recalled the explanation without looking it up.</p><div class="row"><button class="btn primary sm" id="networkRecallRemembered" type="button">I recalled it</button><button class="btn sm" id="networkRecallAgain" type="button">I need more practice</button></div></div></article>';
+}
+function startNetworkRecall() {
+  NETWORK_RECALL_QUEUE = networkRecallItems().filter(item => item.dueAt <= Date.now()).map(item => item.command);
+  NETWORK_RECALL_INDEX = 0;
+  renderNetworkRecallCard();
+}
+
 function renderNetworkLearningPlan() {
   const plan = networkLearningRecommendation();
   return `<section class="knowledge-playbooks" aria-label="Personal learning plan">
@@ -1909,12 +1967,27 @@ function renderKnowledgeCenter() {
   root.innerHTML = `
     <div class="knowledge-page-heading"><div><div class="eyebrow">Field reference · network operations</div><h1>Network knowledge</h1><p>Practical command references and repeatable troubleshooting workflows. Select a command to send it to the active Workbench console, or open the coach to understand when and why to use it.</p></div><span class="help-key">L1 / L2 FIELD GUIDE</span></div>
     ${renderNetworkLearningPlan()}
+    ${networkRecallPanelMarkup()}
     <section class="knowledge-playbooks"><div class="knowledge-section-head"><h2>Troubleshooting playbooks</h2><span>Work methodically · capture evidence</span></div><div class="knowledge-playbook-grid">${KNOWLEDGE_PLAYBOOKS.map((p,i)=>`<article class="knowledge-playbook"><div class="eyebrow">PLAYBOOK 0${i+1}</div><h3>${esc(p.title)}</h3><ol>${p.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></article>`).join('')}</div></section>
     <section class="knowledge-library"><div class="knowledge-section-head"><div><h2>Command reference</h2><p>Search by command, task or description. Availability depends on the selected simulator device and CLI mode.</p></div></div><div class="knowledge-toolbar"><input id="knowledgeSearch" type="search" placeholder="Search commands and tasks…" aria-label="Search commands"><select id="knowledgeCategory" aria-label="Filter command category"><option value="all">All categories</option>${[...new Set(KNOWLEDGE_COMMANDS.map(x=>x.cat))].map(c=>`<option>${esc(c)}</option>`).join('')}</select></div><div id="knowledgeCommands" class="knowledge-command-list">${renderKnowledgeCommands(KNOWLEDGE_COMMANDS)}</div>
       <section class="network-command-coach" id="networkCommandCoach" aria-live="polite" aria-label="Network command coach"><div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div></section>
     </section>
     <p class="knowledge-caveat">Simulator reference only: this is not a complete Cisco IOS / IOS XE command catalogue. Commands vary by device and CLI context; unsupported commands should be treated as unavailable, not assumed to work on production equipment.</p>`;
   const search=root.querySelector('#knowledgeSearch'), category=root.querySelector('#knowledgeCategory'), list=root.querySelector('#knowledgeCommands');
+  root.addEventListener('click', event => {
+    if (event.target.closest('#networkRecallStart')) startNetworkRecall();
+    else if (event.target.closest('#networkRecallReveal')) { const answer = root.querySelector('#networkRecallAnswer'); if (answer) { answer.hidden = false; event.target.closest('#networkRecallReveal').disabled = true; } }
+    else if (event.target.closest('#networkRecallRemembered') || event.target.closest('#networkRecallAgain')) {
+      const remembered = !!event.target.closest('#networkRecallRemembered'), command = NETWORK_RECALL_QUEUE[NETWORK_RECALL_INDEX];
+      if (command) networkRecallReview(command, remembered);
+      NETWORK_RECALL_INDEX++;
+      if (NETWORK_RECALL_INDEX >= NETWORK_RECALL_QUEUE.length) NETWORK_RECALL_QUEUE = [];
+      const due = root.querySelector('#networkRecallDue'), start = root.querySelector('#networkRecallStart');
+      if (due) due.textContent = networkRecallDueCount() + ' due · ' + networkRecallItems().length + ' saved';
+      if (start) { const count = networkRecallDueCount(); start.disabled = !count; start.textContent = 'Start review' + (count ? ' · ' + count + ' due' : ''); }
+      renderNetworkRecallCard();
+    }
+  });
   const filter=()=>{const q=search.value.trim().toLowerCase(), cat=category.value; const matches=KNOWLEDGE_COMMANDS.filter(x=>(cat==='all'||x.cat===cat)&&(!q||[x.cmd,x.cat,x.desc].join(' ').toLowerCase().includes(q))); list.innerHTML=renderKnowledgeCommands(matches); wireKnowledgeCommands(root);};
   search.addEventListener('input',filter); category.addEventListener('change',filter); wireKnowledgeCommands(root);
   const practice = root.querySelector('#coachPracticeFocus');
@@ -1938,11 +2011,12 @@ function renderNetworkCommandCoach(command) {
     '<div class="coach-content"><div><b>' + (challenge ? 'Test your understanding' : 'How to approach it') + '</b>' + guidance +
     '<div class="coach-detail"><b>How to interpret the output</b><p>' + esc(guide.interpret) + '</p><p><b>Evidence to look for:</b> ' + esc(guide.lookFor) + '</p></div>' +
     '<div class="coach-detail"><b>Common pitfall</b><p>' + esc(guide.pitfall) + '</p></div><div class="coach-detail"><b>Next step</b><p>' + esc(guide.next) + '</p></div></div></div>' +
-    '<div class="row"><button class="btn primary" id="networkCoachPractice" type="button">Practice in Workbench</button><button class="btn" id="networkCoachClose" type="button">Close coach</button></div>';
+    '<div class="row"><button class="btn primary" id="networkCoachPractice" type="button">Practice in Workbench</button><button class="btn" id="networkCoachRecallAdd" type="button">' + (networkRecallRead()[command] ? 'In recall deck' : 'Add to recall deck') + '</button><button class="btn" id="networkCoachClose" type="button">Close coach</button></div>';
   root.querySelector('#networkCoachMode').addEventListener('change', e => { KNOWLEDGE_COACH_MODE = e.target.value; renderNetworkCommandCoach(command); });
   const reveal = root.querySelector('#networkCoachReveal');
   if (reveal) reveal.addEventListener('click', () => { const answer = root.querySelector('#networkCoachAnswer'); answer.hidden = false; reveal.disabled = true; reveal.textContent = 'Explanation revealed'; });
   root.querySelector('#networkCoachPractice').addEventListener('click', () => { showWorkspaceView('workbench'); const input = $('#tin'); if (input) { input.value = item.cmd; openTerminalWindow(true); } });
+  root.querySelector('#networkCoachRecallAdd').addEventListener('click', () => { networkRecallAdd(command); renderNetworkCommandCoach(command); const due = $('#networkRecallDue'); if (due) due.textContent = networkRecallDueCount() + ' due · ' + networkRecallItems().length + ' saved'; });
   root.querySelector('#networkCoachClose').addEventListener('click', () => { KNOWLEDGE_COACH_COMMAND = null; root.innerHTML = '<div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div>'; });
 }
 function wireKnowledgeCommands(root) {
