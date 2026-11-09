@@ -115,6 +115,12 @@ jobs:
       - name: Network Trainer incident management UI tests (WebKit)
         run: npm --prefix network-trainer run test:incidents:webkit
 
+      - name: Network Trainer change management UI tests (Firefox)
+        run: npm --prefix network-trainer run test:changes:firefox
+
+      - name: Network Trainer change management UI tests (WebKit)
+        run: npm --prefix network-trainer run test:changes:webkit
+
       - name: Network Trainer topology keyboard tests (Firefox)
         run: cd network-trainer && PLAYWRIGHT_BROWSER=firefox node test-topology-objects-keyboard-ui.js
 

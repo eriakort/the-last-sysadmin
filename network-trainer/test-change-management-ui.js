@@ -1,10 +1,32 @@
 // Change management workflow: create, approve, implement, verify and persist a controlled change.
 const path = require('path');
-const { chromium } = require('playwright');
-const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbench';
+const fs = require('fs');
+const http = require('http');
+const { URL: NodeURL } = require('url');
+const { chromium, firefox, webkit } = require('playwright');
+const browserName = process.env.PLAYWRIGHT_BROWSER || 'chromium';
+const browserType = ({ chromium, firefox, webkit })[browserName];
+if (!browserType) throw new Error('Unsupported PLAYWRIGHT_BROWSER: ' + browserName);
+const root = path.resolve(process.cwd());
+const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.webp':'image/webp' };
+const server = http.createServer((req, res) => {
+  let pathname;
+  try { pathname = decodeURIComponent(new NodeURL(req.url, 'http://127.0.0.1').pathname); }
+  catch { res.writeHead(400).end('Bad request'); return; }
+  const file = path.resolve(root, '.' + pathname);
+  if (file !== root && !file.startsWith(root + path.sep)) { res.writeHead(403).end('Forbidden'); return; }
+  fs.stat(file, (error, stat) => {
+    if (error || !stat.isFile()) { res.writeHead(404).end('Not found'); return; }
+    res.writeHead(200, { 'Content-Type': mime[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control':'no-store' });
+    fs.createReadStream(file).pipe(res);
+  });
+});
+const listen = () => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 
 (async () => {
-  const browser = await chromium.launch();
+  const port = await listen();
+  const URL = 'http://127.0.0.1:' + port + '/index.html?view=workbench';
+  const browser = await browserType.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -68,7 +90,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
     ok('change record and verification evidence persist after reload');
   else fail('change record did not persist');
   await page.locator('#navJournal').click();
-  if (await page.locator('#journalView').innerText().then(t=>t.includes('change verified'))) ok('change lifecycle is recorded in the Engineering Journal');
+  await page.locator('#journalView h1').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => (document.querySelector('#journalView')?.innerText || '').toLowerCase().includes('change verified'));
+  if (await page.locator('#journalView').innerText().then(t=>t.toLowerCase().includes('change verified'))) ok('change lifecycle is recorded in the Engineering Journal');
   else fail('change lifecycle was not journalled');
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -78,6 +102,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   else fail('Change Management causes horizontal page overflow on mobile');
 
   await browser.close();
+  await new Promise(resolve => server.close(resolve));
   if (errors.length) { console.error('\\nCHANGE MANAGEMENT TEST FAILED (' + errors.length + ')'); process.exit(1); }
   console.log('\\nCHANGE MANAGEMENT OK.');
 })();
