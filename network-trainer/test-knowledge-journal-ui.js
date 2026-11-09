@@ -50,7 +50,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('#networkRecallStart').isEnabled() && (await page.locator('#networkRecallDue').innerText()).includes('1 due')) ok('saved recall cards become available when their due date arrives');
   else fail('due recall card was not surfaced after reload');
   await page.locator('#networkRecallStart').click();
-  if ((await page.locator('#networkRecallCard').innerText()).includes('redundant path') && await page.locator('#networkRecallAnswer').isHidden()) ok('recall review presents the challenge before revealing its explanation');
+  if ((await page.locator('#networkRecallCard').innerText()).includes('triangle topology') && await page.locator('#networkRecallAnswer').isHidden()) ok('recall review presents the challenge before revealing its explanation');
   else fail('recall card did not withhold its explanation');
   await page.locator('#networkRecallReveal').click();
   if (await page.locator('#networkRecallAnswer').isVisible()) ok('learner can reveal the command-specific explanation');
