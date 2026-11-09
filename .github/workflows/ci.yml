@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# CI only builds and tests; it does not need to write repository contents,
+# publish packages, or create deployments.
+permissions:
+  contents: read
+
 jobs:
   build-and-verify:
     runs-on: ubuntu-latest
