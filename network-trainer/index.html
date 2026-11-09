@@ -33,6 +33,23 @@ svg#topo{max-width:100%;height:auto}
 .node:active{cursor:grabbing}
 .pal-hint{font-size:11px;margin-top:5px}
 .node .ico{color:var(--muted)}
+/* Isometric device faces: layered light, front and side planes create a compact 3D equipment look. */
+.node .device-art{overflow:visible;filter:drop-shadow(0 3px 2px rgba(0,0,0,.28))}
+.node .device-art .iso-top{fill:#91b8ca !important;stroke:#d5eaf2;stroke-width:1.05}
+.node .device-art .iso-front{fill:#31566b !important;stroke:#a8c8d7;stroke-width:1.05}
+.node .device-art .iso-side{fill:#172f40 !important;stroke:#7898aa;stroke-width:1.05}
+.palette-device-icon .device-art .iso-top{fill:#91b8ca !important;stroke:#d5eaf2;stroke-width:1.05}
+.palette-device-icon .device-art .iso-front{fill:#31566b !important;stroke:#a8c8d7;stroke-width:1.05}
+.palette-device-icon .device-art .iso-side{fill:#172f40 !important;stroke:#7898aa;stroke-width:1.05}
+.device-art .iso-screen{fill:#102a35;stroke:#8bdcf2;stroke-width:.8}
+.device-art .iso-screen-glint{fill:#8bdcf2;stroke:none;opacity:.78}
+.device-art .iso-detail,.device-art .iso-port,.device-art .iso-port-side{fill:none;stroke:color-mix(in srgb,currentColor 55%,#e2e8f0);stroke-width:1.05}
+.device-art .iso-led{fill:#6ee7b7;stroke:#d1fae5;stroke-width:.55}
+.device-art .iso-antenna{fill:none;stroke:color-mix(in srgb,currentColor 65%,#e2e8f0);stroke-width:1.5}
+.device-art .iso-brick{fill:color-mix(in srgb,currentColor 22%,#111827);stroke:color-mix(in srgb,currentColor 48%,#e2e8f0);stroke-width:.7}
+.device-art .iso-shield{fill:#451b27;stroke:#fecdd3;stroke-width:.8}
+.node:hover .device-art{filter:drop-shadow(0 4px 4px rgba(0,0,0,.42)) brightness(1.12)}
+.node.sel .device-art{filter:drop-shadow(0 0 5px var(--amber)) drop-shadow(0 3px 2px rgba(0,0,0,.35))}
 .node.k-host,.node.k-host .ico{color:var(--host)}
 .node.k-server,.node.k-server .ico{color:var(--host)}
 .node.k-switch,.node.k-switch .ico{color:var(--switch)}
