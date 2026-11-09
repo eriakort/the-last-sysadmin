@@ -103,6 +103,12 @@ jobs:
       - name: Network Trainer core UI tests (WebKit)
         run: npm --prefix network-trainer run test:ui:webkit
 
+      - name: Network Trainer ticket queue UI tests (Firefox)
+        run: npm --prefix network-trainer run test:ticket-queue:firefox
+
+      - name: Network Trainer ticket queue UI tests (WebKit)
+        run: npm --prefix network-trainer run test:ticket-queue:webkit
+
       - name: Network Trainer topology keyboard tests (Firefox)
         run: cd network-trainer && PLAYWRIGHT_BROWSER=firefox node test-topology-objects-keyboard-ui.js
 
