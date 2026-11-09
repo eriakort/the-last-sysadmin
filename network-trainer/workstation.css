@@ -583,7 +583,8 @@ aside{scrollbar-color:#344a60 transparent}
 .terminal-window-content .term-head{flex:none;max-height:84px;overflow:auto;flex-wrap:wrap}
 .terminal-window-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
 .terminal-window-content .tline{flex:none}
-.terminal-restore{position:fixed;z-index:1001;right:18px;bottom:18px;box-shadow:0 8px 28px #0009}
+body>.terminal-restore{position:fixed;z-index:1001;top:18px;right:18px;bottom:auto;box-shadow:0 8px 28px #0009}
+#topoWrap>.terminal-restore{position:absolute;z-index:25;top:12px;right:12px;bottom:auto;box-shadow:0 8px 28px #0009}
 @media(max-width:760px){
  .terminal-window{left:8px!important;right:8px!important;top:auto!important;bottom:8px!important;width:auto;height:54vh;min-width:0;min-height:220px;resize:vertical}
  .terminal-window-content .term-head{max-height:76px}
