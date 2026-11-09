@@ -144,7 +144,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   page.once('dialog', dialog => dialog.accept('Core Router'));
   await page.click('#labelDev');
   await page.waitForTimeout(60);
-  if ((await page.locator('#topo .node[data-dev="h2"] .n-id').textContent()) === 'Core Router') ok('selected device supports a custom display label');
+  if ((await page.locator('#topo .device-label[data-device-label="h2"][data-label-kind="name"]').textContent()) === 'Core Router') ok('selected device supports a custom display label');
   else fail('custom device label was not rendered');
   page.once('dialog', dialog => dialog.accept('Core LAN'));
   await page.click('#zoneBtn'); await page.waitForTimeout(70);
