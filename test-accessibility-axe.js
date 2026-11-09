@@ -1,6 +1,9 @@
 'use strict';
 const path=require('path');
-const {chromium}=require('playwright');
+const {chromium,firefox,webkit}=require('playwright');
+const browserName=process.env.PLAYWRIGHT_BROWSER||'chromium';
+const browserType={chromium,firefox,webkit}[browserName];
+if(!browserType)throw new Error('Unsupported PLAYWRIGHT_BROWSER: '+browserName);
 const {spawnSync}=require('child_process');
 const axe=require('axe-core');
 const build=spawnSync(process.execPath,[path.join(process.cwd(),'network-trainer','build-ui.js')],{encoding:'utf8'});
@@ -8,7 +11,8 @@ if(build.status!==0)throw new Error('Network Trainer build failed before accessi
 const rootUrl='file://'+path.join(process.cwd(),'index.html');
 const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html?view=workbench');
 (async()=>{
- const browser=await chromium.launch({args:['--allow-file-access-from-files']}),failures=[];
+ const launchOptions=browserName==='chromium'?{args:['--allow-file-access-from-files']}:{};
+ const browser=await browserType.launch(launchOptions),failures=[];
  async function install(page){await page.addScriptTag({content:axe.source});}
  async function scan(page,label){
   const result=await page.evaluate(async()=>await axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']}}));
@@ -68,5 +72,5 @@ const networkUrl='file://'+path.join(process.cwd(),'network-trainer','index.html
   await net.close();
  }finally{await browser.close();}
  if(failures.length){console.error('Accessibility scan failed: '+failures.join(', '));process.exit(1);}
- console.log('Accessibility axe scans passed: no serious or critical violations across all scanned states.');
+ console.log('Accessibility axe scans passed ('+browserName+'): no serious or critical violations across all scanned states.');
 })();
