@@ -6073,7 +6073,7 @@ function openStats() {
 const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
 function renderPalette() {
   if (!canBuild()) return '';
-  const add = PALETTE.map(([k, n]) => '<button class="btn sm pal" data-add="' + k + '" title="Add a ' + n.toLowerCase() + ' to the topology canvas"><svg class="palette-device-icon" viewBox="0 0 48 42" aria-hidden="true">' + NODE_ICONS[k] + '</svg><span>' + n + '</span><span class="palette-add" aria-hidden="true">＋</span></button>').join('');
+  const add = PALETTE.map(([k, n]) => '<button class="btn sm pal" data-add="' + k + '" title="Add a ' + n.toLowerCase() + ' to the topology canvas"><svg class="palette-device-icon" viewBox="0 -12 48 58" aria-hidden="true">' + NODE_ICONS[k] + '</svg><span>' + n + '</span><span class="palette-add" aria-hidden="true">＋</span></button>').join('');
   const wiring = WIRE ? '<span class="wire-on">click another device to connect <b>' + esc(WIRE) + '</b></span>' : '';
   const layerState = Object.assign({}, TOPO_LAYERS, RUN.net.layerVisibility || {});
   const drawingTools = [['select','Select'],['line','Line'],['arrow','Arrow'],['rect','Rectangle'],['ellipse','Ellipse'],['freehand','Freehand']];
