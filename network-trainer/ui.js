@@ -291,6 +291,8 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
+  const terminalRestore=$('#terminalRestore');
+  if(terminalRestore) (view==='workbench'||view==='build' ? $('#topoWrap') : document.body).appendChild(terminalRestore);
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -1060,9 +1062,7 @@ function wireSessionTabs() {
 }
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
-  const terminalRestore=$('#terminalRestore');
   $('#topoWrap').innerHTML = renderTopo();
-  if(terminalRestore)$('#topoWrap').appendChild(terminalRestore);
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
@@ -2082,7 +2082,7 @@ function mountTerminalWindow() {
   const restore = document.createElement('button');
   restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
   restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
-  restore.hidden = false; const canvas=$('#topoWrap'); (canvas||document.body).appendChild(restore);
+  restore.hidden = false; const cols=$('#cols'); (cols&&!cols.hidden ? $('#topoWrap') : document.body).appendChild(restore);
   const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
   if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
     win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
