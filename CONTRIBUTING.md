@@ -1,124 +1,104 @@
 # Contributing to The Last Sysadmin
 
-Thanks for helping improve the game. It ships as a single self-contained
-`index.html` (easy to open and deploy), but that file is **generated** — you
-edit the sources under `src/` and run the build. Never edit `index.html` or
-`service-worker.js` by hand; CI will reject it.
+Thanks for helping improve the learning platform. The repository contains two connected browser-based simulators: Linux Sysadmin and Network Sysadmin. Both have source files and generated deployable HTML; make changes in the source, then regenerate and verify the output.
 
-> **Start here:** `src/game.html` is the game — title, CSS, body, and the game
-> `<script>`. Edit that. Then `npm run check` and commit `src/**` together with
-> the regenerated `index.html` / `service-worker.js`. See `MODULARIZATION.md`
-> for the full layout and the release checklist.
+## Development setup
 
-## Design rule
+Requirements:
+- Node.js and npm
+- Playwright and the browser binaries required by the tests
+- PostgreSQL only when running the Supabase schema/RLS suite locally
 
-**Do not change the visual look or graphical design** unless explicitly requested. Improvements should be functional, pedagogical, accessibility-related, or structural.
+Install dependencies:
 
-## Adding a new command
+```bash
+npm ci
+```
 
-1. In `src/game.html`, find the command registry (search for existing command definitions near the shell engine).
-2. Add a new entry with:
-   - Name and aliases
-   - Handler that mutates the simulated filesystem / process state when appropriate
-   - A short `man` page
-3. Prefer checks that inspect resulting state rather than matching the exact command string.
-4. Test both the happy path and a couple of creative alternatives.
+Install the browser binaries used by the complete browser suite:
 
-## Adding a chapter or ticket
+```bash
+npx playwright install --with-deps chromium firefox webkit
+```
 
-1. In `src/game.html`, locate the chapter / ticket data structures.
-2. Add the new ticket with:
-   - Title, story, objective
-   - Hint steps (three is the usual pattern)
-   - A state-based success check
-3. Keep the existing amber / terminal aesthetic.
-4. Update the chapter table in `README.md` and `CHANGELOG.md`.
+## Source files and generated output
 
-## Accessibility improvements
+### Linux Sysadmin
 
-- Prefer adding `aria-*` attributes, roles, and keyboard handlers.
-- Keep focus management clear in modals (race overlay).
+- `src/game.html` — main application source, including markup, styles and browser logic.
+- `src/helpers.js`, `src/checkers.js` — pure helper and mission-checking modules used by tests.
+- `build.js` — generates the root `index.html` and service worker from the source files.
+- `src/version.txt` — service-worker cache version; bump it when a release needs to invalidate cached application assets.
+
+Do not edit the generated root `index.html` or `service-worker.js` directly.
+
+### Network Sysadmin
+
+- `network-trainer/ui.js` — browser UI source.
+- `network-trainer/build-ui.js` — generates `network-trainer/index.html`.
+- The other `network-trainer/*.js` modules contain the simulator model, CLI, mission data, checks, topology builder and related logic.
+
+Do not edit `network-trainer/index.html` directly. Update the source modules and regenerate it.
+
+### Database
+
+- `supabase/` contains the SQL migrations and PostgreSQL/RLS test harness.
+- Follow `supabase/README.md` for the authoritative migration order and deployment requirements.
+- Never commit service-role keys, passwords, access tokens or other privileged credentials.
+
+## Build and test
+
+Useful root commands:
+
+```bash
+npm run build          # Build Linux Sysadmin output
+npm run build:net      # Build Network Sysadmin output
+npm run check          # Linux build, core tests, verification and generated-file freshness
+npm run test:all       # Full non-database test suite, including browser tests
+npm run test:net       # Network Trainer unit/engine test suite
+npm run test:a11y      # Automated Playwright + axe accessibility scans
+npm run test:sync-db   # Supabase schema/RLS tests; requires local PostgreSQL
+```
+
+The complete local browser suite requires the Playwright package and its browser binaries. CI is the authoritative merge gate and also runs database/RLS tests and generated-file checks. A local pass does not replace the required GitHub checks.
+
+For a focused change, run the narrowest relevant tests first, then the broader suite when practical. Add regression coverage for behavior changes, including keyboard and assistive-technology behavior for accessibility work.
+
+## Accessibility
+
+- Give every interactive control a meaningful accessible name, role and state.
+- Ensure all functionality is keyboard-operable and focus remains visible and predictable.
+- For dialogs and menus, implement appropriate semantics, initial focus, keyboard navigation, Escape behavior where supported, and focus restoration.
 - Respect `prefers-reduced-motion`.
-- Do not alter colors, spacing, or fonts.
+- Run `npm run test:a11y` for changes affecting either application shell.
+- The manual keyboard and screen-reader worksheet is `docs/ACCESSIBILITY_MANUAL_VALIDATION.md`; automated axe results do not replace hands-on testing. Record actual environment, revision, outcomes and defects in that worksheet. Do not claim WCAG conformance without a suitable full audit.
 
-### Ready-to-apply accessibility patch
+See `docs/ACCESSIBILITY_AUDIT.md` for findings and remediation history.
 
-A small non-visual accessibility patch is included as `a11y.patch`. It adds:
+## Implementation principles
 
-- A visually-hidden skip link to the command input
-- `role="main"` on the stage
-- Stronger ARIA on the terminal input (`aria-describedby`), hint/retry buttons, and the live log region
-- Dialog semantics on the race overlay
+- Keep changes incremental and focused; avoid unrelated refactors in feature PRs.
+- Preserve the established visual language unless a design improvement is part of the requested change. Keep responsive behavior and accessible focus states intact.
+- The environments are educational simulations. Do not imply that they connect to physical network equipment, launch real VMs/containers, or provide complete vendor OS emulation.
+- Treat simulated telemetry, browser-local records and formative grading honestly; do not describe them as production monitoring, audit-grade evidence or high-stakes assessment.
+- Do not weaken authentication, authorization, RLS policies or test assertions to make a check pass. Add adversarial tests when changing security-sensitive behavior.
+- Keep generated output synchronized with its source.
 
-Apply it locally:
+## Pull request workflow
 
-```bash
-git pull
-git apply a11y.patch
-# review the changes, then:
-git add index.html
-git commit -m "Accessibility improvements (skip link, landmarks, stronger ARIA)"
-git push
-```
+1. Start from an up-to-date `main` and create a focused feature or fix branch.
+2. Make the change in source files and add/update regression tests.
+3. Run the relevant build and tests; regenerate generated HTML where applicable.
+4. Review the diff for secrets, generated-file drift, accessibility regressions and unintended scope.
+5. Open a pull request with a concise summary, test evidence and any known limitations.
+6. Merge only after required CI and security checks pass.
 
-The patch only touches attributes and adds a hidden skip link; the visual design is unchanged.
+For Supabase changes, include migration-order and RLS implications in the PR description and test both allowed and denied access paths.
 
-## Developer debug mode and post-ticket “why”
+## Further guidance
 
-A second small patch (`debug-why.patch`) adds two non-visual helpers near the top of the script:
-
-- **Debug mode** — append `?debug=1` to the URL. Call `debugLog('state', someObject)` anywhere to log mission state or filesystem snapshots to the console (grouped, collapsed).
-- **Post-ticket why** — call `postSuccessWhy('short explanation')` after a successful ticket. It appends a normal `.sys.ok` system message (no new panel or design change).
-
-Apply:
-
-```bash
-git pull
-git apply debug-why.patch
-# then wire debugLog(...) and postSuccessWhy(...) into the places you want
-git add index.html
-git commit -m "Add debug mode and post-ticket why helpers"
-git push
-```
-
-Example usage after the patch:
-
-```js
-// On load or after state changes
-if (DEBUG) debugLog('current state', { chapter, ticket, fs: /* snapshot */ });
-
-// After a ticket passes
-postSuccessWhy('The file mode was updated so the script is executable.');
-```
-
-## Modularization path (still one index.html)
-
-Started. See:
-
-- `src/helpers.js` — pure helpers (`pad`, `esc`, `md`, `splitLines`, `mulberry32`, `ticketId`, etc.) extracted for testing.
-- `MODULARIZATION.md` — plan for further extraction, a tiny concat build step, and unit tests.
-
-The final deployed artifact remains a single `index.html`. No visual changes.
-
-## Suggested next improvements (non-visual)
-
-- Stronger ARIA on the terminal and briefing panel (see `a11y.patch`)
-- Optional post-ticket "why this worked" explanation (see `debug-why.patch` and the sketch in recent commits)
-- A small developer debug mode (e.g. `?debug=1`) that dumps current FS / mission state to the console (helpers already present)
-- Continue extracting pure functions (see `src/helpers.js` and `MODULARIZATION.md`)
-
-## Workflow
-
-1. Edit the sources under `src/` (`src/game.html` for the game itself).
-2. `npm run build`, then test locally: open `index.html` or run `python3 -m http.server`.
-3. `npm run check` (build + unit tests + verify + staleness guard) must pass.
-4. To force returning players to refresh, bump `src/version.txt` before building.
-5. Commit `src/**` together with the regenerated `index.html` / `service-worker.js`, then push — GitHub Pages deploys automatically and CI verifies the build.
-
-> The older `a11y.patch` / `debug-why.patch` files above predate this pipeline;
-> apply such changes to `src/game.html` and rebuild rather than patching the
-> generated `index.html`.
-
-## Questions?
-
-Open an issue. Ideas for new chapters, commands, or better hints are welcome.
+- `README.md` — project overview, setup, architecture and platform boundaries.
+- `MODULARIZATION.md` — Linux source layout and build pipeline.
+- `network-trainer/README.md` — Network Sysadmin simulator capabilities and fidelity boundaries.
+- `docs/ACCESSIBILITY_AUDIT.md` and `docs/ACCESSIBILITY_MANUAL_VALIDATION.md` — accessibility findings, automated coverage and outstanding manual validation.
+- `supabase/README.md` — database setup and migration sequence.
