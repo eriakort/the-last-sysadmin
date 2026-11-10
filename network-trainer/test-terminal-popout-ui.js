@@ -22,17 +22,22 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   else fail('double-click did not open the floating terminal');
 
   await page.click('#navIncidents');
-  if (await page.locator('#terminalWindow').isVisible()) ok('terminal remains visible when navigating away from the workbench');
-  else fail('terminal disappeared after workspace navigation');
-
-  await page.click('#terminalMinimize');
-  if (!(await page.locator('#terminalWindow').isVisible()) && await page.locator('#terminalRestore').isVisible()) ok('terminal can be minimized without destroying its session');
-  else fail('minimize/restore controls did not preserve the terminal window');
+  if (await page.locator('#terminalWindow').isHidden()) ok('terminal auto-minimizes when leaving the topology workspace so other tools stay visible');
+  else fail('terminal remained open and could cover other workspace tools');
+  const dock = page.locator('#terminalRestore');
+  if (await dock.isVisible() && await dock.evaluate(el => el.parentElement?.id === 'navRail')) ok('terminal launcher is docked in the persistent navigation rail outside the workbench');
+  else fail('terminal launcher is not docked in the navigation rail');
+  const dockBox = await dock.boundingBox(), topBox = await page.locator('#top').boundingBox();
+  if (dockBox && topBox && dockBox.y + dockBox.height <= topBox.y) ok('terminal launcher occupies navigation space without covering the top toolbar');
+  else fail('terminal launcher overlaps the top toolbar');
 
   await page.click('#terminalRestore');
   await page.waitForFunction(() => document.activeElement?.id === 'tin');
   if (await page.locator('#terminalWindow').isVisible()) ok('terminal can be restored and returns focus to the command input');
   else fail('terminal did not restore');
+  const dockedBox = await page.locator('#terminalWindow').boundingBox();
+  if (dockedBox && dockedBox.y > topBox.y + topBox.height && dockedBox.x + dockedBox.width <= 1440) ok('terminal opens in the lower workspace area instead of covering the header controls');
+  else fail('terminal is not safely positioned outside the top toolbar');
 
   await page.click('#btnBuild');
   await page.waitForSelector('#config .pal[data-add="host"]');
@@ -47,6 +52,14 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await buildDevice.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, buildId);
   if (await page.locator('#terminalWindow').isVisible()) ok('double-click opens the selected device console in Build mode');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click('#navIncidents');
+  if (await page.locator('#terminalWindow').isHidden() && await page.locator('#terminalRestore').isVisible()) ok('mobile navigation keeps the terminal minimized and launcher accessible');
+  else fail('mobile workspace navigation is obstructed by the terminal');
+  const mobileDock = await page.locator('#terminalRestore').boundingBox();
+  if (mobileDock && mobileDock.x >= 0 && mobileDock.x + mobileDock.width <= 390 && mobileDock.y >= 0 && mobileDock.y + mobileDock.height <= 844) ok('mobile terminal launcher remains inside the navigation rail viewport');
+  else fail('mobile terminal launcher is outside the viewport');
 
   await browser.close();
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
