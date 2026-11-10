@@ -29,6 +29,7 @@ let WIRE = null;                                   // first endpoint picked whil
 let SB = null, AUTHUSER = null, PLAYING_DBID = null; // cloud/classroom (shared Supabase project)
 let LASTPOS = {}, DRAG = null, PAN = null, BOX = null, TOPO_VIEW = null, TOPO_SHOW_PORTS = false, TOPO_GRID = true, TOPO_SNAP = true, LINK_SEL = null;
 let TOPO_SELECTED = new Set(), TOPO_UNDO = [], TOPO_REDO = [], TOPO_CLIPBOARD = null; // topology interaction state
+let TEXT_SELECTED = new Set(), LABEL_SELECTED = new Set(); // text indices and "id:kind" for labels
 let TOPO_CAPTURE_SELECT = true, TOPO_DELETE_KEY_BOUND = false;
 let TOPO_LAYERS = { zones:true, links:true, notes:true, devices:true, drawings:true, texts:true };
 let DRAW_TOOL = 'select', DRAWING = null, DRAWING_SEL = null, DRAWING_DRAG = null, NOTE_DRAG = null, ANNOTATION_DRAG = null, RESIZE_DRAG = null, TEXT_INSERT_MODE = false, TEXT_INSERT_CANCEL_BOUND = false;
@@ -225,7 +226,7 @@ function renderTopo() {
     const t=net.texts[ti];
     const tx=Number(t.x)||0, ty=Number(t.y)||0, fs=Math.max(9,Math.min(36,Number(t.fontSize)||14));
     const approxW=Math.max(48, String(t.text||"Text").length*fs*0.62);
-    s += `<g class="topo-text-group" data-text-index="${ti}"><rect class="topo-text-hit" x="${tx-approxW/2}" y="${ty-fs*1.1}" width="${approxW}" height="${fs*1.6}" fill="transparent" pointer-events="all"/><text class="topo-text${TEXT_INSERT_MODE?' insert-ready':''}" data-text-index="${ti}" x="${tx}" y="${ty}" fill="${esc(t.color||'#e5b85c')}" font-size="${fs}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Canvas text: '+(t.text||'Text'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" style="cursor:move;user-select:none" pointer-events="bounding-box">${esc(t.text||'Text')}</text></g>`;
+    s += `<g class="topo-text-group" data-text-index="${ti}"><rect class="topo-text-hit" x="${tx-approxW/2}" y="${ty-fs*1.1}" width="${approxW}" height="${fs*1.6}" fill="transparent" pointer-events="all"/><text class="topo-text${TEXT_INSERT_MODE?' insert-ready':''}${TEXT_SELECTED.has(ti)?' selected':''}" data-text-index="${ti}" x="${tx}" y="${ty}" fill="${esc(t.color||'#e5b85c')}" font-size="${fs}" text-anchor="middle" role="button" tabindex="0" aria-label="${esc('Canvas text: '+(t.text||'Text'))}" aria-keyshortcuts="Enter Space Shift+F10 Delete" style="cursor:move;user-select:none" pointer-events="bounding-box">${esc(t.text||'Text')}</text></g>`;
   }
 
   if (layers.devices) for (const id in net.devices) {
@@ -1412,6 +1413,36 @@ function editTopologyText(index) {
 function wireTopo() {
   const svg = $('#topo');
   if(!TOPO_DELETE_KEY_BOUND){document.addEventListener('keydown',e=>{if(!canBuild()||!RUN||!['Delete','Backspace'].includes(e.key)||/INPUT|TEXTAREA|SELECT/.test((e.target&&e.target.tagName)||''))return;const text=e.target&&e.target.closest&&e.target.closest('.topo-text');if(text){e.preventDefault();runTopologyContextAction('delete-text',{index:Number(text.dataset.textIndex)});return;}const label=e.target&&e.target.closest&&e.target.closest('.device-label');if(label){e.preventDefault();runTopologyContextAction('clear-device-label',{id:label.dataset.deviceLabel,labelKind:label.dataset.labelKind});}});TOPO_DELETE_KEY_BOUND=true;}
+  // Arrow-key movement for any selected canvas objects (devices, texts, labels)
+  if (!window._topoArrowBound) {
+    document.addEventListener('keydown', e => {
+      if (!canBuild() || !RUN || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const step = e.shiftKey ? 40 : 10;
+      const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      let moved = 0;
+      if (TOPO_SELECTED.size) {
+        rememberTopology();
+        [...TOPO_SELECTED].forEach(id => { if (RUN.net.devices[id]) { const p = nodePos(id); setPos(id, p[0]+dx, p[1]+dy); moved++; } });
+      }
+      if (TEXT_SELECTED.size) {
+        if (!moved) rememberTopology();
+        [...TEXT_SELECTED].forEach(ti => { const t = RUN.net.texts && RUN.net.texts[ti]; if (t) { t.x += dx; t.y += dy; moved++; } });
+      }
+      if (LABEL_SELECTED.size) {
+        if (!moved) rememberTopology();
+        [...LABEL_SELECTED].forEach(key => {
+          const [lid, kind] = key.split(':');
+          const pos = RUN.net.deviceLabelPositions && RUN.net.deviceLabelPositions[lid] && RUN.net.deviceLabelPositions[lid][kind];
+          if (pos) { pos[0] += dx; pos[1] += dy; moved++; }
+        });
+      }
+      if (moved) { refresh(); flashStatus('Moved ' + moved + ' selected item' + (moved===1?'':'s') + ' with arrow keys.'); }
+    });
+    window._topoArrowBound = true;
+  }
+
   if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.');}});TEXT_INSERT_CANCEL_BOUND=true;}
   if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
@@ -1560,7 +1591,10 @@ function wireTopo() {
       // group; clicking a node outside the selection starts a fresh single-node drag.
       if(!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
-      DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
+      // Also capture currently selected texts and labels so the whole group moves
+      const textStarts = {}; [...TEXT_SELECTED].forEach(ti => { const t = RUN.net.texts && RUN.net.texts[ti]; if(t) textStarts[ti] = [t.x, t.y]; });
+      const labelStarts = {}; [...LABEL_SELECTED].forEach(key => { const [lid, kind] = key.split(':'); const pos = RUN.net.deviceLabelPositions && RUN.net.deviceLabelPositions[lid] && RUN.net.deviceLabelPositions[lid][kind]; if(pos) labelStarts[key] = pos.slice(); });
+      DRAG = { id, ids, starts, textStarts, labelStarts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
     });
   });
@@ -1600,6 +1634,9 @@ function onDragMove(e) {
   if (!DRAG.moved && Math.hypot(nx - prev[0], ny - prev[1]) > 3) DRAG.moved = true;
   const dx=nx-prev[0],dy=ny-prev[1];
   DRAG.ids.forEach(id=>{const start=DRAG.starts[id]||nodePos(id);setPos(id,start[0]+dx,start[1]+dy);const p=nodePos(id),cx=p[0]+24,cy=p[1]+18;const g=document.querySelector(`#topo .node[data-dev="${id}"]`);if(g)g.setAttribute('transform',`translate(${p[0]},${p[1]})`);document.querySelectorAll(`#topo line[data-a="${id}"]`).forEach(l=>{l.setAttribute('x1',cx);l.setAttribute('y1',cy);});document.querySelectorAll(`#topo line[data-b="${id}"]`).forEach(l=>{l.setAttribute('x2',cx);l.setAttribute('y2',cy);});});
+  // Move selected texts and labels with the group
+  if(DRAG.textStarts) Object.entries(DRAG.textStarts).forEach(([ti, start]) => { const t = RUN.net.texts && RUN.net.texts[ti]; if(t){ t.x = start[0]+dx; t.y = start[1]+dy; const el = document.querySelector(`.topo-text[data-text-index="${ti}"]`); if(el){el.setAttribute('x', t.x); el.setAttribute('y', t.y);} } });
+  if(DRAG.labelStarts) Object.entries(DRAG.labelStarts).forEach(([key, start]) => { const [lid, kind] = key.split(':'); RUN.net.deviceLabelPositions = RUN.net.deviceLabelPositions || {}; RUN.net.deviceLabelPositions[lid] = RUN.net.deviceLabelPositions[lid] || {}; RUN.net.deviceLabelPositions[lid][kind] = [start[0]+dx, start[1]+dy]; const el = document.querySelector(`.device-label[data-device-label="${CSS.escape(lid)}"][data-label-kind="${kind}"]`); if(el){el.setAttribute('x', start[0]+dx); el.setAttribute('y', start[1]+dy);} });
 }
 function onDragUp() {
   if(DRAWING){finishTopologyDrawing();return;}
@@ -1607,7 +1644,17 @@ function onDragUp() {
   if(NOTE_DRAG){const d=NOTE_DRAG;NOTE_DRAG=null;if(d.moved){const item=RUN.net.notes&&RUN.net.notes[d.index];if(item){item.x=d.nextX;item.y=d.nextY;rememberTopology(d.before);}}refresh();return;}
   if(DRAWING_DRAG){const d=DRAWING_DRAG;DRAWING_DRAG=null;if(d.moved){rememberTopology(d.before);refresh();}else{refresh();}return;}
   if(ANNOTATION_DRAG){const d=ANNOTATION_DRAG;ANNOTATION_DRAG=null;if(d.moved){const dx=Number(d.el.getAttribute('x'))-d.value.x,dy=Number(d.el.getAttribute('y'))-d.value.y;rememberTopology(d.before);if(d.kind==='device-label'){RUN.net.deviceLabelPositions=RUN.net.deviceLabelPositions||{};RUN.net.deviceLabelPositions[d.id]=RUN.net.deviceLabelPositions[d.id]||{};RUN.net.deviceLabelPositions[d.id][d.labelKind]=[d.value.x+dx,d.value.y+dy];}else{const item=RUN.net.texts&&RUN.net.texts[d.index];if(item){item.x=d.value.x+dx;item.y=d.value.y+dy;}}refresh();}return;}
-  if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);const captured=Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;});TOPO_SELECTED=b.additive?new Set([...TOPO_SELECTED,...captured]):new Set(captured);SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
+  if(BOX){const b=BOX;BOX=null;if(b.el)b.el.remove();const x1=Math.min(b.start[0],b.current[0]),x2=Math.max(b.start[0],b.current[0]),y1=Math.min(b.start[1],b.current[1]),y2=Math.max(b.start[1],b.current[1]);
+const captured=Object.keys(RUN.net.devices).filter(id=>{const p=nodePos(id);return p[0]+48>=x1&&p[0]<=x2&&p[1]+36>=y1&&p[1]<=y2;});
+const textCaptured=(RUN.net.texts||[]).map((t,i)=>[i,t]).filter(([,t])=>t.x>=x1&&t.x<=x2&&t.y>=y1&&t.y<=y2).map(([i])=>i);
+const labelCaptured=[];
+Object.entries(RUN.net.deviceLabelPositions||{}).forEach(([id,pos])=>{
+  Object.entries(pos).forEach(([kind,xy])=>{if(xy&&xy[0]>=x1&&xy[0]<=x2&&xy[1]>=y1&&xy[1]<=y2)labelCaptured.push(id+':'+kind);});
+});
+TOPO_SELECTED=b.additive?new Set([...TOPO_SELECTED,...captured]):new Set(captured);
+TEXT_SELECTED=b.additive?new Set([...TEXT_SELECTED,...textCaptured]):new Set(textCaptured);
+LABEL_SELECTED=b.additive?new Set([...LABEL_SELECTED,...labelCaptured]):new Set(labelCaptured);
+SEL=[...TOPO_SELECTED][0]||null;refresh();return;}
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
@@ -2374,7 +2421,7 @@ function loadBuilderDraft() {
 function renderAll() { $('#brief').innerHTML = MODE === 'build' ? renderAuthor() : renderBrief(); wireBrief(); refresh(); updateHud(); }
 function enterBuild(options = {}) {
   showWorkspaceView('build', options);
-  MODE = 'build'; WIRE = null; SEL = null; DRAW_TOOL='select'; DRAWING=null; DRAWING_SEL=null; TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
+  MODE = 'build'; WIRE = null; SEL = null; DRAW_TOOL='select'; DRAWING=null; DRAWING_SEL=null; TOPO_SELECTED=new Set();TEXT_SELECTED=new Set();LABEL_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null; TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; INSPECTOR_TAB = 'overview'; HINTS = 0; PLAYING_DBID = null; stopTimer();
   const draft=loadBuilderDraft();
   if (draft) { AUTHOR=draft.author || {title:'My scenario',objective:'',ticket:null,hints:[],success:[]}; RUN=builderRun(draft.net); SEL=draft.selected || null; TOPO_VIEW=Array.isArray(draft.view)?draft.view:null; }
   else { AUTHOR = { title: 'My scenario', objective: '', ticket: null, hints: [], success: [] }; RUN = builderRun(B.blank()); }
@@ -2404,7 +2451,7 @@ function importScenario(file) {
   reader.onload = () => {
     try {
       const scn = S.fromJSON(reader.result);
-      MODE = 'build'; WIRE = null; SEL = null;TOPO_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null;
+      MODE = 'build'; WIRE = null; SEL = null;TOPO_SELECTED=new Set();TEXT_SELECTED=new Set();LABEL_SELECTED=new Set();TOPO_UNDO=[];TOPO_REDO=[];TOPO_CLIPBOARD=null;
       AUTHOR = { title: scn.title, objective: scn.objective || '', ticket: scn.ticket || null, hints: scn.hints || [], success: scn.success || [] };
       RUN = builderRun(S.clone(scn.start || { devices: {}, links: [] }));
       renderAll();
