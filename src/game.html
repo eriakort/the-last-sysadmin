@@ -8402,7 +8402,7 @@ async function openClassroom() {
               </select>
               <select id="fbMission" aria-label="Feedback mission" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
                 <option value="">No specific mission</option>
-                ${[...new Map(asns.flatMap(a => (a.mission_ids || []).map(id => [id, { id, assignment: a.id, title: a.title }])).values()].map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)} · ${esc(m.title)}</option>`).join('')}
+                ${[...new Map(asns.flatMap(a => (a.mission_ids || []).map(id => [id, { id, assignment: a.id, title: a.title }]))).values()].map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)} · ${esc(m.title)}</option>`).join('')}
               </select>
               <input id="fbBody" type="text" placeholder="Leave feedback…">
               <button class="btn primary" id="fbSend" type="button">Send feedback</button>
