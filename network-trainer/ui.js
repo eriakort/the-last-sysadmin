@@ -2256,6 +2256,8 @@ function mountTerminalWindow() {
         border-bottom: 1px solid #334155;
       }
       #terminalWindow .terminal-window-titlebar small { opacity: .6; font-weight: 400; margin-left: 8px; }
+      #terminalWindow .terminal-window-actions { display: flex; gap: 4px; }
+      #terminalWindow .terminal-window-actions .btn { min-width: 28px; padding: 2px 8px; }
       #terminalWindow .terminal-window-content {
         flex: 1;
         min-height: 0;
@@ -2272,7 +2274,7 @@ function mountTerminalWindow() {
   win.className = 'terminal-window';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
+  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><span class="terminal-window-actions"><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button><button type="button" class="btn sm" id="terminalClose" aria-label="Close device terminal" title="Close">✕</button></span></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
   win.hidden = true;
   document.body.appendChild(win);
@@ -2290,6 +2292,7 @@ function mountTerminalWindow() {
     if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
   } catch (_) {}
   $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; });
+  $('#terminalClose').addEventListener('click', () => { win.hidden = true; });
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
