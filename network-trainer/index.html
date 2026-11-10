@@ -6010,12 +6010,14 @@ function wireTopo() {
       const focusedLabel = e.target && e.target.closest && e.target.closest('.device-label');
       const focusedText = e.target && e.target.closest && e.target.closest('.topo-text');
       const focusedNote = e.target && e.target.closest && e.target.closest('.topo-note');
-      const deviceIds = new Set(TOPO_SELECTED);
+      // A focused label/text/note should move only that item, not any selected devices
+      const isolate = !!(focusedLabel || focusedText || focusedNote);
+      const deviceIds = isolate ? new Set() : new Set(TOPO_SELECTED);
       if (focusedNode) deviceIds.add(focusedNode.dataset.dev);
-      else if (!deviceIds.size && !TEXT_SELECTED.size && !LABEL_SELECTED.size && !focusedLabel && !focusedText && !focusedNote && SEL) deviceIds.add(SEL);
-      const textIdx = new Set(TEXT_SELECTED);
+      else if (!isolate && !deviceIds.size && !TEXT_SELECTED.size && !LABEL_SELECTED.size && SEL) deviceIds.add(SEL);
+      const textIdx = isolate && !focusedText ? new Set() : new Set(TEXT_SELECTED);
       if (focusedText) textIdx.add(Number(focusedText.dataset.textIndex));
-      const labelKeys = new Set(LABEL_SELECTED);
+      const labelKeys = isolate && !focusedLabel ? new Set() : new Set(LABEL_SELECTED);
       if (focusedLabel) labelKeys.add(focusedLabel.dataset.deviceLabel + ':' + focusedLabel.dataset.labelKind);
       if (!deviceIds.size && !textIdx.size && !labelKeys.size && !focusedNote) return;
       e.preventDefault();
@@ -6175,6 +6177,15 @@ function wireTopo() {
     });
     n.addEventListener('pointerdown', e => {
       const id = n.dataset.dev;
+      // If a label or free text sits under the pointer, let that item handle the drag
+      // (WebKit elementFromPoint can return the node even when the click is on a label).
+      if (canBuild() && e.button === 0) {
+        const over = [...document.querySelectorAll('#topo .device-label, #topo .topo-text')].find(el => {
+          const r = el.getBoundingClientRect();
+          return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        });
+        if (over) return;
+      }
       if ((e.ctrlKey || e.metaKey || e.shiftKey) && canBuild()) { e.preventDefault(); if(TOPO_SELECTED.has(id)){TOPO_SELECTED.delete(id);if(SEL===id){const next=[...TOPO_SELECTED][0]||null;if(next)selectDevice(next);else{persistTerminalSession();SEL=null;refresh();}}else refresh();}else{TOPO_SELECTED.add(id);selectDevice(id);} return; }
       if (WIRE) {                                      // wiring: connect the armed device to this one
         if (WIRE !== id) { try { rememberTopology(); B.addLink(RUN.net, WIRE, id); } catch (err) { flashStatus(err.message); } }
