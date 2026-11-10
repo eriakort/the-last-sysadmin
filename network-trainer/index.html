@@ -235,7 +235,8 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 @media(max-width:650px){.queue-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-ticket{grid-template-columns:1fr}.qt-actions{justify-content:flex-start}.queue-toolbar .dim{width:100%;margin:0}}
 @media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
 </style><link rel="stylesheet" href="./workstation.css"></head>
-<body><div id="app"></div><script>// ---- tiny CommonJS shim ----
+<body><div id="app"></div><script>
+// ---- tiny CommonJS shim ----
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
