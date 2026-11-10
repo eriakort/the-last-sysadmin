@@ -156,6 +156,7 @@ button{font:inherit;cursor:pointer}
 .cx-cohort-metric strong{display:block;font-size:18px;color:var(--ink);line-height:1.3}
 .cx-cohort-metric span{display:block;font-size:11px;color:var(--muted);margin-top:3px}
 .cx-cohort-trends{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);margin:7px 0 12px}.cx-cohort-trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.cx-cohort-trend{background:var(--raise);border-radius:6px;padding:8px}.cx-cohort-trend strong{display:block;font:600 17px var(--f-display);color:var(--ink)}.cx-cohort-trend span{display:block;font-size:11px;color:var(--muted)}.cx-cohort-hotspot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);font-size:12px}
+.cx-learner-evidence-review{display:grid;gap:7px;margin:7px 0 12px}.cx-learner-evidence{border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:8px 10px}.cx-learner-evidence summary{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;cursor:pointer}.cx-learner-event{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--line);font-size:12px}.cx-learner-event:first-child{margin-top:8px}
 
 .skill-progress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .skill-progress h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
@@ -8534,6 +8535,22 @@ async function openClassroom() {
             .filter(item => item.requests >= 2)
             .sort((a, b) => b.requests - a.requests || b.learners.size - a.learners.size)
             .slice(0, 4);
+          const learnerEvidenceHtml = '<div class="rlabel" style="margin-top:14px">Learner activity review · last 30 days</div>' +
+            '<p class="cx-dim" style="margin:0 0 7px">Recorded events for enrolled learners and assigned missions only. Expand a learner to review recent activity; missing events are not evidence of missing learning.</p>' +
+            '<div class="cx-learner-evidence-review" data-learner-evidence-review>' +
+            (cohortStudents.length ? cohortStudents.map(learner => {
+              const events = cohortEvidence.filter(event => event.user_id === learner.user_id)
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+              const learnerName = learner.profiles?.display_name || 'Learner';
+              const rows = events.slice(0, 6).map(event => {
+                const label = event.event_type === 'hint_requested' ? 'Hint requested' : 'Mission completed';
+                const when = new Date(event.created_at);
+                return '<div class="cx-learner-event"><span>' + label + ' · <code>' + esc(event.mission_id) + '</code></span><time>' + (Number.isFinite(when.getTime()) ? esc(when.toLocaleString()) : 'Date unavailable') + '</time></div>';
+              }).join('');
+              return '<details class="cx-learner-evidence"><summary><strong>' + esc(learnerName) + '</strong><span class="cx-dim">' + events.length + ' recorded event' + (events.length === 1 ? '' : 's') + '</span></summary>' +
+                (rows || '<p class="cx-dim" style="margin:8px 0 0">No activity events recorded in this period.</p>') + '</details>';
+            }).join('') : '<p class="cx-dim">No enrolled learners in this class.</p>') +
+            '</div>';
           const cohortTrendHtml = '<div class="rlabel" style="margin-top:14px">Learning activity · last 14 days</div>' +
             '<p class="cx-dim" style="margin:0 0 7px">Compared with the previous 14 days. Counts reflect recorded events only, not total practice or learning.</p>' +
             '<div class="cx-cohort-trends" data-cohort-trends><div class="cx-cohort-trend-grid">' +
@@ -8581,7 +8598,7 @@ async function openClassroom() {
                     (r.next_step ? '<strong>Next step</strong><p>' + esc(r.next_step) + '</p>' : '') + '</article>';
                 }).join('')
               : '<p class="cx-dim">No learner reflections have been shared in this class yet.</p>');
-          dashHtml = analyticsHtml + skillDiagnosticsHtml + cohortInsightHtml + cohortTrendHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          dashHtml = analyticsHtml + skillDiagnosticsHtml + cohortInsightHtml + cohortTrendHtml + learnerEvidenceHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
