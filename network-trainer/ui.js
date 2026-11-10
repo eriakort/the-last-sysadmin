@@ -273,10 +273,10 @@ function workspaceViewFromUrl() {
 function placeTerminalRestore(inWorkbench) {
   const restore = $('#terminalRestore');
   if (!restore) return;
-  if (inWorkbench) {
-    const canvas = $('#topoWrap');
-    if (canvas) { canvas.appendChild(restore); return; }
-  }
+  // Keep the launcher outside #topoWrap: refresh() replaces that canvas markup,
+  // which would otherwise destroy the launcher during normal terminal commands.
+  // The navigation rail remains available in every workspace and keeps the
+  // launcher clear of the page toolbar on small screens.
   const rail = $('#navRail');
   if (rail) {
     const spacer = rail.querySelector('.nav-spacer');
