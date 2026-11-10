@@ -12,6 +12,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   try {
     await page.goto(INDEX, { waitUntil: 'load' });
     await page.waitForTimeout(200);
+    await page.locator('#menuProgress summary').click();
     await page.click('#btnHealthDashboard');
     const dialog = page.locator('#serverHealthDialog [role="dialog"]');
     if (!(await dialog.isVisible())) fail('Server health dialog did not open');
