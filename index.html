@@ -562,7 +562,9 @@ body.practicing{padding-top:40px}
   .stats>.stat{align-items:flex-start;padding:3px 8px;border-right:0}
   .top-menu{min-width:0}
   .top-menu>summary{width:100%;min-height:36px}
-  .top-menu-list{left:0;right:auto;min-width:min(240px,calc(100vw - 32px))}
+  .top-menu-list{min-width:min(240px,calc(100vw - 32px))}
+  #menuPractice .top-menu-list,#menuHelp .top-menu-list{left:0;right:auto}
+  #menuProgress .top-menu-list{left:auto;right:0}
   #btnNew{width:100%}
 }
 @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}}
