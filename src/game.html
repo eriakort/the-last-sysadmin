@@ -16,7 +16,7 @@
 }
 html,body{height:100%}
 [hidden]{display:none!important}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
 .app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr)}
 .top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line);background:var(--panel)}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
@@ -547,9 +547,8 @@ body.practicing{padding-top:40px}
   .stats>.stat{align-items:flex-start;padding:3px 8px;border-right:0}
   .top-menu{min-width:0}
   .top-menu>summary{width:100%;min-height:36px}
-  .top-menu-list{min-width:min(240px,calc(100vw - 32px))}
-  #menuPractice .top-menu-list,#menuHelp .top-menu-list{left:0;right:auto}
-  #menuProgress .top-menu-list{left:auto;right:0}
+  .top-menu-list{position:fixed;top:var(--menu-top,120px);left:var(--menu-left,16px);right:auto;width:min(256px,calc(100vw - 32px));min-width:0;max-width:calc(100vw - 32px);box-sizing:border-box}
+  #menuPractice .top-menu-list,#menuHelp .top-menu-list,#menuProgress .top-menu-list{left:var(--menu-left,16px);right:auto}
   #btnNew{width:100%}
 }
 @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}}
@@ -789,6 +788,14 @@ document.querySelectorAll('.top-menu button').forEach(button => button.addEventL
 document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
   const current = summary.parentElement;
   document.querySelectorAll('.top-menu[open]').forEach(menu => { if (menu !== current) menu.removeAttribute('open'); });
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    const rect = summary.getBoundingClientRect();
+    const width = Math.min(256, window.innerWidth - 32);
+    const preferredLeft = current.id === 'menuProgress' ? rect.right - width : rect.left;
+    const left = Math.max(16, Math.min(preferredLeft, window.innerWidth - width - 16));
+    current.style.setProperty('--menu-left', left + 'px');
+    current.style.setProperty('--menu-top', Math.min(rect.bottom + 7, window.innerHeight - 120) + 'px');
+  }
 }));
 document.addEventListener('click', event => {
   if (event.target.closest('.top-menu')) return;
