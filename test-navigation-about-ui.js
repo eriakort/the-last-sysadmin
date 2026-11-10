@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
 const URL = 'file://' + path.join(process.cwd(), 'index.html');
-const VERSION = fs.readFileSync(path.join(process.cwd(), 'src/version.txt'), 'utf8').trim();
+const VERSION = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8')).version;
+const BUILD = fs.readFileSync(path.join(process.cwd(), 'src/version.txt'), 'utf8').trim();
 
 (async () => {
   const browser = await chromium.launch();
@@ -28,7 +29,7 @@ const VERSION = fs.readFileSync(path.join(process.cwd(), 'src/version.txt'), 'ut
   await page.locator('#menuHelp summary').click();
   await page.locator('#btnAbout').click();
   const about = await page.locator('body').innerText();
-  if (/About The Last Sysadmin/.test(about) && about.includes('Version ' + VERSION))
+  if (/About The Last Sysadmin/.test(about) && about.includes('Version ' + VERSION + ' · build ' + BUILD))
     ok('About displays the application purpose and the generated current version');
   else fail('About purpose or version is missing: ' + about.slice(-1200));
   if (/browser-based learning platform/.test(about) && /isolated browser simulation/.test(about))
