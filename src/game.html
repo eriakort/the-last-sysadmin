@@ -127,6 +127,16 @@ button{font:inherit;cursor:pointer}
 #commandCoachDrillFeedback[data-result="retry"]{color:var(--amber)}
 #commandCoachDrillProgress{color:var(--muted);font-size:10px}
 .skill-progress{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.cx-reflection-form{display:grid;gap:6px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--raise)}
+.cx-reflection-form label{font-size:12px;font-weight:600;color:var(--ink);margin-top:4px}
+.cx-reflection-form input,.cx-reflection-form select,.cx-reflection-form textarea{box-sizing:border-box;width:100%;min-width:0;font:inherit;font-size:13px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:8px}
+.cx-reflection-form textarea{min-height:66px;resize:vertical}
+.cx-reflection-form [data-reflection-status]{margin:0}
+.cx-reflection{border:1px solid var(--line);border-radius:7px;padding:9px 10px;margin:7px 0;background:var(--panel);font-size:12px;overflow-wrap:anywhere}
+.cx-reflection-meta{font-size:10px;color:var(--muted);margin-bottom:6px}
+.cx-reflection p{margin:2px 0 7px;white-space:pre-wrap}
+.cx-reflection strong{font-size:11px;color:var(--ink)}
+
 .skill-progress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .skill-progress h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
 .skill-progress-head p{font-size:11.5px;color:var(--muted);margin:3px 0 0}
@@ -8237,8 +8247,8 @@ async function openClassroom() {
           <option value="">General class reflection</option>${asns.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join('')}
         </select>
         <label for="${reflectionId}-mission">Mission (optional)</label>
-        <select id="${reflectionId}-mission" data-reflection-mission>
-          <option value="">No specific mission</option>${reflectionMissions.map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)}</option>`).join('')}
+        <select id="${reflectionId}-mission" data-reflection-mission disabled>
+          <option value="">Choose an assignment first</option>${reflectionMissions.map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)}</option>`).join('')}
         </select>
         <label for="${reflectionId}-learned">What did I learn? <span aria-hidden="true">*</span></label>
         <textarea id="${reflectionId}-learned" data-reflection-learned maxlength="1200" required placeholder="Describe the concept or skill you understand better now…"></textarea>
@@ -8670,6 +8680,7 @@ async function openClassroom() {
     const missionId = field('mission')?.value || null;
     const status = field('status');
     if (!learned || !approach) { if (status) status.textContent = 'Add both what you learned and how you approached the task.'; return; }
+    if (missionId && !assignmentId) { if (status) status.textContent = 'Choose an assignment before selecting a mission.'; return; }
     if (assignmentId && missionId) {
       const assignment = await loadAssignments(classId).then(items => items.find(a => a.id === assignmentId));
       if (!assignment || !(assignment.mission_ids || []).includes(missionId)) {
@@ -8685,6 +8696,8 @@ async function openClassroom() {
     const form = sel.closest('[data-reflection-form]');
     const mission = form && form.querySelector('[data-reflection-mission]');
     if (!mission) return;
+    mission.disabled = !sel.value;
+    if (!sel.value) mission.value = '';
     [...mission.options].forEach(option => {
       if (!option.value) { option.hidden = false; return; }
       option.hidden = !!sel.value && option.dataset.assignment !== sel.value;
