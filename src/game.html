@@ -8297,7 +8297,38 @@ async function openClassroom() {
                hardest.map(h => `<div style="display:grid;grid-template-columns:1fr 80px 70px;gap:6px;padding:8px 10px;border-top:1px solid var(--line)"><span><code>${esc(h.id)}</code></span><span>${Math.round(h.rate*100)}%</span><span>${h.hints}</span></div>`).join('') +
                '</div>'
             : '';
-          dashHtml = analyticsHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          // Assignment-level mastery is calculated from the same authorized
+          // roster and attempt evidence already loaded for this class.
+          // Percentages always show their learner/mission denominator.
+          const assignmentInsightHtml = asns.length
+            ? `<div class="rlabel" style="margin-top:14px">Assignment mastery</div>` +
+              asns.map(a => {
+                const mids = Array.isArray(a.mission_ids) ? [...new Set(a.mission_ids)] : [];
+                const learners = roster.filter(e => e.role === 'student');
+                const scores = learners.map(e => {
+                  const passed = mids.filter(id => byUser[e.user_id] && byUser[e.user_id].has(id)).length;
+                  return { name: e.profiles?.display_name || 'User', passed, total: mids.length, percent: mids.length ? Math.round(passed / mids.length * 100) : 0 };
+                });
+                const pairs = learners.length * mids.length;
+                const earned = scores.reduce((sum, score) => sum + score.passed, 0);
+                const average = pairs ? Math.round(earned / pairs * 100) : null;
+                const complete = scores.filter(score => score.total > 0 && score.passed === score.total).length;
+                const due = a.due_at ? new Date(a.due_at).toLocaleDateString() : 'No due date';
+                const summary = !mids.length ? 'No missions assigned' : !learners.length ? 'No students enrolled' : `${average}% cohort progress · ${complete}/${learners.length} complete`;
+                const detail = !mids.length
+                  ? '<p class="cx-dim">Add mission IDs to this assignment to measure mastery.</p>'
+                  : !learners.length
+                    ? '<p class="cx-dim">Student-level progress will appear when learners join the class.</p>'
+                    : `<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">` +
+                      scores.map(score => `<div style="display:grid;grid-template-columns:minmax(0,1fr) 90px 58px;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--line)"><span>${esc(score.name)}</span><span>${score.passed}/${score.total} missions</span><strong style="text-align:right">${score.percent}%</strong></div>`).join('') +
+                      '</div>';
+                return `<details class="cx-assignment-insight" style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin:7px 0;background:var(--panel)">
+                  <summary style="display:flex;justify-content:space-between;gap:10px;align-items:center;cursor:pointer;flex-wrap:wrap"><span><strong>${esc(a.title)}</strong> <small class="cx-dim">· ${mids.length} mission${mids.length===1?'':'s'} · ${due}</small></span><span class="cx-dim">${summary}</span></summary>
+                  ${detail}
+                </details>`;
+              }).join('')
+            : '';
+          dashHtml = analyticsHtml + assignmentInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>

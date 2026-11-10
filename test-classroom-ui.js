@@ -19,7 +19,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
       const state = { table };
       const api = {
         select() { return api; },
-        eq() { return api; },
+        eq(column, value) { state.filters = state.filters || {}; state.filters[column] = value; return api; },
+        in() { return api; },
         order() { return api; },
         maybeSingle() {
           calls.push(['select', state.table]);
@@ -35,9 +36,18 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
         then(res) { // for `select(...).eq(...)` awaited directly (enrollments/classes lists)
           calls.push(['list', state.table]);
           const data = state.table === 'enrollments'
-            ? [{ role: 'student', class_id: 'c1', classes: { name: 'Intro Linux', term: 'F26', join_code: 'ZZZ999' } }]
+            ? (state.filters && state.filters.class_id
+              ? [{ user_id: 'u-student', role: 'student', profiles: { display_name: 'Student One', avatar: '🧑' } }]
+              : [{ role: 'student', class_id: 'c1', classes: { name: 'Intro Linux', term: 'F26', join_code: 'ZZZ999' } }])
             : state.table === 'classes'
             ? [{ id: 'c9', name: 'My Course', term: 'F26', join_code: 'ABC123', created_at: '2026-01-01' }]
+            : state.table === 'assignments'
+            ? [{ id: 'a1', title: 'Linux fundamentals', mission_ids: ['1-1', '1-2'], due_at: null }]
+            : state.table === 'attempts'
+            ? [
+                { user_id: 'u-student', mission_id: '1-1', passed: true, hints: 0, updated_at: '2026-11-10T10:00:00Z' },
+                { user_id: 'u-student', mission_id: '1-2', passed: false, hints: 1, updated_at: '2026-11-10T10:05:00Z' }
+              ]
             : [];
           return Promise.resolve({ data, error: null }).then(res);
         },
@@ -90,6 +100,12 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.$('#cxCreate')) ok('Teacher sees create-class form in Teach tab'); else fail('no create form in Teach tab');
   const codeShown = await page.$$eval('.cx-code', els => els.map(e => e.textContent));
   if (codeShown.includes('ABC123')) ok('Owned class shows its join code'); else fail('join code not shown: ' + JSON.stringify(codeShown));
+  const assignmentInsight = page.locator('.cx-assignment-insight');
+  if (await assignmentInsight.count() === 1) ok('Teacher sees assignment-level mastery details');
+  else fail('assignment-level mastery details missing');
+  const assignmentText = await assignmentInsight.first().textContent();
+  if (/Linux fundamentals/.test(assignmentText) && /Student One/.test(assignmentText) && /50%/.test(assignmentText)) ok('Assignment mastery reports learner evidence and the correct percentage');
+  else fail('assignment mastery evidence incorrect: ' + assignmentText);
 
   // Join by code (Join tab is the default)
   await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
