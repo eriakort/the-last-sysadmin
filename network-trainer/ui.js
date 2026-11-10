@@ -1377,9 +1377,12 @@ function startInlineTextEdit(targetEl, currentText, onCommit) {
   document.body.appendChild(input);
   input.focus();
   input.select();
+  let finished = false;
   const finish = (commit) => {
+    if (finished) return;
+    finished = true;
     const val = input.value;
-    input.remove();
+    try { input.remove(); } catch (_) {}
     if (commit) onCommit(val);
   };
   input.addEventListener('keydown', e => {
