@@ -8493,7 +8493,7 @@ async function openClassroom() {
                     (r.next_step ? '<strong>Next step</strong><p>' + esc(r.next_step) + '</p>' : '') + '</article>';
                 }).join('')
               : '<p class="cx-dim">No learner reflections have been shared in this class yet.</p>');
-          dashHtml = analyticsHtml + skillDiagnosticsHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          dashHtml = analyticsHtml + skillDiagnosticsHtml + cohortInsightHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
