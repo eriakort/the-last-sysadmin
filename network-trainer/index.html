@@ -4853,18 +4853,12 @@ function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
-function placeTerminalRestore(inWorkbench) {
+function placeTerminalRestore() {
   const restore = $('#terminalRestore');
   if (!restore) return;
-  // Keep the launcher outside #topoWrap: refresh() replaces that canvas markup,
-  // which would otherwise destroy the launcher during normal terminal commands.
-  // The navigation rail remains available in every workspace and keeps the
-  // launcher clear of the page toolbar on small screens.
-  const rail = $('#navRail');
-  if (rail) {
-    const spacer = rail.querySelector('.nav-spacer');
-    rail.insertBefore(restore, spacer || null);
-  } else document.body.appendChild(restore);
+  // Keep the launcher directly under body so workspace visibility, rail
+  // reflow, and topology refreshes cannot hide or detach the restore control.
+  if (restore.parentElement !== document.body) document.body.appendChild(restore);
 }
 function positionTerminalWindow(inWorkbench) {
   const win = $('#terminalWindow');
