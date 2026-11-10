@@ -1507,8 +1507,7 @@ function wireTopo() {
       if (canBuild() && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
         e.preventDefault();
         const step=e.shiftKey?40:10, dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0, dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
-        const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]);
-        if(!ids.includes(id))ids.push(id);
+        const ids=TOPO_SELECTED.has(id)?[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]):[id];
         rememberTopology();
         ids.forEach(selectedId=>{const p=nodePos(selectedId);setPos(selectedId,p[0]+dx,p[1]+dy);});
         refresh();
