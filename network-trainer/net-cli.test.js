@@ -702,7 +702,9 @@ test('HSRP rejects invalid groups, priorities, tracked interfaces and virtual IP
 });
 
 test('help presents network commands in readable groups with short descriptions', () => {
-  const cli = makeCLI(world(), 'r1');
+  // A router shows the fullest set of groups (routing + services + security).
+  const net = { devices: { r1: { id: 'r1', kind: 'router', ifaces: { eth0: { up: true } } } }, links: [] };
+  const cli = makeCLI(net, 'r1');
   const help = cli.run('help');
   eq(help.code, 0, 'help succeeds');
   has(help.out, 'DEVICE AND INTERFACE', 'interface group');
@@ -730,6 +732,46 @@ test('ASA help separates firewall setup, objects, access control and troubleshoo
   has(help.out, 'implicit deny rule', 'security behaviour explained');
   eq(help.out.includes('\\n'), false, 'ASA help contains real line breaks, not literal escape sequences');
   eq(help.out.split('\n').length > 20, true, 'ASA reference is presented as separate lines');
+});
+
+test('help is scoped to the selected device kind', () => {
+  const net = { devices: {
+    host1: { id: 'host1', kind: 'host', ifaces: { eth0: { up: true } } },
+    sw1:   { id: 'sw1', kind: 'switch', ifaces: { p1: { up: true } } },
+    r1:    { id: 'r1', kind: 'router', ifaces: { eth0: { up: true } } },
+    fw1:   { id: 'fw1', kind: 'firewall', ifaces: { eth0: { up: true } } },
+  }, links: [] };
+  const cli = makeCLI(net, 'host1');
+  const no = (s, sub, m) => { if (String(s).includes(sub)) throw new Error(`${m}: help should not list "${sub}"`); };
+
+  const host = cli.run('help').out;
+  has(host, '(host)', 'host header names the kind');
+  has(host, 'ping <host|ip>', 'host keeps diagnostics');
+  has(host, 'iptables -L', 'host keeps host firewall');
+  no(host, 'vlan <id>', 'host');
+  no(host, 'router ospf', 'host');
+  no(host, 'access-list', 'host');
+
+  const sw = cli.on('sw1').run('help').out;
+  has(sw, 'vlan <id>', 'switch keeps VLANs');
+  has(sw, 'show spanning-tree', 'switch keeps STP');
+  no(sw, 'router ospf', 'switch');
+  no(sw, 'iptables', 'switch');
+
+  const r = cli.on('r1').run('help').out;
+  has(r, 'router ospf <process-id>', 'router keeps OSPF');
+  has(r, 'show ip bgp', 'router keeps BGP');
+  has(r, 'ip dhcp pool <name>', 'router keeps DHCP services');
+  no(r, 'switchport', 'router');
+  no(r, 'vlan <id>', 'router');
+
+  const fw = cli.on('fw1').run('help').out;
+  has(fw, 'packet-tracer input ...', 'firewall keeps packet-tracer');
+  has(fw, 'access-list ...', 'firewall keeps ACLs');
+  no(fw, 'vlan <id>', 'firewall');
+  no(fw, 'router ospf', 'firewall');
+
+  has(cli.on('r1').run('?').out, 'router ospf <process-id>', '? is a scoped alias for help');
 });
 
 let failed = 0;

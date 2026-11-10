@@ -2203,6 +2203,100 @@ function runCisco(cli, line) {
   return dispatch(cli, raw);
 }
 
+/* ---------------- device-scoped help ----------------
+ * Each entry is [command, description, kinds]. `help` shows only the entries
+ * whose `kinds` include the selected device's kind, so the reference matches
+ * what that device can actually run (the handlers enforce the same gating).
+ * kinds: 'host' | 'server' | 'switch' | 'router' | 'firewall'; ALL = every kind.
+ * This is also the natural seam for brand profiles later (e.g. Cisco IOS):
+ * add a `brands` filter alongside `kinds` and filter on the device's brand. */
+const ALL_KINDS = ['host', 'server', 'switch', 'router', 'firewall'];
+const HELP_SECTIONS = [
+  { h: 'DEVICE AND INTERFACE', items: [
+    ['show ip interface brief', 'Summarise interface addresses and status', ['switch', 'router', 'firewall']],
+    ['ip addr', 'List or configure IP addresses', ['host', 'server', 'router', 'firewall']],
+    ['ip link', 'View or change interface state', ['host', 'server', 'router', 'firewall']],
+    ['interface <port>', 'Select a switch port for configuration', ['switch']],
+    ['shutdown / no shutdown', 'Disable or re-enable an interface', ['switch']],
+    ['vlan <id>', 'Create a VLAN on a switch', ['switch']],
+    ['switchport mode access|trunk', 'Set a switch port mode', ['switch']],
+    ['switchport access vlan <id>', 'Assign an access port to a VLAN', ['switch']],
+    ['switchport trunk allowed vlan ...', 'Choose VLANs carried by a trunk', ['switch']],
+    ['show vlan brief', 'List VLANs configured on a switch', ['switch']],
+    ['show interfaces trunk', 'Review active trunk ports', ['switch']],
+    ['show spanning-tree', 'Inspect spanning-tree state', ['switch']],
+  ]},
+  { h: 'IP ROUTING', items: [
+    ['ip route', 'Display the routing table', ['router', 'firewall']],
+    ['ip route add ... via <ip>', 'Add a route through a next-hop router', ['router', 'firewall']],
+    ['ip route del ...', 'Remove a configured route', ['router', 'firewall']],
+    ['router ospf <process-id>', 'Enter OSPF routing configuration', ['router']],
+    ['network <address> <wildcard> ...', 'Advertise a network into OSPF', ['router']],
+    ['show ip ospf neighbor', 'Check OSPF neighbour relationships', ['router']],
+    ['standby <group> ip <virtual-ip>', 'Configure HSRP first-hop redundancy', ['router']],
+    ['show ip protocols', 'Review active routing protocols', ['router']],
+    ['bgp summary / bgp neighbor', 'Inspect BGP peers and session state', ['router']],
+    ['show ip bgp', 'Review routes learned through BGP', ['router']],
+  ]},
+  { h: 'CONNECTIVITY AND DIAGNOSTICS', items: [
+    ['ping <host|ip>', 'Test whether a destination is reachable', ALL_KINDS],
+    ['traceroute <host|ip>', 'Show the network path to a destination', ALL_KINDS],
+    ['arp', 'Display the local IP-to-MAC address cache', ALL_KINDS],
+    ['tcpdump', 'Capture and inspect network packets', ALL_KINDS],
+    ['nmap <host|ip>', 'Discover reachable hosts and open ports', ALL_KINDS],
+    ['dig <name>', 'Query DNS records for a hostname', ALL_KINDS],
+    ['dhclient <interface>', 'Request an IP address using DHCP', ['host', 'server']],
+    ['resolvectl status', 'Inspect DNS resolver configuration', ['host', 'server', 'router', 'firewall']],
+  ]},
+  { h: 'NETWORK SERVICES', items: [
+    ['ip dhcp pool <name>', 'Create a DHCP address pool', ['router']],
+    ['ip helper-address <ip>', 'Relay DHCP requests to another subnet', ['router']],
+    ['ip name-server <ip>', 'Configure the DNS server used by a device', ['router', 'firewall']],
+    ['ip host <name> <ip>', 'Add a static hostname mapping', ['router', 'firewall']],
+    ['ntp server <ip>', 'Synchronise time with an NTP server', ['router', 'firewall']],
+    ['logging host <ip>', 'Send device logs to a remote collector', ['router', 'firewall']],
+    ['show ip dhcp binding', 'List DHCP leases assigned to clients', ['router']],
+    ['show ntp status', 'Check time synchronisation', ['router', 'firewall']],
+    ['show logging', 'Review recent device log messages', ['router', 'firewall']],
+  ]},
+  { h: 'SECURITY AND FIREWALL', items: [
+    ['iptables -L', 'List firewall filtering rules', ['host', 'server', 'firewall']],
+    ['iptables -A ...', 'Add a packet-filtering rule', ['host', 'server', 'firewall']],
+    ['access-list ...', 'Define traffic to permit or deny', ['router', 'firewall']],
+    ['access-group ...', 'Apply an access list to an interface', ['router', 'firewall']],
+    ['ip nat inside/outside ...', 'Translate addresses at the border', ['router', 'firewall']],
+    ['packet-tracer input ...', 'Simulate how a firewall handles a packet', ['firewall']],
+  ]},
+  { h: 'CONFIGURATION AND HELP', items: [
+    ['show running-config', 'Display the active device configuration', ALL_KINDS],
+    ['show startup-config', 'Display the saved startup configuration', ['switch', 'router', 'firewall']],
+    ['write memory', 'Save the current configuration', ['switch', 'router', 'firewall']],
+    ['enable', 'Enter privileged device mode', ['switch', 'router', 'firewall']],
+    ['configure terminal', 'Enter global configuration mode', ['switch', 'router', 'firewall']],
+    ['exit / end', 'Leave the current configuration mode', ['switch', 'router', 'firewall']],
+    ['man <command>', 'Read command-specific usage notes', ALL_KINDS],
+    ['help or ?', 'Display this command reference', ALL_KINDS],
+  ]},
+];
+function buildHelp(dev) {
+  const kind = dev && dev.kind;
+  const label = dev ? (dev.hostname || dev.id) : '';
+  const out = [
+    'NETWORK TERMINAL HELP' + (kind ? ` — ${label} (${kind})` : ''),
+    'Commands available on this device. Replace values in <angle brackets> with your own.',
+    ''
+  ];
+  for (const sec of HELP_SECTIONS) {
+    const rows = sec.items.filter(it => !kind || it[2].includes(kind));
+    if (!rows.length) continue;
+    out.push(sec.h);
+    for (const [cmd, desc] of rows) out.push('  ' + cmd.padEnd(34) + desc);
+    out.push('');
+  }
+  out.push('This is an educational network CLI. Only commands implemented in the simulator are available.');
+  return out.join('\n');
+}
+
 /* ---------------- commands ---------------- */
 const COMMANDS = {
   clear: (cli, a) => {
@@ -2437,75 +2531,8 @@ const COMMANDS = {
     dev.ifaces[ifn].ospf = Number(area);
     return ok(`OSPF enabled on ${ifn} area ${area}`);
   },
-  help: () => ok([
-    'NETWORK TERMINAL HELP',
-    'Commands are grouped by task. Replace values in <angle brackets> with your own.',
-    '',
-    'DEVICE AND INTERFACE',
-    '  show ip interface brief          Summarise interface addresses and status',
-    '  ip addr                          List or configure IP addresses',
-    '  ip link                          View or change interface state',
-    '  interface <port>                 Select a switch port for configuration',
-    '  shutdown / no shutdown            Disable or re-enable an interface',
-    '  vlan <id>                         Create a VLAN on a switch',
-    '  switchport mode access|trunk      Set a switch port mode',
-    '  switchport access vlan <id>       Assign an access port to a VLAN',
-    '  switchport trunk allowed vlan ... Choose VLANs carried by a trunk',
-    '  show vlan brief                   List VLANs configured on a switch',
-    '  show interfaces trunk             Review active trunk ports',
-    '  show spanning-tree                Inspect spanning-tree state',
-    '',
-    'IP ROUTING',
-    '  ip route                          Display the routing table',
-    '  ip route add ... via <ip>         Add a route through a next-hop router',
-    '  ip route del ...                  Remove a configured route',
-    '  router ospf <process-id>          Enter OSPF routing configuration',
-    '  network <address> <wildcard> ...  Advertise a network into OSPF',
-    '  show ip ospf neighbor             Check OSPF neighbour relationships',
-    '  show ip protocols                 Review active routing protocols',
-    '  bgp summary / bgp neighbor        Inspect BGP peers and session state',
-    '  show ip bgp                       Review routes learned through BGP',
-    '',
-    'CONNECTIVITY AND DIAGNOSTICS',
-    '  ping <host|ip>                    Test whether a destination is reachable',
-    '  traceroute <host|ip>              Show the network path to a destination',
-    '  arp                               Display the local IP-to-MAC address cache',
-    '  tcpdump                           Capture and inspect network packets',
-    '  nmap <host|ip>                    Discover reachable hosts and open ports',
-    '  dig <name>                        Query DNS records for a hostname',
-    '  dhclient <interface>              Request an IP address using DHCP',
-    '  resolvectl status                 Inspect DNS resolver configuration',
-    '',
-    'NETWORK SERVICES',
-    '  ip dhcp pool <name>               Create a DHCP address pool',
-    '  ip helper-address <ip>            Relay DHCP requests to another subnet',
-    '  ip name-server <ip>               Configure the DNS server used by a device',
-    '  ip host <name> <ip>               Add a static hostname mapping',
-    '  ntp server <ip>                   Synchronise time with an NTP server',
-    '  logging host <ip>                 Send device logs to a remote collector',
-    '  show ip dhcp binding              List DHCP leases assigned to clients',
-    '  show ntp status                   Check time synchronisation',
-    '  show logging                      Review recent device log messages',
-    '',
-    'SECURITY AND FIREWALL',
-    '  iptables -L                       List firewall filtering rules',
-    '  iptables -A ...                   Add a packet-filtering rule',
-    '  access-list ...                   Define traffic a firewall should permit or deny',
-    '  access-group ...                  Apply an access list to an interface',
-    '  packet-tracer input ...           Simulate how a firewall handles a packet',
-    '',
-    'CONFIGURATION AND HELP',
-    '  show running-config               Display the active device configuration',
-    '  show startup-config               Display the saved startup configuration',
-    '  write memory                      Save the current configuration',
-    '  enable                            Enter privileged device mode',
-    '  configure terminal                Enter global configuration mode',
-    '  exit / end                        Leave the current configuration mode',
-    '  man <command>                     Read command-specific usage notes',
-    '  help or ?                         Display this command reference',
-    '',
-    'This is an educational network CLI. Only commands implemented in the simulator are available.'
-  ].join('\n')),
+  help: (cli) => ok(buildHelp(cli.net.devices[cli.cur])),
+  '?': (cli) => ok(buildHelp(cli.net.devices[cli.cur])),
 
   man: (cli, a) => ok(MAN[a[0]] || `no manual entry for ${a[0] || ''}`),
 
