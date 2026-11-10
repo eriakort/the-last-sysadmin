@@ -270,6 +270,43 @@ function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
+function placeTerminalRestore(inWorkbench) {
+  const restore = $('#terminalRestore');
+  if (!restore) return;
+  if (inWorkbench) {
+    const canvas = $('#topoWrap');
+    if (canvas) { canvas.appendChild(restore); return; }
+  }
+  const rail = $('#navRail');
+  if (rail) {
+    const spacer = rail.querySelector('.nav-spacer');
+    rail.insertBefore(restore, spacer || null);
+  } else document.body.appendChild(restore);
+}
+function positionTerminalWindow(inWorkbench) {
+  const win = $('#terminalWindow');
+  if (!win) return;
+  if (inWorkbench) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}') || {}; } catch (_) {}
+    if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
+      win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
+      win.style.right = 'auto'; win.style.bottom = 'auto';
+    } else {
+      win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '22px'; win.style.bottom = '18px';
+    }
+    win.style.width = ''; win.style.height = '';
+  } else {
+    // Outside the topology workspace, keep the console docked low on screen.
+    // The navigation rail owns its launcher, so no header controls are covered.
+    win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '16px'; win.style.bottom = '16px';
+  }
+  const hint = win.querySelector('.terminal-window-titlebar small');
+  if (hint) hint.textContent = inWorkbench ? 'DRAG TO MOVE' : 'DOCKED · WORKSPACE NAVIGATION STAYS CLEAR';
+  const bar = win.querySelector('.terminal-window-titlebar');
+  if (bar) bar.style.cursor = inWorkbench ? 'move' : 'default';
+}
 function showWorkspaceView(view, options = {}) {
   if (!WORKSPACE_VIEWS.has(view)) view = 'overview';
   const historyMode = options.historyMode || 'push';
@@ -292,8 +329,15 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
-  const terminalRestore=$('#terminalRestore');
-  if(terminalRestore) (view==='workbench'||view==='build' ? $('#topoWrap') : document.body).appendChild(terminalRestore);
+  const inWorkbench = view === 'workbench' || view === 'build';
+  placeTerminalRestore(inWorkbench);
+  positionTerminalWindow(inWorkbench);
+  const terminalWindow = $('#terminalWindow');
+  if (!inWorkbench && terminalWindow && !terminalWindow.hidden) {
+    terminalWindow.hidden = true;
+    const terminalRestore = $('#terminalRestore');
+    if (terminalRestore) terminalRestore.hidden = false;
+  }
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -1063,9 +1107,8 @@ function wireSessionTabs() {
 }
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
-  const terminalRestore=$('#terminalRestore');
   $('#topoWrap').innerHTML = renderTopo();
-  if(terminalRestore)$('#topoWrap').appendChild(terminalRestore);
+  placeTerminalRestore(true);
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
@@ -2100,22 +2143,21 @@ function mountTerminalWindow() {
   win.hidden = true; // Start tucked away so the console never blocks workspace controls.
   document.body.appendChild(win);
   const restore = document.createElement('button');
-  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
-  restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
-  restore.hidden = false; const cols=$('#cols'); (cols&&!cols.hidden ? $('#topoWrap') : document.body).appendChild(restore);
-  const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
-  if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-    win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
-    win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
-    win.style.right = 'auto'; win.style.bottom = 'auto';
-  }
+  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore nav-item';
+  restore.innerHTML = '<span class="nav-glyph" aria-hidden="true">▣</span><span>Device terminal</span>';
+  restore.setAttribute('aria-label', 'Open device terminal');
+  restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
+  restore.hidden = false;
+  placeTerminalRestore(false);
+  positionTerminalWindow(false);
   const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
   $('#terminalMinimize').addEventListener('click', minimize);
   restore.addEventListener('click', () => openTerminalWindow(true));
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
-    if (e.target.closest('button') || e.button !== 0) return;
+    const cols = $('#cols');
+    if (!cols || cols.hidden || e.target.closest('button') || e.button !== 0) return;
     const rect = win.getBoundingClientRect();
     drag = { x:e.clientX, y:e.clientY, left:rect.left, top:rect.top };
     bar.setPointerCapture(e.pointerId); e.preventDefault();
@@ -2138,6 +2180,8 @@ function mountTerminalWindow() {
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow'), restore = $('#terminalRestore');
   if (!win) return;
+  const cols = $('#cols');
+  positionTerminalWindow(!!(cols && !cols.hidden));
   win.hidden = false;
   if (restore) restore.hidden = true;
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
