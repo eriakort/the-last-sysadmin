@@ -17,7 +17,7 @@ Run these **in order**. All are safe to re-run.
 8. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
 9. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
 
-Skipping any of 3–9 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+Skipping any of 3–9 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`. M12 is additive and can be applied after M1; it does not change existing progress or attempt records.
 
 There is no server code — the game talks to Supabase directly with the anon
 key, and RLS is what keeps tenants apart.
