@@ -31,7 +31,6 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const separated = dockBox && topBox && (dockBox.x + dockBox.width <= topBox.x || dockBox.x >= topBox.x + topBox.width || dockBox.y + dockBox.height <= topBox.y || dockBox.y >= topBox.y + topBox.height);
   if (separated) ok('terminal launcher occupies reserved navigation space without covering the top toolbar');
   else fail('terminal launcher overlaps the top toolbar');
-  else fail('terminal launcher overlaps the top toolbar');
 
   await page.click('#terminalRestore');
   await page.waitForFunction(() => document.activeElement?.id === 'tin');
