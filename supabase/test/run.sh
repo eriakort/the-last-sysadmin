@@ -59,7 +59,7 @@ run "$REPO/supabase/net-scenarios.sql" >/dev/null 2>&1
 echo "Running adversarial RLS tests (M1)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m1-rls-test.sql"
 
-echo "Running join-by-code tests (M2)..."
+echo "Running learner-reflection RLS tests (M12)..."\n"${PSQL[@]}" -d "$DB" -f "$HERE/m12-learner-reflections-test.sql"\n\necho "Running join-by-code tests (M2)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m2-enroll-test.sql"
 
 echo "Running enroll-by-email + authoring-isolation tests (M4/M6/M7)..."
