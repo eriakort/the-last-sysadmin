@@ -51,9 +51,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'workbench');
 
   // Theme-aware controls must retain readable contrast in Paper (light) mode.
+  // Disable the normal 150ms button transition so this assertion measures the
+  // final theme colors rather than an intermediate animation frame.
+  const paperButton = page.locator('#btnSearch');
+  await paperButton.evaluate(el => { el.style.transition = 'none'; });
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'paper'));
   await page.waitForTimeout(30);
-  const paperButton = page.locator('#btnSearch');
   const paperColors = await paperButton.evaluate(el => ({ color: getComputedStyle(el).color, background: getComputedStyle(el).backgroundColor }));
   if (paperColors.color === 'rgb(26, 34, 48)' && paperColors.background === 'rgb(243, 246, 250)') ok('shared action buttons use readable light-theme foreground and background colors');
   else fail('Paper theme button contrast is incorrect: ' + JSON.stringify(paperColors));
