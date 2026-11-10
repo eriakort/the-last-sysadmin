@@ -31,7 +31,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
           calls.push(['insert.select', state.table, state.payload]);
           return Promise.resolve({ data: { name: state.payload.name, join_code: 'ABC123' }, error: null });
         },
-        insert(p) { state.payload = p; return api; },
+        insert(p) { state.payload = p; calls.push(['insert', state.table, p]); return api; },
         update(p) { calls.push(['update', state.table, p]); return { eq() { return Promise.resolve({ error: null }); } }; },
         then(res) { // for `select(...).eq(...)` awaited directly (enrollments/classes lists)
           calls.push(['list', state.table]);
@@ -116,11 +116,25 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (/Navigation/.test(diagnosticText) && /Network operations/.test(diagnosticText) && /Revisit mission 1-2/.test(diagnosticText) && /Revisit mission network-dhcp/.test(diagnosticText)) ok('Skill diagnostics map Linux and network evidence to targeted practice');
   else fail('skill diagnostic evidence or recommendation incorrect: ' + diagnosticText);
 
-  // Join by code (Join tab is the default)
+  const feedbackControls = await page.locator('#fbAssignment').count();
+  if (feedbackControls === 1 && await page.locator('#fbMission').count() === 1) ok('Teacher can target feedback to an assignment and mission');
+  else fail('contextual feedback controls missing');
+  await page.selectOption('#fbAssignment', 'a1');
+  await page.selectOption('#fbMission', '1-2');
+  await page.fill('#fbBody', 'Review the navigation sequence, then try again.');
+  await page.click('#fbSend');
+  await page.waitForTimeout(120);
+  const feedbackInsert = await page.evaluate(() => window.__calls.find(c => c[0] === 'insert' && c[1] === 'feedback'));
+  if (feedbackInsert && feedbackInsert[2].assignment_id === 'a1' && feedbackInsert[2].mission_id === '1-2' && feedbackInsert[2].student_id === 'u-student') ok('Feedback is stored with learner, assignment and mission context');
+  else fail('contextual feedback payload incorrect: ' + JSON.stringify(feedbackInsert));
+
+  // Join by code is tested separately; successful join closes the classroom overlay.
   await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
   await page.fill('#cxCode', ' abc 123 ');
   await page.click('#cxJoin');
   await page.waitForTimeout(200);
+  // Joining closes the classroom overlay; reopen it below for the create-class test.
+
   const calls = await page.evaluate(() => window.__calls);
   const rpc = calls.find(c => c[0] === 'rpc' && c[1] === 'enroll_by_code');
   if (rpc && rpc[2] && typeof rpc[2].code === 'string') ok('Join calls rpc enroll_by_code with {code}');
