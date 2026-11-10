@@ -121,6 +121,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.fill('#cxCode', ' abc 123 ');
   await page.click('#cxJoin');
   await page.waitForTimeout(200);
+  // Feedback controls live in the teacher tab, not the Join tab.
+  await page.click('#cxTabs [data-cxtab="teach"]');
+  await page.waitForTimeout(120);
   const feedbackControls = await page.locator('#fbAssignment').count();
   if (feedbackControls === 1 && await page.locator('#fbMission').count() === 1) ok('Teacher can target feedback to an assignment and mission');
   else fail('contextual feedback controls missing');
