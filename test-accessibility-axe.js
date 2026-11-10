@@ -51,6 +51,7 @@ const server=http.createServer((req,res)=>{
   await scan(root,'Linux Sysadmin initial workspace');
   // The server-health overlay is a distinct, frequently used dialog state.
   if(await root.locator('#btnHealthDashboard').count()){
+   await root.locator('#menuProgress summary').click();
    await root.locator('#btnHealthDashboard').click();await root.waitForTimeout(80);
    await scan(root,'Linux Sysadmin server-health dialog');
   }else throw new Error('Linux server-health launcher missing; cannot scan dialog state');
