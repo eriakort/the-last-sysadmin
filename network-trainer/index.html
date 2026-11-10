@@ -6791,7 +6791,14 @@ function openJournal() { showWorkspaceView('journal'); }
 function openHelp() { showWorkspaceView('knowledge'); }
 function mountTerminalWindow() {
   const term = $('#term');
-  if (!term || $('#terminalWindow')) return;
+  if (!term) return;
+  const existing = $('#terminalWindow');
+  if (existing) {
+    // Already mounted; just ensure the terminal element is still inside it
+    const content = existing.querySelector('.terminal-window-content');
+    if (content && term.parentElement !== content) content.appendChild(term);
+    return;
+  }
   // Inject styles once
   if (!document.getElementById('terminalWindowStyles')) {
     const style = document.createElement('style');
@@ -6837,7 +6844,7 @@ function mountTerminalWindow() {
         display: flex;
         flex-direction: column;
       }
-      #terminalWindow #term { flex: 1; min-height: 0; }
+      #terminalWindow #term { flex: 1 !important; min-height: 0 !important; height: auto !important; border: none !important; width: 100%; }
     `;
     document.head.appendChild(style);
   }
@@ -7470,6 +7477,8 @@ function boot() {
       </div>
     </div>`;
   mountTerminalWindow();
+  // Re-mount after bfcache restore (soft refresh / back-forward) so the terminal stays floating
+  window.addEventListener('pageshow', (e) => { if (e.persisted || !$('#terminalWindow') || !$('#terminalWindow').contains($('#term'))) mountTerminalWindow(); });
   wireTerm();
   wireEvidenceTools();
   wireConfigArchiveTools();
