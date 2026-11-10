@@ -20,7 +20,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
       const api = {
         select() { return api; },
         eq(column, value) { state.filters = state.filters || {}; state.filters[column] = value; return api; },
-        in() { return api; },
+        in(column, values) { state.filters = state.filters || {}; state.filters[column] = values; return api; },
+        gte(column, value) { state.filters = state.filters || {}; state.filters[column] = value; return api; },
         order() { return api; },
         maybeSingle() {
           calls.push(['select', state.table]);
@@ -43,6 +44,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
             ? [{ id: 'c9', name: 'My Course', term: 'F26', join_code: 'ABC123', created_at: '2026-01-01' }]
             : state.table === 'assignments'
             ? [{ id: 'a1', title: 'Linux fundamentals', mission_ids: ['1-1', '1-2', 'network-vlan', 'network-dhcp'], due_at: null }]
+            : state.table === 'learning_evidence'
+            ? [
+                { user_id: 'u-student', mission_id: '1-2', event_type: 'hint_requested', created_at: new Date(Date.now() - 2 * 864e5).toISOString() },
+                { user_id: 'u-student', mission_id: '1-2', event_type: 'hint_requested', created_at: new Date(Date.now() - 1 * 864e5).toISOString() },
+                { user_id: 'u-student', mission_id: '1-1', event_type: 'mission_completed', created_at: new Date(Date.now() - 3 * 864e5).toISOString() },
+                { user_id: 'u-outside', mission_id: 'network-dhcp', event_type: 'hint_requested', created_at: new Date(Date.now() - 1 * 864e5).toISOString() }
+              ]
             : state.table === 'attempts'
             ? [
                 { user_id: 'u-student', mission_id: '1-1', passed: true, hints: 0, updated_at: '2026-11-10T10:00:00Z' },
@@ -108,6 +116,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   const cohortInsight = page.locator('.cx-cohort-insight');
   if (await cohortInsight.count() === 1 && /1\/1 active/.test(await cohortInsight.textContent()) && /50%/.test(await cohortInsight.textContent()) && /0\/1 learners/.test(await cohortInsight.textContent())) ok('Cohort insight reports activity, attempt outcomes and reflection coverage with denominators');
   else fail('cohort insight missing or incorrect: ' + await page.locator('#raceContent').textContent());
+  const cohortTrends = page.locator('[data-cohort-trends]');
+  if (await cohortTrends.count() === 1 && /1/.test(await cohortTrends.locator('[data-trend="completions"]').textContent()) && /2/.test(await cohortTrends.locator('[data-trend="hints"]').textContent()) && /1-2/.test(await cohortTrends.textContent()) && /2 requests · 1 learners/.test(await cohortTrends.textContent())) ok('Cohort trends compare 14-day event counts and surface repeated hints for assigned learners only');
+  else fail('cohort evidence trends missing or incorrect: ' + await page.locator('#raceContent').textContent());
   const assignmentInsight = page.locator('.cx-assignment-insight');
   if (await assignmentInsight.count() === 1) ok('Teacher sees assignment-level mastery details');
   else fail('assignment-level mastery details missing');
