@@ -72,7 +72,8 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  assert(await page.locator('#topo .name-label').count()===1,'Device context menu should restore a deleted label');
  ok('device labels can be deleted and restored independently');
  // Drag the visible resize handles; size changes must not move the device or its label.
- await page.locator('#topo .name-label').click();
+ // Force-click the device so it is selected (and the label handle renders). force bypasses WebKit SVG intercept.
+ await page.locator('#topo .node[data-dev="h1"]').click({force:true});
  await page.waitForSelector('#topo .topo-label-resize[data-label-kind="name"]');
  const labelResize=page.locator('#topo .topo-label-resize[data-label-kind="name"]');
  const labelSizeBefore=Number(await page.locator('#topo .name-label').getAttribute('font-size'));
