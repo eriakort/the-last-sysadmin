@@ -585,6 +585,7 @@ aside{scrollbar-color:#344a60 transparent}
 .terminal-window-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
 .terminal-window-content .tline{flex:none}
 .terminal-restore{position:fixed;right:16px;bottom:16px;z-index:999;width:auto;min-height:40px;padding:9px 13px;border:1px solid #3c647c;border-radius:9px;background:#122638;color:#dff7ff;box-shadow:0 8px 28px #0009;white-space:nowrap}
+body>.terminal-restore{position:fixed;top:auto;right:16px;bottom:16px;z-index:1001}
 .terminal-restore:hover,.terminal-restore:focus-visible{background:#1b3a50;color:#fff}
 .terminal-restore .nav-glyph{display:inline-grid;place-items:center;width:19px;color:var(--amber);font-size:15px}
 .terminal-restore[hidden]{display:none!important}
