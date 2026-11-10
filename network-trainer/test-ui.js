@@ -83,7 +83,7 @@ let URL;
   // The console may already be open if the startup route restored an active session.
   // Open it only when the launcher is visible; do not wait on a hidden launcher.
   const terminalWindow = page.locator('#terminalWindow');
-  await page.waitForSelector('#terminalWindow');
+  await page.waitForSelector('#terminalWindow', { state: 'attached' });
   if (await terminalWindow.isHidden()) {
     await page.waitForSelector('#terminalRestore:visible');
     await page.click('#terminalRestore');
