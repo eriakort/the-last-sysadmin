@@ -41,6 +41,14 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 .name{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:.07em;text-transform:uppercase;line-height:1.1}
 .sub{color:var(--muted);font-size:12.5px}
 .stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.top-menu{position:relative;min-width:0}
+.top-menu>summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap}
+.top-menu>summary::-webkit-details-marker{display:none}
+.top-menu>summary::after{content:"▾";font-size:10px;color:var(--muted)}
+.top-menu[open]>summary{border-color:var(--amber)}
+.top-menu-list{position:absolute;top:calc(100% + 7px);right:0;z-index:1300;display:grid;gap:5px;min-width:220px;max-height:min(70vh,460px);overflow:auto;padding:7px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:0 18px 45px #000a}
+.top-menu-list .btn{width:100%;text-align:left;white-space:normal}
+.top-menu-list .btn:focus-visible,.top-menu>summary:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .apphdr{display:flex;align-items:center;gap:20px;min-width:0;flex-wrap:wrap}
 .apptabs{display:flex;gap:4px}
 .apptab{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:7px;color:var(--muted);font-size:13.5px;font-weight:600;text-decoration:none;border:1px solid transparent;cursor:pointer}
@@ -546,6 +554,18 @@ body.practicing{padding-top:40px}
 .ops-lab-safety{border-left:3px solid var(--blue);padding:9px 11px;background:var(--raise);font-size:11px;color:var(--muted);margin-top:14px}
 @media(max-width:680px){.bash-workshop-backdrop{padding:8px}.bash-workshop-dialog{padding:14px;max-height:94vh}.bash-workshop-grid{grid-template-columns:1fr}.bash-workshop-head h2{font-size:19px}}
 
+@media(max-width:700px){
+  .top{align-items:stretch}
+  .apphdr{width:100%;gap:10px}
+  .apptabs{width:100%;flex-wrap:wrap}
+  .stats{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .stats>.stat{align-items:flex-start;padding:3px 8px;border-right:0}
+  .top-menu{min-width:0}
+  .top-menu>summary{width:100%;min-height:36px}
+  .top-menu-list{left:0;right:auto;min-width:min(240px,calc(100vw - 32px))}
+  #btnNew{width:100%}
+}
+@media(max-width:380px){.stats{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -560,25 +580,41 @@ body.practicing{padding-top:40px}
       </div>
     </div>
     <nav class="apptabs" aria-label="Application navigation">
-      <a class="apptab on" href="." aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
-      <a class="apptab" href="network-trainer/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
+      <a class="apptab on" href="." aria-current="page" title="Learn and practise Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+      <a class="apptab" href="network-trainer/" title="Open the network engineering and device simulation workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
     </nav>
     </div>
-    <div class="stats">
-      <div class="stat"><span class="k">XP</span><span class="v" id="xp">0</span></div>
-      <div class="stat"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
+    <div class="stats" aria-label="Learning progress and application tools">
+      <div class="stat" title="Experience earned by completing Linux learning missions"><span class="k">XP</span><span class="v" id="xp">0</span></div>
+      <div class="stat" title="Your current learning rank"><span class="k">Rank</span><span class="v" id="rank">Intern</span></div>
       <div class="stat" id="clockStat" hidden><span class="k">Task time</span><span class="v live" id="clock">0:00</span></div>
-      <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
-      <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
-      <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
-      <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
-      <button class="btn" id="btnCrossTrackCase" type="button" title="Work a service outage across Linux and network operations">Integrated case</button>
-      <button class="btn" id="btnRevisionReview" type="button" title="Recall completed concepts using spaced practice">Recall review</button>
-      <button class="btn" id="btnSkillPortfolio" type="button" title="Review and export evidence of skills demonstrated in both learning tracks">Skill portfolio</button>
-      <button class="btn" id="btnCompanyDesk" type="button" title="Work persistent service requests for the simulated Halcyon IT company">Company service desk</button>
-      <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
-      <button class="btn" id="btnSettings" type="button" title="Themes, avatar, and account">⚙ Settings</button>
-      <button class="btn" id="btnNew" type="button">New game</button>
+      <details class="top-menu" id="menuPractice">
+        <summary class="btn" title="Open hands-on labs and cross-track practice">Practice</summary>
+        <div class="top-menu-list" aria-label="Practice tools">
+          <button class="btn" id="btnBashWorkshop" type="button" title="Practise Bash variables, conditionals, loops and scripts">Bash workshop</button>
+          <button class="btn" id="btnOpsRecoveryLab" type="button" title="Practise Linux security operations and storage recovery in an isolated lab">Security &amp; recovery</button>
+          <button class="btn" id="btnCrossTrackCase" type="button" title="Work service incidents across Linux and network operations">Integrated case</button>
+          <button class="btn" id="btnCompanyDesk" type="button" title="Work persistent service requests for the simulated Halcyon IT company">Company service desk</button>
+        </div>
+      </details>
+      <details class="top-menu" id="menuProgress">
+        <summary class="btn" title="Review performance, server health and demonstrated skills">Progress &amp; tools</summary>
+        <div class="top-menu-list" aria-label="Progress and utility tools">
+          <button class="btn" id="btnTimer" type="button" title="Time each ticket and keep a performance log">Speed tracker</button>
+          <button class="btn" id="btnHealthDashboard" type="button" title="Inspect the simulated server health and service relationships">Server health</button>
+          <button class="btn" id="btnRevisionReview" type="button" title="Recall completed concepts using spaced practice">Recall review</button>
+          <button class="btn" id="btnSkillPortfolio" type="button" title="Review and export evidence of skills demonstrated in both learning tracks">Skill portfolio</button>
+          <button class="btn" id="btnRace" type="button" title="Race another player through an incident scenario">⚑ Race</button>
+        </div>
+      </details>
+      <details class="top-menu" id="menuHelp">
+        <summary class="btn" title="Manage your account or learn about this platform">Account &amp; help</summary>
+        <div class="top-menu-list" aria-label="Account and help">
+          <button class="btn" id="btnSettings" type="button" title="Change themes, avatar and account settings">⚙ Settings</button>
+          <button class="btn" id="btnAbout" type="button" title="Read the app purpose and current version">About this app</button>
+        </div>
+      </details>
+      <button class="btn primary" id="btnNew" type="button" title="Start a new learning run. You will be asked to confirm before progress is erased.">New game</button>
     </div>
   </header>
 
@@ -717,6 +753,7 @@ try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentE
 /* ============================================================
    Constants and helpers
    ============================================================ */
+const APP_VERSION = '97';
 const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
 const KEY = 'last-sysadmin-v1';
 const AVATARS = ['👤','🧑‍💻','👩‍💻','🦊','🐧','🐢','🚀','⚡','🔧','🛡️','🎯','🌟'];
@@ -761,6 +798,14 @@ const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KB = 1024, MB = KB * 1024, GB = MB * 1024;
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const $ = s => document.querySelector(s);
+document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
+document.addEventListener('click', event => {
+  if (event.target.closest('.top-menu')) return;
+  document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
+});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const md = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
@@ -8116,6 +8161,17 @@ function openSettings() {
   const cr = $('#setClassroom'); if (cr) cr.addEventListener('click', openClassroom);
 }
 $('#btnSettings').addEventListener('click', openSettings);
+function openAbout() {
+  showOverlay();
+  renderContent(`<h2>About The Last Sysadmin</h2>
+    <p class="rlead">The Last Sysadmin is a browser-based learning platform for practical Linux and network administration.</p>
+    <p class="rlead">Learn through guided missions, simulated terminals, troubleshooting labs, incident workflows, and evidence-led practice. It is designed to help learners build practical skills step by step, from foundational commands to operational problem-solving.</p>
+    <p class="rlead">All commands and network activity run in an isolated browser simulation. The platform does not connect to your computer, real servers, or physical network devices.</p>
+    <div class="rlabel">Application version</div><p class="rlead"><strong>Version ${esc(APP_VERSION)}</strong></p>
+    <div class="race-row" style="margin-top:16px"><button class="btn primary" id="aboutDone" type="button">Done</button></div>`);
+  $('#aboutDone')?.addEventListener('click', hideOverlay);
+}
+$('#btnAbout').addEventListener('click', openAbout);
 
 /* ---------- Classroom (M2: create class + join by code + enrollment) ---------- */
 async function cxLoad() {
