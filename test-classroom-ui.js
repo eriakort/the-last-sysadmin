@@ -133,10 +133,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.fill('#cxCode', ' abc 123 ');
   await page.click('#cxJoin');
   await page.waitForTimeout(200);
-  // Feedback controls live in the teacher tab, not the Join tab.
-  await page.click('#cxTabs [data-cxtab="teach"]');
-  await page.waitForTimeout(120);
-
+  // Joining closes the classroom overlay; reopen it below for the create-class test.
 
   const calls = await page.evaluate(() => window.__calls);
   const rpc = calls.find(c => c[0] === 'rpc' && c[1] === 'enroll_by_code');
