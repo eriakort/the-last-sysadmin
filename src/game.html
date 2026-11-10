@@ -659,8 +659,8 @@ body.practicing{padding-top:40px}
         <div class="label">Hints <span id="hintCount"></span></div>
         <ol id="pHints"></ol>
         <div class="row">
-          <button class="btn" id="btnHint" type="button">Show hint · −25 XP</button>
-          <button class="btn" id="btnRetry" type="button">Restore checkpoint</button>
+          <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; each hint costs XP">Show hint · −25 XP</button>
+          <button class="btn" id="btnRetry" type="button" title="Restore the simulated server to the current mission checkpoint">Restore checkpoint</button>
         </div>
       </div>
       <div class="finale" id="finale" hidden></div>
@@ -784,6 +784,10 @@ const KB = 1024, MB = KB * 1024, GB = MB * 1024;
 const pad = (n, w = 2) => String(n).padStart(w, '0');
 const $ = s => document.querySelector(s);
 document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
+document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
+  const current = summary.parentElement;
+  document.querySelectorAll('.top-menu[open]').forEach(menu => { if (menu !== current) menu.removeAttribute('open'); });
+}));
 document.addEventListener('click', event => {
   if (event.target.closest('.top-menu')) return;
   document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
