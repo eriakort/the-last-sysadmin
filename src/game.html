@@ -8297,6 +8297,48 @@ async function openClassroom() {
                hardest.map(h => `<div style="display:grid;grid-template-columns:1fr 80px 70px;gap:6px;padding:8px 10px;border-top:1px solid var(--line)"><span><code>${esc(h.id)}</code></span><span>${Math.round(h.rate*100)}%</span><span>${h.hints}</span></div>`).join('') +
                '</div>'
             : '';
+          // Skill diagnostics use only assignment-scoped learner outcome records.
+          // Mission IDs are mapped to authored Linux chapters or recognizable network labs;
+          // unknown custom IDs remain explicitly unclassified rather than guessed.
+          const skillEvidence = {};
+          (atts||[]).forEach(a => {
+            if (assigned.size && !assigned.has(a.mission_id)) return;
+            const id = String(a.mission_id || '');
+            const chapterMatch = id.match(/^(\\d+)-/);
+            const networkMatch = /^(?:net|network|nt|protocol|topology|vlan|routing|switching|dhcp|dns)[-_:]/i.test(id);
+            const chapter = chapterMatch ? CHAPTERS[Number(chapterMatch[1]) - 1] : null;
+            const key = chapter ? 'linux:' + chapterMatch[1] : networkMatch ? 'network' : 'custom:' + id;
+            const area = chapter ? chapter.topic : networkMatch ? 'Network operations' : 'Custom mission';
+            const title = chapter ? chapter.name : networkMatch ? 'Network practice' : id || 'Unidentified mission';
+            const group = skillEvidence[key] = skillEvidence[key] || { area, title, records: 0, passed: 0, hints: 0, learners: new Set(), missions: {} };
+            group.records++;
+            if (a.passed) group.passed++;
+            group.hints += Number(a.hints) || 0;
+            if (a.user_id) group.learners.add(a.user_id);
+            const mission = group.missions[id] = group.missions[id] || { records: 0, passed: 0, hints: 0 };
+            mission.records++;
+            if (a.passed) mission.passed++;
+            mission.hints += Number(a.hints) || 0;
+          });
+          const skillGaps = Object.entries(skillEvidence).map(([key, s]) => {
+            const rate = s.records ? s.passed / s.records : 0;
+            const focus = Object.entries(s.missions).filter(([, m]) => m.passed < m.records || m.hints > 0)
+              .sort((a,b) => (a[1].passed / a[1].records) - (b[1].passed / b[1].records) || b[1].hints - a[1].hints)
+              .map(([id]) => id);
+            return { key, ...s, rate, focus };
+          }).filter(s => s.records >= 2 && (s.rate < 0.7 || s.hints >= s.records * 1.5))
+            .sort((a,b) => a.rate - b.rate || (b.hints / b.records) - (a.hints / a.records));
+          const skillDiagnosticsHtml = '<div class="rlabel" style="margin-top:14px">Skill diagnostics</div>' +
+            '<p class="cx-dim" style="margin:0 0 7px">Formative signals from recorded assignment outcomes, not grades or verified production experience. A skill is flagged only after at least two learner-outcome records.</p>' +
+            (skillGaps.length
+              ? skillGaps.slice(0, 6).map(s => {
+                  const recommendation = s.focus.length ? 'Revisit mission ' + s.focus.slice(0, 3).join(', ') : 'Review this skill area with a guided exercise';
+                  return '<div class="cx-skill-diagnostic" style="border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin:7px 0;background:var(--panel)">' +
+                    '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>' + esc(s.area) + '</strong><strong>' + Math.round(s.rate * 100) + '% passed</strong></div>' +
+                    '<div class="cx-dim">' + esc(s.title) + ' · ' + s.records + ' recorded outcomes · ' + s.passed + '/' + s.records + ' passed · ' + s.hints + ' hints · ' + s.learners.size + ' learners</div>' +
+                    '<div style="font-size:12px;margin-top:5px"><b>Targeted practice:</b> ' + esc(recommendation) + '</div></div>';
+                }).join('')
+              : '<p class="cx-dim" style="margin:0">No skill gap is supported by enough current evidence. Keep collecting assignment outcomes; fewer than two records is shown as insufficient evidence, not as mastery.</p>');
           // Assignment-level mastery is calculated from the same authorized
           // roster and attempt evidence already loaded for this class.
           // Percentages always show their learner/mission denominator.
