@@ -43,6 +43,7 @@ create policy "learners append their own learning evidence"
     )
   );
 
+revoke all on public.learning_evidence from anon, authenticated;
 grant select, insert on public.learning_evidence to authenticated;
 
 commit;
