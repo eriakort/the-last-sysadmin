@@ -26,10 +26,11 @@ select test.expect_denied('learner cannot append evidence as another learner',
   $$insert into public.learning_evidence(user_id, class_id, mission_id, event_type)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
       'c1111111-1111-1111-1111-111111111111', '1-2', 'mission_completed')$$);
+select test.login(:'S3');
 select test.expect_denied('learner cannot append evidence to a class they do not belong to',
-  $$insert into public.learning_evidence(user_id, class_id, mission_id, event_type)
-    values ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-      'c1111111-1111-1111-1111-111111111111', '1-2', 'mission_completed')$$);
+  $insert into public.learning_evidence(user_id, class_id, mission_id, event_type)
+    values ('cccccccc-cccc-cccc-cccc-cccccccccccc',
+      'c1111111-1111-1111-1111-111111111111', '1-2', 'mission_completed')$);
 
 select test.login(:'T1');
 select test.expect('class staff can read class learner evidence',
