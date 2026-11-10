@@ -8304,7 +8304,7 @@ async function openClassroom() {
           (atts||[]).forEach(a => {
             if (assigned.size && !assigned.has(a.mission_id)) return;
             const id = String(a.mission_id || '');
-            const chapterMatch = id.match(/^(\\d+)-/);
+            const chapterMatch = id.match(/^(\d+)-/);
             const networkMatch = /^(?:net|network|nt|protocol|topology|vlan|routing|switching|dhcp|dns)[-_:]/i.test(id);
             const chapter = chapterMatch ? CHAPTERS[Number(chapterMatch[1]) - 1] : null;
             const key = chapter ? 'linux:' + chapterMatch[1] : networkMatch ? 'network' : 'custom:' + id;
@@ -8370,7 +8370,7 @@ async function openClassroom() {
                 </details>`;
               }).join('')
             : '';
-          dashHtml = analyticsHtml + assignmentInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          dashHtml = analyticsHtml + skillDiagnosticsHtml + assignmentInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
