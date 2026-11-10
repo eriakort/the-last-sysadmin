@@ -5691,7 +5691,8 @@ function wireSessionTabs() {
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
   $('#topoWrap').innerHTML = renderTopo();
-  placeTerminalRestore(true);
+  const cols = $('#cols');
+  placeTerminalRestore(!!(cols && !cols.hidden));
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
