@@ -691,3 +691,14 @@ body>.terminal-restore{position:fixed;top:auto;right:16px;bottom:16px;z-index:10
 :root[data-theme="paper"] #btnQueue,
 :root[data-theme="paper"] #btnHelp,
 :root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
+
+
+/* Keep the persistent device console launcher inside Workspace navigation. */
+#navRail .terminal-restore{position:static!important;display:flex;flex:none;min-height:42px;margin:8px 0 2px;padding:9px 11px;border:1px solid #2d91ae;border-radius:9px;background:linear-gradient(110deg,#12394b,#102536);color:#dff8ff;box-shadow:inset 3px 0 #48c7e8,0 5px 16px #0003;font-weight:750;letter-spacing:.025em}
+#navRail .terminal-restore .nav-glyph{color:#62d9f4;font-size:17px}
+#navRail .terminal-restore:hover{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);color:#fff;transform:translateY(-1px)}
+#navRail .terminal-restore:focus-visible{outline:2px solid #8bdcf1;outline-offset:3px}
+#navRail .terminal-restore[hidden]{display:none!important}
+@media(max-width:760px){
+ #navRail .terminal-restore{grid-column:1/-1;justify-content:center;margin:2px 0 0;min-height:38px}
+}
