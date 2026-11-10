@@ -29,6 +29,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html') + '?view=workbenc
   else fail('device explorer search did not retain only the matching device');
   await search.fill('');
 
+  await page.locator('#btnBuild').click();
   await page.locator('#terminalRestore').click();
   await page.waitForSelector('#terminalWindow:not([hidden])');
 

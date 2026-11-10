@@ -71,7 +71,8 @@ const server=http.createServer((req,res)=>{
   await net.locator('#btnSearch').click();await net.waitForTimeout(80);
   await scan(net,'Network Trainer search palette');await net.keyboard.press('Escape');await net.waitForTimeout(60);
 
-  await net.locator('#btnBuild').click();await net.waitForTimeout(150);
+  await net.locator('#btnBuild').click();await net.waitForTimeout(80);
+  await net.locator('#buildMenuOpen').click();await net.waitForTimeout(150);
   if(!(await net.locator('#aTitle').count()))throw new Error('Network Trainer Build workspace did not open');
   await scan(net,'Network Trainer topology Build workspace');
 

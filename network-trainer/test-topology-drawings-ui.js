@@ -11,7 +11,7 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const assert=(condition,message)=>{if(!condition)throw new Error(message);};
  await page.goto(URL,{waitUntil:'load'});
- await page.click('#btnBuild');
+ await page.click('#btnBuild'); await page.click('#buildMenuOpen');
  await page.waitForSelector('#topo');
  const box=()=>page.locator('#topo').boundingBox();
  const point=async(rx,ry)=>{const b=await box();return{x:b.x+b.width*rx,y:b.y+b.height*ry};};

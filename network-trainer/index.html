@@ -25,8 +25,6 @@ aside{background:var(--panel);overflow:auto;padding:16px;border-left:1px solid v
 .done{color:var(--good);font-weight:600}
 main{display:flex;flex-direction:column;min-width:0}
 #topoWrap{position:relative;flex:1;overflow:auto;padding:16px;display:flex;align-items:center;justify-content:center}
-.terminal-restore{position:absolute;top:12px;right:12px;z-index:25;white-space:nowrap}
-body>.terminal-restore{position:fixed;top:18px;right:18px;z-index:1001}
 svg#topo{max-width:100%;height:auto}
 .edge{stroke:#44506a;stroke-width:2}
 .topo-drawing{cursor:pointer;pointer-events:all}.topo-drawing.selected{stroke:#38bdf8;stroke-width:4}.topo-drawing.draft{pointer-events:none}.draw-tool.active{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 18%,var(--raise));color:var(--ink);box-shadow:inset 0 0 0 1px var(--amber)}
@@ -4853,36 +4851,6 @@ function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
-function placeTerminalRestore() {
-  const restore = $('#terminalRestore'), rail = $('#navRail');
-  if (!restore || !rail) return;
-  // The persistent Workspace rail owns the terminal entry on every view.
-  if (restore.parentElement !== rail) rail.insertBefore(restore, rail.querySelector('.nav-spacer') || null);
-}
-function positionTerminalWindow(inWorkbench) {
-  const win = $('#terminalWindow');
-  if (!win) return;
-  if (inWorkbench) {
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}') || {}; } catch (_) {}
-    if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-      win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
-      win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
-      win.style.right = 'auto'; win.style.bottom = 'auto';
-    } else {
-      win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '22px'; win.style.bottom = '18px';
-    }
-    win.style.width = ''; win.style.height = '';
-  } else {
-    // Outside the topology workspace, keep the console docked low on screen.
-    // The navigation rail owns its launcher, so no header controls are covered.
-    win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '16px'; win.style.bottom = '16px';
-  }
-  const hint = win.querySelector('.terminal-window-titlebar small');
-  if (hint) hint.textContent = inWorkbench ? 'DRAG TO MOVE' : 'DOCKED · WORKSPACE NAVIGATION STAYS CLEAR';
-  const bar = win.querySelector('.terminal-window-titlebar');
-  if (bar) bar.style.cursor = inWorkbench ? 'move' : 'default';
-}
 function showWorkspaceView(view, options = {}) {
   if (!WORKSPACE_VIEWS.has(view)) view = 'overview';
   const historyMode = options.historyMode || 'push';
@@ -4905,17 +4873,9 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
-  const inWorkbench = view === 'workbench' || view === 'build';
-  placeTerminalRestore(inWorkbench);
-  positionTerminalWindow(inWorkbench);
-  const terminalWindow = $('#terminalWindow');
-  if (!inWorkbench && terminalWindow && !terminalWindow.hidden) {
-    terminalWindow.hidden = true;
-  }
-  // Keep the launcher and window in sync after every workspace transition.
-  // The launcher is the only way back to a minimized terminal.
-  const terminalRestore = $('#terminalRestore');
-  if (terminalRestore && terminalWindow) terminalRestore.hidden = !terminalWindow.hidden;
+  // The console is docked inside #cols, so it hides with the workspace. Its opener
+  // lives in the fixed top-bar "Build ▾" menu, which is always in a stable place.
+  if (cols.hidden) collapseTerminalWindow();
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -5686,8 +5646,6 @@ function wireSessionTabs() {
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
   $('#topoWrap').innerHTML = renderTopo();
-  const cols = $('#cols');
-  placeTerminalRestore(!!(cols && !cols.hidden));
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
@@ -6126,7 +6084,9 @@ function wireTopo() {
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
-      if(TOPO_SELECTED.size!==1||!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
+      // Dragging a node that is part of the current multi-selection moves the whole
+      // group; clicking a node outside the selection starts a fresh single-node drag.
+      if(!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
@@ -6179,7 +6139,9 @@ function onDragUp() {
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
-  if (!d.moved) selectDevice(d.id);
+  // A press without movement is a plain click: collapse any multi-selection to the
+  // clicked node. A real drag keeps the whole selection (every node already moved).
+  if (!d.moved) { TOPO_SELECTED = new Set([d.id]); selectDevice(d.id); }
   else { if(SEL!==d.id)selectDevice(d.id); rememberTopology(d.before); refresh(); }
 }
 function zoomTopology(factor) {
@@ -6724,63 +6686,57 @@ function openHelp() { showWorkspaceView('knowledge'); }
 function mountTerminalWindow() {
   const term = $('#term');
   if (!term || $('#terminalWindow')) return;
+  // Dock the device console as a collapsible panel at the foot of the workbench,
+  // exactly where it already lives in the layout. Nothing floats, so the launcher
+  // can never drift over the header on refresh.
+  const host = term.parentElement;
   const win = document.createElement('section');
   win.id = 'terminalWindow';
-  win.className = 'terminal-window';
+  win.className = 'terminal-dock';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
-  win.querySelector('.terminal-window-content').appendChild(term);
-  win.hidden = true; // Start tucked away so the console never blocks workspace controls.
-  document.body.appendChild(win);
-  const restore = document.createElement('button');
-  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore nav-item';
-  restore.innerHTML = '<span class="nav-glyph" aria-hidden="true">▣</span><span>Device terminal</span>';
-  restore.setAttribute('aria-label', 'Open device terminal');
-  restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
-  restore.hidden = false;
-  // Attach it to the document first; placeTerminalRestore() relocates an existing
-  // node and cannot find a detached one, so without this the launcher never mounts.
-  document.body.appendChild(restore);
-  // Mount it as a dedicated item in the persistent Workspace navigation.
-  placeTerminalRestore(false);
-  positionTerminalWindow(false);
-  const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
-  $('#terminalMinimize').addEventListener('click', minimize);
-  restore.addEventListener('click', () => openTerminalWindow(true));
-  const bar = win.querySelector('.terminal-window-titlebar');
-  let drag = null;
-  bar.addEventListener('pointerdown', e => {
-    const cols = $('#cols');
-    if (!cols || cols.hidden || e.target.closest('button') || e.button !== 0) return;
-    const rect = win.getBoundingClientRect();
-    drag = { x:e.clientX, y:e.clientY, left:rect.left, top:rect.top };
-    bar.setPointerCapture(e.pointerId); e.preventDefault();
-  });
-  bar.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const left = Math.max(0, Math.min(window.innerWidth - 220, drag.left + e.clientX - drag.x));
-    const top = Math.max(0, Math.min(window.innerHeight - 90, drag.top + e.clientY - drag.y));
-    win.style.left = left + 'px'; win.style.top = top + 'px'; win.style.right = 'auto'; win.style.bottom = 'auto';
-  });
-  const finishDrag = () => {
-    if (!drag) return;
-    drag = null;
-    const rect = win.getBoundingClientRect();
-    try { localStorage.setItem('network-terminal-window-v1', JSON.stringify({ left:rect.left, top:rect.top })); } catch (_) {}
-  };
-  bar.addEventListener('pointerup', finishDrag);
-  bar.addEventListener('pointercancel', finishDrag);
+  win.innerHTML = '<header class="terminal-dock-titlebar"><span><i></i> DEVICE TERMINAL</span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Collapse device terminal" title="Collapse console">—</button></header><div class="terminal-dock-content"></div>';
+  host.insertBefore(win, term);
+  win.querySelector('.terminal-dock-content').appendChild(term);
+  win.hidden = true; // Collapsed by default so the topology has full height.
+  // The console is opened from the top-bar "Build ▾" menu (see wireBuildMenu) and
+  // by double-clicking a device; it is collapsed from its own titlebar button.
+  $('#terminalMinimize').addEventListener('click', collapseTerminalWindow);
+}
+function collapseTerminalWindow() {
+  const win = $('#terminalWindow');
+  if (win) win.hidden = true;
 }
 function openTerminalWindow(focusInput = false) {
-  const win = $('#terminalWindow'), restore = $('#terminalRestore');
+  const win = $('#terminalWindow');
   if (!win) return;
-  const cols = $('#cols');
-  positionTerminalWindow(!!(cols && !cols.hidden));
   win.hidden = false;
-  if (restore) restore.hidden = true;
-  win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
+}
+// Top-bar "Build ▾" dropdown: a menu anchored in the fixed header, so its
+// controls are always in a stable place and can never float over the page.
+function toggleBuildMenu(force) {
+  const menu = $('#buildMenu'), btn = $('#btnBuild');
+  if (!menu || !btn) return;
+  const show = force === undefined ? menu.hidden : !!force;
+  menu.hidden = !show;
+  btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+}
+function closeBuildMenu() { toggleBuildMenu(false); }
+function openDeviceTerminal() {
+  closeBuildMenu();
+  // Bring the workbench into view so the docked console is visible, then open it.
+  const cols = $('#cols');
+  if (!cols || cols.hidden) { if (MODE === 'build') enterBuild(); else showWorkspaceView('workbench'); }
+  openTerminalWindow(true);
+}
+function wireBuildMenu() {
+  const btn = $('#btnBuild'); if (!btn) return;
+  btn.addEventListener('click', () => toggleBuildMenu());
+  const open = $('#buildMenuOpen'); if (open) open.addEventListener('click', () => { closeBuildMenu(); enterBuild(); });
+  const term = $('#terminalRestore'); if (term) term.addEventListener('click', openDeviceTerminal);
+  document.addEventListener('click', e => { if (!e.target.closest('.build-menu')) closeBuildMenu(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBuildMenu(); });
 }
 function explainNetworkMistake(command, output) {
   const panel = $('#networkMistakeCoach');
@@ -7292,7 +7248,7 @@ function boot() {
         <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
         <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
-        <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
+        <div class="build-menu"><button id="btnBuild" class="btn" type="button" title="Build tools" aria-haspopup="true" aria-expanded="false">🛠 Build <span class="caret" aria-hidden="true">▾</span></button><div class="build-menu-panel" id="buildMenu" role="menu" aria-label="Build tools" hidden><button class="build-menu-item" id="buildMenuOpen" type="button" role="menuitem"><span aria-hidden="true">🛠</span> Open build workspace</button><button class="build-menu-item" id="terminalRestore" type="button" role="menuitem" aria-label="Open device terminal"><span aria-hidden="true">▣</span> Device terminal</button></div></div>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" type="button" title="Stats" aria-label="Open statistics">📊</button>
         <button id="btnSet" class="btn" type="button" title="Settings" aria-label="Open settings">⚙</button></div>
@@ -7347,7 +7303,7 @@ function boot() {
   $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
-  $('#btnBuild').addEventListener('click', enterBuild);
+  wireBuildMenu();
   $('#btnClass').addEventListener('click', openClassroom);
   document.addEventListener('pointermove', onDragMove);   // node dragging (attached once)
   document.addEventListener('pointerup', onDragUp);
