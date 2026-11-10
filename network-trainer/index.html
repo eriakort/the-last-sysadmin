@@ -6728,6 +6728,8 @@ function mountTerminalWindow() {
   restore.setAttribute('aria-label', 'Open device terminal');
   restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
   restore.hidden = false;
+  // Attach before placeTerminalRestore looks it up by id.
+  document.body.appendChild(restore);
   placeTerminalRestore(false);
   positionTerminalWindow(false);
   const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
