@@ -570,29 +570,30 @@ aside{scrollbar-color:#344a60 transparent}
 }
 
 
-/* Persistent floating device terminal: remains mounted while workspaces change. */
-.terminal-window{position:fixed;z-index:1000;left:auto;top:auto;right:22px;bottom:18px;width:min(900px,calc(100vw - 36px));height:min(470px,62vh);min-width:min(360px,calc(100vw - 20px));min-height:230px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);display:flex;flex-direction:column;resize:both;overflow:hidden;border:1px solid #3c647c;border-radius:12px;background:#08121d;box-shadow:0 22px 70px #000b}
-.terminal-window[hidden],.terminal-restore[hidden]{display:none!important}
-.terminal-window-titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:8px 12px;background:linear-gradient(110deg,#123047,#101d2b);border-bottom:1px solid #31536b;color:#dff7ff;font:700 10px ui-monospace,monospace;letter-spacing:.12em;cursor:move;user-select:none;touch-action:none}
-.terminal-window-titlebar>span{display:flex;align-items:center;gap:9px}
-.terminal-window-titlebar>span>i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px color-mix(in srgb,var(--good) 55%,transparent)}
-.terminal-window-titlebar small{color:#7895ab;font-size:8px;letter-spacing:.1em}
-.terminal-window-titlebar button{cursor:pointer}
-.terminal-window-content{flex:1;min-height:0;overflow:hidden}
-.terminal-window-content #term{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;border:0;border-radius:0;box-shadow:none}
-.terminal-window-content #sessionBar{flex:none}
-.terminal-window-content .term-head{flex:none;max-height:84px;overflow:auto;flex-wrap:wrap}
-.terminal-window-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
-.terminal-window-content .tline{flex:none}
-.terminal-restore{position:fixed;right:16px;bottom:16px;z-index:999;width:auto;min-height:40px;padding:9px 13px;border:1px solid #3c647c;border-radius:9px;background:#122638;color:#dff7ff;box-shadow:0 8px 28px #0009;white-space:nowrap}
-body>.terminal-restore{position:fixed;top:auto;right:16px;bottom:16px;z-index:1001}
-.terminal-restore:hover,.terminal-restore:focus-visible{background:#1b3a50;color:#fff}
-.terminal-restore .nav-glyph{display:inline-grid;place-items:center;width:19px;color:var(--amber);font-size:15px}
-.terminal-restore[hidden]{display:none!important}
+/* Device console docked at the foot of the workbench — collapsible, never floating. */
+.terminal-dock{flex:none;display:flex;flex-direction:column;height:38%;min-height:210px;max-height:60%;overflow:hidden;border-top:1px solid #31536b;background:#08121d;resize:vertical}
+.terminal-dock[hidden]{display:none!important}
+.terminal-dock-titlebar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:7px 12px;background:linear-gradient(110deg,#123047,#101d2b);border-bottom:1px solid #31536b;color:#dff7ff;font:700 10px ui-monospace,monospace;letter-spacing:.12em;user-select:none}
+.terminal-dock-titlebar>span{display:flex;align-items:center;gap:9px}
+.terminal-dock-titlebar>span>i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 10px color-mix(in srgb,var(--good) 55%,transparent)}
+.terminal-dock-titlebar button{cursor:pointer}
+.terminal-dock-content{flex:1;min-height:0;overflow:hidden}
+.terminal-dock-content #term{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;border:0;border-radius:0;box-shadow:none}
+.terminal-dock-content #sessionBar{flex:none}
+.terminal-dock-content .term-head{flex:none;max-height:84px;overflow:auto;flex-wrap:wrap}
+.terminal-dock-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
+.terminal-dock-content .tline{flex:none}
+/* Deskbar toggle that opens the docked console. */
+.desk-tools .terminal-toggle{margin-left:6px;border-color:#2d91ae;color:#dff8ff;background:linear-gradient(110deg,#12394b,#102536);white-space:nowrap}
+.desk-tools .terminal-toggle>span{color:var(--amber);font-size:13px}
+.desk-tools .terminal-toggle:hover{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);color:#fff}
+.desk-tools .terminal-toggle:focus-visible{outline:2px solid #8bdcf1;outline-offset:2px}
+.desk-tools .terminal-toggle[aria-expanded="true"]{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);box-shadow:inset 0 0 0 1px #48c7e8}
+.terminal-toggle[hidden]{display:none!important}
 @media(max-width:760px){
- .terminal-window{left:8px!important;right:8px!important;top:auto!important;bottom:8px!important;width:auto;height:54vh;min-width:0;min-height:220px;resize:vertical}
- .terminal-window-content .term-head{max-height:76px}
- .terminal-window-titlebar{padding:6px 10px}
+ .terminal-dock{height:54vh;min-height:220px}
+ .terminal-dock-content .term-head{max-height:76px}
+ .terminal-dock-titlebar{padding:6px 10px}
 }
 
 /* Keyboard-operable topology devices */
@@ -693,12 +694,3 @@ body>.terminal-restore{position:fixed;top:auto;right:16px;bottom:16px;z-index:10
 :root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
 
 
-/* Keep the persistent device console launcher inside Workspace navigation. */
-#navRail .terminal-restore{position:static!important;display:flex;flex:none;min-height:42px;margin:8px 0 2px;padding:9px 11px;border:1px solid #2d91ae;border-radius:9px;background:linear-gradient(110deg,#12394b,#102536);color:#dff8ff;box-shadow:inset 3px 0 #48c7e8,0 5px 16px #0003;font-weight:750;letter-spacing:.025em}
-#navRail .terminal-restore .nav-glyph{color:#62d9f4;font-size:17px}
-#navRail .terminal-restore:hover{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);color:#fff;transform:translateY(-1px)}
-#navRail .terminal-restore:focus-visible{outline:2px solid #8bdcf1;outline-offset:3px}
-#navRail .terminal-restore[hidden]{display:none!important}
-@media(max-width:760px){
- #navRail .terminal-restore{grid-column:1/-1;justify-content:center;margin:2px 0 0;min-height:38px}
-}
