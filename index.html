@@ -42,7 +42,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);fo
 .sub{color:var(--muted);font-size:12.5px}
 .stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .top-menu{position:relative;min-width:0}
-.top-menu>summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap}
+.top-menu>summary{list-style:none;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;user-select:none;white-space:nowrap;box-sizing:border-box;min-width:0;max-width:100%}
 .top-menu>summary::-webkit-details-marker{display:none}
 .top-menu>summary::after{content:"▾";font-size:10px;color:var(--muted)}
 .top-menu[open]>summary{border-color:var(--amber)}
@@ -811,6 +811,8 @@ document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addE
     const left = Math.max(16, Math.min(preferredLeft, window.innerWidth - width - 16));
     current.style.setProperty('--menu-left', left + 'px');
     current.style.setProperty('--menu-top', Math.min(rect.bottom + 7, window.innerHeight - 120) + 'px');
+    const panel = current.querySelector('.top-menu-list');
+    if (panel) { panel.style.left = left + 'px'; panel.style.right = 'auto'; }
   }
 }));
 document.addEventListener('click', event => {
