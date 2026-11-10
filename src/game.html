@@ -8097,6 +8097,30 @@ async function addFeedback(classId, studentId, body, assignmentId, missionId) {
     assignment_id: assignmentId || null, mission_id: missionId || null, body: body.trim()
   });
 }
+async function loadLearnerReflections(classId, userId) {
+  const sb = await getSB(); if (!sb) return [];
+  try {
+    let q = sb.from('learner_reflections')
+      .select('id, user_id, assignment_id, mission_id, learned, approach, evidence, next_step, created_at')
+      .eq('class_id', classId);
+    if (userId) q = q.eq('user_id', userId);
+    const { data, error } = await q.order('created_at', { ascending: false });
+    return error ? [] : (data || []);
+  } catch (e) { return []; }
+}
+async function saveLearnerReflection(classId, values, reflectionId) {
+  const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
+  const payload = {
+    class_id: classId, user_id: authUser.id,
+    assignment_id: values.assignmentId || null, mission_id: values.missionId || null,
+    learned: values.learned.trim(), approach: values.approach.trim(),
+    evidence: values.evidence.trim(), next_step: values.nextStep.trim(),
+    updated_at: new Date().toISOString()
+  };
+  return reflectionId
+    ? sb.from('learner_reflections').update(payload).eq('id', reflectionId).eq('user_id', authUser.id)
+    : sb.from('learner_reflections').insert(payload);
+}
 async function loadMyScenarios() {
   const sb = await getSB(); if (!sb || !authUser) return [];
   try {
@@ -8165,6 +8189,7 @@ async function openClassroom() {
       const cname = e.classes?.name || 'Class';
       const asns = await loadAssignments(e.class_id);
       const fbs = await loadFeedback(e.class_id, authUser.id);
+      const reflections = await loadLearnerReflections(e.class_id, authUser.id);
       // authored missions assigned to this class, delivered via the server function
       let classMissions = [];
       try { const { data } = await sb.rpc('get_class_missions', { p_class_id: e.class_id }); classMissions = data || []; } catch (_) {}
@@ -8192,10 +8217,45 @@ async function openClassroom() {
             return `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span>${context ? `<div class="cx-dim" style="margin:3px 0">${esc(context)}</div>` : ''}<div>${esc(f.body)}</div></div></div>`;
           }).join('')
         : '<p class="cx-dim">No feedback yet.</p>';
+      const reflectionContext = reflections.length
+        ? reflections.map(r => {
+            const assignment = asns.find(a => a.id === r.assignment_id);
+            const context = [assignment ? assignment.title : '', r.mission_id || ''].filter(Boolean).join(' · ');
+            return `<article class="cx-reflection"><div class="cx-reflection-meta">${new Date(r.created_at).toLocaleString()}${context ? ' · '+esc(context) : ''}</div>
+              <strong>What I learned</strong><p>${esc(r.learned)}</p>
+              <strong>How I approached it</strong><p>${esc(r.approach)}</p>
+              ${r.evidence ? '<strong>Evidence I observed</strong><p>'+esc(r.evidence)+'</p>' : ''}
+              ${r.next_step ? '<strong>What I will try next</strong><p>'+esc(r.next_step)+'</p>' : ''}
+            </article>`;
+          }).join('')
+        : '<p class="cx-dim">No reflections saved yet. Your first note can capture what you learned from a task.</p>';
+      const reflectionId = 'lr-' + String(e.class_id).replace(/[^a-zA-Z0-9_-]/g, '');
+      const reflectionMissions = [...new Map(asns.flatMap(a => (a.mission_ids || []).map(id => [id, { id, assignment: a.id }]))).values()];
+      const reflectionForm = `<form class="cx-reflection-form" data-reflection-form="${esc(e.class_id)}">
+        <label for="${reflectionId}-assignment">Assignment (optional)</label>
+        <select id="${reflectionId}-assignment" data-reflection-assignment>
+          <option value="">General class reflection</option>${asns.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join('')}
+        </select>
+        <label for="${reflectionId}-mission">Mission (optional)</label>
+        <select id="${reflectionId}-mission" data-reflection-mission>
+          <option value="">No specific mission</option>${reflectionMissions.map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)}</option>`).join('')}
+        </select>
+        <label for="${reflectionId}-learned">What did I learn? <span aria-hidden="true">*</span></label>
+        <textarea id="${reflectionId}-learned" data-reflection-learned maxlength="1200" required placeholder="Describe the concept or skill you understand better now…"></textarea>
+        <label for="${reflectionId}-approach">How did I approach the task? <span aria-hidden="true">*</span></label>
+        <textarea id="${reflectionId}-approach" data-reflection-approach maxlength="1200" required placeholder="Describe the steps you tried, including what changed after a mistake…"></textarea>
+        <label for="${reflectionId}-evidence">What evidence did I observe?</label>
+        <textarea id="${reflectionId}-evidence" data-reflection-evidence maxlength="1600" placeholder="Summarise relevant output or the final state. Do not include passwords, tokens or private data."></textarea>
+        <label for="${reflectionId}-next">What will I try next?</label>
+        <textarea id="${reflectionId}-next" data-reflection-next maxlength="800" placeholder="Name one useful next step…"></textarea>
+        <button class="btn primary" type="button" data-reflection-save="${esc(e.class_id)}">Save reflection</button>
+        <p class="cx-dim" data-reflection-status aria-live="polite">Your reflection is visible to you and staff of this class. It is learner-reported evidence, not a verified grade.</p>
+      </form>`;
       studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:600">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</span>${playBtn}</div>
         <div class="rlabel">Assignments</div>${asnHtml}
         <div class="rlabel" style="margin-top:8px">Feedback</div>${fbHtml}
+        <div class="rlabel" style="margin-top:12px">My reflections &amp; evidence</div>${reflectionContext}${e.role==='student'?reflectionForm:'<p class="cx-dim">Reflection entries are available to enrolled learners.</p>'}
       </div>`;
     }
   }
@@ -8377,7 +8437,21 @@ async function openClassroom() {
                 </details>`;
               }).join('')
             : '';
-          dashHtml = analyticsHtml + skillDiagnosticsHtml + assignmentInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          const classReflections = await loadLearnerReflections(cid);
+          const reflectionInsightHtml = '<div class="rlabel" style="margin-top:14px">Learner reflections &amp; evidence</div>' +
+            '<p class="cx-dim" style="margin:0 0 7px">Learner-reported notes help guide coaching. They are not verified grades or proof of production work.</p>' +
+            (classReflections.length
+              ? classReflections.slice(0, 20).map(r => {
+                  const learner = roster.find(member => member.user_id === r.user_id);
+                  const assignment = asns.find(a => a.id === r.assignment_id);
+                  const context = [assignment ? assignment.title : '', r.mission_id || ''].filter(Boolean).join(' · ');
+                  return '<article class="cx-reflection"><div class="cx-reflection-meta"><strong>' + esc(learner?.profiles?.display_name || 'Learner') + '</strong> · ' + new Date(r.created_at).toLocaleString() + (context ? ' · ' + esc(context) : '') + '</div>' +
+                    '<strong>Learned</strong><p>' + esc(r.learned) + '</p><strong>Approach</strong><p>' + esc(r.approach) + '</p>' +
+                    (r.evidence ? '<strong>Observed evidence</strong><p>' + esc(r.evidence) + '</p>' : '') +
+                    (r.next_step ? '<strong>Next step</strong><p>' + esc(r.next_step) + '</p>' : '') + '</article>';
+                }).join('')
+              : '<p class="cx-dim">No learner reflections have been shared in this class yet.</p>');
+          dashHtml = analyticsHtml + skillDiagnosticsHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
@@ -8583,6 +8657,40 @@ async function openClassroom() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (window._cxClass||'class')+'-gradebook.csv'; a.click();
   });
+  document.querySelectorAll('#raceContent [data-reflection-save]').forEach(btn => btn.addEventListener('click', async () => {
+    const classId = btn.dataset.reflectionSave;
+    const form = document.querySelector('[data-reflection-form="' + CSS.escape(classId) + '"]');
+    if (!form) return;
+    const field = name => form.querySelector('[data-reflection-' + name + ']');
+    const learned = field('learned')?.value.trim() || '';
+    const approach = field('approach')?.value.trim() || '';
+    const evidence = field('evidence')?.value.trim() || '';
+    const nextStep = field('next')?.value.trim() || '';
+    const assignmentId = field('assignment')?.value || null;
+    const missionId = field('mission')?.value || null;
+    const status = field('status');
+    if (!learned || !approach) { if (status) status.textContent = 'Add both what you learned and how you approached the task.'; return; }
+    if (assignmentId && missionId) {
+      const assignment = await loadAssignments(classId).then(items => items.find(a => a.id === assignmentId));
+      if (!assignment || !(assignment.mission_ids || []).includes(missionId)) {
+        if (status) status.textContent = 'Choose a mission that belongs to the selected assignment.';
+        return;
+      }
+    }
+    const { error } = await saveLearnerReflection(classId, { learned, approach, evidence, nextStep, assignmentId, missionId });
+    if (error) { if (status) status.textContent = 'Could not save reflection: ' + error.message; return; }
+    openClassroom();
+  }));
+  document.querySelectorAll('#raceContent [data-reflection-assignment]').forEach(sel => sel.addEventListener('change', () => {
+    const form = sel.closest('[data-reflection-form]');
+    const mission = form && form.querySelector('[data-reflection-mission]');
+    if (!mission) return;
+    [...mission.options].forEach(option => {
+      if (!option.value) { option.hidden = false; return; }
+      option.hidden = !!sel.value && option.dataset.assignment !== sel.value;
+    });
+    if (mission.selectedOptions[0]?.hidden) mission.value = '';
+  }));
   const fbAssignment = $('#fbAssignment'), fbMission = $('#fbMission');
   if (fbAssignment && fbMission) fbAssignment.addEventListener('change', () => {
     [...fbMission.options].forEach(option => {
