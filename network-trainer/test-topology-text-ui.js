@@ -72,6 +72,8 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  assert(await page.locator('#topo .name-label').count()===1,'Device context menu should restore a deleted label');
  ok('device labels can be deleted and restored independently');
  // Drag the visible resize handles; size changes must not move the device or its label.
+ await page.locator('#topo .name-label').click();
+ await page.waitForSelector('#topo .topo-label-resize[data-label-kind="name"]');
  const labelResize=page.locator('#topo .topo-label-resize[data-label-kind="name"]');
  const labelSizeBefore=Number(await page.locator('#topo .name-label').getAttribute('font-size'));
  const labelHandleBox=await labelResize.boundingBox();
