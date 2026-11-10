@@ -678,3 +678,7 @@ body>.terminal-restore{position:fixed;z-index:1001;top:18px;right:18px;bottom:au
 .builder .pal-hint{padding-top:8px;margin-top:9px;border-top:1px solid var(--line);font-size:9px;line-height:1.5}
 @media(max-width:760px){.builder{padding:11px}.device-palette{grid-template-columns:repeat(2,minmax(0,1fr))}.builder-heading p{max-width:none}.builder .pal-row .btn{flex:0 1 auto}}
 @media(prefers-reduced-motion:reduce){.btn.pal{transition:none}.btn.pal:hover{transform:none}}
+
+/* Keep action controls legible when the light Paper palette is active. */
+:root[data-theme="paper"] .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
+:root[data-theme="paper"] #top .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
