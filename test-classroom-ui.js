@@ -107,6 +107,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (/Linux fundamentals/.test(assignmentText) && /Student One/.test(assignmentText) && /50%/.test(assignmentText)) ok('Assignment mastery reports learner evidence and the correct percentage');
   else fail('assignment mastery evidence incorrect: ' + assignmentText);
 
+  const diagnostics = page.locator('.cx-skill-diagnostic');
+  if (await diagnostics.count() === 1) ok('Teacher sees evidence-backed skill diagnostics');
+  else fail('skill diagnostics missing or unexpected count: ' + await diagnostics.count());
+  const diagnosticText = await page.locator('#raceContent').textContent();
+  if (/Navigation/.test(diagnosticText) && /1\\/2 passed/.test(diagnosticText) && /Revisit mission 1-2/.test(diagnosticText)) ok('Skill diagnostic maps chapter evidence and recommends the failed mission');
+  else fail('skill diagnostic evidence or recommendation incorrect: ' + diagnosticText);
+
   // Join by code (Join tab is the default)
   await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
   await page.fill('#cxCode', ' abc 123 ');
