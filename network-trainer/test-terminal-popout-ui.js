@@ -25,12 +25,12 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.locator('#terminalWindow').isHidden()) ok('terminal auto-minimizes when leaving the topology workspace so other tools stay visible');
   else fail('terminal remained open and could cover other workspace tools');
   const dock = page.locator('#terminalRestore');
-  if (await dock.isVisible() && await dock.evaluate(el => el.parentElement?.id === 'navRail')) ok('terminal launcher is docked in the persistent navigation rail outside the workbench');
-  else fail('terminal launcher is not docked in the navigation rail');
+  if (await dock.isVisible() && await dock.evaluate(el => el.parentElement === document.body)) ok('terminal launcher is mounted directly under the page body, independent of workspace navigation');
+  else fail('terminal launcher is not mounted independently of the navigation rail');
   const dockBox = await dock.boundingBox(), topBox = await page.locator('#top').boundingBox();
   const separated = dockBox && topBox && (dockBox.x + dockBox.width <= topBox.x || dockBox.x >= topBox.x + topBox.width || dockBox.y + dockBox.height <= topBox.y || dockBox.y >= topBox.y + topBox.height);
-  if (separated) ok('terminal launcher occupies reserved navigation space without covering the top toolbar');
-  else fail('terminal launcher overlaps the top toolbar');
+  if (separated && dockBox.y > topBox.y + topBox.height) ok('terminal launcher stays in the lower-right dock without covering the top toolbar');
+  else fail('terminal launcher is not safely separated from the top toolbar');
 
   await page.click('#terminalRestore');
   await page.waitForFunction(() => document.activeElement?.id === 'tin');
@@ -59,8 +59,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.locator('#terminalWindow').isHidden() && await page.locator('#terminalRestore').isVisible()) ok('mobile navigation keeps the terminal minimized and launcher accessible');
   else fail('mobile workspace navigation is obstructed by the terminal');
   const mobileDock = await page.locator('#terminalRestore').boundingBox();
-  if (mobileDock && mobileDock.x >= 0 && mobileDock.x + mobileDock.width <= 390 && mobileDock.y >= 0 && mobileDock.y + mobileDock.height <= 844) ok('mobile terminal launcher remains inside the navigation rail viewport');
-  else fail('mobile terminal launcher is outside the viewport');
+  if (mobileDock && mobileDock.x >= 0 && mobileDock.x + mobileDock.width <= 390 && mobileDock.y >= 0 && mobileDock.y + mobileDock.height <= 844 && mobileDock.y > 844 - 100) ok('mobile terminal launcher remains accessible in the bottom-right dock and inside the viewport');
+  else fail('mobile terminal launcher is outside the safe bottom dock area or viewport');
 
   await browser.close();
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
