@@ -540,10 +540,11 @@ body.practicing{padding-top:40px}
 @media(max-width:680px){.bash-workshop-backdrop{padding:8px}.bash-workshop-dialog{padding:14px;max-height:94vh}.bash-workshop-grid{grid-template-columns:1fr}.bash-workshop-head h2{font-size:19px}}
 
 @media(max-width:700px){
-  .top{align-items:stretch}
-  .apphdr{width:100%;gap:10px}
-  .apptabs{width:100%;flex-wrap:wrap}
-  .stats{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .top{align-items:stretch;min-width:0;box-sizing:border-box}
+  .apphdr{width:100%;min-width:0;max-width:100%;box-sizing:border-box;gap:10px}
+  .apptabs{width:100%;min-width:0;max-width:100%;box-sizing:border-box;flex-wrap:wrap}
+  .stats{width:100%;min-width:0;max-width:100%;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .stats>*{min-width:0;max-width:100%;box-sizing:border-box}
   .stats>.stat{align-items:flex-start;padding:3px 8px;border-right:0}
   .top-menu{min-width:0}
   .top-menu>summary{width:100%;min-height:36px}
