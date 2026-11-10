@@ -29,6 +29,7 @@ const DAY=24*60*60*1000;
  if(!(await page.locator('#revisionFeedback').innerText()).includes('Correct recall'))fail('correct recall was not acknowledged');
  schedule=await page.evaluate(()=>JSON.parse(localStorage.getItem('lsa-spaced-revision-v1')));
  if(schedule.items.bearings.stage!==1||schedule.items.bearings.reviews!==1||schedule.items.bearings.dueAt<Date.now()+2*DAY)fail('successful recall did not extend the review interval');
+ await page.click('[data-revision-close]');
  await page.locator('#menuProgress summary').click();
  if((await page.locator('#btnRevisionReview').innerText()).includes('due'))fail('review badge did not clear after a successful recall');
  if(errors.length)fail('Browser errors: '+errors.join('; '));
