@@ -6084,7 +6084,9 @@ function wireTopo() {
       e.preventDefault();
       const svg = $('#topo'); const [px, py] = svgPoint(svg, e.clientX, e.clientY);
       const cur = nodePos(id);
-      if(TOPO_SELECTED.size!==1||!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
+      // Dragging a node that is part of the current multi-selection moves the whole
+      // group; clicking a node outside the selection starts a fresh single-node drag.
+      if(!TOPO_SELECTED.has(id))TOPO_SELECTED=new Set([id]);
       const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]); const starts={};ids.forEach(x=>starts[x]=nodePos(x).slice());
       DRAG = { id, ids, starts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
@@ -6137,7 +6139,9 @@ function onDragUp() {
   if (PAN) { PAN = null; const svg = $('#topo'); if (svg) svg.classList.remove('panning'); return; }
   if (!DRAG) return;
   const d = DRAG; DRAG = null;
-  if (!d.moved) selectDevice(d.id);
+  // A press without movement is a plain click: collapse any multi-selection to the
+  // clicked node. A real drag keeps the whole selection (every node already moved).
+  if (!d.moved) { TOPO_SELECTED = new Set([d.id]); selectDevice(d.id); }
   else { if(SEL!==d.id)selectDevice(d.id); rememberTopology(d.before); refresh(); }
 }
 function zoomTopology(factor) {
