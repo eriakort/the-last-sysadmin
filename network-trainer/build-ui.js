@@ -7,7 +7,7 @@ const path = require('path');
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 
 const MODULES = ['../src/feedback.js', 'net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js', 'net-classroom.js', 'net-design-academy.js', 'net-automation-workshop.js', 'net-learning-coach.js', 'net-spaced-recall.js'];
-const wrap = f => `__def(${JSON.stringify('./' + f.replace(/\.js$/, ''))}, function(module, exports, require){\n${read(f)}\n});`;
+const wrap = f => { const id = f === '../src/feedback.js' ? './src/feedback' : './' + f.replace(/\.js$/, ''); return `__def(${JSON.stringify(id)}, function(module, exports, require){\n${read(f)}\n});`; };
 
 const bundle = `
 // ---- tiny CommonJS shim ----
