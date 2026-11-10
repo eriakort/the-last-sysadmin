@@ -2208,19 +2208,137 @@ function exportJournal() {
 }
 function openJournal() { showWorkspaceView('journal'); }
 function openHelp() { showWorkspaceView('knowledge'); }
+function ensureBuildMenuStyles() {
+  if (document.getElementById('buildMenuStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'buildMenuStyles';
+  style.textContent = `
+    .build-menu { position: relative; display: inline-flex; }
+    .build-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 2000;
+      min-width: 220px;
+      padding: 6px;
+      background: var(--panel, #0f172a);
+      border: 1px solid var(--line, #334155);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.4);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .build-menu-panel[hidden] { display: none !important; }
+    .build-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .build-menu-item:hover, .build-menu-item:focus { background: rgba(255,255,255,.06); outline: none; }
+  `;
+  document.head.appendChild(style);
+}
 function mountTerminalWindow() {
   const term = $('#term');
-  if (!term || $('#terminalWindow')) return;
+  if (!term) return;
+  const existing = $('#terminalWindow');
+  if (existing) {
+    // Already mounted; just ensure the terminal element is still inside it
+    const content = existing.querySelector('.terminal-window-content');
+    if (content && term.parentElement !== content) content.appendChild(term);
+    return;
+  }
+  // Inject styles once
+  if (!document.getElementById('terminalWindowStyles')) {
+    const style = document.createElement('style');
+    style.id = 'terminalWindowStyles';
+    style.textContent = `
+      #terminalWindow.terminal-window {
+        position: fixed;
+        z-index: 1000;
+        width: 520px;
+        height: 340px;
+        min-width: 280px;
+        min-height: 180px;
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+        background: #0b1220;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        box-shadow: 0 12px 40px rgba(0,0,0,.45);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        resize: both;
+        color: #e2e8f0;
+      }
+      #terminalWindow[hidden] { display: none !important; }
+      #terminalWindow .terminal-window-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        background: #1e293b;
+        cursor: move;
+        user-select: none;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .04em;
+        border-bottom: 1px solid #334155;
+      }
+      #terminalWindow .terminal-window-titlebar small { opacity: .6; font-weight: 400; margin-left: 8px; }
+      #terminalWindow .terminal-window-actions { display: flex; gap: 4px; }
+      #terminalWindow .terminal-window-actions .btn { min-width: 28px; padding: 2px 8px; }
+      #terminalWindow .terminal-window-content {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      #terminalWindow #term { flex: 1 !important; min-height: 0 !important; height: auto !important; border: none !important; width: 100%; }
+    `;
+    document.head.appendChild(style);
+  }
   const win = document.createElement('section');
   win.id = 'terminalWindow';
   win.className = 'terminal-window';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
+  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><span class="terminal-window-actions"><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button><button type="button" class="btn sm" id="terminalClose" aria-label="Close device terminal" title="Close">✕</button></span></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
+  // Critical layout as inline styles so the window floats even if the stylesheet is late or overridden
+  Object.assign(win.style, {
+    position: 'fixed',
+    zIndex: '1000',
+    width: '520px',
+    height: '340px',
+    minWidth: '280px',
+    minHeight: '180px',
+    maxWidth: 'calc(100vw - 16px)',
+    maxHeight: 'calc(100vh - 16px)',
+    background: '#0b1220',
+    border: '1px solid #334155',
+    borderRadius: '10px',
+    boxShadow: '0 12px 40px rgba(0,0,0,.45)',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    resize: 'both',
+    color: '#e2e8f0'
+  });
   win.hidden = true;
   document.body.appendChild(win);
-  // Position from saved or default
+  // Position and size from saved or default
   try {
     const saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}');
     if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
@@ -2230,8 +2348,11 @@ function mountTerminalWindow() {
     } else {
       win.style.right = '22px'; win.style.bottom = '18px';
     }
+    if (Number.isFinite(saved.width) && saved.width >= 280) win.style.width = Math.min(saved.width, window.innerWidth - 16) + 'px';
+    if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
   } catch (_) {}
-  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; });
+  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
+  $('#terminalClose').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
@@ -2249,20 +2370,43 @@ function mountTerminalWindow() {
   const finishDrag = () => {
     if (!drag) return;
     drag = null;
-    const rect = win.getBoundingClientRect();
-    try { localStorage.setItem('network-terminal-window-v1', JSON.stringify({ left: rect.left, top: rect.top })); } catch (_) {}
+    saveTerminalWindowState(win);
   };
   bar.addEventListener('pointerup', finishDrag);
   bar.addEventListener('pointercancel', finishDrag);
+  // Persist size on resize (CSS resize or window resize)
+  const ro = new ResizeObserver(() => saveTerminalWindowState(win));
+  ro.observe(win);
+  window.addEventListener('resize', () => saveTerminalWindowState(win));
+}
+function saveTerminalWindowState(win) {
+  if (!win || win.hidden) return;
+  const rect = win.getBoundingClientRect();
+  try {
+    localStorage.setItem('network-terminal-window-v1', JSON.stringify({
+      left: rect.left,
+      top: rect.top,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }));
+  } catch (_) {}
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
-  if (win) win.hidden = true;
+  if (win) { win.hidden = true; win.style.display = 'none'; }
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
-  if (!win) return;
+  if (!win) { mountTerminalWindow(); return openTerminalWindow(focusInput); }
+  // Re-assert floating layout in case something cleared it
+  if (win.style.position !== 'fixed') {
+    win.style.position = 'fixed';
+    win.style.zIndex = '1000';
+    if (!win.style.width) win.style.width = '520px';
+    if (!win.style.height) win.style.height = '340px';
+  }
   win.hidden = false;
+  win.style.display = 'flex';
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
 }
@@ -2822,7 +2966,13 @@ function boot() {
     </div>
       </div>
     </div>`;
+  ensureBuildMenuStyles();
   mountTerminalWindow();
+  // Re-mount after bfcache restore (soft refresh / back-forward) so the terminal stays floating
+  window.addEventListener('pageshow', (e) => {
+    ensureBuildMenuStyles();
+    if (e.persisted || !$('#terminalWindow') || !$('#terminalWindow').contains($('#term'))) mountTerminalWindow();
+  });
   wireTerm();
   wireEvidenceTools();
   wireConfigArchiveTools();
