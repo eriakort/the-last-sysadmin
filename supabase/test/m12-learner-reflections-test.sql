@@ -25,7 +25,7 @@ select test.expect('learner reads own reflection',
 select test.login(:'S2');
 select test.expect('another learner cannot read private reflection',
   (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'), 0);
-select test.expect_denied('another learner cannot create reflection in someone else class',
+select test.expect_denied('learner cannot create a reflection as another learner',
   $$insert into public.learner_reflections(class_id,user_id,learned,approach)
     values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','Learned','Tried')$$);
 
