@@ -4918,9 +4918,11 @@ function showWorkspaceView(view, options = {}) {
   const terminalWindow = $('#terminalWindow');
   if (!inWorkbench && terminalWindow && !terminalWindow.hidden) {
     terminalWindow.hidden = true;
-    const terminalRestore = $('#terminalRestore');
-    if (terminalRestore) terminalRestore.hidden = false;
   }
+  // Keep the launcher and window in sync after every workspace transition.
+  // The launcher is the only way back to a minimized terminal.
+  const terminalRestore = $('#terminalRestore');
+  if (terminalRestore && terminalWindow) terminalRestore.hidden = !terminalWindow.hidden;
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
