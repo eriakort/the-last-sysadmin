@@ -69,6 +69,7 @@ let URL;
   else fail('correct ticket diagnosis did not unlock verification');
 
   // Restore the terminal only after diagnosis, when command entry is required.
+  await page.locator('#btnBuild').click();
   await page.locator('#terminalRestore').click();
   await page.waitForSelector('#terminalWindow:not([hidden])');
 

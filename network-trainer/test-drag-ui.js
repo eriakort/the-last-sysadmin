@@ -23,7 +23,7 @@ const xformOf = t => { const m = /translate\(([-\d.]+),\s*([-\d.]+)\)/.exec(t ||
   await page.waitForTimeout(400);
 
   // build a tiny topology in build mode
-  await page.click('#btnBuild'); await page.waitForTimeout(120);
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen'); await page.waitForTimeout(120);
   await addDev('host'); await addDev('host'); await addDev('switch');   // h1 h2 sw1
   await wire('h1', 'sw1'); await wire('h2', 'sw1');
   if ((await page.$$eval('#topo .edge', e => e.length)) === 2) ok('built 2 hosts wired to a switch'); else fail('setup wiring failed');

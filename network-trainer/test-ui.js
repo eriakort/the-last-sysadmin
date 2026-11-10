@@ -81,11 +81,11 @@ let URL;
   else fail('expected unresolved status before the fix');
 
   // The console may already be open if the startup route restored an active session.
-  // Open it only when the launcher is visible; do not wait on a hidden launcher.
+  // Otherwise open it from the top-bar Build ▾ menu → Device terminal.
   const terminalWindow = page.locator('#terminalWindow');
   await page.waitForSelector('#terminalWindow', { state: 'attached' });
   if (await terminalWindow.isHidden()) {
-    await page.waitForSelector('#terminalRestore:visible');
+    await page.click('#btnBuild');
     await page.click('#terminalRestore');
   }
   await page.waitForSelector('#terminalWindow:not([hidden])');
@@ -147,8 +147,8 @@ let URL;
   await page.click('#modal #closeS'); await page.waitForTimeout(100);
 
   // --- terminal command history (ArrowUp recalls last command) ---
-  // The terminal is minimized after reload; restore it before interacting with its input.
-  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
+  // The terminal is minimized; reopen it from the Build ▾ menu before interacting with its input.
+  await page.click('#btnBuild'); await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
   await page.fill('#tin', 'ip addr'); await page.press('#tin', 'Enter'); await page.waitForTimeout(80);
   await page.press('#tin', 'ArrowUp'); await page.waitForTimeout(60);
   if ((await page.inputValue('#tin')) === 'ip addr') ok('ArrowUp recalls the previous command');
@@ -179,7 +179,7 @@ let URL;
   } else fail('incident selector did not populate ticket options');
 
   // --- topology builder context menu: add, duplicate, connect, and toggle a link ---
-  await page.click('#btnBuild'); await page.waitForTimeout(160);
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen'); await page.waitForTimeout(160);
   if (await page.locator('#topo').count()) ok('Build workspace opens its topology canvas');
   else fail('Build workspace did not render a topology canvas');
   await page.locator('#topo').click({ button: 'right', position: { x: 220, y: 180 } });

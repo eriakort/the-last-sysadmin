@@ -583,13 +583,18 @@ aside{scrollbar-color:#344a60 transparent}
 .terminal-dock-content .term-head{flex:none;max-height:84px;overflow:auto;flex-wrap:wrap}
 .terminal-dock-content #tout{flex:1;min-height:70px;max-height:none;overflow:auto}
 .terminal-dock-content .tline{flex:none}
-/* Deskbar toggle that opens the docked console. */
-.desk-tools .terminal-toggle{margin-left:6px;border-color:#2d91ae;color:#dff8ff;background:linear-gradient(110deg,#12394b,#102536);white-space:nowrap}
-.desk-tools .terminal-toggle>span{color:var(--amber);font-size:13px}
-.desk-tools .terminal-toggle:hover{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);color:#fff}
-.desk-tools .terminal-toggle:focus-visible{outline:2px solid #8bdcf1;outline-offset:2px}
-.desk-tools .terminal-toggle[aria-expanded="true"]{border-color:#65dff6;background:linear-gradient(110deg,#174b60,#15344a);box-shadow:inset 0 0 0 1px #48c7e8}
-.terminal-toggle[hidden]{display:none!important}
+/* Top-bar "Build ▾" dropdown — anchored in the fixed header, so it never floats. */
+.build-menu{position:relative;display:inline-flex}
+.build-menu>#btnBuild{display:inline-flex;align-items:center;gap:6px}
+.build-menu>#btnBuild .caret{font-size:10px;opacity:.85}
+.build-menu>#btnBuild[aria-expanded="true"]{border-color:var(--amber);color:var(--ink)}
+.build-menu-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:60;display:flex;flex-direction:column;min-width:210px;padding:6px;border:1px solid #31536b;border-radius:10px;background:#0c1b28;box-shadow:0 18px 50px #000a}
+.build-menu-panel[hidden]{display:none!important}
+.build-menu-item{display:flex;align-items:center;gap:9px;width:100%;padding:9px 11px;border:1px solid transparent;border-radius:8px;background:transparent;color:#dff7ff;font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
+.build-menu-item>span{color:var(--amber);font-size:14px;width:18px;text-align:center}
+.build-menu-item:hover{background:linear-gradient(110deg,#174b60,#15344a);border-color:#2d91ae;color:#fff}
+.build-menu-item:focus-visible{outline:2px solid #8bdcf1;outline-offset:1px}
+@media(max-width:760px){.build-menu-panel{right:auto;left:0}}
 @media(max-width:760px){
  .terminal-dock{height:54vh;min-height:220px}
  .terminal-dock-content .term-head{max-height:76px}

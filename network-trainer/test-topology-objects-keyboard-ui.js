@@ -10,7 +10,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
-  await page.click('#btnBuild');
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen');
   await page.waitForSelector('#config .pal[data-add="host"]');
   await page.click('#config .pal[data-add="host"]');
   await page.click('#config .pal[data-add="host"]');

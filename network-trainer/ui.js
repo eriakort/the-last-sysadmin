@@ -270,13 +270,6 @@ function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
-function placeTerminalRestore() {
-  // The console toggle lives in the topology deskbar, so it only ever appears
-  // inside the Build / Workbench workspace and can never float over the header.
-  const restore = $('#terminalRestore'), tools = document.querySelector('#cols .desk-tools');
-  if (!restore || !tools) return;
-  if (restore.parentElement !== tools) tools.appendChild(restore);
-}
 function showWorkspaceView(view, options = {}) {
   if (!WORKSPACE_VIEWS.has(view)) view = 'overview';
   const historyMode = options.historyMode || 'push';
@@ -299,9 +292,9 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
-  // The docked console and its toggle live inside #cols, so they are shown and
-  // hidden with the workspace automatically — no floating element to misplace.
-  placeTerminalRestore();
+  // The console is docked inside #cols, so it hides with the workspace. Its opener
+  // lives in the fixed top-bar "Build ▾" menu, which is always in a stable place.
+  if (cols.hidden) collapseTerminalWindow();
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -1072,7 +1065,6 @@ function wireSessionTabs() {
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
   $('#topoWrap').innerHTML = renderTopo();
-  placeTerminalRestore();
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
@@ -2122,32 +2114,44 @@ function mountTerminalWindow() {
   host.insertBefore(win, term);
   win.querySelector('.terminal-dock-content').appendChild(term);
   win.hidden = true; // Collapsed by default so the topology has full height.
-  // The toggle lives in the topology deskbar (contextual to this workspace).
-  const restore = document.createElement('button');
-  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'btn sm terminal-toggle';
-  restore.innerHTML = '<span aria-hidden="true">▣</span> Terminal';
-  restore.setAttribute('aria-label', 'Open device terminal');
-  restore.setAttribute('aria-expanded', 'false');
-  restore.title = 'Open the device console for the selected device. Double-click a device to open it too.';
-  // Attach the toggle to the deskbar now; placeTerminalRestore() only relocates an
-  // already-mounted node, so it cannot find this one until it is in the DOM.
-  const tools = document.querySelector('#cols .desk-tools');
-  (tools || document.body).appendChild(restore);
-  placeTerminalRestore();
+  // The console is opened from the top-bar "Build ▾" menu (see wireBuildMenu) and
+  // by double-clicking a device; it is collapsed from its own titlebar button.
   $('#terminalMinimize').addEventListener('click', collapseTerminalWindow);
-  restore.addEventListener('click', () => { if ($('#terminalWindow').hidden) openTerminalWindow(true); else collapseTerminalWindow(); });
 }
 function collapseTerminalWindow() {
-  const win = $('#terminalWindow'), restore = $('#terminalRestore');
+  const win = $('#terminalWindow');
   if (win) win.hidden = true;
-  if (restore) { restore.setAttribute('aria-expanded', 'false'); restore.focus(); }
 }
 function openTerminalWindow(focusInput = false) {
-  const win = $('#terminalWindow'), restore = $('#terminalRestore');
+  const win = $('#terminalWindow');
   if (!win) return;
   win.hidden = false;
-  if (restore) restore.setAttribute('aria-expanded', 'true');
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
+}
+// Top-bar "Build ▾" dropdown: a menu anchored in the fixed header, so its
+// controls are always in a stable place and can never float over the page.
+function toggleBuildMenu(force) {
+  const menu = $('#buildMenu'), btn = $('#btnBuild');
+  if (!menu || !btn) return;
+  const show = force === undefined ? menu.hidden : !!force;
+  menu.hidden = !show;
+  btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+}
+function closeBuildMenu() { toggleBuildMenu(false); }
+function openDeviceTerminal() {
+  closeBuildMenu();
+  // Bring the workbench into view so the docked console is visible, then open it.
+  const cols = $('#cols');
+  if (!cols || cols.hidden) { if (MODE === 'build') enterBuild(); else showWorkspaceView('workbench'); }
+  openTerminalWindow(true);
+}
+function wireBuildMenu() {
+  const btn = $('#btnBuild'); if (!btn) return;
+  btn.addEventListener('click', () => toggleBuildMenu());
+  const open = $('#buildMenuOpen'); if (open) open.addEventListener('click', () => { closeBuildMenu(); enterBuild(); });
+  const term = $('#terminalRestore'); if (term) term.addEventListener('click', openDeviceTerminal);
+  document.addEventListener('click', e => { if (!e.target.closest('.build-menu')) closeBuildMenu(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBuildMenu(); });
 }
 function explainNetworkMistake(command, output) {
   const panel = $('#networkMistakeCoach');
@@ -2659,7 +2663,7 @@ function boot() {
         <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
         <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
         <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
-        <button id="btnBuild" class="btn" title="Build a scenario">🛠 Build</button>
+        <div class="build-menu"><button id="btnBuild" class="btn" type="button" title="Build tools" aria-haspopup="true" aria-expanded="false">🛠 Build <span class="caret" aria-hidden="true">▾</span></button><div class="build-menu-panel" id="buildMenu" role="menu" aria-label="Build tools" hidden><button class="build-menu-item" id="buildMenuOpen" type="button" role="menuitem"><span aria-hidden="true">🛠</span> Open build workspace</button><button class="build-menu-item" id="terminalRestore" type="button" role="menuitem" aria-label="Open device terminal"><span aria-hidden="true">▣</span> Device terminal</button></div></div>
         <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
         <button id="btnStats" class="btn" type="button" title="Stats" aria-label="Open statistics">📊</button>
         <button id="btnSet" class="btn" type="button" title="Settings" aria-label="Open settings">⚙</button></div>
@@ -2714,7 +2718,7 @@ function boot() {
   $('#btnJournal').addEventListener('click', openJournal);
   $('#btnSet').addEventListener('click', openSettings);
   $('#btnStats').addEventListener('click', openStats);
-  $('#btnBuild').addEventListener('click', enterBuild);
+  wireBuildMenu();
   $('#btnClass').addEventListener('click', openClassroom);
   document.addEventListener('pointermove', onDragMove);   // node dragging (attached once)
   document.addEventListener('pointerup', onDragUp);

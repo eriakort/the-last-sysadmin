@@ -10,7 +10,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   // Build mode starts with an intentionally empty canvas. Add a device before
   // asserting keyboard behavior; the default mission is not a reliable source
   // of topology nodes for this isolated builder test.
-  await page.click('#btnBuild');
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen');
   await page.waitForSelector('#config .pal[data-add="host"]');
   await page.click('#config .pal[data-add="host"]');
   await page.waitForSelector('#topo .node');
