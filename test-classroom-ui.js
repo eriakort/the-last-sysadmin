@@ -116,14 +116,6 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (/Navigation/.test(diagnosticText) && /Network operations/.test(diagnosticText) && /Revisit mission 1-2/.test(diagnosticText) && /Revisit mission network-dhcp/.test(diagnosticText)) ok('Skill diagnostics map Linux and network evidence to targeted practice');
   else fail('skill diagnostic evidence or recommendation incorrect: ' + diagnosticText);
 
-  // Join by code (Join tab is the default)
-  await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
-  await page.fill('#cxCode', ' abc 123 ');
-  await page.click('#cxJoin');
-  await page.waitForTimeout(200);
-  // Feedback controls live in the teacher tab, not the Join tab.
-  await page.click('#cxTabs [data-cxtab="teach"]');
-  await page.waitForTimeout(120);
   const feedbackControls = await page.locator('#fbAssignment').count();
   if (feedbackControls === 1 && await page.locator('#fbMission').count() === 1) ok('Teacher can target feedback to an assignment and mission');
   else fail('contextual feedback controls missing');
@@ -135,6 +127,16 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   const feedbackInsert = await page.evaluate(() => window.__calls.find(c => c[0] === 'insert' && c[1] === 'feedback'));
   if (feedbackInsert && feedbackInsert[2].assignment_id === 'a1' && feedbackInsert[2].mission_id === '1-2' && feedbackInsert[2].student_id === 'u-student') ok('Feedback is stored with learner, assignment and mission context');
   else fail('contextual feedback payload incorrect: ' + JSON.stringify(feedbackInsert));
+
+  // Join by code is tested separately; successful join closes the classroom overlay.
+  await page.click('#cxTabs [data-cxtab="join"]'); await page.waitForTimeout(120);
+  await page.fill('#cxCode', ' abc 123 ');
+  await page.click('#cxJoin');
+  await page.waitForTimeout(200);
+  // Feedback controls live in the teacher tab, not the Join tab.
+  await page.click('#cxTabs [data-cxtab="teach"]');
+  await page.waitForTimeout(120);
+
 
   const calls = await page.evaluate(() => window.__calls);
   const rpc = calls.find(c => c[0] === 'rpc' && c[1] === 'enroll_by_code');
