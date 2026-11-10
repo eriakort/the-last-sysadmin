@@ -61,6 +61,9 @@ jobs:
       - name: Linux classroom UI tests
         run: npm run test:ui
 
+      - name: Learner reflection and evidence browser tests
+        run: node test-learner-reflections-ui.js
+
       - name: Linux authored-mission playback tests
         run: npm run test:play
 
