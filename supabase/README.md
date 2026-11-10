@@ -9,15 +9,16 @@ Run these **in order**. All are safe to re-run.
 
 1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard).
 2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
-3. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
-4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
-5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
-6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
-7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
-8. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
-9. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
+3. **`m12-learner-reflections.sql`** — M12: private learner-authored reflections with optional assignment/mission context and learner/class-staff RLS.
+4. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
+5. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
+6. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
+7. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
+8. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
+9. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
+10. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
 
-Skipping any of 3–9 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`.
+Skipping any of 3–10 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`. M12 is additive and can be applied after M1; it does not change existing progress or attempt records.
 
 There is no server code — the game talks to Supabase directly with the anon
 key, and RLS is what keeps tenants apart.
@@ -41,7 +42,7 @@ M11 is a required deployment migration. Until it is applied to the connected Sup
 
 - **Open professor sign-up:** any signed-in user can set their *own* `is_teacher` and start creating classes. No one can set it on anyone else.
 - **Tenant isolation:** a teacher sees only their own classes and the students in them. No teacher, TA, or student can read or write another tenant's rosters, attempts, grades, or feedback.
-- **Privacy split:** a profile is a public handle (display name + avatar — the race leaderboard already shows it). The sensitive data (enrollments, attempts, feedback) is private to the student and their class staff. Email stays in `auth.users` and is never exposed through these tables.
+- **Privacy split:** a profile is a public handle (display name + avatar — the race leaderboard already shows it). The sensitive data (enrollments, attempts, feedback, learner reflections and task evidence) is private to the student and their class staff. Email stays in `auth.users` and is never exposed through these tables.
 - **Formative grading:** auto-grades are practice/participation only, so the anon-key + RLS stack is sufficient. Tamper-resistant grading (Edge Functions) is deliberately deferred.
 
 ## Testing the policies
@@ -55,6 +56,7 @@ it should and nothing it shouldn't. It covers:
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
 - **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
+- **M12** — learner reflections: own-row access, class-owner/TA read access, cross-class denial, and assignment/mission consistency.
 - **Network Trainer** — author-only scenario CRUD, mixed-assignment filtering, class-member delivery, outsider denial, and anonymous execution denial.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
