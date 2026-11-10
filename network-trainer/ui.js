@@ -274,7 +274,7 @@ function placeTerminalRestore() {
   const restore = $('#terminalRestore'), rail = $('#navRail');
   if (!restore || !rail) return;
   // The persistent Workspace rail owns the terminal entry on every view.
-  if (restore.parentElement !== rail) rail.appendChild(restore);
+  if (restore.parentElement !== rail) rail.insertBefore(restore, rail.querySelector('.nav-spacer') || null);
 }
 function positionTerminalWindow(inWorkbench) {
   const win = $('#terminalWindow');
