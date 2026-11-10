@@ -2316,6 +2316,26 @@ function mountTerminalWindow() {
   win.setAttribute('aria-label', 'Device terminal');
   win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><span class="terminal-window-actions"><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button><button type="button" class="btn sm" id="terminalClose" aria-label="Close device terminal" title="Close">✕</button></span></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
+  // Critical layout as inline styles so the window floats even if the stylesheet is late or overridden
+  Object.assign(win.style, {
+    position: 'fixed',
+    zIndex: '1000',
+    width: '520px',
+    height: '340px',
+    minWidth: '280px',
+    minHeight: '180px',
+    maxWidth: 'calc(100vw - 16px)',
+    maxHeight: 'calc(100vh - 16px)',
+    background: '#0b1220',
+    border: '1px solid #334155',
+    borderRadius: '10px',
+    boxShadow: '0 12px 40px rgba(0,0,0,.45)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    resize: 'both',
+    color: '#e2e8f0'
+  });
   win.hidden = true;
   document.body.appendChild(win);
   // Position and size from saved or default
@@ -2377,7 +2397,14 @@ function collapseTerminalWindow() {
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
-  if (!win) return;
+  if (!win) { mountTerminalWindow(); return openTerminalWindow(focusInput); }
+  // Re-assert floating layout in case something cleared it
+  if (win.style.position !== 'fixed') {
+    win.style.position = 'fixed';
+    win.style.zIndex = '1000';
+    if (!win.style.width) win.style.width = '520px';
+    if (!win.style.height) win.style.height = '340px';
+  }
   win.hidden = false;
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
