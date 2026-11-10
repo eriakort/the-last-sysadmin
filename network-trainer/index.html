@@ -6739,6 +6739,9 @@ function mountTerminalWindow() {
   restore.setAttribute('aria-label', 'Open device terminal');
   restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
   restore.hidden = false;
+  // Attach it to the document first; placeTerminalRestore() relocates an existing
+  // node and cannot find a detached one, so without this the launcher never mounts.
+  document.body.appendChild(restore);
   // Mount it as a dedicated item in the persistent Workspace navigation.
   placeTerminalRestore(false);
   positionTerminalWindow(false);

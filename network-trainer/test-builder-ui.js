@@ -97,13 +97,13 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
     await page.locator('#terminalMinimize').click();
     await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
   }
-  if (await page.locator('#terminalRestore').evaluate(el=>el.parentElement===document.body)) ok('device terminal restore control stays outside the canvas');
+  if (await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('device terminal restore control stays outside the canvas');
   else fail('device terminal restore control is anchored to the canvas');
   await page.click('#navOverview');
-  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>el.parentElement===document.body)) ok('terminal restore remains available outside the workbench');
+  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('terminal restore remains available outside the workbench');
   else fail('terminal restore was hidden with the workbench');
   await page.click('#btnBuild');
-  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>el.parentElement===document.body)) ok('terminal restore remains available outside the canvas when Build opens');
+  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('terminal restore remains available outside the canvas when Build opens');
   else fail('terminal restore is unavailable outside the canvas when Build opens');
   if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
   if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
