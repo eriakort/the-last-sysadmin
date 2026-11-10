@@ -12,6 +12,7 @@ const URL='file://'+path.join(process.cwd(),'index.html');
   localStorage.setItem('nettrainer',JSON.stringify({done:{'first-contact':true,'wrong-subnet':true},journal:[{title:'private note'}],changes:[{id:1}]}));
  });
  await page.reload({waitUntil:'load'});await page.waitForTimeout(100);
+ await page.locator('#menuProgress summary').click();
  await page.click('#btnSkillPortfolio');
  const dialog=page.locator('#portfolioDialog [role="dialog"]');
  if(!(await dialog.isVisible()))throw new Error('portfolio dialog did not open');
