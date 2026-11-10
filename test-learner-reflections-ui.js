@@ -15,6 +15,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
       const state = { table, filters: {} };
       const api = {
         select() { return api; },
+        maybeSingle() { return Promise.resolve({ data: { is_teacher: false }, error: null }); },
         eq(key, value) { state.filters[key] = value; return api; },
         order() { return api; },
         insert(payload) { calls.push(['insert', table, payload]); return api; },
