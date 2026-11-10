@@ -6792,16 +6792,65 @@ function openHelp() { showWorkspaceView('knowledge'); }
 function mountTerminalWindow() {
   const term = $('#term');
   if (!term || $('#terminalWindow')) return;
+  // Inject styles once
+  if (!document.getElementById('terminalWindowStyles')) {
+    const style = document.createElement('style');
+    style.id = 'terminalWindowStyles';
+    style.textContent = `
+      #terminalWindow.terminal-window {
+        position: fixed;
+        z-index: 1000;
+        width: 520px;
+        height: 340px;
+        min-width: 280px;
+        min-height: 180px;
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+        background: #0b1220;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        box-shadow: 0 12px 40px rgba(0,0,0,.45);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        resize: both;
+        color: #e2e8f0;
+      }
+      #terminalWindow .terminal-window-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+        background: #1e293b;
+        cursor: move;
+        user-select: none;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: .04em;
+        border-bottom: 1px solid #334155;
+      }
+      #terminalWindow .terminal-window-titlebar small { opacity: .6; font-weight: 400; margin-left: 8px; }
+      #terminalWindow .terminal-window-content {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+      }
+      #terminalWindow #term { flex: 1; min-height: 0; }
+    `;
+    document.head.appendChild(style);
+  }
   const win = document.createElement('section');
   win.id = 'terminalWindow';
   win.className = 'terminal-window';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
+  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
   win.hidden = true;
   document.body.appendChild(win);
-  // Position from saved or default
+  // Position and size from saved or default
   try {
     const saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}');
     if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
@@ -6811,6 +6860,8 @@ function mountTerminalWindow() {
     } else {
       win.style.right = '22px'; win.style.bottom = '18px';
     }
+    if (Number.isFinite(saved.width) && saved.width >= 280) win.style.width = Math.min(saved.width, window.innerWidth - 16) + 'px';
+    if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
   } catch (_) {}
   $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; });
   const bar = win.querySelector('.terminal-window-titlebar');
@@ -6830,11 +6881,26 @@ function mountTerminalWindow() {
   const finishDrag = () => {
     if (!drag) return;
     drag = null;
-    const rect = win.getBoundingClientRect();
-    try { localStorage.setItem('network-terminal-window-v1', JSON.stringify({ left: rect.left, top: rect.top })); } catch (_) {}
+    saveTerminalWindowState(win);
   };
   bar.addEventListener('pointerup', finishDrag);
   bar.addEventListener('pointercancel', finishDrag);
+  // Persist size on resize (CSS resize or window resize)
+  const ro = new ResizeObserver(() => saveTerminalWindowState(win));
+  ro.observe(win);
+  window.addEventListener('resize', () => saveTerminalWindowState(win));
+}
+function saveTerminalWindowState(win) {
+  if (!win || win.hidden) return;
+  const rect = win.getBoundingClientRect();
+  try {
+    localStorage.setItem('network-terminal-window-v1', JSON.stringify({
+      left: rect.left,
+      top: rect.top,
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }));
+  } catch (_) {}
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
