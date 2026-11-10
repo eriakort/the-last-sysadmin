@@ -2282,6 +2282,7 @@ function mountTerminalWindow() {
         resize: both;
         color: #e2e8f0;
       }
+      #terminalWindow[hidden] { display: none !important; }
       #terminalWindow .terminal-window-titlebar {
         display: flex;
         align-items: center;
@@ -2330,7 +2331,6 @@ function mountTerminalWindow() {
     border: '1px solid #334155',
     borderRadius: '10px',
     boxShadow: '0 12px 40px rgba(0,0,0,.45)',
-    display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
     resize: 'both',
@@ -2351,8 +2351,8 @@ function mountTerminalWindow() {
     if (Number.isFinite(saved.width) && saved.width >= 280) win.style.width = Math.min(saved.width, window.innerWidth - 16) + 'px';
     if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
   } catch (_) {}
-  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; });
-  $('#terminalClose').addEventListener('click', () => { win.hidden = true; });
+  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
+  $('#terminalClose').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
@@ -2393,7 +2393,7 @@ function saveTerminalWindowState(win) {
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
-  if (win) win.hidden = true;
+  if (win) { win.hidden = true; win.style.display = 'none'; }
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
@@ -2406,6 +2406,7 @@ function openTerminalWindow(focusInput = false) {
     if (!win.style.height) win.style.height = '340px';
   }
   win.hidden = false;
+  win.style.display = 'flex';
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
 }
