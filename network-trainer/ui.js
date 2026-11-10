@@ -2350,9 +2350,13 @@ function mountTerminalWindow() {
     }
     if (Number.isFinite(saved.width) && saved.width >= 280) win.style.width = Math.min(saved.width, window.innerWidth - 16) + 'px';
     if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
+    if (saved.open === true) {
+      win.hidden = false;
+      win.style.display = 'flex';
+    }
   } catch (_) {}
-  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
-  $('#terminalClose').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; });
+  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); });
+  $('#terminalClose').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); });
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
@@ -2379,21 +2383,25 @@ function mountTerminalWindow() {
   ro.observe(win);
   window.addEventListener('resize', () => saveTerminalWindowState(win));
 }
-function saveTerminalWindowState(win) {
-  if (!win || win.hidden) return;
+function saveTerminalWindowState(win, forceOpen) {
+  if (!win) return;
+  const open = forceOpen !== undefined ? forceOpen : !win.hidden;
+  let prev = {};
+  try { prev = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) {}
   const rect = win.getBoundingClientRect();
   try {
     localStorage.setItem('network-terminal-window-v1', JSON.stringify({
-      left: rect.left,
-      top: rect.top,
-      width: Math.round(rect.width),
-      height: Math.round(rect.height)
+      left: open ? rect.left : (prev.left ?? rect.left),
+      top: open ? rect.top : (prev.top ?? rect.top),
+      width: open ? Math.round(rect.width) : (prev.width ?? Math.round(rect.width)),
+      height: open ? Math.round(rect.height) : (prev.height ?? Math.round(rect.height)),
+      open: open
     }));
   } catch (_) {}
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
-  if (win) { win.hidden = true; win.style.display = 'none'; }
+  if (win) { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); }
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
@@ -2408,6 +2416,7 @@ function openTerminalWindow(focusInput = false) {
   win.hidden = false;
   win.style.display = 'flex';
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
+  saveTerminalWindowState(win, true);
   if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
 }
 // Top-bar "Build ▾" dropdown: a menu anchored in the fixed header, so its
