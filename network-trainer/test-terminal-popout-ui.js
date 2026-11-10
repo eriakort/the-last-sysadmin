@@ -28,7 +28,9 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await dock.isVisible() && await dock.evaluate(el => el.parentElement?.id === 'navRail')) ok('terminal launcher is docked in the persistent navigation rail outside the workbench');
   else fail('terminal launcher is not docked in the navigation rail');
   const dockBox = await dock.boundingBox(), topBox = await page.locator('#top').boundingBox();
-  if (dockBox && topBox && dockBox.y + dockBox.height <= topBox.y) ok('terminal launcher occupies navigation space without covering the top toolbar');
+  const separated = dockBox && topBox && (dockBox.x + dockBox.width <= topBox.x || dockBox.x >= topBox.x + topBox.width || dockBox.y + dockBox.height <= topBox.y || dockBox.y >= topBox.y + topBox.height);
+  if (separated) ok('terminal launcher occupies reserved navigation space without covering the top toolbar');
+  else fail('terminal launcher overlaps the top toolbar');
   else fail('terminal launcher overlaps the top toolbar');
 
   await page.click('#terminalRestore');
