@@ -8240,7 +8240,7 @@ async function openClassroom() {
           }).join('')
         : '<p class="cx-dim">No reflections saved yet. Your first note can capture what you learned from a task.</p>';
       const reflectionId = 'lr-' + String(e.class_id).replace(/[^a-zA-Z0-9_-]/g, '');
-      const reflectionMissions = [...new Map(asns.flatMap(a => (a.mission_ids || []).map(id => [id, { id, assignment: a.id }]))).values()];
+      const reflectionMissions = asns.flatMap(a => (a.mission_ids || []).map(id => ({ id, assignment: a.id })));
       const reflectionForm = `<form class="cx-reflection-form" data-reflection-form="${esc(e.class_id)}">
         <label for="${reflectionId}-assignment">Assignment (optional)</label>
         <select id="${reflectionId}-assignment" data-reflection-assignment>
