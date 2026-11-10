@@ -1420,6 +1420,8 @@ function wireTopo() {
   if (!window._topoArrowBound) {
     document.addEventListener('keydown', e => {
       if (!canBuild() || !RUN || document.querySelector('.topo-context-menu') || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+      // Let focused nodes, labels and texts handle their own arrow keys (they restore focus after refresh)
+      if (e.target && e.target.closest && e.target.closest('.node, .device-label, .topo-text')) return;
       if (!TOPO_SELECTED.size && !TEXT_SELECTED.size && !LABEL_SELECTED.size) return;
       e.preventDefault();
       const step = e.shiftKey ? 40 : 10;
