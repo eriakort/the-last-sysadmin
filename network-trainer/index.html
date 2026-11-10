@@ -6789,6 +6789,46 @@ function exportJournal() {
 }
 function openJournal() { showWorkspaceView('journal'); }
 function openHelp() { showWorkspaceView('knowledge'); }
+function ensureBuildMenuStyles() {
+  if (document.getElementById('buildMenuStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'buildMenuStyles';
+  style.textContent = `
+    .build-menu { position: relative; display: inline-flex; }
+    .build-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 2000;
+      min-width: 220px;
+      padding: 6px;
+      background: var(--panel, #0f172a);
+      border: 1px solid var(--line, #334155);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.4);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .build-menu-panel[hidden] { display: none !important; }
+    .build-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .build-menu-item:hover, .build-menu-item:focus { background: rgba(255,255,255,.06); outline: none; }
+  `;
+  document.head.appendChild(style);
+}
 function mountTerminalWindow() {
   const term = $('#term');
   if (!term) return;
@@ -7479,9 +7519,13 @@ function boot() {
     </div>
       </div>
     </div>`;
+  ensureBuildMenuStyles();
   mountTerminalWindow();
   // Re-mount after bfcache restore (soft refresh / back-forward) so the terminal stays floating
-  window.addEventListener('pageshow', (e) => { if (e.persisted || !$('#terminalWindow') || !$('#terminalWindow').contains($('#term'))) mountTerminalWindow(); });
+  window.addEventListener('pageshow', (e) => {
+    ensureBuildMenuStyles();
+    if (e.persisted || !$('#terminalWindow') || !$('#terminalWindow').contains($('#term'))) mountTerminalWindow();
+  });
   wireTerm();
   wireEvidenceTools();
   wireConfigArchiveTools();
