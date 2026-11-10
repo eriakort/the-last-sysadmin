@@ -753,7 +753,7 @@ try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentE
 /* ============================================================
    Constants and helpers
    ============================================================ */
-const APP_VERSION = '97';
+const APP_VERSION = '0.27.0', APP_BUILD = '97';
 const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
 const KEY = 'last-sysadmin-v1';
 const AVATARS = ['👤','🧑‍💻','👩‍💻','🦊','🐧','🐢','🚀','⚡','🔧','🛡️','🎯','🌟'];
@@ -8167,7 +8167,7 @@ function openAbout() {
     <p class="rlead">The Last Sysadmin is a browser-based learning platform for practical Linux and network administration.</p>
     <p class="rlead">Learn through guided missions, simulated terminals, troubleshooting labs, incident workflows, and evidence-led practice. It is designed to help learners build practical skills step by step, from foundational commands to operational problem-solving.</p>
     <p class="rlead">All commands and network activity run in an isolated browser simulation. The platform does not connect to your computer, real servers, or physical network devices.</p>
-    <div class="rlabel">Application version</div><p class="rlead"><strong>Version ${esc(APP_VERSION)}</strong></p>
+    <div class="rlabel">Application version</div><p class="rlead"><strong>Version ${esc(APP_VERSION)} · build ${esc(APP_BUILD)}</strong></p>
     <div class="race-row" style="margin-top:16px"><button class="btn primary" id="aboutDone" type="button">Done</button></div>`);
   $('#aboutDone')?.addEventListener('click', hideOverlay);
 }
