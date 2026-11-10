@@ -6326,6 +6326,28 @@ function statsLog(ctx) {
   ctx.out(`Slowest       : ${fmtDur(slowest.ms)}  (${slowest.title})\n`);
   ctx.out(`Hints used    : ${hintsUsed}\n`);
 }
+// Append minimal learning events separately from the latest-state attempts
+// table. Each enrolled class gets its own scoped copy so staff never gain
+// visibility into a learner's activity in another class.
+async function recordLearningEvidence(eventType, m, durationMs) {
+  if (typeof RACE !== 'undefined' && RACE.active) return;
+  if (!authUser) return;
+  const sb = await getSB(); if (!sb) return;
+  try {
+    const { data: enrollments, error } = await sb.from('enrollments')
+      .select('class_id').eq('user_id', authUser.id).eq('role', 'student');
+    if (error) return;
+    const classIds = [...new Set((enrollments || []).map(e => e.class_id).filter(Boolean))];
+    const targets = classIds.length ? classIds : [null];
+    const hints = (S.hints && S.hints[m.id]) || 0;
+    const rows = targets.map(classId => ({
+      user_id: authUser.id, class_id: classId, mission_id: m.id,
+      event_type: eventType, hints,
+      duration_ms: Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : null
+    }));
+    await sb.from('learning_evidence').insert(rows);
+  } catch (e) {}
+}
 async function recordAttempt(m) {
   if (typeof RACE !== 'undefined' && RACE.active) return;
   if (!authUser) return;
@@ -6346,6 +6368,7 @@ async function recordAttempt(m) {
 }
 function completeMission() {
   const m = MISSIONS[S.mission], gain = rewardFor(m);
+  const elapsedMs = S.missionStart ? Date.now() - S.missionStart : null;
   S.xp += gain; S.done.push(m.id);
   revisionScheduleMission(m);
   let timeStr = '';
@@ -6355,6 +6378,7 @@ function completeMission() {
     S.missionStart = null; timeStr = ` · <span class="pu">${fmtDur(ms)}</span>`;
   }
   recordAttempt(m);
+  recordLearningEvidence('mission_completed', m, elapsedMs);
   if (PRACTICE.active && PRACTICE.label === 'Linux Security & Recovery Lab') {
     try { const completed = JSON.parse(localStorage.getItem('lsa-ops-recovery-complete') || '[]'); if (!completed.includes(m.id)) completed.push(m.id); localStorage.setItem('lsa-ops-recovery-complete', JSON.stringify(completed)); } catch (e) {}
   }
@@ -6393,6 +6417,7 @@ function showHint() {
   const m = MISSIONS[S.mission], n = S.hints[m.id] || 0;
   if (n >= m.hints.length) { emitSys('No more hints for this ticket. The last one gives the full answer.', 'hint'); return; }
   S.hints[m.id] = n + 1;
+  recordLearningEvidence('hint_requested', m, null);
   emitSys(`<b>Hint ${n + 1}/${m.hints.length}:</b> ${md(m.hints[n])}`, 'hint');
   render(); save();
 }
