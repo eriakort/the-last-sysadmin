@@ -35,8 +35,9 @@ body{background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,syste
 .hud{gap:10px;font-size:10px;flex-wrap:wrap;justify-content:flex-end}
 .hud>span{padding:5px 8px;border:1px solid #27394d;border-radius:7px;background:#0e1723}
 .hud b{font-size:12px}
-.btn{border-radius:7px;border-color:#30445a;background:#182638;transition:background .15s,border-color .15s,transform .15s}
-.btn:hover{border-color:#4b7892;background:#20364d}
+.btn{border-radius:7px;border-color:var(--line);background:var(--raise);color:var(--ink);transition:background .15s,border-color .15s,transform .15s}
+#top .btn{background:var(--raise);color:var(--ink)}
+.btn:hover{border-color:var(--amber);background:color-mix(in srgb,var(--raise) 78%,var(--amber) 22%)}
 .btn:focus-visible,.nav-item:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .btn.primary{background:#39b9d8;border-color:#39b9d8;color:#06131c}
 #cols{min-height:0;min-width:0}
@@ -449,12 +450,12 @@ aside{scrollbar-color:#344a60 transparent}
 
 /* Global workstation command palette */
 .palette-launch{display:inline-flex;align-items:center;gap:7px}
-.palette-launch kbd{font:10px ui-monospace,monospace;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:2px 4px}
+.palette-launch kbd{font:10px ui-monospace,monospace;color:var(--ink);background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:2px 4px}
 .palette-overlay{position:fixed;inset:0;z-index:10000;display:flex;justify-content:center;align-items:flex-start;padding:12vh 18px 24px;background:rgba(3,8,15,.72);backdrop-filter:blur(5px)}
 .palette-dialog{width:min(680px,100%);max-height:70vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 24px 80px rgba(0,0,0,.5)}
 .palette-search-row{display:flex;align-items:center;gap:12px;padding:15px 17px;border-bottom:1px solid var(--line);color:var(--muted);font-size:20px}
 .palette-search-row input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:inherit;font-size:15px}
-.palette-search-row kbd{font:10px ui-monospace,monospace;border:1px solid var(--line);border-radius:4px;padding:3px 6px}
+.palette-search-row kbd{font:10px ui-monospace,monospace;color:var(--ink);background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:3px 6px}
 .palette-results{overflow:auto;padding:7px;min-height:80px}
 .palette-result{width:100%;display:flex;align-items:center;gap:12px;padding:10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
 .palette-result:hover,.palette-result.active{background:var(--raise);border-color:var(--line)}
@@ -677,3 +678,13 @@ body>.terminal-restore{position:fixed;z-index:1001;top:18px;right:18px;bottom:au
 .builder .pal-hint{padding-top:8px;margin-top:9px;border-top:1px solid var(--line);font-size:9px;line-height:1.5}
 @media(max-width:760px){.builder{padding:11px}.device-palette{grid-template-columns:repeat(2,minmax(0,1fr))}.builder-heading p{max-width:none}.builder .pal-row .btn{flex:0 1 auto}}
 @media(prefers-reduced-motion:reduce){.btn.pal{transition:none}.btn.pal:hover{transform:none}}
+
+/* Keep action controls legible when the light Paper palette is active. */
+:root[data-theme="paper"] .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
+:root[data-theme="paper"] #top .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
+
+/* Paper theme must override legacy button backgrounds in the workstation shell. */
+:root[data-theme="paper"] #btnSearch,
+:root[data-theme="paper"] #btnQueue,
+:root[data-theme="paper"] #btnHelp,
+:root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
