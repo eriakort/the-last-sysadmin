@@ -3,7 +3,7 @@
 // terminal + mission flow, now with saved progress, XP, ranks, a hints economy,
 // themes, and settings — the sysadmin game's "feel".
 const M = require('./net-model');
-const F = require('./../src/feedback');
+const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
