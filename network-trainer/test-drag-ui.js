@@ -23,7 +23,7 @@ const xformOf = t => { const m = /translate\(([-\d.]+),\s*([-\d.]+)\)/.exec(t ||
   await page.waitForTimeout(400);
 
   // build a tiny topology in build mode
-  await page.click('#btnBuild'); await page.waitForTimeout(120);
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen'); await page.waitForTimeout(120);
   await addDev('host'); await addDev('host'); await addDev('switch');   // h1 h2 sw1
   await wire('h1', 'sw1'); await wire('h2', 'sw1');
   if ((await page.$$eval('#topo .edge', e => e.length)) === 2) ok('built 2 hosts wired to a switch'); else fail('setup wiring failed');
@@ -54,6 +54,31 @@ const xformOf = t => { const m = /translate\(([-\d.]+),\s*([-\d.]+)\)/.exec(t ||
       return Math.abs(end[0] - X) < 1 && Math.abs(end[1] - Y) < 1;
     }), ['sw1', cx, cy]);
   if (linksOk) ok('both links followed the device to its new position'); else fail('links did not follow the node');
+
+  // --- multi-select drag: dragging one selected node moves the whole selection ---
+  await clickNode('h1');                                   // select just h1
+  await page.click(node('h2'), { modifiers: ['Control'] }); // add h2 to the selection
+  await page.waitForTimeout(500);                           // clear the double-click window before dragging
+  const selCount = await page.$$eval('#topo .node.multi-selected, #topo .node.sel', ns => ns.length);
+  const h1Before = xformOf(await page.getAttribute(node('h1'), 'transform'));
+  const h2Before = xformOf(await page.getAttribute(node('h2'), 'transform'));
+  const h1c = await centerOf('h1');
+  await page.mouse.move(h1c.x, h1c.y);
+  await page.mouse.down();
+  await page.mouse.move(h1c.x + 90, h1c.y + 70, { steps: 10 }); // into open space (no edge clamp)
+  await page.mouse.up();
+  await page.waitForTimeout(120);
+  const h1After = xformOf(await page.getAttribute(node('h1'), 'transform'));
+  const h2After = xformOf(await page.getAttribute(node('h2'), 'transform'));
+  const d1 = [h1After[0] - h1Before[0], h1After[1] - h1Before[1]];
+  const d2 = [h2After[0] - h2Before[0], h2After[1] - h2Before[1]];
+  const h1Moved = Math.hypot(d1[0], d1[1]) > 10;
+  const h2Moved = Math.hypot(d2[0], d2[1]) > 10;
+  // Both shift by the same drag delta; grid-snapping (24px) can quantize each node
+  // independently, so allow up to one grid cell of difference.
+  const sameDelta = Math.abs(d1[0] - d2[0]) <= 24 && Math.abs(d1[1] - d2[1]) <= 24;
+  if (h1Moved && h2Moved && sameDelta) ok(`both selected devices moved together (Δ h1=${d1} h2=${d2})`);
+  else fail(`multi-select drag moved only part of the selection: h1Δ=${d1} h2Δ=${d2} (selected=${selCount})`);
 
   // a plain click still selects (not treated as a drag)
   await clickNode('h1');

@@ -12,7 +12,7 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  const ok=m=>console.log('  ✓ '+m);
  const assert=(condition,message)=>{if(!condition)throw new Error(message);};
  await page.goto(URL,{waitUntil:'load'});
- await page.click('#btnBuild');
+ await page.click('#btnBuild'); await page.click('#buildMenuOpen');
  await page.waitForSelector('#config .pal[data-add="host"]');
  await page.click('#config .pal[data-add="host"]');
  await page.waitForSelector('#topo .device-label[data-label-kind="name"]');

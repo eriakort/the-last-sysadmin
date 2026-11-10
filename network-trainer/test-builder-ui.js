@@ -63,7 +63,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
 
   // --- enter build mode ---
-  await page.click('#btnBuild'); await page.waitForTimeout(150);
+  await page.click('#btnBuild'); await page.click('#buildMenuOpen'); await page.waitForTimeout(150);
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
   if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
   if (await page.locator('#config .device-palette .pal').count() === 5 && await page.locator('#config .palette-device-icon').count() === 5) ok('five-device palette has compact isometric previews');
@@ -92,20 +92,22 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForFunction(() => new URLSearchParams(location.search).get('view') === 'build');
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#aTitle');
-  // Reload restores the floating terminal; minimize it before continuing canvas authoring.
+  if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
+  // After reload the docked console stays collapsed; collapse it if something opened it.
   if (await page.locator('#terminalWindow:not([hidden])').count()) {
     await page.locator('#terminalMinimize').click();
     await page.waitForSelector('#terminalWindow[hidden]', { state: 'attached' });
   }
-  if (await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('device terminal restore control stays outside the canvas');
-  else fail('device terminal restore control is anchored to the canvas');
+  if (await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#top .build-menu"))) ok('device terminal control lives in the top-bar Build menu, off the canvas');
+  else fail('device terminal control is not in the top-bar Build menu');
   await page.click('#navOverview');
-  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('terminal restore remains available outside the workbench');
-  else fail('terminal restore was hidden with the workbench');
+  if (await page.locator('#btnBuild').isVisible()) ok('Build menu stays available in the header from any workspace');
+  else fail('Build menu disappeared off the workbench');
   await page.click('#btnBuild');
-  if (await page.locator('#terminalRestore').isVisible() && await page.locator('#terminalRestore').evaluate(el=>!!el.closest("#navRail"))) ok('terminal restore remains available outside the canvas when Build opens');
-  else fail('terminal restore is unavailable outside the canvas when Build opens');
-  if (new URLSearchParams(page.url().split('?')[1] || '').get('view') === 'build' && await page.locator('#cols').isVisible()) ok('refresh restores the Build page route'); else fail('refresh did not restore Build page');
+  await page.waitForSelector('#buildMenu:not([hidden])');
+  await page.click('#buildMenuOpen');
+  await page.waitForSelector('#cols:not([hidden])');
+  if (await page.locator('#cols').isVisible()) ok('Build ▾ → Open build workspace reopens the canvas'); else fail('Build menu did not reopen the canvas');
   if (await page.inputValue('#aTitle') === 'Refresh-safe lab' && await page.locator('#topo .node').count() === 2) ok('refresh restores the in-progress topology and authoring details'); else fail('Build draft was not restored after refresh');
   const built = await page.$$eval('#topo .node', ns => ns.map(n => n.dataset.dev));
   if (built.includes('h1') && built.includes('h2')) ok('placed h1 and h2 (' + built.join(', ') + ')'); else fail('endpoints not placed: ' + JSON.stringify(built));

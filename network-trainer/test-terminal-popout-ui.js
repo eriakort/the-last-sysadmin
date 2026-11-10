@@ -1,4 +1,6 @@
-// Browser regression coverage for the persistent floating device terminal.
+// Browser regression coverage for the docked device console and the top-bar
+// "Build ▾" dropdown that opens it. The dropdown is anchored in the fixed header,
+// so its controls stay in a stable place and can never float over the page.
 const path = require('path');
 const { chromium } = require('playwright');
 const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
@@ -13,54 +15,83 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForSelector('#terminalWindow #term', { state: 'attached' });
+
+  // The console is docked inside the workbench and starts collapsed.
+  if (await page.locator('#terminalWindow').isHidden()) ok('device console starts collapsed so the topology has full height');
+  else fail('device console was not collapsed on load');
+
+  // The opener is a menu item in the top-bar "Build ▾" dropdown, closed by default.
+  if (await page.locator('#buildMenu').isHidden()) ok('Build dropdown is closed by default');
+  else fail('Build dropdown was open on load');
+  if (await page.locator('#terminalRestore').evaluate(el => !!el.closest('#top .build-menu'))) ok('Device terminal control lives in the fixed top-bar Build menu, not floating over the page');
+  else fail('Device terminal control is not anchored in the top-bar Build menu');
+
+  // Open the menu and launch the console from it.
+  await page.click('#btnBuild');
+  await page.waitForSelector('#buildMenu:not([hidden])');
+  await page.click('#terminalRestore');
+  await page.waitForFunction(() => document.activeElement?.id === 'tin');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Device terminal opens the docked console and focuses the input');
+  else fail('Build menu did not open the console');
+  if (await page.locator('#buildMenu').isHidden()) ok('selecting a menu item closes the dropdown');
+  else fail('dropdown stayed open after selecting an item');
+
+  // The dock sits below the top toolbar — it can never cover the header.
+  const dockBox = await page.locator('#terminalWindow').boundingBox();
+  const topBox = await page.locator('#top').boundingBox();
+  if (dockBox && topBox && dockBox.y >= topBox.y + topBox.height && dockBox.x + dockBox.width <= 1440) ok('docked console stays below the top toolbar instead of covering header controls');
+  else fail('docked console overlaps the top toolbar');
+
+  // Collapse from the dock titlebar.
+  await page.click('#terminalMinimize');
+  await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
+  ok('console collapses from its titlebar button');
+
+  // Double-click a device opens its console directly (no menu needed).
   await page.waitForSelector('#topo .node');
   const first = page.locator('#topo .node').first();
   const device = await first.getAttribute('data-dev');
   await first.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, device);
-  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its floating terminal');
-  else fail('double-click did not open the floating terminal');
+  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its docked terminal');
+  else fail('double-click did not open the docked terminal');
 
+  // Leaving the workspace hides the workbench, so the console collapses with it.
   await page.click('#navIncidents');
-  if (await page.locator('#terminalWindow').isHidden()) ok('terminal auto-minimizes when leaving the topology workspace so other tools stay visible');
-  else fail('terminal remained open and could cover other workspace tools');
-  const dock = page.locator('#terminalRestore');
-  if (await dock.isVisible() && await dock.evaluate(el => el.parentElement === document.querySelector('#navRail'))) ok('terminal launcher is a dedicated item inside the persistent Workspace navigation');
-  else fail('terminal launcher is not mounted inside the Workspace navigation');
-  const dockBox = await dock.boundingBox(), topBox = await page.locator('#top').boundingBox();
-  const separated = dockBox && topBox && (dockBox.x + dockBox.width <= topBox.x || dockBox.x >= topBox.x + topBox.width || dockBox.y + dockBox.height <= topBox.y || dockBox.y >= topBox.y + topBox.height);
-  if (separated && dockBox.y > topBox.y + topBox.height) ok('terminal launcher stays in the lower-right dock without covering the top toolbar');
-  else fail('terminal launcher is not safely separated from the top toolbar');
+  if (await page.locator('#terminalWindow').isHidden()) ok('console is scoped to the workbench and hidden on other workspaces');
+  else fail('console leaked onto another workspace');
+  // The Build menu stays reachable from the header on any workspace.
+  if (await page.locator('#btnBuild').isVisible()) ok('Build ▾ stays available in the header from any workspace');
+  else fail('Build ▾ disappeared off the workbench');
 
-  await page.click('#terminalRestore');
-  await page.waitForFunction(() => document.activeElement?.id === 'tin');
-  if (await page.locator('#terminalWindow').isVisible()) ok('terminal can be restored and returns focus to the command input');
-  else fail('terminal did not restore');
-  const dockedBox = await page.locator('#terminalWindow').boundingBox();
-  if (dockedBox && dockedBox.y > topBox.y + topBox.height && dockedBox.x + dockedBox.width <= 1440) ok('terminal opens in the lower workspace area instead of covering the header controls');
-  else fail('terminal is not safely positioned outside the top toolbar');
-
+  // From another workspace, Build ▾ → Device terminal returns to the workbench and opens it.
   await page.click('#btnBuild');
+  await page.waitForSelector('#buildMenu:not([hidden])');
+  await page.click('#terminalRestore');
+  await page.waitForSelector('#cols:not([hidden])');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Device terminal from another workspace returns to the workbench and opens the console');
+  else fail('Device terminal did not restore the workbench console');
+
+  // Build mode via the dropdown.
+  await page.click('#btnBuild');
+  await page.waitForSelector('#buildMenu:not([hidden])');
+  await page.click('#buildMenuOpen');
   await page.waitForSelector('#config .pal[data-add="host"]');
   await page.click('#config .pal[data-add="host"]');
   await page.waitForSelector('#topo .node');
-  // Minimize the console to expose the canvas, then double-clicking a device
-  // should reopen it in the topology workspace.
-  await page.click('#terminalMinimize');
-  await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
+  await page.click('#terminalMinimize').catch(() => {});
   const buildDevice = page.locator('#topo .node').first();
   const buildId = await buildDevice.getAttribute('data-dev');
   await buildDevice.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, buildId);
-  if (await page.locator('#terminalWindow').isVisible()) ok('double-click opens the selected device console in Build mode');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Open build workspace enters Build mode and double-click opens the console');
+  else fail('Build workspace or its console did not open from the menu');
 
+  // Mobile: the Build button stays within the viewport.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.click('#navIncidents');
-  if (await page.locator('#terminalWindow').isHidden() && await page.locator('#terminalRestore').isVisible()) ok('mobile navigation keeps the terminal minimized and launcher accessible');
-  else fail('mobile workspace navigation is obstructed by the terminal');
-  const mobileDock = await page.locator('#terminalRestore').boundingBox();
-  if (mobileDock && mobileDock.x >= 0 && mobileDock.x + mobileDock.width <= 390 && mobileDock.y >= 0 && mobileDock.y + mobileDock.height <= 844 && await page.locator('#terminalRestore').evaluate(el => el.parentElement === document.querySelector('#navRail'))) ok('mobile terminal launcher remains accessible as a full-width Workspace navigation item');
-  else fail('mobile terminal launcher is outside the Workspace navigation or viewport');
+  const mobileBtn = await page.locator('#btnBuild').boundingBox();
+  if (mobileBtn && mobileBtn.x >= 0 && mobileBtn.x + mobileBtn.width <= 390 && mobileBtn.y >= 0) ok('mobile Build ▾ button stays inside the viewport');
+  else fail('mobile Build ▾ button is outside the viewport');
 
   await browser.close();
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
