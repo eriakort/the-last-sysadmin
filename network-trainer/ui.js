@@ -271,11 +271,10 @@ function workspaceViewFromUrl() {
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
 function placeTerminalRestore() {
-  const restore = $('#terminalRestore');
-  if (!restore) return;
-  // Keep the launcher directly under body so workspace visibility, rail
-  // reflow, and topology refreshes cannot hide or detach the restore control.
-  if (restore.parentElement !== document.body) document.body.appendChild(restore);
+  const restore = $('#terminalRestore'), rail = $('#navRail');
+  if (!restore || !rail) return;
+  // The persistent Workspace rail owns the terminal entry on every view.
+  if (restore.parentElement !== rail) rail.appendChild(restore);
 }
 function positionTerminalWindow(inWorkbench) {
   const win = $('#terminalWindow');
@@ -1441,14 +1440,20 @@ function wireTopo() {
       else if(e.key==='Enter'||e.key===' '){e.preventDefault();LINK_SEL=Number(el.dataset.linkIndex);refresh();const next=$('#topo .edge[data-link-index="'+LINK_SEL+'"]');if(next)next.focus();}
     }));
     svg.querySelectorAll('.topo-drawing').forEach(el=>el.addEventListener('keydown',e=>{
-      const index=Number(el.dataset.drawingIndex);
+      const index=Number(el.dataset.drawingIndex), item=RUN.net.drawings&&RUN.net.drawings[index];
       if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menuFor(el,'drawing',index);}
       else if(e.key==='Enter'||e.key===' '){e.preventDefault();DRAWING_SEL=index;refresh();const next=$('#topo .topo-drawing[data-drawing-index="'+index+'"]');if(next)next.focus();}
+      else if(canBuild()&&item&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+        e.preventDefault();const step=e.shiftKey?40:10,dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0,dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
+        rememberTopology();if(item.type==='freehand')item.points=item.points.map(p=>[p[0]+dx,p[1]+dy]);else{item.x1=Number(item.x1)+dx;item.y1=Number(item.y1)+dy;item.x2=Number(item.x2)+dx;item.y2=Number(item.y2)+dy;}
+        DRAWING_SEL=index;refresh();const next=$('#topo .topo-drawing[data-drawing-index="'+index+'"]');if(next)next.focus();
+      }
     }));
     svg.querySelectorAll('.topo-note').forEach(el=>el.addEventListener('keydown',e=>{
       const index=Number(el.dataset.noteIndex);
       if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menuFor(el,'note',index);}
       else if(e.key==='Enter'||e.key===' '){e.preventDefault();const note=RUN.net.notes[index];if(!note)return;const value=prompt('Edit topology note (leave blank to remove):',note.text||'');if(value===null)return;rememberTopology();if(!value.trim())RUN.net.notes.splice(index,1);else note.text=value.trim().slice(0,120);refresh();const next=$('#topo .topo-note[data-note-index="'+index+'"]');if(next)next.focus();}
+      else if(canBuild()&&['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const item=RUN.net.notes[index];if(!item)return;const step=e.shiftKey?40:10;rememberTopology();item.x=(Number(item.x)||0)+(e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0);item.y=(Number(item.y)||0)+(e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0);refresh();const next=$('#topo .topo-note[data-note-index="'+index+'"]');if(next)next.focus();}
     }));
   }
   if (svg) svg.addEventListener('dblclick', e => { const labelEl=e.target.closest&&(e.target.closest('.device-label')||(e.target.closest('.device-label-group')&&e.target.closest('.device-label-group').querySelector('.device-label'))), textEl=e.target.closest&&(e.target.closest('.topo-text')||(e.target.closest('.topo-text-group')&&e.target.closest('.topo-text-group').querySelector('.topo-text'))); if(labelEl&&canBuild()){e.preventDefault();editTopologyDeviceLabel(labelEl.dataset.deviceLabel,labelEl.dataset.labelKind);} else if(textEl&&canBuild()){e.preventDefault();editTopologyText(Number(textEl.dataset.textIndex));} });
@@ -1499,9 +1504,16 @@ function wireTopo() {
       const id=n.dataset.dev, rect=n.getBoundingClientRect();
       const openMenu=()=>showTopologyContextMenu({preventDefault(){},stopPropagation(){},clientX:rect.left+rect.width/2,clientY:rect.bottom},'device',{id});
       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openMenu(); return; }
-      if (canBuild() && e.altKey && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
-        e.preventDefault(); const p=nodePos(id), step=e.shiftKey?40:10, dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0, dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
-        rememberTopology(); setPos(id,p[0]+dx,p[1]+dy); refresh(); const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]'); if(next)next.focus(); flashStatus('Moved '+id+' with the keyboard.'); return;
+      if (canBuild() && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const step=e.shiftKey?40:10, dx=e.key==='ArrowLeft'?-step:e.key==='ArrowRight'?step:0, dy=e.key==='ArrowUp'?-step:e.key==='ArrowDown'?step:0;
+        const ids=[...TOPO_SELECTED].filter(x=>RUN.net.devices[x]);
+        if(!ids.includes(id))ids.push(id);
+        rememberTopology();
+        ids.forEach(selectedId=>{const p=nodePos(selectedId);setPos(selectedId,p[0]+dx,p[1]+dy);});
+        refresh();
+        const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]');if(next)next.focus();
+        flashStatus('Moved '+ids.length+' selected device'+(ids.length===1?'':'s')+' with the keyboard.'); return;
       }
       if (canBuild() && (e.key==='c'||e.key==='C')) { e.preventDefault(); WIRE=id; flashStatus('Connection started from '+id+'. Focus another device and press Enter.'); return; }
       if (e.key === 'Enter' || e.key === ' ') {
@@ -2134,7 +2146,7 @@ function mountTerminalWindow() {
   win.id = 'terminalWindow';
   win.className = 'terminal-window';
   win.setAttribute('role', 'region');
-  win.setAttribute('aria-label', 'Floating device terminal');
+  win.setAttribute('aria-label', 'Device terminal');
   win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE</small></span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button></header><div class="terminal-window-content"></div>';
   win.querySelector('.terminal-window-content').appendChild(term);
   win.hidden = true; // Start tucked away so the console never blocks workspace controls.
@@ -2145,8 +2157,7 @@ function mountTerminalWindow() {
   restore.setAttribute('aria-label', 'Open device terminal');
   restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
   restore.hidden = false;
-  // Attach before placeTerminalRestore looks it up by id.
-  document.body.appendChild(restore);
+  // Mount it as a dedicated item in the persistent Workspace navigation.
   placeTerminalRestore(false);
   positionTerminalWindow(false);
   const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
