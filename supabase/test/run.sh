@@ -38,6 +38,11 @@ run "$REPO/supabase/m12-learner-reflections.sql" >/dev/null
 echo "Re-applying m12-learner-reflections.sql (idempotency check)..."
 run "$REPO/supabase/m12-learner-reflections.sql" >/dev/null 2>&1
 
+echo "Applying m13-learning-evidence.sql..."
+run "$REPO/supabase/m13-learning-evidence.sql" >/dev/null
+echo "Re-applying m13-learning-evidence.sql (idempotency check)..."
+run "$REPO/supabase/m13-learning-evidence.sql" >/dev/null 2>&1
+
 echo "Applying m2-enrollment.sql (join-by-code function)..."
 run "$REPO/supabase/m2-enrollment.sql" >/dev/null
 
@@ -66,6 +71,9 @@ echo "Running adversarial RLS tests (M1)..."
 
 echo "Running learner-reflection RLS tests (M12)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m12-learner-reflections-test.sql"
+
+echo "Running append-only learning-evidence RLS tests (M13)..."
+"${PSQL[@]}" -d "$DB" -f "$HERE/m13-learning-evidence-test.sql"
 
 echo "Running join-by-code tests (M2)..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/m2-enroll-test.sql"
