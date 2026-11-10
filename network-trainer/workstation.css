@@ -682,3 +682,9 @@ body>.terminal-restore{position:fixed;z-index:1001;top:18px;right:18px;bottom:au
 /* Keep action controls legible when the light Paper palette is active. */
 :root[data-theme="paper"] .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
 :root[data-theme="paper"] #top .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
+
+/* Paper theme must override legacy button backgrounds in the workstation shell. */
+:root[data-theme="paper"] #btnSearch,
+:root[data-theme="paper"] #btnQueue,
+:root[data-theme="paper"] #btnHelp,
+:root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
