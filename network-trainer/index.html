@@ -235,12 +235,11 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 @media(max-width:650px){.queue-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-ticket{grid-template-columns:1fr}.qt-actions{justify-content:flex-start}.queue-toolbar .dim{width:100%;margin:0}}
 @media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
 </style><link rel="stylesheet" href="./workstation.css"></head>
-<body><div id="app"></div><script>
-// ---- tiny CommonJS shim ----
+<body><div id="app"></div><script>// ---- tiny CommonJS shim ----
 var __mods = {};
 function __def(id, fn){ var m = { exports: {} }; fn(m, m.exports, require); __mods[id] = m; }
 function require(id){ if(!__mods[id]) throw new Error('module not found: '+id); return __mods[id].exports; }
-__def("./../src/feedback", function(module, exports, require){
+__def("./src/feedback", function(module, exports, require){
 'use strict';
 (function (root, factory) {
   const api = factory();
@@ -4856,10 +4855,10 @@ function workspaceViewFromUrl() {
 function placeTerminalRestore(inWorkbench) {
   const restore = $('#terminalRestore');
   if (!restore) return;
-  if (inWorkbench) {
-    const canvas = $('#topoWrap');
-    if (canvas) { canvas.appendChild(restore); return; }
-  }
+  // Keep the launcher outside #topoWrap: refresh() replaces that canvas markup,
+  // which would otherwise destroy the launcher during normal terminal commands.
+  // The navigation rail remains available in every workspace and keeps the
+  // launcher clear of the page toolbar on small screens.
   const rail = $('#navRail');
   if (rail) {
     const spacer = rail.querySelector('.nav-spacer');
