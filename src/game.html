@@ -8084,15 +8084,18 @@ async function cxLoad() {
 async function loadFeedback(classId, studentId) {
   const sb = await getSB(); if (!sb) return [];
   try {
-    let q = sb.from('feedback').select('id, body, created_at, author_id, student_id, profiles!feedback_author_id_fkey(display_name)').eq('class_id', classId);
+    let q = sb.from('feedback').select('id, body, created_at, author_id, student_id, assignment_id, mission_id, profiles!feedback_author_id_fkey(display_name)').eq('class_id', classId);
     if (studentId) q = q.eq('student_id', studentId);
     const { data, error } = await q.order('created_at', { ascending: false });
     return error ? [] : (data || []);
   } catch (e) { return []; }
 }
-async function addFeedback(classId, studentId, body) {
+async function addFeedback(classId, studentId, body, assignmentId, missionId) {
   const sb = await getSB(); if (!sb) return { error: { message: 'Not connected' } };
-  return sb.from('feedback').insert({ class_id: classId, student_id: studentId, author_id: authUser.id, body: body.trim() });
+  return sb.from('feedback').insert({
+    class_id: classId, student_id: studentId, author_id: authUser.id,
+    assignment_id: assignmentId || null, mission_id: missionId || null, body: body.trim()
+  });
 }
 async function loadMyScenarios() {
   const sb = await getSB(); if (!sb || !authUser) return [];
@@ -8183,7 +8186,11 @@ async function openClassroom() {
         asnHtml = '<p class="cx-dim">No assignments yet.</p>';
       }
       let fbHtml = fbs.length
-        ? fbs.map(f => `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span><br>${esc(f.body)}</div></div>`).join('')
+        ? fbs.map(f => {
+            const linkedAssignment = asns.find(a => a.id === f.assignment_id);
+            const context = [linkedAssignment ? 'Assignment: ' + linkedAssignment.title : '', f.mission_id ? 'Mission: ' + f.mission_id : ''].filter(Boolean).join(' · ');
+            return `<div class="cx-item"><div><b>${esc(f.profiles?.display_name || 'Teacher')}</b> <span class="cx-dim">· ${new Date(f.created_at).toLocaleString()}</span>${context ? `<div class="cx-dim" style="margin:3px 0">${esc(context)}</div>` : ''}<div>${esc(f.body)}</div></div></div>`;
+          }).join('')
         : '<p class="cx-dim">No feedback yet.</p>';
       studentDash += `<div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:8px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><span style="font-weight:600">${esc(cname)}${e.role==='ta'?' <span class="cx-badge">TA</span>':''}</span>${playBtn}</div>
@@ -8389,6 +8396,14 @@ async function openClassroom() {
               <select id="fbStudent" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
                 ${roster.map(e => `<option value="${esc(e.user_id)}">${esc(e.profiles?.display_name || e.user_id)}</option>`).join('')}
               </select>
+              <select id="fbAssignment" aria-label="Feedback assignment" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
+                <option value="">General class feedback</option>
+                ${asns.map(a => `<option value="${esc(a.id)}">${esc(a.title)}</option>`).join('')}
+              </select>
+              <select id="fbMission" aria-label="Feedback mission" style="font:inherit;background:var(--raise);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:4px">
+                <option value="">No specific mission</option>
+                ${[...new Map(asns.flatMap(a => (a.mission_ids || []).map(id => [id, { id, assignment: a.id, title: a.title }])).values()].map(m => `<option value="${esc(m.id)}" data-assignment="${esc(m.assignment)}">${esc(m.id)} · ${esc(m.title)}</option>`).join('')}
+              </select>
               <input id="fbBody" type="text" placeholder="Leave feedback…">
               <button class="btn primary" id="fbSend" type="button">Send feedback</button>
             </div>`;
@@ -8568,14 +8583,31 @@ async function openClassroom() {
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (window._cxClass||'class')+'-gradebook.csv'; a.click();
   });
+  const fbAssignment = $('#fbAssignment'), fbMission = $('#fbMission');
+  if (fbAssignment && fbMission) fbAssignment.addEventListener('change', () => {
+    [...fbMission.options].forEach(option => {
+      if (!option.value) { option.hidden = false; return; }
+      option.hidden = !!fbAssignment.value && option.dataset.assignment !== fbAssignment.value;
+    });
+    if (fbMission.selectedOptions[0]?.hidden) fbMission.value = '';
+  });
   const fbBtn = $('#fbSend');
   if (fbBtn) fbBtn.addEventListener('click', async () => {
     const sid = ($('#fbStudent')||{}).value;
+    const assignmentId = ($('#fbAssignment')||{}).value || null;
+    const missionId = ($('#fbMission')||{}).value || null;
     const body = ($('#fbBody')||{}).value?.trim() || '';
     const er = $('#cxErr');
     if (!sid || !body) { if (er) { er.hidden = false; er.textContent = 'Pick a student and write a comment.'; } return; }
     if (!d.owned.length) return;
-    const { error } = await addFeedback(d.owned[0].id, sid, body);
+    if (assignmentId && missionId) {
+      const assignment = await loadAssignments(d.owned[0].id).then(items => items.find(a => a.id === assignmentId));
+      if (!assignment || !(assignment.mission_ids || []).includes(missionId)) {
+        if (er) { er.hidden = false; er.textContent = 'Choose a mission that belongs to the selected assignment.'; }
+        return;
+      }
+    }
+    const { error } = await addFeedback(d.owned[0].id, sid, body, assignmentId, missionId);
     if (error) { if (er) { er.hidden = false; er.textContent = error.message; } return; }
     openClassroom();
   });
