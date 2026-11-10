@@ -136,6 +136,10 @@ button{font:inherit;cursor:pointer}
 .cx-reflection-meta{font-size:10px;color:var(--muted);margin-bottom:6px}
 .cx-reflection p{margin:2px 0 7px;white-space:pre-wrap}
 .cx-reflection strong{font-size:11px;color:var(--ink)}
+.cx-cohort-insight{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:7px 0 12px}
+.cx-cohort-metric{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);min-width:0}
+.cx-cohort-metric strong{display:block;font-size:18px;color:var(--ink);line-height:1.3}
+.cx-cohort-metric span{display:block;font-size:11px;color:var(--muted);margin-top:3px}
 
 .skill-progress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .skill-progress h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
@@ -8448,6 +8452,34 @@ async function openClassroom() {
               }).join('')
             : '';
           const classReflections = await loadLearnerReflections(cid);
+          // Cohort pulse uses only enrolled student rows and assignment-scoped attempt evidence.
+          // Missing attempts/reflections are reported as missing evidence, never as zero mastery.
+          const cohortStudents = roster.filter(member => member.role === 'student');
+          const cohortStudentIds = new Set(cohortStudents.map(member => member.user_id));
+          const cohortAttempts = assigned.size
+            ? (atts || []).filter(attempt => assigned.has(attempt.mission_id) && cohortStudentIds.has(attempt.user_id))
+            : [];
+          const activeCohortLearners = new Set(cohortAttempts.map(attempt => attempt.user_id));
+          const cohortPasses = cohortAttempts.filter(attempt => attempt.passed).length;
+          const reflectedCohortLearners = new Set(classReflections
+            .filter(reflection => cohortStudentIds.has(reflection.user_id))
+            .map(reflection => reflection.user_id));
+          const activityValue = cohortStudents.length
+            ? activeCohortLearners.size + '/' + cohortStudents.length + ' active'
+            : 'No learners';
+          const outcomesValue = cohortAttempts.length
+            ? Math.round(cohortPasses / cohortAttempts.length * 100) + '%'
+            : 'Not enough evidence';
+          const reflectionValue = cohortStudents.length
+            ? reflectedCohortLearners.size + '/' + cohortStudents.length + ' learners'
+            : 'No learners';
+          const cohortInsightHtml = '<div class="rlabel" style="margin-top:14px">Cohort insight</div>' +
+            '<p class="cx-dim" style="margin:0 0 7px">A class-level snapshot of recorded activity. These are formative signals, not grades; missing records do not imply a learner has not learned.</p>' +
+            '<div class="cx-cohort-insight">' +
+              '<div class="cx-cohort-metric" data-cohort-metric="activity"><strong>' + esc(activityValue) + '</strong><span>Learners with at least one assigned mission attempt</span></div>' +
+              '<div class="cx-cohort-metric" data-cohort-metric="outcomes"><strong>' + esc(outcomesValue) + '</strong><span>' + cohortPasses + ' passed from ' + cohortAttempts.length + ' recorded assigned attempts</span></div>' +
+              '<div class="cx-cohort-metric" data-cohort-metric="reflections"><strong>' + esc(reflectionValue) + '</strong><span>Learners who submitted a reflection; no reflection is not a learning judgement</span></div>' +
+            '</div>';
           const reflectionInsightHtml = '<div class="rlabel" style="margin-top:14px">Learner reflections &amp; evidence</div>' +
             '<p class="cx-dim" style="margin:0 0 7px">Learner-reported notes help guide coaching. They are not verified grades or proof of production work.</p>' +
             (classReflections.length
