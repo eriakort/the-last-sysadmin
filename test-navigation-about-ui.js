@@ -47,7 +47,11 @@ const BUILD = fs.readFileSync(path.join(process.cwd(), 'src/version.txt'), 'utf8
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
     header: document.querySelector('.top')?.getBoundingClientRect().width,
-    stats: document.querySelector('.stats')?.getBoundingClientRect().width
+    stats: document.querySelector('.stats')?.getBoundingClientRect().width,
+    offenders: [...document.querySelectorAll('body *')].map(el => {
+      const r = el.getBoundingClientRect();
+      return {tag:el.tagName,id:el.id,cls:typeof el.className==='string'?el.className:'',left:Math.round(r.left*10)/10,right:Math.round(r.right*10)/10,width:Math.round(r.width*10)/10,scrollWidth:el.scrollWidth};
+    }).filter(x => x.right > window.innerWidth + 1 || x.left < -1 || x.scrollWidth > x.width + 1).sort((a,b)=>b.right-a.right).slice(0,20)
   }));
   if (layout.document <= layout.viewport && layout.header <= layout.viewport && layout.stats <= layout.viewport)
     ok('compact toolbar fits a 390px viewport without horizontal overflow');
