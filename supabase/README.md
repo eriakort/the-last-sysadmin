@@ -42,7 +42,7 @@ M11 is a required deployment migration. Until it is applied to the connected Sup
 
 - **Open professor sign-up:** any signed-in user can set their *own* `is_teacher` and start creating classes. No one can set it on anyone else.
 - **Tenant isolation:** a teacher sees only their own classes and the students in them. No teacher, TA, or student can read or write another tenant's rosters, attempts, grades, or feedback.
-- **Privacy split:** a profile is a public handle (display name + avatar — the race leaderboard already shows it). The sensitive data (enrollments, attempts, feedback) is private to the student and their class staff. Email stays in `auth.users` and is never exposed through these tables.
+- **Privacy split:** a profile is a public handle (display name + avatar — the race leaderboard already shows it). The sensitive data (enrollments, attempts, feedback, learner reflections and task evidence) is private to the student and their class staff. Email stays in `auth.users` and is never exposed through these tables.
 - **Formative grading:** auto-grades are practice/participation only, so the anon-key + RLS stack is sufficient. Tamper-resistant grading (Edge Functions) is deliberately deferred.
 
 ## Testing the policies
@@ -56,6 +56,7 @@ it should and nothing it shouldn't. It covers:
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
 - **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
+- **M12** — learner reflections: own-row access, class-owner/TA read access, cross-class denial, and assignment/mission consistency.
 - **Network Trainer** — author-only scenario CRUD, mixed-assignment filtering, class-member delivery, outsider denial, and anonymous execution denial.
 
 It runs against a **local Postgres** (not your Supabase project): `test/shim.sql`
