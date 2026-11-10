@@ -42,11 +42,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
             : state.table === 'classes'
             ? [{ id: 'c9', name: 'My Course', term: 'F26', join_code: 'ABC123', created_at: '2026-01-01' }]
             : state.table === 'assignments'
-            ? [{ id: 'a1', title: 'Linux fundamentals', mission_ids: ['1-1', '1-2'], due_at: null }]
+            ? [{ id: 'a1', title: 'Linux fundamentals', mission_ids: ['1-1', '1-2', 'network-vlan', 'network-dhcp'], due_at: null }]
             : state.table === 'attempts'
             ? [
                 { user_id: 'u-student', mission_id: '1-1', passed: true, hints: 0, updated_at: '2026-11-10T10:00:00Z' },
-                { user_id: 'u-student', mission_id: '1-2', passed: false, hints: 1, updated_at: '2026-11-10T10:05:00Z' }
+                { user_id: 'u-student', mission_id: '1-2', passed: false, hints: 1, updated_at: '2026-11-10T10:05:00Z' },
+                { user_id: 'u-student', mission_id: 'network-vlan', passed: true, hints: 1, updated_at: '2026-11-10T10:10:00Z' },
+                { user_id: 'u-student', mission_id: 'network-dhcp', passed: false, hints: 2, updated_at: '2026-11-10T10:15:00Z' }
               ]
             : [];
           return Promise.resolve({ data, error: null }).then(res);
@@ -108,10 +110,10 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('assignment mastery evidence incorrect: ' + assignmentText);
 
   const diagnostics = page.locator('.cx-skill-diagnostic');
-  if (await diagnostics.count() === 1) ok('Teacher sees evidence-backed skill diagnostics');
+  if (await diagnostics.count() === 2) ok('Teacher sees Linux and network skill diagnostics');
   else fail('skill diagnostics missing or unexpected count: ' + await diagnostics.count());
   const diagnosticText = await page.locator('#raceContent').textContent();
-  if (/Navigation/.test(diagnosticText) && /1\\/2 passed/.test(diagnosticText) && /Revisit mission 1-2/.test(diagnosticText)) ok('Skill diagnostic maps chapter evidence and recommends the failed mission');
+  if (/Navigation/.test(diagnosticText) && /Network operations/.test(diagnosticText) && /Revisit mission 1-2/.test(diagnosticText) && /Revisit mission network-dhcp/.test(diagnosticText)) ok('Skill diagnostics map Linux and network evidence to targeted practice');
   else fail('skill diagnostic evidence or recommendation incorrect: ' + diagnosticText);
 
   // Join by code (Join tab is the default)
