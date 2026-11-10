@@ -140,6 +140,7 @@ button{font:inherit;cursor:pointer}
 .cx-cohort-metric{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);min-width:0}
 .cx-cohort-metric strong{display:block;font-size:18px;color:var(--ink);line-height:1.3}
 .cx-cohort-metric span{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+.cx-cohort-trends{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel);margin:7px 0 12px}.cx-cohort-trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}.cx-cohort-trend{background:var(--raise);border-radius:6px;padding:8px}.cx-cohort-trend strong{display:block;font:600 17px var(--f-display);color:var(--ink)}.cx-cohort-trend span{display:block;font-size:11px;color:var(--muted)}.cx-cohort-hotspot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--line);font-size:12px}
 
 .skill-progress-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .skill-progress h2{font:600 15px var(--f-display);color:var(--amber);margin:0}
@@ -8481,6 +8482,53 @@ async function openClassroom() {
           // Missing attempts/reflections are reported as missing evidence, never as zero mastery.
           const cohortStudents = roster.filter(member => member.role === 'student');
           const cohortStudentIds = new Set(cohortStudents.map(member => member.user_id));
+          // Read only this class's assigned mission evidence; RLS independently enforces staff access.
+          let cohortEvidence = [];
+          if (assigned.size) {
+            try {
+              const { data: evidenceRows, error: evidenceError } = await (await getSB()).from('learning_evidence')
+                .select('user_id, mission_id, event_type, created_at')
+                .eq('class_id', cid).in('mission_id', [...assigned])
+                .gte('created_at', new Date(Date.now() - 30 * 864e5).toISOString())
+                .order('created_at', { ascending: false });
+              if (!evidenceError) cohortEvidence = (evidenceRows || []).filter(event =>
+                cohortStudentIds.has(event.user_id) && assigned.has(event.mission_id));
+            } catch (e) { cohortEvidence = []; }
+          }
+          const evidenceNow = Date.now();
+          const recentEvidence = cohortEvidence.filter(event => {
+            const at = new Date(event.created_at).getTime();
+            return Number.isFinite(at) && at >= evidenceNow - 14 * 864e5;
+          });
+          const previousEvidence = cohortEvidence.filter(event => {
+            const at = new Date(event.created_at).getTime();
+            return Number.isFinite(at) && at >= evidenceNow - 28 * 864e5 && at < evidenceNow - 14 * 864e5;
+          });
+          const eventCount = (events, type) => events.filter(event => event.event_type === type).length;
+          const recentCompletions = eventCount(recentEvidence, 'mission_completed');
+          const previousCompletions = eventCount(previousEvidence, 'mission_completed');
+          const recentHints = eventCount(recentEvidence, 'hint_requested');
+          const previousHints = eventCount(previousEvidence, 'hint_requested');
+          const hintHotspots = Object.entries(cohortEvidence.reduce((groups, event) => {
+            if (event.event_type !== 'hint_requested') return groups;
+            const group = groups[event.mission_id] = groups[event.mission_id] || { requests: 0, learners: new Set() };
+            group.requests++;
+            group.learners.add(event.user_id);
+            return groups;
+          }, {})).map(([missionId, stats]) => ({ missionId, ...stats }))
+            .filter(item => item.requests >= 2)
+            .sort((a, b) => b.requests - a.requests || b.learners.size - a.learners.size)
+            .slice(0, 4);
+          const cohortTrendHtml = '<div class="rlabel" style="margin-top:14px">Learning activity · last 14 days</div>' +
+            '<p class="cx-dim" style="margin:0 0 7px">Compared with the previous 14 days. Counts reflect recorded events only, not total practice or learning.</p>' +
+            '<div class="cx-cohort-trends" data-cohort-trends><div class="cx-cohort-trend-grid">' +
+              '<div class="cx-cohort-trend" data-trend="completions"><strong>' + recentCompletions + '</strong><span>Mission completions · ' + (recentCompletions - previousCompletions >= 0 ? '+' : '') + (recentCompletions - previousCompletions) + ' vs previous period</span></div>' +
+              '<div class="cx-cohort-trend" data-trend="hints"><strong>' + recentHints + '</strong><span>Hint requests · ' + (recentHints - previousHints >= 0 ? '+' : '') + (recentHints - previousHints) + ' vs previous period</span></div>' +
+            '</div><div class="rlabel" style="margin-top:10px">Repeated hint requests · last 30 days</div>' +
+            '<p class="cx-dim" style="margin:0 0 4px">A prompt to review or clarify a mission, not proof of a misconception.</p>' +
+            (hintHotspots.length ? hintHotspots.map(item => '<div class="cx-cohort-hotspot"><code>' + esc(item.missionId) + '</code><span>' + item.requests + ' requests · ' + item.learners.size + ' learners</span></div>').join('') :
+              '<p class="cx-dim" data-no-hint-hotspots>No repeated hint-request pattern is supported by the current evidence.</p>') +
+            '</div>';
           const cohortAttempts = assigned.size
             ? (atts || []).filter(attempt => assigned.has(attempt.mission_id) && cohortStudentIds.has(attempt.user_id))
             : [];
@@ -8518,7 +8566,7 @@ async function openClassroom() {
                     (r.next_step ? '<strong>Next step</strong><p>' + esc(r.next_step) + '</p>' : '') + '</article>';
                 }).join('')
               : '<p class="cx-dim">No learner reflections have been shared in this class yet.</p>');
-          dashHtml = analyticsHtml + skillDiagnosticsHtml + cohortInsightHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
+          dashHtml = analyticsHtml + skillDiagnosticsHtml + cohortInsightHtml + cohortTrendHtml + assignmentInsightHtml + reflectionInsightHtml + `<div class="rlabel" style="margin-top:14px">Admin · Roster · ${esc(d.owned[0].name)} <button class="btn sm" id="cxCsv" type="button" style="margin-left:8px">Export CSV</button></div>
             <div class="cx-form" style="margin:6px 0 10px">
               <input id="addEmail" type="email" placeholder="student@example.com">
               <button class="btn primary" id="addStudent" type="button">Add student</button>
