@@ -10,13 +10,13 @@ Run these **in order**. All are safe to re-run.
 1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard).
 2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
 3. **`m12-learner-reflections.sql`** — M12: private learner-authored reflections with optional assignment/mission context and learner/class-staff RLS.
-3. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
-4. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
-5. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
-6. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
-7. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
-8. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
-9. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
+4. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
+5. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
+6. **`m6-missions.sql`** — M6: `authored_missions` (the no-code mission editor's storage).
+7. **`m7-scenarios.sql`** — M7: `scenarios` (groups of authored missions).
+8. **`m10-authored-delivery.sql`** — delivery: `get_class_missions()` so students can read (and play) the authored missions assigned to their class.
+9. **`net-scenarios.sql`** — Network Trainer classroom scenario storage and class-member-only delivery. Run after M10; it reuses the shared classroom assignments table.
+10. **`m11-transactional-progress-sync.sql`** — atomic `merge_progress()` RPC, recursive filesystem merge, deletion tombstones, and RPC-only progress writes.
 
 Skipping any of 3–10 leaves the matching feature broken (join-by-code, add-by-email, the mission editor, the scenario builder, playing custom missions, Network Trainer classroom delivery), since the function or table it needs won't exist. M3 (assignments) and M5 (feedback) need no new SQL — their tables ship in `m1-classroom.sql`. M12 is additive and can be applied after M1; it does not change existing progress or attempt records.
 
