@@ -1416,7 +1416,8 @@ function wireTopo() {
   // Arrow-key movement for any selected canvas objects (devices, texts, labels)
   if (!window._topoArrowBound) {
     document.addEventListener('keydown', e => {
-      if (!canBuild() || !RUN || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+      if (!canBuild() || !RUN || document.querySelector('.topo-context-menu') || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+      if (!TOPO_SELECTED.size && !TEXT_SELECTED.size && !LABEL_SELECTED.size) return;
       e.preventDefault();
       const step = e.shiftKey ? 40 : 10;
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
