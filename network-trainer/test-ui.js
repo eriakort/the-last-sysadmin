@@ -80,8 +80,15 @@ let URL;
   if ((await page.getAttribute('#status', 'class')) === 'bad') ok('Check shows unresolved before the fix');
   else fail('expected unresolved status before the fix');
 
-  // The floating console starts minimized; explicitly open it before using commands.
-  await page.click('#terminalRestore'); await page.waitForSelector('#terminalWindow:not([hidden])');
+  // The console may already be open if the startup route restored an active session.
+  // Open it only when the launcher is visible; do not wait on a hidden launcher.
+  const terminalWindow = page.locator('#terminalWindow');
+  await page.waitForSelector('#terminalWindow');
+  if (await terminalWindow.isHidden()) {
+    await page.waitForSelector('#terminalRestore:visible');
+    await page.click('#terminalRestore');
+  }
+  await page.waitForSelector('#terminalWindow:not([hidden])');
 
   // --- solve via the TERMINAL (console is h1 by default) ---
   await page.fill('#tin', 'ip addr add 10.0.1.10/24 dev eth0');
