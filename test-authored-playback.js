@@ -71,6 +71,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.waitForTimeout(600);
 
   // Open classroom -> My dashboard tab
+  await page.locator('#menuHelp summary').click();
   await page.click('#btnSettings'); await page.waitForTimeout(150);
   await page.click('#setClassroom'); await page.waitForTimeout(400);
   await page.click('#cxTabs [data-cxtab="dash"]'); await page.waitForTimeout(300);

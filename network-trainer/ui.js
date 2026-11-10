@@ -3,7 +3,7 @@
 // terminal + mission flow, now with saved progress, XP, ranks, a hints economy,
 // themes, and settings — the sysadmin game's "feel".
 const M = require('./net-model');
-const F = require('./../src/feedback');
+const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
@@ -270,6 +270,37 @@ function workspaceViewFromUrl() {
   const requested = new URLSearchParams(window.location.search).get('view');
   return WORKSPACE_VIEWS.has(requested) ? requested : 'overview';
 }
+function placeTerminalRestore() {
+  const restore = $('#terminalRestore');
+  if (!restore) return;
+  // Keep the launcher directly under body so workspace visibility, rail
+  // reflow, and topology refreshes cannot hide or detach the restore control.
+  if (restore.parentElement !== document.body) document.body.appendChild(restore);
+}
+function positionTerminalWindow(inWorkbench) {
+  const win = $('#terminalWindow');
+  if (!win) return;
+  if (inWorkbench) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}') || {}; } catch (_) {}
+    if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+      win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
+      win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
+      win.style.right = 'auto'; win.style.bottom = 'auto';
+    } else {
+      win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '22px'; win.style.bottom = '18px';
+    }
+    win.style.width = ''; win.style.height = '';
+  } else {
+    // Outside the topology workspace, keep the console docked low on screen.
+    // The navigation rail owns its launcher, so no header controls are covered.
+    win.style.left = 'auto'; win.style.top = 'auto'; win.style.right = '16px'; win.style.bottom = '16px';
+  }
+  const hint = win.querySelector('.terminal-window-titlebar small');
+  if (hint) hint.textContent = inWorkbench ? 'DRAG TO MOVE' : 'DOCKED · WORKSPACE NAVIGATION STAYS CLEAR';
+  const bar = win.querySelector('.terminal-window-titlebar');
+  if (bar) bar.style.cursor = inWorkbench ? 'move' : 'default';
+}
 function showWorkspaceView(view, options = {}) {
   if (!WORKSPACE_VIEWS.has(view)) view = 'overview';
   const historyMode = options.historyMode || 'push';
@@ -292,8 +323,17 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
-  const terminalRestore=$('#terminalRestore');
-  if(terminalRestore) (view==='workbench'||view==='build' ? $('#topoWrap') : document.body).appendChild(terminalRestore);
+  const inWorkbench = view === 'workbench' || view === 'build';
+  placeTerminalRestore(inWorkbench);
+  positionTerminalWindow(inWorkbench);
+  const terminalWindow = $('#terminalWindow');
+  if (!inWorkbench && terminalWindow && !terminalWindow.hidden) {
+    terminalWindow.hidden = true;
+  }
+  // Keep the launcher and window in sync after every workspace transition.
+  // The launcher is the only way back to a minimized terminal.
+  const terminalRestore = $('#terminalRestore');
+  if (terminalRestore && terminalWindow) terminalRestore.hidden = !terminalWindow.hidden;
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -1063,9 +1103,9 @@ function wireSessionTabs() {
 }
 function refreshFlows() { const fw = $('#flows'); if (fw) fw.outerHTML = renderFlows(); }
 function refresh() {
-  const terminalRestore=$('#terminalRestore');
   $('#topoWrap').innerHTML = renderTopo();
-  if(terminalRestore)$('#topoWrap').appendChild(terminalRestore);
+  const cols = $('#cols');
+  placeTerminalRestore(!!(cols && !cols.hidden));
   refreshFlows(); $('#config').innerHTML = renderConfig();
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
@@ -2100,22 +2140,23 @@ function mountTerminalWindow() {
   win.hidden = true; // Start tucked away so the console never blocks workspace controls.
   document.body.appendChild(win);
   const restore = document.createElement('button');
-  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore btn primary';
-  restore.textContent = '▣ Device terminal'; restore.setAttribute('aria-label', 'Open device terminal');
-  restore.hidden = false; const cols=$('#cols'); (cols&&!cols.hidden ? $('#topoWrap') : document.body).appendChild(restore);
-  const saved = (() => { try { return JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) { return {}; } })();
-  if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-    win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
-    win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
-    win.style.right = 'auto'; win.style.bottom = 'auto';
-  }
+  restore.type = 'button'; restore.id = 'terminalRestore'; restore.className = 'terminal-restore nav-item';
+  restore.innerHTML = '<span class="nav-glyph" aria-hidden="true">▣</span><span>Device terminal</span>';
+  restore.setAttribute('aria-label', 'Open device terminal');
+  restore.title = 'Open the persistent device console. It stays minimized when you switch workspaces.';
+  restore.hidden = false;
+  // Attach before placeTerminalRestore looks it up by id.
+  document.body.appendChild(restore);
+  placeTerminalRestore(false);
+  positionTerminalWindow(false);
   const minimize = () => { win.hidden = true; restore.hidden = false; restore.focus(); };
   $('#terminalMinimize').addEventListener('click', minimize);
   restore.addEventListener('click', () => openTerminalWindow(true));
   const bar = win.querySelector('.terminal-window-titlebar');
   let drag = null;
   bar.addEventListener('pointerdown', e => {
-    if (e.target.closest('button') || e.button !== 0) return;
+    const cols = $('#cols');
+    if (!cols || cols.hidden || e.target.closest('button') || e.button !== 0) return;
     const rect = win.getBoundingClientRect();
     drag = { x:e.clientX, y:e.clientY, left:rect.left, top:rect.top };
     bar.setPointerCapture(e.pointerId); e.preventDefault();
@@ -2138,6 +2179,8 @@ function mountTerminalWindow() {
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow'), restore = $('#terminalRestore');
   if (!win) return;
+  const cols = $('#cols');
+  positionTerminalWindow(!!(cols && !cols.hidden));
   win.hidden = false;
   if (restore) restore.hidden = true;
   win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
@@ -2645,8 +2688,8 @@ function boot() {
       <div class="apphdr">
         <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
         <nav class="apptabs" aria-label="Application navigation">
-          <a class="apptab" href="../"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
-          <a class="apptab on" href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
+          <a class="apptab" href="../" title="Return to Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+          <a class="apptab on" href="#" aria-current="page" title="Current Network Sysadmin workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
         </nav>
       </div>
       <div class="hud"><button id="btnSearch" class="btn palette-launch" title="Search workstation (Ctrl+K)">⌕ Search <kbd>Ctrl K</kbd></button><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>

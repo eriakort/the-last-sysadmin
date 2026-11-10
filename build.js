@@ -21,15 +21,19 @@ const read = f => fs.readFileSync(path.join(SRC, f), 'utf8');
 
 function build() {
   const head = read('shell-head.html');
-  const game = read('game.html');
+  const version = read('version.txt').trim();
+  const packageVersion = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
+  const game = read('game.html')
+    .replace(/__APP_VERSION__/g, packageVersion)
+    .replace(/__APP_BUILD__/g, version);
   const tail = read('shell-tail.html');
   const swTemplate = read('service-worker.js');
-  const version = read('version.txt').trim();
 
   // guards — fail loudly rather than ship something broken
   if (!/^\d+$/.test(version)) throw new Error(`src/version.txt must be a number, got "${version}"`);
   if (!game.includes('<div class="app">')) throw new Error('src/game.html is missing <div class="app"> — wrong source?');
   if (!game.includes('boot(load())')) throw new Error('src/game.html is missing boot(load()) — wrong source?');
+  if (game.includes('__APP_VERSION__') || game.includes('__APP_BUILD__')) throw new Error('src/game.html contains an unresolved version token');
   if (!head.includes('<link rel="manifest"')) throw new Error('src/shell-head.html is missing the manifest link');
   if (!swTemplate.includes('__VERSION__')) throw new Error('src/service-worker.js is missing the __VERSION__ placeholder');
 

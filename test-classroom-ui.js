@@ -88,6 +88,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   const ok = m => console.log('  ✓ ' + m);
 
   // Open Settings
+  await page.locator('#menuHelp summary').click();
   await page.click('#btnSettings');
   await page.waitForTimeout(150);
   if (await page.$('#setClassroom')) ok('Settings shows "Open classroom" when signed in');
@@ -165,6 +166,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('rpc enroll_by_code not called correctly: ' + JSON.stringify(rpc));
 
   // Create class (in the Teach tab)
+  await page.locator('#menuHelp summary').click();
   await page.click('#btnSettings'); await page.waitForTimeout(120);
   await page.click('#setClassroom'); await page.waitForTimeout(250);
   await page.click('#cxTabs [data-cxtab="teach"]'); await page.waitForTimeout(150);

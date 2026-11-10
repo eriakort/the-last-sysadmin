@@ -81,6 +81,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (!(await page.locator('#mistakeCoach').isVisible())) ok('mistake feedback clears after the next command');
   else fail('stale Linux mistake feedback remained after a new command');
 
+  await page.locator('#menuProgress summary').click();
   await page.click('#btnHealthDashboard');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible() && (await page.textContent('#serverHealthDialog')).includes('Service dependency view'))
     ok('server health dashboard opens with a service dependency view');
@@ -103,6 +104,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.inputValue('#tin') === 'systemctl --failed' && await page.locator('#tout .cmdl').count() === terminalLinesBefore)
     ok('troubleshooting prepares a command without executing it');
   else fail('troubleshooting command was not safely prepared in the terminal');
+  await page.locator('#menuProgress summary').click();
   await page.click('#btnHealthDashboard');
   await page.click('#healthRefresh');
   if (await page.locator('#serverHealthDialog [role="dialog"]').isVisible()) ok('dashboard refreshes on demand without background polling');

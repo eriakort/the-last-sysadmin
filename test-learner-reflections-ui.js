@@ -50,6 +50,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   });
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(500);
+  await page.locator('#menuHelp summary').click();
   await page.click('#btnSettings');
   await page.waitForTimeout(100);
   await page.click('#setClassroom');
