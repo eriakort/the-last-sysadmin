@@ -1099,6 +1099,47 @@ const chapters = [
     ],
     solution: [['r1','enable'],['r1','show access-lists INCIDENT-IN'],['r1','configure terminal'],['r1','ip access-list extended INCIDENT-IN'],['r1','no 10'],['r1','no 20'],['r1','no 30'],['r1','10 deny tcp host 198.51.100.200 host 10.0.2.10 eq 22'],['r1','20 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','30 permit tcp any host 10.0.2.20 eq 443'],['r1','40 deny ip any any'],['r1','end'],['r1','show access-lists INCIDENT-IN'],['r1','write memory']]
   },
+
+  // --- Design-from-requirements: the learner BUILDS the topology to meet a spec,
+  // using the canvas (device library + Wire devices), and is graded on the outcome.
+  // `mode: 'design'` enables the build tools for the mission; `solution` is a
+  // function that programmatically builds the reference answer so the solvability
+  // test can prove the mission is winnable.
+  { id: 'design-two-subnet', chapter: 'Design · build to spec', mode: 'design',
+    title: 'Design a routed two-subnet network',
+    story: 'Two departments each need their own subnet, but both must reach the shared file server. The two endpoints are already placed on the canvas with their addresses set — you design and build the network that connects them.',
+    objective: 'Build and configure the network so h1 (Finance) can reach srv (Shared services) across the two subnets.',
+    spec: 'Lead · design-from-requirements',
+    constraints: [
+      'h1 lives in 10.0.1.0/24 and already uses default gateway 10.0.1.1',
+      'srv lives in 10.0.2.0/24 and already uses default gateway 10.0.2.1',
+      'Add a router from the device library and wire each subnet to it',
+      'Configure the router so the two subnets can route to each other',
+      'h1 must be able to reach srv (10.0.2.10)'
+    ],
+    console: 'h1',
+    hints: [
+      'Add a Router from the device library, then use "Wire devices" to connect h1 and srv to it.',
+      'Open the router console: give the interface facing h1 10.0.1.1/24 and the one facing srv 10.0.2.1/24.',
+      'h1 and srv already point at those gateways — once the router interfaces are up, `ping srv` from h1 works.'
+    ],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' })
+      },
+      links: []
+    }),
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: (s) => {
+      const B = require('./net-builder');
+      B.addDevice(s.net, 'router', 'r1');
+      B.addLink(s.net, 'h1', 'r1');     // h1.eth0 <-> r1.eth0 (10.0.1.0/24 side)
+      B.addLink(s.net, 'srv', 'r1');    // srv.eth0 <-> r1.eth1 (10.0.2.0/24 side)
+      s.on('r1').run('ip addr add 10.0.1.1/24 dev eth0');
+      s.on('r1').run('ip addr add 10.0.2.1/24 dev eth1');
+    }
+  },
 ];
 
 module.exports = { chapters };

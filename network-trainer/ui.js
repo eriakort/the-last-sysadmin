@@ -39,7 +39,7 @@ let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', prio
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
 let JOURNAL_FILTERS = { query:'', type:'all', range:'all' };
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
-function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
+function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && (RUN.mission.mode === 'design' || (RUN.mission.authored && RUN.mission.mode === 'build'))); }
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -661,6 +661,15 @@ function renderInfrastructureView() {
 }
 function refreshInfrastructureView() { if ($('#infrastructureView') && !$('#infrastructureView').hidden) renderInfrastructureView(); }
 
+function renderRequirements(m) {
+  const items = (m.constraints || []).map(c => `<li>${esc(c)}</li>`).join('');
+  return `<div class="design-brief-card">
+    <div class="tk-top"><span class="tk-id">DESIGN BRIEF</span><span class="tk-pri design-tier">${esc(m.spec || 'design')}</span></div>
+    <div class="label">Requirements</div>
+    <ul class="req-list">${items}</ul>
+    <p class="design-hint dim">Build it on the canvas: add devices from the library, use "Wire devices" to connect them, configure each from its console, then Check.</p>
+  </div>`;
+}
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
   const pc = 'tk-' + String(t.priority || '').toLowerCase();
@@ -725,7 +734,7 @@ function renderBrief() {
   return `<select id="pick" aria-label="Select mission">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}${solved ? ' · <span class="done">solved</span>' : ''}</div>
     <h1>${esc(m.title)}</h1>
-    ${renderTicket(m)}
+    ${m.mode === 'design' ? renderRequirements(m) : renderTicket(m)}
     <div class="label">What you know</div><p class="story">${esc(m.story)}</p>
     ${renderDeviceExplorer()}
     ${body}
@@ -1124,13 +1133,14 @@ function doCheck() {
     if (id === 'cross-track-ssh-hardening-network') markCrossTrackProgress('hardeningNetwork');
     if (id === 'cross-track-contractor-containment-network') markCrossTrackProgress('contractorNetwork');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    const isDesign = RUN.mission.mode === 'design';
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
-    let msg = '✓ All objectives met — ticket resolved.';
+    let msg = isDesign ? '✓ All requirements met — design signed off.' : '✓ All objectives met — ticket resolved.';
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
-      addJournalEntry({ type: 'ticket resolved', device: SEL || '', text: `Resolved ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
-      msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
+      addJournalEntry({ type: isDesign ? 'design signed off' : 'ticket resolved', device: SEL || '', text: `${isDesign ? 'Built to spec' : 'Resolved'} ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
+      msg = `✓ ${isDesign ? 'Built to spec' : 'Ticket resolved'} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
     const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);

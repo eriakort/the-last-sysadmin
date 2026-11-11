@@ -13,10 +13,16 @@ for (const m of chapters) {
   test(`[${m.id}] starts unsolved, solution resolves it`, () => {
     const s = startMission(m);
     assert(s.done() === false, `mission "${m.id}" is already solved before any action:\n${s.status()}`);
-    // apply the reference solution via the CLI, switching console as specified
-    for (const [dev, cmd] of m.solution) {
-      const r = s.on(dev).run(cmd);
-      assert(r.code === 0, `solution command failed on ${dev}: "${cmd}" -> ${r.out}`);
+    // Apply the reference solution. Design missions build the topology, so their
+    // solution is a function (B.addDevice/addLink + config); fix-it missions use a
+    // [device, command] list run through the CLI.
+    if (typeof m.solution === 'function') {
+      m.solution(s);
+    } else {
+      for (const [dev, cmd] of m.solution) {
+        const r = s.on(dev).run(cmd);
+        assert(r.code === 0, `solution command failed on ${dev}: "${cmd}" -> ${r.out}`);
+      }
     }
     assert(s.done() === true, `mission "${m.id}" NOT resolved after the solution:\n${s.status()}`);
   });
@@ -36,19 +42,36 @@ test('a wrong address does not resolve "first contact"', () => {
   assert(s.done() === false, 'a wrong-subnet address should not pass the mission');
 });
 
-// Every mission carries a well-formed incident ticket.
-test('every mission has a complete incident ticket', () => {
+// Every incident mission carries a well-formed ticket. Design-from-requirements
+// missions are a design brief, not an incident, so they are exempt.
+test('every incident mission has a complete ticket', () => {
   for (const m of chapters) {
+    if (m.mode === 'design') continue;
     assert(m.ticket && m.ticket.id && m.ticket.from && m.ticket.priority && m.ticket.symptom,
       `mission "${m.id}" is missing ticket fields`);
     assert(/^P[123]$/.test(m.ticket.priority), `mission "${m.id}" has an odd priority: ${m.ticket.priority}`);
   }
 });
 
+// Design missions are well-formed: a build-to-spec brief with constraints,
+// success checks, a build seed, and a programmatic reference solution.
+test('every design mission has constraints, checks and a buildable solution', () => {
+  for (const m of chapters) {
+    if (m.mode !== 'design') continue;
+    assert(Array.isArray(m.constraints) && m.constraints.length > 0, `design mission "${m.id}" needs constraints`);
+    assert(Array.isArray(m.success) && m.success.length > 0, `design mission "${m.id}" needs success checks`);
+    assert(typeof m.build === 'function', `design mission "${m.id}" needs a build seed`);
+    assert(typeof m.solution === 'function', `design mission "${m.id}" needs a programmatic reference solution`);
+    assert(!m.diagnose, `design mission "${m.id}" should not have a diagnosis gate`);
+  }
+});
+
 // The diagnosis grader: right index passes, every wrong index fails, and the
 // correct answer is always in range (guards against an unanswerable gate).
+// Design missions have no gate, so they are exempt.
 test('diagnosis grader accepts the right answer and rejects wrong ones', () => {
   for (const m of chapters) {
+    if (m.mode === 'design') continue;
     const s = startMission(m);
     assert(s.requiresDiagnosis === true, `mission "${m.id}" should require diagnosis`);
     const d = m.diagnose;

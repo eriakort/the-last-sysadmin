@@ -4375,6 +4375,47 @@ const chapters = [
     ],
     solution: [['r1','enable'],['r1','show access-lists INCIDENT-IN'],['r1','configure terminal'],['r1','ip access-list extended INCIDENT-IN'],['r1','no 10'],['r1','no 20'],['r1','no 30'],['r1','10 deny tcp host 198.51.100.200 host 10.0.2.10 eq 22'],['r1','20 permit tcp 10.0.1.0 0.0.0.255 host 10.0.2.10 eq 22'],['r1','30 permit tcp any host 10.0.2.20 eq 443'],['r1','40 deny ip any any'],['r1','end'],['r1','show access-lists INCIDENT-IN'],['r1','write memory']]
   },
+
+  // --- Design-from-requirements: the learner BUILDS the topology to meet a spec,
+  // using the canvas (device library + Wire devices), and is graded on the outcome.
+  // `mode: 'design'` enables the build tools for the mission; `solution` is a
+  // function that programmatically builds the reference answer so the solvability
+  // test can prove the mission is winnable.
+  { id: 'design-two-subnet', chapter: 'Design · build to spec', mode: 'design',
+    title: 'Design a routed two-subnet network',
+    story: 'Two departments each need their own subnet, but both must reach the shared file server. The two endpoints are already placed on the canvas with their addresses set — you design and build the network that connects them.',
+    objective: 'Build and configure the network so h1 (Finance) can reach srv (Shared services) across the two subnets.',
+    spec: 'Lead · design-from-requirements',
+    constraints: [
+      'h1 lives in 10.0.1.0/24 and already uses default gateway 10.0.1.1',
+      'srv lives in 10.0.2.0/24 and already uses default gateway 10.0.2.1',
+      'Add a router from the device library and wire each subnet to it',
+      'Configure the router so the two subnets can route to each other',
+      'h1 must be able to reach srv (10.0.2.10)'
+    ],
+    console: 'h1',
+    hints: [
+      'Add a Router from the device library, then use "Wire devices" to connect h1 and srv to it.',
+      'Open the router console: give the interface facing h1 10.0.1.1/24 and the one facing srv 10.0.2.1/24.',
+      'h1 and srv already point at those gateways — once the router interfaces are up, `ping srv` from h1 works.'
+    ],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' })
+      },
+      links: []
+    }),
+    success: [{ type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: (s) => {
+      const B = require('./net-builder');
+      B.addDevice(s.net, 'router', 'r1');
+      B.addLink(s.net, 'h1', 'r1');     // h1.eth0 <-> r1.eth0 (10.0.1.0/24 side)
+      B.addLink(s.net, 'srv', 'r1');    // srv.eth0 <-> r1.eth1 (10.0.2.0/24 side)
+      s.on('r1').run('ip addr add 10.0.1.1/24 dev eth0');
+      s.on('r1').run('ip addr add 10.0.2.1/24 dev eth1');
+    }
+  },
 ];
 
 module.exports = { chapters };
@@ -5020,7 +5061,7 @@ let INCIDENT_SELECTED = null, INCIDENT_FILTERS = { query:'', status:'open', prio
 let INFRA_SELECTED = null, INFRA_FILTERS = { query:'', kind:'all', status:'all' };
 let JOURNAL_FILTERS = { query:'', type:'all', range:'all' };
 // Builder controls show while authoring, or while a student plays a build-from-scratch scenario.
-function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && RUN.mission.authored && RUN.mission.mode === 'build'); }
+function canBuild() { return MODE === 'build' || !!(RUN && RUN.mission && (RUN.mission.mode === 'design' || (RUN.mission.authored && RUN.mission.mode === 'build'))); }
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmtTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -5642,6 +5683,15 @@ function renderInfrastructureView() {
 }
 function refreshInfrastructureView() { if ($('#infrastructureView') && !$('#infrastructureView').hidden) renderInfrastructureView(); }
 
+function renderRequirements(m) {
+  const items = (m.constraints || []).map(c => `<li>${esc(c)}</li>`).join('');
+  return `<div class="design-brief-card">
+    <div class="tk-top"><span class="tk-id">DESIGN BRIEF</span><span class="tk-pri design-tier">${esc(m.spec || 'design')}</span></div>
+    <div class="label">Requirements</div>
+    <ul class="req-list">${items}</ul>
+    <p class="design-hint dim">Build it on the canvas: add devices from the library, use "Wire devices" to connect them, configure each from its console, then Check.</p>
+  </div>`;
+}
 function renderTicket(m) {
   const t = m.ticket; if (!t) return '';
   const pc = 'tk-' + String(t.priority || '').toLowerCase();
@@ -5706,7 +5756,7 @@ function renderBrief() {
   return `<select id="pick" aria-label="Select mission">${opts}</select>
     <div class="eyebrow">${esc(m.chapter)}${solved ? ' · <span class="done">solved</span>' : ''}</div>
     <h1>${esc(m.title)}</h1>
-    ${renderTicket(m)}
+    ${m.mode === 'design' ? renderRequirements(m) : renderTicket(m)}
     <div class="label">What you know</div><p class="story">${esc(m.story)}</p>
     ${renderDeviceExplorer()}
     ${body}
@@ -6105,13 +6155,14 @@ function doCheck() {
     if (id === 'cross-track-ssh-hardening-network') markCrossTrackProgress('hardeningNetwork');
     if (id === 'cross-track-contractor-containment-network') markCrossTrackProgress('contractorNetwork');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
+    const isDesign = RUN.mission.mode === 'design';
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
-    let msg = '✓ All objectives met — ticket resolved.';
+    let msg = isDesign ? '✓ All requirements met — design signed off.' : '✓ All objectives met — ticket resolved.';
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
-      addJournalEntry({ type: 'ticket resolved', device: SEL || '', text: `Resolved ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
-      msg = `✓ Ticket resolved in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
+      addJournalEntry({ type: isDesign ? 'design signed off' : 'ticket resolved', device: SEL || '', text: `${isDesign ? 'Built to spec' : 'Resolved'} ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
+      msg = `✓ ${isDesign ? 'Built to spec' : 'Ticket resolved'} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
     const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);
