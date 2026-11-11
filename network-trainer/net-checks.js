@@ -83,6 +83,13 @@ function vrrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
 }
+function reachable6(net, aId, bId) {
+  const bdev = net.devices[bId];
+  const target = bdev && Object.values(bdev.ifaces || {}).map(f => f.ip6).find(x => x != null);
+  if (target == null) return { ok: false, reason: `${bId} has no IPv6 address configured` };
+  const r = M.ping6(net, aId, target);
+  return { ok: r.ok, reason: r.ok ? `${aId} can reach ${bId} over IPv6 (${target})` : `${aId} cannot reach ${bId} over IPv6 — ${r.reason}` };
+}
 function etherchannelUp(net, devId, group) {
   const s = M.etherChannelStatus(net, devId, group);
   if (!s) return { ok: false, reason: `${devId} has no EtherChannel group ${group} configured` };
@@ -162,4 +169,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6 };

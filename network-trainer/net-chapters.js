@@ -1302,6 +1302,30 @@ const chapters = [
       ['sw2', 'interface p3'], ['sw2', 'channel-group 1 mode active'], ['sw2', 'interface p4'], ['sw2', 'channel-group 1 mode active']
     ]
   },
+
+  // Breadth · IPv6 dual-stack — IPv4 already works end to end; the hosts have
+  // IPv6 addresses and default routes, but the router has no IPv6, so it cannot
+  // route v6 between the two subnets. Bring the router onto IPv6 to light it up.
+  { id: 'ipv6-dual-stack', chapter: 'IPv6 · dual-stack', mode: 'diagnose',
+    title: 'Light up IPv6 on the router',
+    story: 'The network is going dual-stack. h1 (2001:db8:1::10/64) and the server srv (2001:db8:2::10/64) already have IPv6 addresses and IPv6 default routes pointing at the router. IPv4 works end to end, but `ping6` from h1 to srv fails. The router r1 still has only IPv4 on its two interfaces.',
+    objective: 'Configure IPv6 on r1 — the gateway 2001:db8:1::1/64 on eth0 and 2001:db8:2::1/64 on eth1 — so it routes IPv6 between the two subnets and h1 can reach srv over IPv6.',
+    ticket: { id: 'INC-2602', from: 'Platform engineering', priority: 'P3', symptom: 'We rolled out IPv6 addressing to the hosts for the dual-stack migration, but IPv6 traffic between subnets goes nowhere. IPv4 is unaffected. ping6 to the other subnet just says no route.' },
+    diagnose: { q: 'The hosts have IPv6 addresses and IPv6 default routes, IPv4 routing works, but h1 cannot ping6 srv across the subnets. What is missing?', options: ['r1 has no IPv6 addresses, so it is not an IPv6 router and the hosts’ v6 gateway does not exist', 'the hosts need their IPv4 removed first', 'IPv6 requires a separate physical cable'], answer: 0, because: 'Dual-stack runs IPv4 and IPv6 independently on the same interfaces. The hosts point their IPv6 default route at r1, but r1 has no IPv6 address — so the gateway is unreachable and r1 cannot forward v6. Add the v6 gateway addresses to r1.' },
+    console: 'r1',
+    hints: ['IPv4 and IPv6 are independent — adding v6 does not disturb the working v4. Add a second address with `ip addr add`.', 'On r1: `ip addr add 2001:db8:1::1/64 dev eth0` and `ip addr add 2001:db8:2::1/64 dev eth1`.', 'These are the gateway addresses the hosts already point to. Verify with `ip addr`, then `ping6 2001:db8:2::10` from h1.'],
+    build: () => ({
+      devices: {
+        h1: { id: 'h1', kind: 'host', ifaces: { eth0: { ip: ip('10.0.1.10'), mask: 24, up: true, ip6: '2001:db8:1::10', mask6: 64 } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.1.1') }], routes6: [{ dest: '::', prefix: 0, via: '2001:db8:1::1' }] },
+        srv: { id: 'srv', kind: 'host', services: { 443: 'https' }, ifaces: { eth0: { ip: ip('10.0.2.10'), mask: 24, up: true, ip6: '2001:db8:2::10', mask6: 64 } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }], routes6: [{ dest: '::', prefix: 0, via: '2001:db8:2::1' }] },
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable6', a: 'h1', b: 'srv' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip addr add 2001:db8:1::1/64 dev eth0'], ['r1', 'ip addr add 2001:db8:2::1/64 dev eth1']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -1318,7 +1342,7 @@ const chapters = [
 const TIERS = [
   { id: 't1', name: 'Foundations', order: 1,
     blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
-    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Switching · VLANs', 'Switching · STP & MAC learning'],
     capstone: 'break-the-switching-loop' },
   { id: 't2', name: 'Routing', order: 2,
     blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',

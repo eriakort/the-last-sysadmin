@@ -15,11 +15,10 @@ const targets = [
   {
     label: 'Network Trainer',
     file: 'network-trainer/index.html',
-    // Raised 192/156 -> 208/168 for roadmap Phase 1-3: design-from-requirements,
-    // the curriculum tier layer, and the decision/tradeoff + incident-command
-    // mission types. Current page ~192 KiB gzip / ~155 KiB Brotli; ~16 KiB headroom.
-    gzipBudget: 208 * 1024,
-    brotliBudget: 168 * 1024
+    // Raised 208/168 -> 224/182 for the Phase 4 breadth work (VPN/PKI, VRRP,
+    // LACP, IPv6 dual-stack). Current page ~203 KiB gzip / ~164 KiB Brotli.
+    gzipBudget: 224 * 1024,
+    brotliBudget: 182 * 1024
   }
 ];
 

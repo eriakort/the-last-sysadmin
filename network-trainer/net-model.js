@@ -11,6 +11,40 @@ const sameNet = (a, b, prefix) => networkOf(a, prefix) === networkOf(b, prefix);
 // parse "10.0.1.0/24" -> { net, prefix }
 const cidr = s => { const [a, p] = String(s).split('/'); return { net: networkOf(ip(a), Number(p)), prefix: Number(p) }; };
 
+/* ---------- IPv6 address math (128-bit, via BigInt) ----------
+ * Dual-stack basics: a parallel L3 space alongside IPv4. Addresses are stored on
+ * interfaces as BigInt in `ip6` with prefix length in `mask6`; static v6 routes
+ * live in `dev.routes6`. Forwarding reuses the same L2 engine (l2Domain). */
+function ip6(s) {                                  // "2001:db8::1" -> BigInt (null if invalid)
+  s = String(s).trim().toLowerCase().split('%')[0];
+  if (!/^[0-9a-f:]+$/.test(s) || (s.match(/::/g) || []).length > 1) return null;
+  let head, tail;
+  if (s.includes('::')) { const parts = s.split('::'); head = parts[0] ? parts[0].split(':') : []; tail = parts[1] ? parts[1].split(':') : []; }
+  else { head = s.split(':'); tail = null; }
+  let groups;
+  if (tail === null) groups = head;
+  else { const miss = 8 - head.length - tail.length; if (miss < 0) return null; groups = [...head, ...Array(miss).fill('0'), ...tail]; }
+  if (groups.length !== 8) return null;
+  let n = 0n;
+  for (const g of groups) { if (!/^[0-9a-f]{1,4}$/.test(g)) return null; n = (n << 16n) | BigInt(parseInt(g, 16)); }
+  return n;
+}
+function ip6Str(n) {                               // BigInt -> canonical compressed string
+  const groups = [];
+  for (let i = 7; i >= 0; i--) groups.push(Number((n >> BigInt(i * 16)) & 0xffffn).toString(16));
+  let best = { start: -1, len: 0 }, cur = { start: -1, len: 0 };
+  groups.forEach((g, i) => {
+    if (g === '0') { if (cur.start < 0) cur = { start: i, len: 0 }; cur.len++; if (cur.len > best.len) best = { ...cur }; }
+    else cur = { start: -1, len: 0 };
+  });
+  if (best.len > 1) { const before = groups.slice(0, best.start).join(':'), after = groups.slice(best.start + best.len).join(':'); return (before + '::' + after).replace(/:::/g, '::') || '::'; }
+  return groups.join(':');
+}
+const mask6 = prefix => prefix <= 0 ? 0n : (((1n << BigInt(prefix)) - 1n) << BigInt(128 - prefix));
+const networkOf6 = (addr, prefix) => addr & mask6(prefix);
+const sameNet6 = (a, b, prefix) => networkOf6(a, prefix) === networkOf6(b, prefix);
+function cidr6(s) { const [a, p] = String(s).split('/'); const addr = ip6(a); if (addr == null) return null; const prefix = Number(p); if (!Number.isInteger(prefix) || prefix < 0 || prefix > 128) return null; return { net: networkOf6(addr, prefix), prefix }; }
+
 /* ---------- topology helpers ---------- */
 // Is a device interface present and up?
 function ifaceUp(net, dev, name) {
@@ -848,6 +882,55 @@ function ping(net, srcDev, dst, base = {}) {
   return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
 }
 
+/* ---------- IPv6 forwarding (dual-stack basics: direct + static routes) ----------
+ * A parallel hop-by-hop path over the same L2 engine. No NDP timers, NAT or v6
+ * ACLs in this slice — the teaching core is addressing, static routing and
+ * reachability. */
+// IPv6 addresses live in the model as canonical STRINGS (so the network object
+// stays JSON-serializable — no BigInt leaks into saved state); math parses them.
+const eq6 = (a, b) => a != null && b != null && ip6(a) === ip6(b);
+function ownsIp6(dev, dst) { return Object.values(dev.ifaces || {}).some(f => f.ip6 != null && f.up !== false && eq6(f.ip6, dst)); }
+function directIface6(dev, dst) { const d = ip6(dst); if (d == null) return null; for (const [n, f] of Object.entries(dev.ifaces || {})) if (f.ip6 != null && f.up !== false && sameNet6(ip6(f.ip6), d, f.mask6)) return n; return null; }
+function routeLookup6(dev, dst) { const d = ip6(dst); let best = null; for (const r of dev.routes6 || []) if (sameNet6(d, ip6(r.dest), r.prefix)) if (!best || r.prefix > best.prefix) best = r; return best; }
+function forward6(net, srcDev, dst) {
+  let cur = srcDev; const path = [];
+  for (let hop = 0; hop < 32; hop++) {
+    const dev = net.devices[cur]; if (!dev) return { ok: false, path, reason: 'unknown device' };
+    path.push(cur);
+    if (ownsIp6(dev, dst)) return { ok: true, path, reason: 'delivered' };
+    let eg = directIface6(dev, dst), target = dst, via = null;
+    if (!eg) {
+      const r = routeLookup6(dev, dst); if (!r) return { ok: false, path, reason: 'no route to ' + dst };
+      via = r.via; eg = directIface6(dev, via); if (!eg) return { ok: false, path, reason: 'next hop not on a connected subnet' };
+      target = via;
+    }
+    const ep = l2Domain(net, cur, eg).find(([d, i]) => { const f = net.devices[d].ifaces[i]; return f && f.up !== false && eq6(f.ip6, target); });
+    if (!ep) return { ok: false, path, reason: via ? 'gateway ' + via + ' unreachable' : 'no host with that IPv6 address on the segment' };
+    if (ep[0] === cur) return { ok: true, path, reason: 'delivered' };
+    cur = ep[0];
+  }
+  return { ok: false, path, reason: 'hop limit exceeded (routing loop?)' };
+}
+function sourceIp6Toward(net, devId, dst) {
+  const d = net.devices[devId];
+  const di = directIface6(d, dst); if (di) return d.ifaces[di].ip6;
+  const r = routeLookup6(d, dst); if (r) { const gi = directIface6(d, r.via); if (gi) return d.ifaces[gi].ip6; }
+  for (const n in d.ifaces) if (d.ifaces[n].ip6 != null) return d.ifaces[n].ip6;
+  return null;
+}
+// Reachability over IPv6: the request must deliver and the reply must return.
+function ping6(net, srcDev, dst) {
+  const fwd = forward6(net, srcDev, dst);
+  if (!fwd.ok) return { ok: false, dir: 'request', reason: fwd.reason, forward: fwd };
+  const dstDev = deviceOwning6(net, dst);
+  if (!dstDev) return { ok: false, dir: 'request', reason: 'no such host' };
+  const srcIp = sourceIp6Toward(net, srcDev, dst);
+  if (srcIp == null) return { ok: false, dir: 'reply', reason: 'source has no IPv6 address' };
+  const rev = forward6(net, dstDev, srcIp);
+  return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : 'reply: ' + rev.reason, forward: fwd, reply: rev };
+}
+function deviceOwning6(net, addr) { for (const id in net.devices) if (ownsIp6(net.devices[id], addr)) return id; return null; }
+
 /* ---------- packet journey view model ---------- */
 // A presentation-safe trace built from the same forwarding engine as ping().
 // L2 switches remain transparent when the engine treats them as one segment;
@@ -899,6 +982,7 @@ function packetJourney(net, srcDev, destination, opts = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
+  ip6, ip6Str, mask6, networkOf6, sameNet6, cidr6, ping6, forward6, deviceOwning6, directIface6, ownsIp6,
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   portForwards, etherChannelStatus,
   aclDecision, forward, ping, packetJourney, sourceIpToward,

@@ -289,6 +289,40 @@ const sameNet = (a, b, prefix) => networkOf(a, prefix) === networkOf(b, prefix);
 // parse "10.0.1.0/24" -> { net, prefix }
 const cidr = s => { const [a, p] = String(s).split('/'); return { net: networkOf(ip(a), Number(p)), prefix: Number(p) }; };
 
+/* ---------- IPv6 address math (128-bit, via BigInt) ----------
+ * Dual-stack basics: a parallel L3 space alongside IPv4. Addresses are stored on
+ * interfaces as BigInt in `ip6` with prefix length in `mask6`; static v6 routes
+ * live in `dev.routes6`. Forwarding reuses the same L2 engine (l2Domain). */
+function ip6(s) {                                  // "2001:db8::1" -> BigInt (null if invalid)
+  s = String(s).trim().toLowerCase().split('%')[0];
+  if (!/^[0-9a-f:]+$/.test(s) || (s.match(/::/g) || []).length > 1) return null;
+  let head, tail;
+  if (s.includes('::')) { const parts = s.split('::'); head = parts[0] ? parts[0].split(':') : []; tail = parts[1] ? parts[1].split(':') : []; }
+  else { head = s.split(':'); tail = null; }
+  let groups;
+  if (tail === null) groups = head;
+  else { const miss = 8 - head.length - tail.length; if (miss < 0) return null; groups = [...head, ...Array(miss).fill('0'), ...tail]; }
+  if (groups.length !== 8) return null;
+  let n = 0n;
+  for (const g of groups) { if (!/^[0-9a-f]{1,4}$/.test(g)) return null; n = (n << 16n) | BigInt(parseInt(g, 16)); }
+  return n;
+}
+function ip6Str(n) {                               // BigInt -> canonical compressed string
+  const groups = [];
+  for (let i = 7; i >= 0; i--) groups.push(Number((n >> BigInt(i * 16)) & 0xffffn).toString(16));
+  let best = { start: -1, len: 0 }, cur = { start: -1, len: 0 };
+  groups.forEach((g, i) => {
+    if (g === '0') { if (cur.start < 0) cur = { start: i, len: 0 }; cur.len++; if (cur.len > best.len) best = { ...cur }; }
+    else cur = { start: -1, len: 0 };
+  });
+  if (best.len > 1) { const before = groups.slice(0, best.start).join(':'), after = groups.slice(best.start + best.len).join(':'); return (before + '::' + after).replace(/:::/g, '::') || '::'; }
+  return groups.join(':');
+}
+const mask6 = prefix => prefix <= 0 ? 0n : (((1n << BigInt(prefix)) - 1n) << BigInt(128 - prefix));
+const networkOf6 = (addr, prefix) => addr & mask6(prefix);
+const sameNet6 = (a, b, prefix) => networkOf6(a, prefix) === networkOf6(b, prefix);
+function cidr6(s) { const [a, p] = String(s).split('/'); const addr = ip6(a); if (addr == null) return null; const prefix = Number(p); if (!Number.isInteger(prefix) || prefix < 0 || prefix > 128) return null; return { net: networkOf6(addr, prefix), prefix }; }
+
 /* ---------- topology helpers ---------- */
 // Is a device interface present and up?
 function ifaceUp(net, dev, name) {
@@ -1126,6 +1160,55 @@ function ping(net, srcDev, dst, base = {}) {
   return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : ('reply: ' + rev.reason), forward: fwd, reply: rev };
 }
 
+/* ---------- IPv6 forwarding (dual-stack basics: direct + static routes) ----------
+ * A parallel hop-by-hop path over the same L2 engine. No NDP timers, NAT or v6
+ * ACLs in this slice — the teaching core is addressing, static routing and
+ * reachability. */
+// IPv6 addresses live in the model as canonical STRINGS (so the network object
+// stays JSON-serializable — no BigInt leaks into saved state); math parses them.
+const eq6 = (a, b) => a != null && b != null && ip6(a) === ip6(b);
+function ownsIp6(dev, dst) { return Object.values(dev.ifaces || {}).some(f => f.ip6 != null && f.up !== false && eq6(f.ip6, dst)); }
+function directIface6(dev, dst) { const d = ip6(dst); if (d == null) return null; for (const [n, f] of Object.entries(dev.ifaces || {})) if (f.ip6 != null && f.up !== false && sameNet6(ip6(f.ip6), d, f.mask6)) return n; return null; }
+function routeLookup6(dev, dst) { const d = ip6(dst); let best = null; for (const r of dev.routes6 || []) if (sameNet6(d, ip6(r.dest), r.prefix)) if (!best || r.prefix > best.prefix) best = r; return best; }
+function forward6(net, srcDev, dst) {
+  let cur = srcDev; const path = [];
+  for (let hop = 0; hop < 32; hop++) {
+    const dev = net.devices[cur]; if (!dev) return { ok: false, path, reason: 'unknown device' };
+    path.push(cur);
+    if (ownsIp6(dev, dst)) return { ok: true, path, reason: 'delivered' };
+    let eg = directIface6(dev, dst), target = dst, via = null;
+    if (!eg) {
+      const r = routeLookup6(dev, dst); if (!r) return { ok: false, path, reason: 'no route to ' + dst };
+      via = r.via; eg = directIface6(dev, via); if (!eg) return { ok: false, path, reason: 'next hop not on a connected subnet' };
+      target = via;
+    }
+    const ep = l2Domain(net, cur, eg).find(([d, i]) => { const f = net.devices[d].ifaces[i]; return f && f.up !== false && eq6(f.ip6, target); });
+    if (!ep) return { ok: false, path, reason: via ? 'gateway ' + via + ' unreachable' : 'no host with that IPv6 address on the segment' };
+    if (ep[0] === cur) return { ok: true, path, reason: 'delivered' };
+    cur = ep[0];
+  }
+  return { ok: false, path, reason: 'hop limit exceeded (routing loop?)' };
+}
+function sourceIp6Toward(net, devId, dst) {
+  const d = net.devices[devId];
+  const di = directIface6(d, dst); if (di) return d.ifaces[di].ip6;
+  const r = routeLookup6(d, dst); if (r) { const gi = directIface6(d, r.via); if (gi) return d.ifaces[gi].ip6; }
+  for (const n in d.ifaces) if (d.ifaces[n].ip6 != null) return d.ifaces[n].ip6;
+  return null;
+}
+// Reachability over IPv6: the request must deliver and the reply must return.
+function ping6(net, srcDev, dst) {
+  const fwd = forward6(net, srcDev, dst);
+  if (!fwd.ok) return { ok: false, dir: 'request', reason: fwd.reason, forward: fwd };
+  const dstDev = deviceOwning6(net, dst);
+  if (!dstDev) return { ok: false, dir: 'request', reason: 'no such host' };
+  const srcIp = sourceIp6Toward(net, srcDev, dst);
+  if (srcIp == null) return { ok: false, dir: 'reply', reason: 'source has no IPv6 address' };
+  const rev = forward6(net, dstDev, srcIp);
+  return { ok: rev.ok, to: dstDev, reason: rev.ok ? 'reachable' : 'reply: ' + rev.reason, forward: fwd, reply: rev };
+}
+function deviceOwning6(net, addr) { for (const id in net.devices) if (ownsIp6(net.devices[id], addr)) return id; return null; }
+
 /* ---------- packet journey view model ---------- */
 // A presentation-safe trace built from the same forwarding engine as ping().
 // L2 switches remain transparent when the engine treats them as one segment;
@@ -1177,6 +1260,7 @@ function packetJourney(net, srcDev, destination, opts = {}) {
 
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
+  ip6, ip6Str, mask6, networkOf6, sameNet6, cidr6, ping6, forward6, deviceOwning6, directIface6, ownsIp6,
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   portForwards, etherChannelStatus,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
@@ -1273,6 +1357,13 @@ function vrrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
 }
+function reachable6(net, aId, bId) {
+  const bdev = net.devices[bId];
+  const target = bdev && Object.values(bdev.ifaces || {}).map(f => f.ip6).find(x => x != null);
+  if (target == null) return { ok: false, reason: `${bId} has no IPv6 address configured` };
+  const r = M.ping6(net, aId, target);
+  return { ok: r.ok, reason: r.ok ? `${aId} can reach ${bId} over IPv6 (${target})` : `${aId} cannot reach ${bId} over IPv6 — ${r.reason}` };
+}
 function etherchannelUp(net, devId, group) {
   const s = M.etherChannelStatus(net, devId, group);
   if (!s) return { ok: false, reason: `${devId} has no EtherChannel group ${group} configured` };
@@ -1352,7 +1443,7 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6 };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -3122,6 +3213,27 @@ const COMMANDS = {
       return ok(ifn + ': ' + state);
     }
     if (sub === 'addr' || sub === 'a' || sub === 'address') {
+      if ((a[1] === 'add' || a[1] === 'replace') && String(a[2]).includes(':')) {   // IPv6 dual-stack
+        const di = a.indexOf('dev'), ifn = di >= 0 ? a[di + 1] : null;
+        const v6 = M.cidr6(a[2]), raw6 = M.ip6(String(a[2]).split('/')[0]);
+        if (!v6 || raw6 == null || !ifn) return err('usage: ip addr add <valid-IPv6>/<0-128> dev <existing-interface>');
+        if (!dev.ifaces[ifn]) return err('ip addr: no such interface ' + ifn);
+        const address = M.ip6Str(raw6);                                 // canonical string (keeps saved state JSON-safe)
+        for (const [id, other] of Object.entries(cli.net.devices))
+          for (const [otherIf, f] of Object.entries(other.ifaces || {}))
+            if (f.up !== false && f.ip6 != null && M.ip6(f.ip6) === raw6 && !(id === cli.cur && otherIf === ifn))
+              return err('ip addr: address already in use by ' + id + '/' + otherIf);
+        dev.ifaces[ifn] = { ...dev.ifaces[ifn], ip6: address, mask6: v6.prefix };
+        return ok(ifn + ': ' + address + '/' + v6.prefix);
+      }
+      if ((a[1] === 'del' || a[1] === 'delete') && String(a[2]).includes(':')) {
+        const di = a.indexOf('dev'), ifn = di >= 0 ? a[di + 1] : null;
+        const raw6 = M.ip6(String(a[2]).split('/')[0]);
+        if (raw6 == null || !ifn || !dev.ifaces[ifn]) return err('usage: ip addr del <valid-IPv6>/<0-128> dev <existing-interface>');
+        if (dev.ifaces[ifn].ip6 == null || M.ip6(dev.ifaces[ifn].ip6) !== raw6) return err('ip addr: IPv6 address not configured on ' + ifn);
+        delete dev.ifaces[ifn].ip6; delete dev.ifaces[ifn].mask6;
+        return ok(ifn + ': IPv6 address removed');
+      }
       if (a[1] === 'add' || a[1] === 'replace') {
         const di = a.indexOf('dev'); const ifn = di >= 0 ? a[di + 1] : null;
         const parsed = parseCIDR(a[2]);
@@ -3152,7 +3264,7 @@ const COMMANDS = {
         return ok(ifn + ': address removed');
       }
       const lines = Object.entries(dev.ifaces).map(([n, f]) =>
-        `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : '(no address)'}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
+        `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : (f.ip6 != null ? '' : '(no address)')}${f.ip6 != null ? (f.ip != null ? ', ' : '') + f.ip6 + '/' + f.mask6 : ''}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
       return ok(lines.join('\n'));
     }
     if (sub === 'tunnel' || sub === 'tun') {                 // site-to-site VPN tunnels
@@ -3190,6 +3302,18 @@ const COMMANDS = {
           dev.ifaces[tn].remote = { net: target.net, prefix: target.prefix };
           return ok('route ' + M.ipStr(target.net) + '/' + target.prefix + ' dev ' + tn);
         }
+      }
+      if ((a[1] === 'add' || a[1] === 'replace') && (String(a[2]).includes(':') || String(a[a.indexOf('via') + 1]).includes(':'))) {   // IPv6 static route
+        const vi = a.indexOf('via');
+        if (vi !== 3 || !a[vi + 1]) return err('usage: ip route add <default|valid-IPv6-CIDR> via <gateway-IPv6>');
+        const viaBig = M.ip6(a[vi + 1]);
+        const target = a[2] === 'default' ? { net: 0n, prefix: 0 } : M.cidr6(a[2]);
+        if (!target || viaBig == null) return err('ip route: invalid IPv6 destination or gateway');
+        const via = M.ip6Str(viaBig), dest = M.ip6Str(target.net);       // canonical strings
+        if (!M.directIface6(dev, via)) return err('ip route: IPv6 gateway ' + a[vi + 1] + ' is not on a connected subnet');
+        dev.routes6 = (dev.routes6 || []).filter(r => !(r.prefix === target.prefix && M.ip6(r.dest) === target.net));
+        dev.routes6.push({ dest, prefix: target.prefix, via });
+        return ok('route ' + (target.prefix === 0 ? 'default' : dest + '/' + target.prefix) + ' via ' + via);
       }
       if (a[1] === 'add' || a[1] === 'replace') {
         const vi = a.indexOf('via');
@@ -3255,6 +3379,15 @@ const COMMANDS = {
     return err(`PING ${t} (${M.ipStr(dst)}): ${r.reason}\npath: ${path}`);
   },
 
+  ping6: (cli, a) => {
+    const t = a[0]; if (!t) return err('usage: ping6 <IPv6-address>');
+    const big = M.ip6(t); if (big == null) return err(`ping6: ${t} is not a valid IPv6 address`);
+    const dst = M.ip6Str(big);
+    const r = M.ping6(cli.net, cli.cur, dst);
+    const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
+    if (r.ok) return ok(`PING6 ${dst}: reply received — reachable\npath: ${path}`);
+    return err(`PING6 ${dst}: ${r.reason}\npath: ${path}`);
+  },
   traceroute: (cli, a) => {
     const t = a[0]; if (!t) return err('usage: traceroute <host|ip>');
     const dst = resolve(cli.net, t); if (dst == null) return err(`traceroute: cannot resolve ${t}`);
@@ -3480,6 +3613,7 @@ function evalCheck(net, s) {
     case 'hsrp_state':    return C.hsrpState(net, s.dev, s.iface, s.state);
     case 'vrrp_state':    return C.vrrpState(net, s.dev, s.iface, s.state);
     case 'etherchannel_up':return C.etherchannelUp(net, s.dev, s.group);
+    case 'reachable6':     return C.reachable6(net, s.a, s.b);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);
@@ -4889,6 +5023,30 @@ const chapters = [
       ['sw2', 'interface p3'], ['sw2', 'channel-group 1 mode active'], ['sw2', 'interface p4'], ['sw2', 'channel-group 1 mode active']
     ]
   },
+
+  // Breadth · IPv6 dual-stack — IPv4 already works end to end; the hosts have
+  // IPv6 addresses and default routes, but the router has no IPv6, so it cannot
+  // route v6 between the two subnets. Bring the router onto IPv6 to light it up.
+  { id: 'ipv6-dual-stack', chapter: 'IPv6 · dual-stack', mode: 'diagnose',
+    title: 'Light up IPv6 on the router',
+    story: 'The network is going dual-stack. h1 (2001:db8:1::10/64) and the server srv (2001:db8:2::10/64) already have IPv6 addresses and IPv6 default routes pointing at the router. IPv4 works end to end, but `ping6` from h1 to srv fails. The router r1 still has only IPv4 on its two interfaces.',
+    objective: 'Configure IPv6 on r1 — the gateway 2001:db8:1::1/64 on eth0 and 2001:db8:2::1/64 on eth1 — so it routes IPv6 between the two subnets and h1 can reach srv over IPv6.',
+    ticket: { id: 'INC-2602', from: 'Platform engineering', priority: 'P3', symptom: 'We rolled out IPv6 addressing to the hosts for the dual-stack migration, but IPv6 traffic between subnets goes nowhere. IPv4 is unaffected. ping6 to the other subnet just says no route.' },
+    diagnose: { q: 'The hosts have IPv6 addresses and IPv6 default routes, IPv4 routing works, but h1 cannot ping6 srv across the subnets. What is missing?', options: ['r1 has no IPv6 addresses, so it is not an IPv6 router and the hosts’ v6 gateway does not exist', 'the hosts need their IPv4 removed first', 'IPv6 requires a separate physical cable'], answer: 0, because: 'Dual-stack runs IPv4 and IPv6 independently on the same interfaces. The hosts point their IPv6 default route at r1, but r1 has no IPv6 address — so the gateway is unreachable and r1 cannot forward v6. Add the v6 gateway addresses to r1.' },
+    console: 'r1',
+    hints: ['IPv4 and IPv6 are independent — adding v6 does not disturb the working v4. Add a second address with `ip addr add`.', 'On r1: `ip addr add 2001:db8:1::1/64 dev eth0` and `ip addr add 2001:db8:2::1/64 dev eth1`.', 'These are the gateway addresses the hosts already point to. Verify with `ip addr`, then `ping6 2001:db8:2::10` from h1.'],
+    build: () => ({
+      devices: {
+        h1: { id: 'h1', kind: 'host', ifaces: { eth0: { ip: ip('10.0.1.10'), mask: 24, up: true, ip6: '2001:db8:1::10', mask6: 64 } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.1.1') }], routes6: [{ dest: '::', prefix: 0, via: '2001:db8:1::1' }] },
+        srv: { id: 'srv', kind: 'host', services: { 443: 'https' }, ifaces: { eth0: { ip: ip('10.0.2.10'), mask: 24, up: true, ip6: '2001:db8:2::10', mask6: 64 } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }], routes6: [{ dest: '::', prefix: 0, via: '2001:db8:2::1' }] },
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')]
+    }),
+    success: [{ type: 'reachable6', a: 'h1', b: 'srv' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip addr add 2001:db8:1::1/64 dev eth0'], ['r1', 'ip addr add 2001:db8:2::1/64 dev eth1']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -4905,7 +5063,7 @@ const chapters = [
 const TIERS = [
   { id: 't1', name: 'Foundations', order: 1,
     blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
-    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Switching · VLANs', 'Switching · STP & MAC learning'],
     capstone: 'break-the-switching-loop' },
   { id: 't2', name: 'Routing', order: 2,
     blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',

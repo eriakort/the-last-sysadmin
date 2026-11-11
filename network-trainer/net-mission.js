@@ -22,6 +22,7 @@ function evalCheck(net, s) {
     case 'hsrp_state':    return C.hsrpState(net, s.dev, s.iface, s.state);
     case 'vrrp_state':    return C.vrrpState(net, s.dev, s.iface, s.state);
     case 'etherchannel_up':return C.etherchannelUp(net, s.dev, s.group);
+    case 'reachable6':     return C.reachable6(net, s.a, s.b);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);

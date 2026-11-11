@@ -1764,6 +1764,27 @@ const COMMANDS = {
       return ok(ifn + ': ' + state);
     }
     if (sub === 'addr' || sub === 'a' || sub === 'address') {
+      if ((a[1] === 'add' || a[1] === 'replace') && String(a[2]).includes(':')) {   // IPv6 dual-stack
+        const di = a.indexOf('dev'), ifn = di >= 0 ? a[di + 1] : null;
+        const v6 = M.cidr6(a[2]), raw6 = M.ip6(String(a[2]).split('/')[0]);
+        if (!v6 || raw6 == null || !ifn) return err('usage: ip addr add <valid-IPv6>/<0-128> dev <existing-interface>');
+        if (!dev.ifaces[ifn]) return err('ip addr: no such interface ' + ifn);
+        const address = M.ip6Str(raw6);                                 // canonical string (keeps saved state JSON-safe)
+        for (const [id, other] of Object.entries(cli.net.devices))
+          for (const [otherIf, f] of Object.entries(other.ifaces || {}))
+            if (f.up !== false && f.ip6 != null && M.ip6(f.ip6) === raw6 && !(id === cli.cur && otherIf === ifn))
+              return err('ip addr: address already in use by ' + id + '/' + otherIf);
+        dev.ifaces[ifn] = { ...dev.ifaces[ifn], ip6: address, mask6: v6.prefix };
+        return ok(ifn + ': ' + address + '/' + v6.prefix);
+      }
+      if ((a[1] === 'del' || a[1] === 'delete') && String(a[2]).includes(':')) {
+        const di = a.indexOf('dev'), ifn = di >= 0 ? a[di + 1] : null;
+        const raw6 = M.ip6(String(a[2]).split('/')[0]);
+        if (raw6 == null || !ifn || !dev.ifaces[ifn]) return err('usage: ip addr del <valid-IPv6>/<0-128> dev <existing-interface>');
+        if (dev.ifaces[ifn].ip6 == null || M.ip6(dev.ifaces[ifn].ip6) !== raw6) return err('ip addr: IPv6 address not configured on ' + ifn);
+        delete dev.ifaces[ifn].ip6; delete dev.ifaces[ifn].mask6;
+        return ok(ifn + ': IPv6 address removed');
+      }
       if (a[1] === 'add' || a[1] === 'replace') {
         const di = a.indexOf('dev'); const ifn = di >= 0 ? a[di + 1] : null;
         const parsed = parseCIDR(a[2]);
@@ -1794,7 +1815,7 @@ const COMMANDS = {
         return ok(ifn + ': address removed');
       }
       const lines = Object.entries(dev.ifaces).map(([n, f]) =>
-        `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : '(no address)'}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
+        `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : (f.ip6 != null ? '' : '(no address)')}${f.ip6 != null ? (f.ip != null ? ', ' : '') + f.ip6 + '/' + f.mask6 : ''}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
       return ok(lines.join('\n'));
     }
     if (sub === 'tunnel' || sub === 'tun') {                 // site-to-site VPN tunnels
@@ -1832,6 +1853,18 @@ const COMMANDS = {
           dev.ifaces[tn].remote = { net: target.net, prefix: target.prefix };
           return ok('route ' + M.ipStr(target.net) + '/' + target.prefix + ' dev ' + tn);
         }
+      }
+      if ((a[1] === 'add' || a[1] === 'replace') && (String(a[2]).includes(':') || String(a[a.indexOf('via') + 1]).includes(':'))) {   // IPv6 static route
+        const vi = a.indexOf('via');
+        if (vi !== 3 || !a[vi + 1]) return err('usage: ip route add <default|valid-IPv6-CIDR> via <gateway-IPv6>');
+        const viaBig = M.ip6(a[vi + 1]);
+        const target = a[2] === 'default' ? { net: 0n, prefix: 0 } : M.cidr6(a[2]);
+        if (!target || viaBig == null) return err('ip route: invalid IPv6 destination or gateway');
+        const via = M.ip6Str(viaBig), dest = M.ip6Str(target.net);       // canonical strings
+        if (!M.directIface6(dev, via)) return err('ip route: IPv6 gateway ' + a[vi + 1] + ' is not on a connected subnet');
+        dev.routes6 = (dev.routes6 || []).filter(r => !(r.prefix === target.prefix && M.ip6(r.dest) === target.net));
+        dev.routes6.push({ dest, prefix: target.prefix, via });
+        return ok('route ' + (target.prefix === 0 ? 'default' : dest + '/' + target.prefix) + ' via ' + via);
       }
       if (a[1] === 'add' || a[1] === 'replace') {
         const vi = a.indexOf('via');
@@ -1897,6 +1930,15 @@ const COMMANDS = {
     return err(`PING ${t} (${M.ipStr(dst)}): ${r.reason}\npath: ${path}`);
   },
 
+  ping6: (cli, a) => {
+    const t = a[0]; if (!t) return err('usage: ping6 <IPv6-address>');
+    const big = M.ip6(t); if (big == null) return err(`ping6: ${t} is not a valid IPv6 address`);
+    const dst = M.ip6Str(big);
+    const r = M.ping6(cli.net, cli.cur, dst);
+    const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
+    if (r.ok) return ok(`PING6 ${dst}: reply received — reachable\npath: ${path}`);
+    return err(`PING6 ${dst}: ${r.reason}\npath: ${path}`);
+  },
   traceroute: (cli, a) => {
     const t = a[0]; if (!t) return err('usage: traceroute <host|ip>');
     const dst = resolve(cli.net, t); if (dst == null) return err(`traceroute: cannot resolve ${t}`);
