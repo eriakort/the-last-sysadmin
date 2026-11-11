@@ -78,6 +78,11 @@ function hsrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is ' + state.state + ' (active: ' + state.active + ')' : devId + '/' + ifaceName + ' has no active HSRP group' };
 }
+function vrrpState(net, devId, ifaceName, expected) {
+  const state = M.vrrpStatus(net, devId, ifaceName);
+  const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
+  return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
+}
 function vpnUp(net, devId, ifaceName) {
   const up = M.tunnelEstablished(net, devId, ifaceName);
   return { ok: up, reason: up ? `${devId}/${ifaceName} VPN tunnel is established` : `${devId}/${ifaceName} VPN tunnel is down (check endpoints, routing to the peer, and matching authentication)` };
@@ -149,4 +154,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState };

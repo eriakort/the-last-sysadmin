@@ -1248,6 +1248,34 @@ const chapters = [
     success: [{ type: 'cert_valid', dev: 'r2', peer: 'r1' }, { type: 'vpn_up', dev: 'r1', iface: 'tun0' }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip tunnel trust CorpRoot-CA']]
   },
+
+  // Breadth · First-hop redundancy (VRRP) — present one virtual gateway from two
+  // routers, with the preferred router tracking its uplink so the backup takes
+  // over on failure. VRRP is the vendor-neutral analog of the existing HSRP.
+  { id: 'vrrp-gateway-redundancy', chapter: 'Redundancy', mode: 'diagnose',
+    title: 'One gateway, two routers (VRRP)',
+    story: 'The office LAN 10.30.0.0/24 is served by two routers, r1 and r2, both reachable to the core and the server farm. Hosts use a single default gateway 10.30.0.1, but today that address lives on r1 alone — if r1 or its uplink fails, the office is stranded even though r2 is healthy. Standardize on VRRP (the branch is multi-vendor, so HSRP is off the table).',
+    objective: 'Configure VRRP group 1 for virtual IP 10.30.0.1 on both routers. Make r1 the master (priority 110) and r2 the backup (priority 100), with r1 tracking its uplink eth1 so it yields on failure. h1 must reach the server srv through the virtual gateway.',
+    ticket: { id: 'INC-2503', from: 'NOC · Branch connectivity', priority: 'P2', symptom: 'Whenever r1 reboots or loses its uplink, the whole office drops off — workstations keep sending to the same gateway and the backup router never takes over. We need automatic first-hop failover without touching every workstation, and it has to be vendor-neutral.' },
+    diagnose: { q: 'Both routers sit on the user LAN, but hosts only have one default gateway. What presents a single gateway address that survives a router or uplink failure?', options: ['A VRRP group sharing one virtual IP on both routers, with r1 tracking its uplink so its priority drops on failure', 'Give each workstation two default gateways and rely on host timeouts', 'Configure the same real interface IP on both routers'], answer: 0, because: 'A first-hop redundancy protocol presents one virtual gateway; the higher-priority router is master, and tracking the uplink makes it yield to the backup when its upstream path fails — with no change to host configuration.' },
+    console: 'r1',
+    hints: ['Enter interface config on each router: `enable`, `configure terminal`, `interface eth0`.', 'On both: `vrrp 1 ip 10.30.0.1`. On r1: `vrrp 1 priority 110`, `vrrp 1 preempt`, `vrrp 1 track eth1 decrement 20`. On r2: `vrrp 1 priority 100`.', 'Verify with `show vrrp` — r1 should be Master, r2 Backup — then ping srv from h1.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.30.0.10', 24, '10.30.0.1'), srv: SRV('srv', '10.30.9.10', 24, '10.30.9.1', { 443: 'https' }),
+        r1: R('r1', 'router', { eth0: iface('10.30.0.2', 24), eth1: iface('10.30.1.1', 30) }, [{ dest: ip('10.30.9.0'), mask: 24, via: ip('10.30.1.2') }]),
+        r2: R('r2', 'router', { eth0: iface('10.30.0.3', 24), eth1: iface('10.30.2.1', 30) }, [{ dest: ip('10.30.9.0'), mask: 24, via: ip('10.30.2.2') }]),
+        core: R('core', 'router', { eth0: iface('10.30.1.2', 30), eth1: iface('10.30.2.2', 30), eth2: iface('10.30.9.1', 24) }, [{ dest: ip('10.30.0.0'), mask: 24, via: ip('10.30.1.1') }, { dest: ip('10.30.0.0'), mask: 24, via: ip('10.30.2.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }]), sw9: SW('sw9', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r2', 'eth0', 'sw1', 'p3'), L('r1', 'eth1', 'core', 'eth0'), L('r2', 'eth1', 'core', 'eth1'), L('srv', 'eth0', 'sw9', 'p1'), L('core', 'eth2', 'sw9', 'p2')]
+    }),
+    success: [{ type: 'vrrp_state', dev: 'r1', iface: 'eth0', state: 'Master' }, { type: 'vrrp_state', dev: 'r2', iface: 'eth0', state: 'Backup' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [
+      ['r1', 'enable'], ['r1', 'configure terminal'], ['r1', 'interface eth0'], ['r1', 'vrrp 1 ip 10.30.0.1'], ['r1', 'vrrp 1 priority 110'], ['r1', 'vrrp 1 preempt'], ['r1', 'vrrp 1 track eth1 decrement 20'], ['r1', 'end'],
+      ['r2', 'enable'], ['r2', 'configure terminal'], ['r2', 'interface eth0'], ['r2', 'vrrp 1 ip 10.30.0.1'], ['r2', 'vrrp 1 priority 100'], ['r2', 'vrrp 1 preempt'], ['r2', 'end']
+    ]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------

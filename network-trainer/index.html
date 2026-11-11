@@ -593,10 +593,35 @@ function hsrpStatus(net, devId, ifaceName) {
   return { group: cfg.group, virtualIp: cfg.virtualIp, state: active && active.id === devId && active.iface === ifaceName ? 'Active' : 'Standby',
     active: active ? active.id : null, priority: local ? local.priority : 0, activePriority: active ? active.priority : 0 };
 }
+// VRRP: first-hop redundancy, the IETF analog of HSRP. Election is by effective
+// priority (the address owner — whose real interface IP is the virtual IP — is
+// always 255), then highest interface IP. State is Master / Backup.
+function vrrpStatus(net, devId, ifaceName) {
+  const dev = net.devices[devId], port = dev && dev.ifaces && dev.ifaces[ifaceName], cfg = port && port.vrrp;
+  if (!cfg || cfg.virtualIp == null) return null;
+  const effective = (id, name) => {
+    const p = net.devices[id].ifaces[name], v = p.vrrp;
+    if (p.ip != null && p.ip === v.virtualIp) return 255;                      // address owner
+    const decrement = (v.track || []).filter(t => !net.devices[id].ifaces[t.iface] || net.devices[id].ifaces[t.iface].up === false)
+      .reduce((sum, t) => sum + t.decrement, 0);
+    return Math.max(0, Number(v.priority || 100) - decrement);
+  };
+  const peers = [[devId, ifaceName], ...l2Domain(net, devId, ifaceName)].filter(([id, name]) => {
+    const d = net.devices[id], p = d && d.ifaces && d.ifaces[name], v = p && p.vrrp;
+    return d && d.kind === 'router' && p && p.up !== false && v && v.group === cfg.group && v.virtualIp === cfg.virtualIp;
+  });
+  const candidates = peers.map(([id, name]) => ({ id, iface: name, priority: effective(id, name), ip: net.devices[id].ifaces[name].ip || 0 }))
+    .sort((a, b) => b.priority - a.priority || b.ip - a.ip || a.id.localeCompare(b.id));
+  const master = candidates[0];
+  const local = candidates.find(x => x.id === devId && x.iface === ifaceName);
+  return { group: cfg.group, virtualIp: cfg.virtualIp, state: master && master.id === devId && master.iface === ifaceName ? 'Master' : 'Backup',
+    master: master ? master.id : null, priority: local ? local.priority : 0, masterPriority: master ? master.priority : 0 };
+}
 function ownsVirtualIp(net, devId, addr) {
   const dev = net.devices[devId]; if (!dev || dev.kind !== 'router') return false;
-  return Object.entries(dev.ifaces || {}).some(([name, p]) => p.hsrp && p.hsrp.virtualIp === addr &&
-    hsrpStatus(net, devId, name)?.state === 'Active');
+  return Object.entries(dev.ifaces || {}).some(([name, p]) =>
+    (p.hsrp && p.hsrp.virtualIp === addr && hsrpStatus(net, devId, name)?.state === 'Active') ||
+    (p.vrrp && p.vrrp.virtualIp === addr && vrrpStatus(net, devId, name)?.state === 'Master'));
 }
 function deviceOwning(net, addr) {
   for (const id in net.devices) if (ownsIp(net.devices[id], addr) || ownsVirtualIp(net, id, addr)) return id;
@@ -1099,7 +1124,7 @@ module.exports = {
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
-  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
+  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
@@ -1186,6 +1211,11 @@ function hsrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is ' + state.state + ' (active: ' + state.active + ')' : devId + '/' + ifaceName + ' has no active HSRP group' };
 }
+function vrrpState(net, devId, ifaceName, expected) {
+  const state = M.vrrpStatus(net, devId, ifaceName);
+  const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
+  return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
+}
 function vpnUp(net, devId, ifaceName) {
   const up = M.tunnelEstablished(net, devId, ifaceName);
   return { ok: up, reason: up ? `${devId}/${ifaceName} VPN tunnel is established` : `${devId}/${ifaceName} VPN tunnel is down (check endpoints, routing to the peer, and matching authentication)` };
@@ -1257,7 +1287,7 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -1383,6 +1413,13 @@ function ciscoRunConfig(dev) {
       if (h.priority != null && h.priority !== 100) lines.push(' standby ' + h.group + ' priority ' + h.priority);
       if (h.preempt) lines.push(' standby ' + h.group + ' preempt');
       for (const t of h.track || []) lines.push(' standby ' + h.group + ' track ' + t.iface + ' decrement ' + t.decrement);
+    }
+    if (p.vrrp) {
+      const v = p.vrrp;
+      lines.push(' vrrp ' + v.group + ' ip ' + M.ipStr(v.virtualIp));
+      if (v.priority != null && v.priority !== 100) lines.push(' vrrp ' + v.group + ' priority ' + v.priority);
+      if (v.preempt) lines.push(' vrrp ' + v.group + ' preempt');
+      for (const t of v.track || []) lines.push(' vrrp ' + v.group + ' track ' + t.iface + ' decrement ' + t.decrement);
     }
     for (const dir of ['in','out']) {
       const acl = p.accessGroups && p.accessGroups[dir];
@@ -1555,6 +1592,15 @@ function ciscoShow(cli, words) {
         (s && s.active || 'none') + ' (' + name + ')');
     }
     return ok('Grp    Virtual IP       State     Priority  Active router\n' + (rows.join('\n') || '(no HSRP groups configured)'));
+  }
+  if (q === 'vrrp brief' || q === 'vrrp' || q === 'ip vrrp' || q === 'vrrp all') {
+    const rows = [];
+    for (const [name, p] of Object.entries(dev.ifaces || {})) if (p.vrrp) {
+      const s = M.vrrpStatus(cli.net, cli.cur, name);
+      rows.push(name.padEnd(8) + String(p.vrrp.group).padEnd(6) + String(s && s.priority || 0).padEnd(10) +
+        (p.vrrp.preempt ? 'Y' : 'N').padEnd(9) + String(s && s.state || 'Unknown').padEnd(10) + M.ipStr(p.vrrp.virtualIp));
+    }
+    return ok('Interface Grp  Priority  Preempt  State     Virtual IP\n' + (rows.join('\n') || '(no VRRP groups configured)'));
   }
   if (q === 'ip bgp summary') {
     const sessions = M.bgpSessions(cli.net, cli.cur);
@@ -2272,7 +2318,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -2504,6 +2550,34 @@ function runCisco(cli, line) {
       if (p.hsrp && p.hsrp.group === group) delete p.hsrp;
       return ok('');
     }
+    if (words[0] === 'vrrp' && words[1] && words[2] === 'ip' && words.length === 4) {
+      const group = Number(words[1]), virtualIp = parseIPv4(words[3]);
+      if (!Number.isInteger(group) || group < 1 || group > 255 || virtualIp == null) return err('% Use vrrp <1-255> ip <virtual-ip>');
+      if (dev.kind !== 'router' || p.ip == null || M.sameNet(p.ip, virtualIp, p.mask) === false) return err('% VRRP requires a router interface and a virtual IP in its connected subnet');
+      p.vrrp = { ...(p.vrrp || {}), group, virtualIp, priority: p.vrrp && p.vrrp.priority || 100, preempt: p.vrrp ? p.vrrp.preempt !== false : true, track: p.vrrp && p.vrrp.track || [] };
+      return ok('');
+    }
+    if (words[0] === 'vrrp' && words[1] && words[2] === 'priority' && words.length === 4) {
+      const group = Number(words[1]), priority = Number(words[3]);
+      if (!p.vrrp || p.vrrp.group !== group) return err('% Configure vrrp <group> ip first');
+      if (!Number.isInteger(priority) || priority < 1 || priority > 254) return err('% VRRP priority must be 1-254');
+      p.vrrp.priority = priority; return ok('');
+    }
+    if (words[0] === 'vrrp' && words[1] && words[2] === 'preempt' && words.length === 3) {
+      const group = Number(words[1]); if (!p.vrrp || p.vrrp.group !== group) return err('% Configure vrrp <group> ip first');
+      p.vrrp.preempt = true; return ok('');
+    }
+    if (words[0] === 'vrrp' && words[1] && words[2] === 'track' && words.length === 6 && words[4] === 'decrement') {
+      const group = Number(words[1]), tracked = ciscoIface(dev, words[3]), decrement = Number(words[5]);
+      if (!p.vrrp || p.vrrp.group !== group) return err('% Configure vrrp <group> ip first');
+      if (!tracked || !Number.isInteger(decrement) || decrement < 1 || decrement > 255) return err('% Use vrrp <group> track <interface> decrement <1-255>');
+      p.vrrp.track = (p.vrrp.track || []).filter(t => t.iface !== tracked).concat([{ iface: tracked, decrement }]); return ok('');
+    }
+    if (words[0] === 'no' && words[1] === 'vrrp' && words.length >= 3) {
+      const group = Number(words[2]);
+      if (p.vrrp && p.vrrp.group === group) delete p.vrrp;
+      return ok('');
+    }
 
     if (words[0] === 'description') { p.description = raw.split(/\s+/).slice(1).join(' '); return ok(''); }
     if (words[0] === 'ip' && words[1] === 'helper-address' && words[2] && words.length === 3) {
@@ -2599,6 +2673,9 @@ const HELP_SECTIONS = [
     ['network <address> <wildcard> ...', 'Advertise a network into OSPF', ['router']],
     ['show ip ospf neighbor', 'Check OSPF neighbour relationships', ['router']],
     ['standby <group> ip <virtual-ip>', 'Configure HSRP first-hop redundancy', ['router']],
+    ['vrrp <group> ip <virtual-ip>', 'Configure VRRP first-hop redundancy (vendor-neutral)', ['router']],
+    ['vrrp <group> priority / preempt / track', 'Tune VRRP election and uplink tracking', ['router']],
+    ['show vrrp', 'Show VRRP groups, priority and master/backup state', ['router']],
     ['show ip protocols', 'Review active routing protocols', ['router']],
     ['bgp summary / bgp neighbor', 'Inspect BGP peers and session state', ['router']],
     ['show ip bgp', 'Review routes learned through BGP', ['router']],
@@ -3297,6 +3374,7 @@ function evalCheck(net, s) {
     case 'ospf_neighbor':  return C.ospfNeighbor(net, s.dev, s.peer);
     case 'ospf_route':     return C.ospfRoute(net, s.dev, s.cidr);
     case 'hsrp_state':    return C.hsrpState(net, s.dev, s.iface, s.state);
+    case 'vrrp_state':    return C.vrrpState(net, s.dev, s.iface, s.state);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);
@@ -4651,6 +4729,34 @@ const chapters = [
     }),
     success: [{ type: 'cert_valid', dev: 'r2', peer: 'r1' }, { type: 'vpn_up', dev: 'r1', iface: 'tun0' }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip tunnel trust CorpRoot-CA']]
+  },
+
+  // Breadth · First-hop redundancy (VRRP) — present one virtual gateway from two
+  // routers, with the preferred router tracking its uplink so the backup takes
+  // over on failure. VRRP is the vendor-neutral analog of the existing HSRP.
+  { id: 'vrrp-gateway-redundancy', chapter: 'Redundancy', mode: 'diagnose',
+    title: 'One gateway, two routers (VRRP)',
+    story: 'The office LAN 10.30.0.0/24 is served by two routers, r1 and r2, both reachable to the core and the server farm. Hosts use a single default gateway 10.30.0.1, but today that address lives on r1 alone — if r1 or its uplink fails, the office is stranded even though r2 is healthy. Standardize on VRRP (the branch is multi-vendor, so HSRP is off the table).',
+    objective: 'Configure VRRP group 1 for virtual IP 10.30.0.1 on both routers. Make r1 the master (priority 110) and r2 the backup (priority 100), with r1 tracking its uplink eth1 so it yields on failure. h1 must reach the server srv through the virtual gateway.',
+    ticket: { id: 'INC-2503', from: 'NOC · Branch connectivity', priority: 'P2', symptom: 'Whenever r1 reboots or loses its uplink, the whole office drops off — workstations keep sending to the same gateway and the backup router never takes over. We need automatic first-hop failover without touching every workstation, and it has to be vendor-neutral.' },
+    diagnose: { q: 'Both routers sit on the user LAN, but hosts only have one default gateway. What presents a single gateway address that survives a router or uplink failure?', options: ['A VRRP group sharing one virtual IP on both routers, with r1 tracking its uplink so its priority drops on failure', 'Give each workstation two default gateways and rely on host timeouts', 'Configure the same real interface IP on both routers'], answer: 0, because: 'A first-hop redundancy protocol presents one virtual gateway; the higher-priority router is master, and tracking the uplink makes it yield to the backup when its upstream path fails — with no change to host configuration.' },
+    console: 'r1',
+    hints: ['Enter interface config on each router: `enable`, `configure terminal`, `interface eth0`.', 'On both: `vrrp 1 ip 10.30.0.1`. On r1: `vrrp 1 priority 110`, `vrrp 1 preempt`, `vrrp 1 track eth1 decrement 20`. On r2: `vrrp 1 priority 100`.', 'Verify with `show vrrp` — r1 should be Master, r2 Backup — then ping srv from h1.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.30.0.10', 24, '10.30.0.1'), srv: SRV('srv', '10.30.9.10', 24, '10.30.9.1', { 443: 'https' }),
+        r1: R('r1', 'router', { eth0: iface('10.30.0.2', 24), eth1: iface('10.30.1.1', 30) }, [{ dest: ip('10.30.9.0'), mask: 24, via: ip('10.30.1.2') }]),
+        r2: R('r2', 'router', { eth0: iface('10.30.0.3', 24), eth1: iface('10.30.2.1', 30) }, [{ dest: ip('10.30.9.0'), mask: 24, via: ip('10.30.2.2') }]),
+        core: R('core', 'router', { eth0: iface('10.30.1.2', 30), eth1: iface('10.30.2.2', 30), eth2: iface('10.30.9.1', 24) }, [{ dest: ip('10.30.0.0'), mask: 24, via: ip('10.30.1.1') }, { dest: ip('10.30.0.0'), mask: 24, via: ip('10.30.2.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }]), sw9: SW('sw9', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r2', 'eth0', 'sw1', 'p3'), L('r1', 'eth1', 'core', 'eth0'), L('r2', 'eth1', 'core', 'eth1'), L('srv', 'eth0', 'sw9', 'p1'), L('core', 'eth2', 'sw9', 'p2')]
+    }),
+    success: [{ type: 'vrrp_state', dev: 'r1', iface: 'eth0', state: 'Master' }, { type: 'vrrp_state', dev: 'r2', iface: 'eth0', state: 'Backup' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [
+      ['r1', 'enable'], ['r1', 'configure terminal'], ['r1', 'interface eth0'], ['r1', 'vrrp 1 ip 10.30.0.1'], ['r1', 'vrrp 1 priority 110'], ['r1', 'vrrp 1 preempt'], ['r1', 'vrrp 1 track eth1 decrement 20'], ['r1', 'end'],
+      ['r2', 'enable'], ['r2', 'configure terminal'], ['r2', 'interface eth0'], ['r2', 'vrrp 1 ip 10.30.0.1'], ['r2', 'vrrp 1 priority 100'], ['r2', 'vrrp 1 preempt'], ['r2', 'end']
+    ]
   },
 ];
 

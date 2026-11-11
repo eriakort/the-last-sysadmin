@@ -315,10 +315,35 @@ function hsrpStatus(net, devId, ifaceName) {
   return { group: cfg.group, virtualIp: cfg.virtualIp, state: active && active.id === devId && active.iface === ifaceName ? 'Active' : 'Standby',
     active: active ? active.id : null, priority: local ? local.priority : 0, activePriority: active ? active.priority : 0 };
 }
+// VRRP: first-hop redundancy, the IETF analog of HSRP. Election is by effective
+// priority (the address owner — whose real interface IP is the virtual IP — is
+// always 255), then highest interface IP. State is Master / Backup.
+function vrrpStatus(net, devId, ifaceName) {
+  const dev = net.devices[devId], port = dev && dev.ifaces && dev.ifaces[ifaceName], cfg = port && port.vrrp;
+  if (!cfg || cfg.virtualIp == null) return null;
+  const effective = (id, name) => {
+    const p = net.devices[id].ifaces[name], v = p.vrrp;
+    if (p.ip != null && p.ip === v.virtualIp) return 255;                      // address owner
+    const decrement = (v.track || []).filter(t => !net.devices[id].ifaces[t.iface] || net.devices[id].ifaces[t.iface].up === false)
+      .reduce((sum, t) => sum + t.decrement, 0);
+    return Math.max(0, Number(v.priority || 100) - decrement);
+  };
+  const peers = [[devId, ifaceName], ...l2Domain(net, devId, ifaceName)].filter(([id, name]) => {
+    const d = net.devices[id], p = d && d.ifaces && d.ifaces[name], v = p && p.vrrp;
+    return d && d.kind === 'router' && p && p.up !== false && v && v.group === cfg.group && v.virtualIp === cfg.virtualIp;
+  });
+  const candidates = peers.map(([id, name]) => ({ id, iface: name, priority: effective(id, name), ip: net.devices[id].ifaces[name].ip || 0 }))
+    .sort((a, b) => b.priority - a.priority || b.ip - a.ip || a.id.localeCompare(b.id));
+  const master = candidates[0];
+  const local = candidates.find(x => x.id === devId && x.iface === ifaceName);
+  return { group: cfg.group, virtualIp: cfg.virtualIp, state: master && master.id === devId && master.iface === ifaceName ? 'Master' : 'Backup',
+    master: master ? master.id : null, priority: local ? local.priority : 0, masterPriority: master ? master.priority : 0 };
+}
 function ownsVirtualIp(net, devId, addr) {
   const dev = net.devices[devId]; if (!dev || dev.kind !== 'router') return false;
-  return Object.entries(dev.ifaces || {}).some(([name, p]) => p.hsrp && p.hsrp.virtualIp === addr &&
-    hsrpStatus(net, devId, name)?.state === 'Active');
+  return Object.entries(dev.ifaces || {}).some(([name, p]) =>
+    (p.hsrp && p.hsrp.virtualIp === addr && hsrpStatus(net, devId, name)?.state === 'Active') ||
+    (p.vrrp && p.vrrp.virtualIp === addr && vrrpStatus(net, devId, name)?.state === 'Master'));
 }
 function deviceOwning(net, addr) {
   for (const id in net.devices) if (ownsIp(net.devices[id], addr) || ownsVirtualIp(net, id, addr)) return id;
@@ -821,7 +846,7 @@ module.exports = {
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
-  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
+  ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
 };
