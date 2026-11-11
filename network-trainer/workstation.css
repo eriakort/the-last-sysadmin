@@ -699,3 +699,8 @@ aside{scrollbar-color:#344a60 transparent}
 :root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
 
 
+
+/* Device command-set (brand) selector in the inspector */
+.brand-row{display:flex;align-items:center;gap:8px;margin:8px 12px 2px;font-size:11px;color:var(--muted)}
+.brand-row select{flex:none;font:inherit;color:var(--ink);background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:4px 7px}
+.brand-chip{display:inline-block;margin-left:7px;padding:1px 6px;border:1px solid #2d91ae;border-radius:5px;background:#12394b;color:#dff8ff;font:700 8px ui-monospace,monospace;letter-spacing:.04em;vertical-align:middle}

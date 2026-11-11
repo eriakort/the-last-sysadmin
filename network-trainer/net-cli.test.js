@@ -774,6 +774,74 @@ test('help is scoped to the selected device kind', () => {
   has(cli.on('r1').run('?').out, 'router ospf <process-id>', '? is a scoped alias for help');
 });
 
+test('a cisco-ios device presents an IOS-only command surface', () => {
+  const net = { devices: {
+    r1: { id: 'r1', kind: 'router', ifaces: { eth0: { ip: ip('10.0.1.1'), mask: 24, up: true } }, routes: [] },
+    rc: { id: 'rc', kind: 'router', brand: 'cisco-ios', ifaces: { eth0: { ip: ip('10.0.1.2'), mask: 24, up: true } }, routes: [] },
+  }, links: [] };
+  const cli = makeCLI(net, 'rc');
+  const no = (s, sub, m) => { if (String(s).includes(sub)) throw new Error(`${m}: should not include "${sub}"`); };
+
+  // Help is brand-scoped and names the brand.
+  const h = cli.run('help').out;
+  has(h, 'Cisco IOS', 'header names the brand');
+  has(h, 'router ospf <process-id>', 'keeps IOS routing commands');
+  has(h, 'show ip interface brief', 'keeps IOS show commands');
+  no(h, 'ip addr ', 'hides Linux ip addr');
+  no(h, 'nmap', 'hides Linux nmap');
+  no(h, 'iptables', 'hides Linux iptables');
+
+  // Linux-dialect commands are rejected with an IOS redirect; IOS commands work.
+  eq(cli.run('iptables -L').code, 1, 'iptables rejected on cisco-ios');
+  has(cli.run('iptables -L').out, 'Cisco IOS', 'rejection explains the dialect');
+  eq(cli.run('nmap r1').code, 1, 'nmap rejected on cisco-ios');
+  eq(cli.run('ip addr').code, 1, 'Linux ip addr rejected on cisco-ios');
+  eq(cli.run('show ip interface brief').code, 0, 'IOS show still works');
+
+  // A generic device is unchanged (the 38 existing missions rely on this).
+  cli.on('r1');
+  eq(cli.run('ip addr').code, 0, 'generic device keeps Linux ip addr');
+  has(cli.run('help').out, 'ip addr ', 'generic help still lists Linux tools');
+});
+
+test('brand registry: EOS is IOS-family, Junos/PAN-OS are reference, ASA routes to its engine', () => {
+  const { brandsForKind } = require('./net-cli');
+  const no = (s, sub, m) => { if (String(s).includes(sub)) throw new Error(`${m}: should not include "${sub}"`); };
+  const net = { devices: {
+    eos: { id: 'eos', kind: 'switch', brand: 'arista-eos', ifaces: { p1: { up: true } } },
+    jun: { id: 'jun', kind: 'router', brand: 'juniper-junos', ifaces: { eth0: { up: true } } },
+    pan: { id: 'pan', kind: 'firewall', brand: 'paloalto-panos', ifaces: { eth0: { up: true } } },
+    asa: { id: 'asa', kind: 'firewall', brand: 'cisco-asa', ifaces: { eth0: { up: true } } },
+  }, links: [] };
+
+  // Per-kind availability: ASA/PAN-OS are firewall-only; EOS is switch/router.
+  eq(brandsForKind('firewall').includes('paloalto-panos'), true, 'PAN-OS offered on firewalls');
+  eq(brandsForKind('router').includes('paloalto-panos'), false, 'PAN-OS not offered on routers');
+  eq(brandsForKind('router').includes('arista-eos'), true, 'EOS offered on routers');
+
+  const cli = makeCLI(net, 'eos');
+  // Arista EOS behaves as IOS family: Linux blocked, IOS commands kept.
+  has(cli.run('help').out, 'Arista EOS', 'EOS names its brand');
+  eq(cli.run('iptables -L').code, 1, 'EOS blocks Linux dialect');
+  eq(cli.run('show ip interface brief').code, 0, 'EOS runs IOS show');
+
+  // Juniper Junos: reference card with set/commit syntax and the transparency note.
+  const jh = cli.on('jun').run('help').out;
+  has(jh, 'JUNIPER JUNOS COMMAND REFERENCE', 'Junos card header');
+  has(jh, 'set interfaces', 'Junos config syntax');
+  has(jh, 'commit', 'Junos commit');
+  has(jh, 'Reference profile', 'reference transparency note');
+
+  // Palo Alto PAN-OS: reference card, firewall-flavoured.
+  const ph = cli.on('pan').run('help').out;
+  has(ph, 'PALO ALTO PAN-OS COMMAND REFERENCE', 'PAN-OS card header');
+  has(ph, 'test security-policy-match', 'PAN-OS policy test');
+  has(ph, 'set rulebase security', 'PAN-OS rule syntax');
+
+  // Cisco ASA routes to the ASA engine (its own help).
+  has(cli.on('asa').run('help').out, 'ASA FIREWALL COMMANDS', 'ASA brand uses the ASA engine');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

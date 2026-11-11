@@ -8,7 +8,7 @@ const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
 const NR = require('./net-spaced-recall');
-const { makeCLI } = require('./net-cli');
+const { makeCLI, BRANDS, brandsForKind } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
 const AW = require('./net-automation-workshop');
@@ -821,7 +821,17 @@ function renderConfig() {
   if (!panels.some(p => p.id === INSPECTOR_TAB)) INSPECTOR_TAB = 'overview';
   const tabs = panels.map(p => `<button type="button" class="inspector-tab${p.id === INSPECTOR_TAB ? ' active' : ''}" data-inspector-tab="${p.id}">${p.label}</button>`).join('');
   const panel = panels.find(p => p.id === INSPECTOR_TAB);
-  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
+  // Command dialect / brand. 'generic' keeps the full hybrid command set; other
+  // brands present a vendor command surface (help + guard live in net-cli.js).
+  const brandOpts = brandsForKind(d.kind);
+  const brand = BRANDS[d.brand] ? d.brand : 'generic';
+  const brandable = brandOpts.length > 1;
+  const brandChip = brand !== 'generic' ? ` <span class="brand-chip">${esc(BRANDS[brand].label)}</span>` : '';
+  const brandRow = (canBuild() && brandable)
+    ? `<label class="brand-row">Command set <select id="deviceBrand" aria-label="Device command set">${brandOpts.map(b => `<option value="${b}"${brand === b ? ' selected' : ''}>${esc(BRANDS[b].label)}</option>`).join('')}</select></label>`
+    : '';
+  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}${brandChip}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
+    ${brandRow}
     <div class="inspector-tabs" role="group" aria-label="Device inspector sections">${tabs}</div>
     <section class="inspector-panel" role="region" aria-label="${esc(panel.label)}">${panel.html}</section>`;
 }
@@ -1759,6 +1769,13 @@ function wireBrief() {
 function wireConfig() {
   document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; input.focus(); } }));
   document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
+  const brandSel = $('#deviceBrand'); if (brandSel) brandSel.addEventListener('change', () => {
+    if (!SEL || !RUN.net.devices[SEL]) return;
+    rememberTopology();
+    if (brandSel.value === 'generic') delete RUN.net.devices[SEL].brand; else RUN.net.devices[SEL].brand = brandSel.value;
+    flashStatus(SEL + ' now uses the ' + ((BRANDS[brandSel.value] || BRANDS.generic).label) + ' command set.');
+    refresh();
+  });
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
     rememberTopology(); const id = B.addDevice(RUN.net, b.dataset.add); TOPO_SELECTED=new Set([id]); LINK_SEL=null; selectDevice(id); WIRE = null; refresh();
   }));

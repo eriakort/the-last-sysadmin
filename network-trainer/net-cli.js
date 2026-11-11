@@ -692,11 +692,102 @@ function runASA(cli, line) {
   return err('% Invalid ASA command — use show, packet-tracer, configure terminal, or help');
 }
 
+/* ---------------- device brands / command dialects ----------------
+ * A brand sets which command surface a device presents. `family` is what the
+ * simulator can actually EXECUTE:
+ *   'linux'     — the generic hybrid command set (today's default)
+ *   'ios'       — Cisco IOS; Arista EOS maps here too (IOS-compatible)
+ *   'asa'       — Cisco ASA firewall (routed to the ASA engine)
+ *   'reference' — no native execution yet; `help` is the accurate vendor
+ *                 command card and the device runs the core engine. Used for
+ *                 Juniper Junos and Palo Alto PAN-OS, whose set/commit syntax
+ *                 would need dedicated parsers.
+ * Default is 'generic' so the existing missions (which set no brand) are
+ * unaffected. `note` is shown under the help header. */
+const BRANDS = {
+  'generic':        { label: 'Generic (Linux)',   kinds: ['host', 'server', 'switch', 'router', 'firewall'], family: 'linux' },
+  'cisco-ios':      { label: 'Cisco IOS',          kinds: ['switch', 'router', 'firewall'], family: 'ios' },
+  'arista-eos':     { label: 'Arista EOS',         kinds: ['switch', 'router'], family: 'ios', note: 'Arista EOS uses Cisco-style syntax; the IOS commands below apply.' },
+  'cisco-asa':      { label: 'Cisco ASA',          kinds: ['firewall'], family: 'asa' },
+  'juniper-junos':  { label: 'Juniper Junos',      kinds: ['switch', 'router', 'firewall'], family: 'reference' },
+  'paloalto-panos': { label: 'Palo Alto PAN-OS',   kinds: ['firewall'], family: 'reference' },
+};
+function deviceBrand(dev) { const b = dev && dev.brand; return BRANDS[b] ? b : 'generic'; }
+function brandProfile(dev) { return BRANDS[deviceBrand(dev)]; }
+function brandsForKind(kind) { return Object.keys(BRANDS).filter(id => BRANDS[id].kinds.includes(kind)); }
+function isLinuxDialect(words) {
+  if (['iptables', 'ip6tables', 'dhclient', 'resolvectl', 'ifconfig', 'tcpdump', 'nmap', 'dig'].includes(words[0])) return true;
+  if (words[0] === 'ip' && ['addr', 'a', 'link', 'l'].includes(words[1])) return true;   // Linux `ip addr` / `ip link`
+  return false;
+}
+
+/* Accurate, publicly-documented command references for brands the engine does
+ * not natively execute. Each item is [command, description, kinds]. These teach
+ * the vendor CLI vocabulary; exact syntax/options should be checked against the
+ * vendor's current documentation. */
+const JUNOS_REF = {
+  intro: 'Juniper Junos reference. Operational commands run from the prompt; configuration is entered under "configure" and applied with "commit".',
+  sections: [
+    { h: 'OPERATIONAL MODE', items: [
+      ['show interfaces terse', 'Summarise interfaces and addresses', ['switch', 'router', 'firewall']],
+      ['show route', 'Display the routing table', ['router', 'firewall']],
+      ['show ospf neighbor', 'Check OSPF adjacencies', ['router']],
+      ['show bgp summary', 'Inspect BGP sessions', ['router']],
+      ['show vlans', 'List VLAN membership (EX switches)', ['switch']],
+      ['show spanning-tree bridge', 'Inspect spanning-tree state', ['switch']],
+      ['show security policies', 'Review security policies (SRX)', ['firewall']],
+      ['show security flow session', 'List active sessions (SRX)', ['firewall']],
+      ['show arp', 'Display the ARP table', ['switch', 'router', 'firewall']],
+      ['show configuration', 'Display the active configuration', ['switch', 'router', 'firewall']],
+      ['ping <host> / traceroute <host>', 'Test reachability and path', ['switch', 'router', 'firewall']],
+    ]},
+    { h: 'CONFIGURATION MODE (configure)', items: [
+      ['set interfaces <if> unit 0 family inet address <ip>/<pfx>', 'Assign an interface address', ['switch', 'router', 'firewall']],
+      ['set routing-options static route <dest>/<pfx> next-hop <ip>', 'Add a static route', ['router', 'firewall']],
+      ['set protocols ospf area 0.0.0.0 interface <if>', 'Enable OSPF on an interface', ['router']],
+      ['set vlans <name> vlan-id <id>', 'Create a VLAN (EX switches)', ['switch']],
+      ['set security policies from-zone <z> to-zone <z> policy <name> ...', 'Define a security policy (SRX)', ['firewall']],
+      ['set security nat source rule-set <name> ...', 'Define source NAT (SRX)', ['firewall']],
+      ['commit', 'Apply the candidate configuration', ['switch', 'router', 'firewall']],
+      ['delete <path>', 'Remove configuration', ['switch', 'router', 'firewall']],
+      ['rollback', 'Discard candidate changes', ['switch', 'router', 'firewall']],
+    ]},
+  ],
+};
+const PANOS_REF = {
+  intro: 'Palo Alto PAN-OS reference. Operational commands run from the prompt; configuration is entered under "configure" and applied with "commit".',
+  sections: [
+    { h: 'OPERATIONAL MODE', items: [
+      ['show interface all', 'List interfaces and addresses', ['firewall']],
+      ['show routing route', 'Display the routing table', ['firewall']],
+      ['show session all', 'List active sessions', ['firewall']],
+      ['show running security-policy', 'Show the effective security rules', ['firewall']],
+      ['test security-policy-match from <z> to <z> source <ip> destination <ip> ...', 'Check which rule a flow matches', ['firewall']],
+      ['show system info', 'Display system and version details', ['firewall']],
+      ['ping host <ip> / traceroute host <ip>', 'Test reachability and path', ['firewall']],
+    ]},
+    { h: 'CONFIGURATION MODE (configure)', items: [
+      ['set network interface ethernet <if> layer3 ip <ip>/<pfx>', 'Assign an interface address', ['firewall']],
+      ['set network virtual-router <vr> routing-table ip static-route <name> ...', 'Add a static route', ['firewall']],
+      ['set rulebase security rules <name> from <z> to <z> source <x> destination <y> application <a> service <s> action <allow|deny>', 'Define a security rule', ['firewall']],
+      ['set network nat-rules <name> ...', 'Define a NAT rule', ['firewall']],
+      ['commit', 'Apply the candidate configuration', ['firewall']],
+      ['delete <path>', 'Remove configuration', ['firewall']],
+    ]},
+  ],
+};
+const REFERENCE_CARDS = { 'juniper-junos': JUNOS_REF, 'paloalto-panos': PANOS_REF };
+
 function runCisco(cli, line) {
   if (!line) return ok('');
   const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
   if (!dev) return dispatch(cli, raw);
-  if (dev.firewallOS === 'asa') return runASA(cli, raw);
+  const brandFamily = brandProfile(dev).family;
+  if (brandFamily === 'asa' || dev.firewallOS === 'asa') return runASA(cli, raw);
+  // An IOS-family device (Cisco IOS, Arista EOS) only exposes IOS commands;
+  // steer Linux-dialect tools to the IOS way.
+  if (brandFamily === 'ios' && isLinuxDialect(words))
+    return err('% Invalid input — ' + (dev.hostname || dev.id) + ' runs ' + brandProfile(dev).label + '. Use IOS-style commands (e.g. "show ip interface brief", "configure terminal" then "interface <port>"). Type "help" for the command set.');
   if (lower === 'enable' || lower === 'en') {
     if (cli.iosMode === 'user') { cli.iosMode = 'privileged'; return ok(''); }
     return ok('% Already in privileged EXEC mode');
@@ -1007,14 +1098,18 @@ function runCisco(cli, line) {
  * whose `kinds` include the selected device's kind, so the reference matches
  * what that device can actually run (the handlers enforce the same gating).
  * kinds: 'host' | 'server' | 'switch' | 'router' | 'firewall'; ALL = every kind.
- * This is also the natural seam for brand profiles later (e.g. Cisco IOS):
- * add a `brands` filter alongside `kinds` and filter on the device's brand. */
+ * An optional 4th element limits an entry to certain brands (e.g. ['generic']
+ * for Linux-dialect tools, ['cisco-ios'] for IOS-only hints); omit it for both. */
 const ALL_KINDS = ['host', 'server', 'switch', 'router', 'firewall'];
+// 4th-element filters are by execution FAMILY: GENERIC = linux-family only
+// (hidden on IOS devices), IOS = ios-family only. Untagged entries show on both.
+const GENERIC = ['linux'], IOS = ['ios'];
 const HELP_SECTIONS = [
   { h: 'DEVICE AND INTERFACE', items: [
     ['show ip interface brief', 'Summarise interface addresses and status', ['switch', 'router', 'firewall']],
-    ['ip addr', 'List or configure IP addresses', ['host', 'server', 'router', 'firewall']],
-    ['ip link', 'View or change interface state', ['host', 'server', 'router', 'firewall']],
+    ['ip addr', 'List or configure IP addresses', ['host', 'server', 'router', 'firewall'], GENERIC],
+    ['ip link', 'View or change interface state', ['host', 'server', 'router', 'firewall'], GENERIC],
+    ['configure terminal → interface <port>', 'Configure an interface, then ip address <ip> <mask>', ['switch', 'router', 'firewall'], IOS],
     ['interface <port>', 'Select a switch port for configuration', ['switch']],
     ['shutdown / no shutdown', 'Disable or re-enable an interface', ['switch']],
     ['vlan <id>', 'Create a VLAN on a switch', ['switch']],
@@ -1041,11 +1136,11 @@ const HELP_SECTIONS = [
     ['ping <host|ip>', 'Test whether a destination is reachable', ALL_KINDS],
     ['traceroute <host|ip>', 'Show the network path to a destination', ALL_KINDS],
     ['arp', 'Display the local IP-to-MAC address cache', ALL_KINDS],
-    ['tcpdump', 'Capture and inspect network packets', ALL_KINDS],
-    ['nmap <host|ip>', 'Discover reachable hosts and open ports', ALL_KINDS],
-    ['dig <name>', 'Query DNS records for a hostname', ALL_KINDS],
-    ['dhclient <interface>', 'Request an IP address using DHCP', ['host', 'server']],
-    ['resolvectl status', 'Inspect DNS resolver configuration', ['host', 'server', 'router', 'firewall']],
+    ['tcpdump', 'Capture and inspect network packets', ALL_KINDS, GENERIC],
+    ['nmap <host|ip>', 'Discover reachable hosts and open ports', ALL_KINDS, GENERIC],
+    ['dig <name>', 'Query DNS records for a hostname', ALL_KINDS, GENERIC],
+    ['dhclient <interface>', 'Request an IP address using DHCP', ['host', 'server'], GENERIC],
+    ['resolvectl status', 'Inspect DNS resolver configuration', ['host', 'server', 'router', 'firewall'], GENERIC],
   ]},
   { h: 'NETWORK SERVICES', items: [
     ['ip dhcp pool <name>', 'Create a DHCP address pool', ['router']],
@@ -1059,8 +1154,8 @@ const HELP_SECTIONS = [
     ['show logging', 'Review recent device log messages', ['router', 'firewall']],
   ]},
   { h: 'SECURITY AND FIREWALL', items: [
-    ['iptables -L', 'List firewall filtering rules', ['host', 'server', 'firewall']],
-    ['iptables -A ...', 'Add a packet-filtering rule', ['host', 'server', 'firewall']],
+    ['iptables -L', 'List firewall filtering rules', ['host', 'server', 'firewall'], GENERIC],
+    ['iptables -A ...', 'Add a packet-filtering rule', ['host', 'server', 'firewall'], GENERIC],
     ['access-list ...', 'Define traffic to permit or deny', ['router', 'firewall']],
     ['access-group ...', 'Apply an access list to an interface', ['router', 'firewall']],
     ['ip nat inside/outside ...', 'Translate addresses at the border', ['router', 'firewall']],
@@ -1077,21 +1172,45 @@ const HELP_SECTIONS = [
     ['help or ?', 'Display this command reference', ALL_KINDS],
   ]},
 ];
-function buildHelp(dev) {
-  const kind = dev && dev.kind;
-  const label = dev ? (dev.hostname || dev.id) : '';
-  const out = [
-    'NETWORK TERMINAL HELP' + (kind ? ` — ${label} (${kind})` : ''),
-    'Commands available on this device. Replace values in <angle brackets> with your own.',
-    ''
-  ];
-  for (const sec of HELP_SECTIONS) {
-    const rows = sec.items.filter(it => !kind || it[2].includes(kind));
+function renderHelpSections(sections, kind, family, pad) {
+  const out = [];
+  for (const sec of sections) {
+    const rows = sec.items.filter(it => (!kind || it[2].includes(kind)) && (!it[3] || !family || it[3].includes(family)));
     if (!rows.length) continue;
     out.push(sec.h);
-    for (const [cmd, desc] of rows) out.push('  ' + cmd.padEnd(34) + desc);
+    for (const [cmd, desc] of rows) out.push('  ' + cmd.padEnd(pad) + desc);
     out.push('');
   }
+  return out;
+}
+function buildHelp(dev) {
+  const kind = dev && dev.kind;
+  const brand = deviceBrand(dev);
+  const prof = BRANDS[brand];
+  const label = dev ? (dev.hostname || dev.id) : '';
+  const titleBrand = brand === 'generic' ? '' : ' · ' + prof.label;
+
+  // Reference brands (Juniper Junos, Palo Alto PAN-OS): show the vendor command
+  // card. The simulator executes its core engine, so this is clearly a reference.
+  if (prof.family === 'reference') {
+    const card = REFERENCE_CARDS[brand];
+    const out = [
+      `${prof.label.toUpperCase()} COMMAND REFERENCE — ${label} (${kind})`,
+      card.intro, ''
+    ];
+    out.push(...renderHelpSections(card.sections, kind, null, 58));
+    out.push('Reference profile — this simulator executes its core engine, so use this as the');
+    out.push(prof.label + ' command card. Verify exact syntax against the vendor\'s current docs.');
+    return out.join('\n');
+  }
+
+  const out = [
+    'NETWORK TERMINAL HELP' + (kind ? ` — ${label} (${kind}${titleBrand})` : ''),
+    'Commands available on this device. Replace values in <angle brackets> with your own.'
+  ];
+  if (prof.note) out.push(prof.note);
+  out.push('');
+  out.push(...renderHelpSections(HELP_SECTIONS, kind, prof.family, 34));
   out.push('This is an educational network CLI. Only commands implemented in the simulator are available.');
   return out.join('\n');
 }
@@ -1595,4 +1714,4 @@ const MAN = {
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  switchport port-security — enable access-port MAC security; maximum N, violation protect|restrict|shutdown, mac-address sticky.\n  show port-security [interface PORT] — inspect secure MACs and violation counters.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
-module.exports = { makeCLI, resolve, primaryIp };
+module.exports = { makeCLI, resolve, primaryIp, BRANDS, brandsForKind };
