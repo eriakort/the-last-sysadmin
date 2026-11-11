@@ -1240,7 +1240,7 @@ const parseVlanId = value => /^\d{1,4}$/.test(String(value)) && Number(value) >=
 
 function makeCLI(net, cur) {
   if (!net || !net.devices || (cur != null && !net.devices[cur])) throw new Error('makeCLI: unknown device ' + cur);
-  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, iosOspf: null, asaMode: 'user', asaIface: null, asaObject: null, on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosOspf = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; } this.cur = id; return this; } };
+  const cli = { net, cur: cur == null ? null : cur, contextIface: null, lastPing: null, flows: [], iosMode: 'user', iosIface: null, iosOspf: null, asaMode: 'user', asaIface: null, asaObject: null, cfgMode: false, cfg: [], on(id) { if (!this.net.devices[id]) throw new Error('unknown device ' + id); if (this.cur !== id) { this.contextIface = null; this.iosIface = null; this.iosOspf = null; this.iosMode = 'user'; this.asaMode = 'user'; this.asaIface = null; this.asaObject = null; this.cfgMode = false; this.cfg = []; } this.cur = id; return this; } };
   cli.run = line => {
     const command = String(line).trim(), result = runCisco(cli, command);
     if (result.code === 0 && cli.cur && /^(?:ip dhcp|ip name-server|ip host|ip helper-address|ntp |no ntp|logging |no logging|hostname |interface |ip route|ip access-list|access-list|no ip dhcp|router ospf|network |no network|router-id |passive-interface |no passive-interface|bgp |write memory|copy running-config)/i.test(command))
@@ -1910,8 +1910,8 @@ const BRANDS = {
   'cisco-ios':      { label: 'Cisco IOS',          kinds: ['switch', 'router', 'firewall'], family: 'ios' },
   'arista-eos':     { label: 'Arista EOS',         kinds: ['switch', 'router'], family: 'ios', note: 'Arista EOS uses Cisco-style syntax; the IOS commands below apply.' },
   'cisco-asa':      { label: 'Cisco ASA',          kinds: ['firewall'], family: 'asa' },
-  'juniper-junos':  { label: 'Juniper Junos',      kinds: ['switch', 'router', 'firewall'], family: 'reference' },
-  'paloalto-panos': { label: 'Palo Alto PAN-OS',   kinds: ['firewall'], family: 'reference' },
+  'juniper-junos':  { label: 'Juniper Junos',      kinds: ['switch', 'router', 'firewall'], family: 'junos' },
+  'paloalto-panos': { label: 'Palo Alto PAN-OS',   kinds: ['firewall'], family: 'panos' },
 };
 function deviceBrand(dev) { const b = dev && dev.brand; return BRANDS[b] ? b : 'generic'; }
 function brandProfile(dev) { return BRANDS[deviceBrand(dev)]; }
@@ -1979,12 +1979,215 @@ const PANOS_REF = {
 };
 const REFERENCE_CARDS = { 'juniper-junos': JUNOS_REF, 'paloalto-panos': PANOS_REF };
 
+/* ---------------- vendor execution layers (Juniper Junos, Palo Alto PAN-OS) ----------------
+ * These translate vendor CLI into the SAME model mutations the IOS path uses
+ * (dev.ifaces[x].ip/mask, dev.routes, dev.ifaces[x].ospf, dev.acls), so they
+ * drive the real engine — reachability, routing and ACL filtering all apply.
+ * Both model the candidate/commit workflow: set/delete stage changes on
+ * cli.cfg, commit applies them. Coverage is the core L3 config+verify loop
+ * (plus OSPF for Junos and security policy for PAN-OS); other listed commands
+ * remain reference. */
+function vParseCidr(tok) {
+  if (!tok) return null;
+  const parts = String(tok).split('/'); const ip = parseIPv4(parts[0]); const prefix = parts.length > 1 ? Number(parts[1]) : 32;
+  if (ip == null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+  return { ip, prefix };
+}
+function vCidrNet(tok) { if (!tok || String(tok).toLowerCase() === 'any') return null; const c = vParseCidr(tok); return c ? { net: M.networkOf(c.ip, c.prefix), prefix: c.prefix } : null; }
+function vSetIface(dev, iface, ip, prefix) { dev.ifaces[iface] = dev.ifaces[iface] || { up: true }; dev.ifaces[iface].ip = ip; dev.ifaces[iface].mask = prefix; dev.ifaces[iface].up = true; }
+function vAddRoute(dev, dest, prefix, via) { dev.routes = (dev.routes || []).filter(r => !(r.dest === dest && r.mask === prefix)); dev.routes.push({ dest, mask: prefix, via }); }
+function vStage(cli, sign, describe, apply) { cli.cfg = cli.cfg || []; cli.cfg.push({ sign, describe, apply }); }
+function vResolveJunosIface(dev, tok) { if (!tok) return null; if (dev.ifaces[tok]) return tok; const m = /^(?:ge|xe|et|em|fe)-\d+\/\d+\/(\d+)$/.exec(tok); return (m && dev.ifaces['eth' + m[1]]) ? 'eth' + m[1] : null; }
+function vResolvePanIface(dev, tok) { if (!tok) return null; if (dev.ifaces[tok]) return tok; const m = /^ethernet\d+\/(\d+)$/.exec(tok); if (m) { const cand = 'eth' + (Number(m[1]) - 1); if (dev.ifaces[cand]) return cand; } return null; }
+function vServicePort(svc) {
+  if (!svc) return null; const key = String(svc).toLowerCase();
+  if (['any', 'application-default'].includes(key)) return null;
+  const map = { 'service-http': { proto: 'tcp', dport: 80 }, http: { proto: 'tcp', dport: 80 }, 'web-browsing': { proto: 'tcp', dport: 80 }, 'service-https': { proto: 'tcp', dport: 443 }, https: { proto: 'tcp', dport: 443 }, ssl: { proto: 'tcp', dport: 443 }, ssh: { proto: 'tcp', dport: 22 }, 'service-ssh': { proto: 'tcp', dport: 22 }, dns: { proto: 'udp', dport: 53 } };
+  if (map[key]) return map[key];
+  const m = /^(tcp|udp)\/(\d+)$/.exec(key); return m ? { proto: m[1], dport: Number(m[2]) } : null;
+}
+function vPingTo(cli, token) {
+  if (!token) return err('error: expected a destination host');
+  const rt = resolveTarget(cli, token); if (rt.err) return err('ping: ' + rt.err);
+  const r = M.ping(cli.net, cli.cur, rt.ip, {});
+  const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
+  cli.flows = cli.flows || []; cli.flows.unshift({ t: Date.now(), from: cli.cur, dst: rt.ip, ok: r.ok, path: (r.forward && r.forward.path) || [cli.cur] }); if (cli.flows.length > 12) cli.flows.length = 12;
+  return r.ok ? ok('PING ' + token + ' (' + M.ipStr(rt.ip) + '): reachable\npath: ' + path) : err('PING ' + token + ' (' + M.ipStr(rt.ip) + '): ' + r.reason + '\npath: ' + path);
+}
+function vTraceTo(cli, token) {
+  if (!token) return err('error: expected a destination host');
+  const rt = resolveTarget(cli, token); if (rt.err) return err('traceroute: ' + rt.err);
+  const r = M.ping(cli.net, cli.cur, rt.ip, {}); const path = (r.forward && r.forward.path) || [cli.cur];
+  return ok(path.map((h, i) => ' ' + (i + 1) + '  ' + h).join('\n') + (r.ok ? '' : '\n (destination not reached)'));
+}
+function vShowArp(cli, dev) {
+  const id = cli.cur, rows = [];
+  for (const l of cli.net.links || []) {
+    let myIf, peerId, peerIf;
+    if (l.a[0] === id) { myIf = l.a[1]; peerId = l.b[0]; peerIf = l.b[1]; }
+    else if (l.b[0] === id) { myIf = l.b[1]; peerId = l.a[0]; peerIf = l.a[1]; }
+    else continue;
+    const f = dev.ifaces[myIf], peer = cli.net.devices[peerId], pf = peer && peer.ifaces && peer.ifaces[peerIf];
+    if (f && f.ip != null && f.up !== false && pf && pf.ip != null) rows.push(M.ipStr(pf.ip).padEnd(18) + M.stableMac(peerId, peerIf).padEnd(20) + myIf);
+  }
+  return ok(rows.length ? 'Address           MAC                 Interface\n' + rows.join('\n') : '(no ARP entries)');
+}
+
+function runJunos(cli, raw) {
+  const dev = cli.net.devices[cli.cur];
+  const line = raw.trim(), words = line.split(/\s+/), w = words.map(s => s.toLowerCase());
+  if (!w[0]) return ok('');
+  if (w[0] === 'help' || w[0] === '?') return ok(buildHelp(dev));
+  if (line === 'configure' || line === 'edit' || line === 'configure exclusive') { cli.cfgMode = true; cli.cfg = cli.cfg || []; return ok('Entering configuration mode\n[edit]'); }
+  if (cli.cfgMode) return junosConfig(cli, words, w, line, dev);
+  return junosOperational(cli, words, w, dev);
+}
+function junosConfig(cli, words, w, line, dev) {
+  if (w[0] === 'commit') { const ops = cli.cfg || []; ops.forEach(o => o.apply()); const n = ops.length; cli.cfg = []; if (w.includes('and-quit')) cli.cfgMode = false; return ok('commit complete' + (n ? '' : ' (no changes to commit)')); }
+  if (w[0] === 'rollback') { cli.cfg = []; return ok('load complete (candidate configuration discarded)'); }
+  if (line === 'show | compare' || (w[0] === 'show' && w[1] === '|' && w[2] === 'compare')) { const ops = cli.cfg || []; return ok(ops.length ? ops.map(o => o.sign + ' ' + o.describe).join('\n') : '(no uncommitted changes)'); }
+  if (w[0] === 'run') return junosOperational(cli, words.slice(1), w.slice(1), dev);
+  if (w[0] === 'exit' || w[0] === 'quit') { cli.cfgMode = false; return ok('Exiting configuration mode'); }
+  if (w[0] === 'top' || w[0] === 'up') return ok('');
+  if (w[0] === 'set' || w[0] === 'delete') return junosSet(cli, words, w, dev, w[0] === 'delete');
+  return err('error: in configuration mode use set/delete, commit, rollback, "show | compare", or run <operational>.');
+}
+function junosSet(cli, words, w, dev, del) {
+  const sign = del ? '-' : '+';
+  if (w[1] === 'interfaces') {
+    const iface = vResolveJunosIface(dev, words[2]);
+    if (!iface) return err('error: interface "' + (words[2] || '') + '" not found (available: ' + Object.keys(dev.ifaces).join(', ') + ')');
+    const ai = w.indexOf('address');
+    if (ai > 0 && words[ai + 1]) { const c = vParseCidr(words[ai + 1]); if (!c) return err('error: invalid address, expected <ip>/<prefix>'); vStage(cli, sign, 'interfaces ' + iface + ' family inet address ' + words[ai + 1], () => { if (del) { delete dev.ifaces[iface].ip; delete dev.ifaces[iface].mask; } else vSetIface(dev, iface, c.ip, c.prefix); }); return ok(''); }
+    if (w.includes('disable')) { vStage(cli, sign, 'interfaces ' + iface + ' disable', () => { dev.ifaces[iface].up = del ? true : false; }); return ok(''); }
+    return err('error: expected "unit 0 family inet address <ip>/<prefix>"');
+  }
+  if (w[1] === 'routing-options' && w[2] === 'static' && w[3] === 'route') {
+    const c = vParseCidr(words[4]); if (!c) return err('error: invalid route, expected <dest>/<prefix>');
+    if (del) { vStage(cli, '-', 'routing-options static route ' + words[4], () => { dev.routes = (dev.routes || []).filter(r => !(r.dest === M.networkOf(c.ip, c.prefix) && r.mask === c.prefix)); }); return ok(''); }
+    const nhi = w.indexOf('next-hop'); const via = nhi > 0 ? parseIPv4(words[nhi + 1]) : null;
+    if (via == null) return err('error: expected "next-hop <ip>"');
+    vStage(cli, '+', 'routing-options static route ' + words[4] + ' next-hop ' + words[nhi + 1], () => vAddRoute(dev, M.networkOf(c.ip, c.prefix), c.prefix, via)); return ok('');
+  }
+  if (w[1] === 'protocols' && w[2] === 'ospf') {
+    const ii = w.indexOf('interface'), ai = w.indexOf('area');
+    const iface = ii > 0 ? vResolveJunosIface(dev, words[ii + 1]) : null; const area = ai > 0 ? words[ai + 1] : '0';
+    if (!iface) return err('error: expected "area <id> interface <if>"');
+    vStage(cli, sign, 'protocols ospf area ' + area + ' interface ' + iface, () => { if (del) { delete dev.ifaces[iface].ospf; } else { dev.ospf = dev.ospf || { networks: [], passiveInterfaces: [] }; dev.ifaces[iface].ospf = area; } }); return ok('');
+  }
+  return err('error: unsupported statement. Models: interfaces … family inet address, routing-options static route, protocols ospf area … interface.');
+}
+function junosOperational(cli, words, w, dev) {
+  if (!w[0]) return ok('');
+  if (w[0] === 'configure') { cli.cfgMode = true; cli.cfg = cli.cfg || []; return ok('Entering configuration mode\n[edit]'); }
+  if (w[0] === 'help' || w[0] === '?') return ok(buildHelp(dev));
+  if (w[0] === 'ping') return vPingTo(cli, words[1]);
+  if (w[0] === 'traceroute') return vTraceTo(cli, words[1]);
+  if (w[0] === 'show') {
+    const q = w.slice(1).join(' ');
+    if (q === 'interfaces terse' || q === 'interfaces') { const rows = ['Interface        Admin Link Proto Local']; for (const [n, f] of Object.entries(dev.ifaces)) { const s = f.up === false ? 'down' : 'up'; rows.push(n.padEnd(16) + ' ' + s.padEnd(5) + s.padEnd(5) + (f.ip != null ? 'inet  ' + M.ipStr(f.ip) + '/' + f.mask : '')); } return ok(rows.join('\n')); }
+    if (q === 'route' || q.startsWith('route ')) { const lines = ['inet.0: routing table']; for (const [n, f] of Object.entries(dev.ifaces)) if (f.ip != null && f.up !== false) lines.push((M.ipStr(M.networkOf(f.ip, f.mask)) + '/' + f.mask).padEnd(20) + '*[Direct] via ' + n); for (const r of dev.routes || []) lines.push((r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask).padEnd(20) + '*[Static/5] via ' + M.ipStr(r.via)); for (const r of M.ospfLearned(cli.net, cli.cur)) lines.push((M.ipStr(r.dest) + '/' + r.mask).padEnd(20) + '*[OSPF/10] via ' + M.ipStr(r.via)); return ok(lines.join('\n')); }
+    if (q === 'ospf neighbor') { const ns = M.ospfNeighbors(cli.net, cli.cur); return ok(ns.length ? 'Address          Interface State ID\n' + ns.map(n => M.ipStr(n.ip).padEnd(16) + ' ' + String(n.via).padEnd(9) + ' Full  ' + n.id).join('\n') : '(no OSPF neighbors)'); }
+    if (q === 'arp') return vShowArp(cli, dev);
+    if (q === 'configuration' || q.startsWith('configuration')) { const lines = []; for (const [n, f] of Object.entries(dev.ifaces)) if (f.ip != null) lines.push('set interfaces ' + n + ' unit 0 family inet address ' + M.ipStr(f.ip) + '/' + f.mask); for (const r of dev.routes || []) lines.push('set routing-options static route ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' next-hop ' + M.ipStr(r.via)); for (const [n, f] of Object.entries(dev.ifaces)) if (f.ospf != null) lines.push('set protocols ospf area ' + f.ospf + ' interface ' + n); return ok(lines.length ? lines.join('\n') : '## no interface or routing configuration yet'); }
+    return err('error: unsupported show — try show interfaces terse, show route, show ospf neighbor, show arp, show configuration');
+  }
+  return err('error: unknown command "' + words[0] + '" (type help)');
+}
+
+function runPanos(cli, raw) {
+  const dev = cli.net.devices[cli.cur];
+  const line = raw.trim(), words = line.split(/\s+/), w = words.map(s => s.toLowerCase());
+  if (!w[0]) return ok('');
+  if (w[0] === 'help' || w[0] === '?') return ok(buildHelp(dev));
+  if (line === 'configure') { cli.cfgMode = true; cli.cfg = cli.cfg || []; return ok('Entering configuration mode'); }
+  if (cli.cfgMode) return panosConfig(cli, words, w, line, dev);
+  return panosOperational(cli, words, w, dev);
+}
+function panosConfig(cli, words, w, line, dev) {
+  if (w[0] === 'commit') { const ops = cli.cfg || []; ops.forEach(o => o.apply()); const n = ops.length; cli.cfg = []; return ok(n ? 'Commit job completed successfully' : 'Commit: there are no changes to commit'); }
+  if (w[0] === 'run') return panosOperational(cli, words.slice(1), w.slice(1), dev);
+  if (w[0] === 'exit' || w[0] === 'quit') { cli.cfgMode = false; return ok(''); }
+  if (w[0] === 'set' || w[0] === 'delete') return panosSet(cli, words, w, dev, w[0] === 'delete');
+  return err('error: in configuration mode use set/delete, commit, or exit.');
+}
+function panosSet(cli, words, w, dev, del) {
+  const sign = del ? '-' : '+';
+  const val = key => { const i = w.indexOf(key); return i > 0 ? words[i + 1] : null; };
+  if (w[1] === 'network' && w[2] === 'interface') {
+    const iface = vResolvePanIface(dev, words[3]);
+    if (!iface) return err('error: interface "' + (words[3] || '') + '" not found (available: ' + Object.keys(dev.ifaces).join(', ') + ')');
+    const ii = w.indexOf('ip'); const c = ii > 0 ? vParseCidr(words[ii + 1]) : null;
+    if (!c) return err('error: expected "layer3 ip <ip>/<prefix>"');
+    vStage(cli, sign, 'network interface ' + iface + ' layer3 ip ' + words[ii + 1], () => { if (del) { delete dev.ifaces[iface].ip; delete dev.ifaces[iface].mask; } else vSetIface(dev, iface, c.ip, c.prefix); }); return ok('');
+  }
+  if (w[1] === 'network' && w[2] === 'virtual-router' && w.includes('static-route')) {
+    const c = vParseCidr(val('destination'));
+    const via = parseIPv4(val('ip-address') || (w.indexOf('nexthop') > 0 ? words[w.indexOf('nexthop') + 1] : null));
+    if (!c) return err('error: expected "destination <dest>/<prefix>"');
+    if (del) { vStage(cli, '-', 'static-route destination ' + val('destination'), () => { dev.routes = (dev.routes || []).filter(r => !(r.dest === M.networkOf(c.ip, c.prefix) && r.mask === c.prefix)); }); return ok(''); }
+    if (via == null) return err('error: expected "nexthop ip-address <ip>"');
+    vStage(cli, '+', 'static-route destination ' + val('destination') + ' nexthop ' + M.ipStr(via), () => vAddRoute(dev, M.networkOf(c.ip, c.prefix), c.prefix, via)); return ok('');
+  }
+  if (w[1] === 'rulebase' && w[2] === 'security' && w[3] === 'rules') {
+    const name = words[4]; if (!name) return err('error: expected a rule name');
+    const action = (val('action') || 'allow').toLowerCase();
+    const rule = { panName: name, panFrom: val('from'), panTo: val('to'), panSvc: val('service') || val('application'), action: action === 'deny' ? 'deny' : 'permit' };
+    const s = vCidrNet(val('source')); if (s) rule.srcnet = s;
+    const d = vCidrNet(val('destination')); if (d) rule.dstnet = d;
+    const svc = vServicePort(val('service') || val('application')); if (svc) { rule.proto = svc.proto; rule.dport = svc.dport; }
+    vStage(cli, sign, 'security rule "' + name + '" ' + (val('source') || 'any') + '->' + (val('destination') || 'any') + ' ' + (rule.panSvc || 'any') + ' ' + rule.action, () => {
+      // Store explicit rules, evaluated first-match on inbound traffic. We do NOT
+      // add PAN-OS's implicit interzone deny: the model is stateless and zoneless,
+      // so a blanket default-deny would also drop return traffic. Rules do exactly
+      // what they state; absent a match, the engine's default (allow) applies.
+      dev.acls = (dev.acls || []).filter(r => r.panName !== name);
+      if (!del) dev.acls.push(rule);
+    }); return ok('');
+  }
+  return err('error: unsupported statement. Models: network interface … layer3 ip, network virtual-router … static-route, rulebase security rules.');
+}
+function panosOperational(cli, words, w, dev) {
+  if (!w[0]) return ok('');
+  if (w[0] === 'configure') { cli.cfgMode = true; cli.cfg = cli.cfg || []; return ok('Entering configuration mode'); }
+  if (w[0] === 'help' || w[0] === '?') return ok(buildHelp(dev));
+  if (w[0] === 'ping') { const hi = w.indexOf('host'); return vPingTo(cli, hi >= 0 ? words[hi + 1] : words[1]); }
+  if (w[0] === 'traceroute') { const hi = w.indexOf('host'); return vTraceTo(cli, hi >= 0 ? words[hi + 1] : words[1]); }
+  if (w[0] === 'test' && w[1] === 'security-policy-match') {
+    const val = key => { const i = w.indexOf(key); return i > 0 ? words[i + 1] : null; };
+    const src = parseIPv4(val('source')), dst = parseIPv4(val('destination'));
+    const svc = vServicePort(val('service') || val('application'));
+    const proto = svc ? svc.proto : ({ '6': 'tcp', '17': 'udp', '1': 'icmp' }[val('protocol')] || 'ip');
+    const dport = svc ? svc.dport : (val('destination-port') != null ? Number(val('destination-port')) : undefined);
+    for (const r of (dev.acls || []).filter(x => x.panName && x.panName !== '_default-deny')) {
+      if (r.srcnet && (src == null || !M.sameNet(src, r.srcnet.net, r.srcnet.prefix))) continue;
+      if (r.dstnet && (dst == null || !M.sameNet(dst, r.dstnet.net, r.dstnet.prefix))) continue;
+      if (r.proto && proto !== 'ip' && r.proto !== proto) continue;
+      if (r.dport != null && r.dport !== dport) continue;
+      return ok('"' + r.panName + '" {\n    action: ' + (r.action === 'permit' ? 'allow' : 'deny') + ';\n}');
+    }
+    return ok('No explicit rule matched (simulator default: allow; note real PAN-OS defaults to deny).');
+  }
+  if (w[0] === 'show') {
+    const q = w.slice(1).join(' ');
+    if (q === 'interface all' || q === 'interface' || q === 'interfaces') { const rows = ['name          state ip']; for (const [n, f] of Object.entries(dev.ifaces)) rows.push(n.padEnd(14) + (f.up === false ? 'down ' : 'up   ') + ' ' + (f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : 'N/A')); return ok(rows.join('\n')); }
+    if (q === 'routing route' || q === 'routing') { const lines = ['destination        nexthop          flags']; for (const [n, f] of Object.entries(dev.ifaces)) if (f.ip != null && f.up !== false) lines.push((M.ipStr(M.networkOf(f.ip, f.mask)) + '/' + f.mask).padEnd(19) + 'connect'.padEnd(17) + 'C'); for (const r of dev.routes || []) lines.push((r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask).padEnd(19) + M.ipStr(r.via).padEnd(17) + 'S'); return ok(lines.join('\n')); }
+    if (q === 'running security-policy' || q === 'security-policy') { const rules = (dev.acls || []).filter(r => r.panName && r.panName !== '_default-deny'); return ok(rules.length ? 'name            src           dst           service  action\n' + rules.map(r => (r.panName || '').padEnd(15) + ' ' + (r.srcnet ? M.ipStr(r.srcnet.net) + '/' + r.srcnet.prefix : 'any').padEnd(13) + ' ' + (r.dstnet ? M.ipStr(r.dstnet.net) + '/' + r.dstnet.prefix : 'any').padEnd(13) + ' ' + (r.panSvc || 'any').padEnd(8) + ' ' + (r.action === 'permit' ? 'allow' : 'deny')).join('\n') + '\n(rules evaluated first-match; no implicit default-deny in this simulator)' : '(no security rules configured)'); }
+    if (q === 'system info') return ok('hostname: ' + (dev.hostname || dev.id) + '\nmodel: PA-VM (simulated)\nsw-version: PAN-OS (simulator subset)');
+    if (q === 'config running' || q === 'configuration') { const lines = []; for (const [n, f] of Object.entries(dev.ifaces)) if (f.ip != null) lines.push('set network interface ' + n + ' layer3 ip ' + M.ipStr(f.ip) + '/' + f.mask); for (const r of dev.routes || []) lines.push('set network virtual-router default routing-table ip static-route S destination ' + (r.mask === 0 ? '0.0.0.0/0' : M.ipStr(r.dest) + '/' + r.mask) + ' nexthop ip-address ' + M.ipStr(r.via)); for (const r of (dev.acls || []).filter(x => x.panName && x.panName !== '_default-deny')) lines.push('set rulebase security rules ' + r.panName + ' action ' + (r.action === 'permit' ? 'allow' : 'deny')); return ok(lines.length ? lines.join('\n') : '## no configuration yet'); }
+    return err('error: unsupported show — try show interface all, show routing route, show running security-policy, show system info');
+  }
+  return err('error: unknown command "' + words[0] + '"');
+}
+
 function runCisco(cli, line) {
   if (!line) return ok('');
   const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
   if (!dev) return dispatch(cli, raw);
   const brandFamily = brandProfile(dev).family;
   if (brandFamily === 'asa' || dev.firewallOS === 'asa') return runASA(cli, raw);
+  if (brandFamily === 'junos') return runJunos(cli, raw);
+  if (brandFamily === 'panos') return runPanos(cli, raw);
   // An IOS-family device (Cisco IOS, Arista EOS) only exposes IOS commands;
   // steer Linux-dialect tools to the IOS way.
   if (brandFamily === 'ios' && isLinuxDialect(words))
@@ -2379,7 +2582,7 @@ function renderHelpSections(sections, kind, family, pad) {
     const rows = sec.items.filter(it => (!kind || it[2].includes(kind)) && (!it[3] || !family || it[3].includes(family)));
     if (!rows.length) continue;
     out.push(sec.h);
-    for (const [cmd, desc] of rows) out.push('  ' + cmd.padEnd(pad) + desc);
+    for (const [cmd, desc] of rows) out.push('  ' + (cmd.length < pad ? cmd.padEnd(pad) : cmd + '  ') + desc);
     out.push('');
   }
   return out;
@@ -2391,17 +2594,21 @@ function buildHelp(dev) {
   const label = dev ? (dev.hostname || dev.id) : '';
   const titleBrand = brand === 'generic' ? '' : ' · ' + prof.label;
 
-  // Reference brands (Juniper Junos, Palo Alto PAN-OS): show the vendor command
-  // card. The simulator executes its core engine, so this is clearly a reference.
-  if (prof.family === 'reference') {
+  // Vendor-CLI brands (Juniper Junos, Palo Alto PAN-OS): show the vendor command
+  // card. Configuration is applied with commit; a core subset actually executes.
+  if (REFERENCE_CARDS[brand]) {
     const card = REFERENCE_CARDS[brand];
+    const supported = brand === 'juniper-junos'
+      ? 'interface addressing, static routes and OSPF'
+      : 'interface addressing, static routes and security policy';
     const out = [
-      `${prof.label.toUpperCase()} COMMAND REFERENCE — ${label} (${kind})`,
+      `${prof.label.toUpperCase()} COMMANDS — ${label} (${kind})`,
       card.intro, ''
     ];
     out.push(...renderHelpSections(card.sections, kind, null, 58));
-    out.push('Reference profile — this simulator executes its core engine, so use this as the');
-    out.push(prof.label + ' command card. Verify exact syntax against the vendor\'s current docs.');
+    out.push('Enter "configure" to edit, then "commit" to apply. Supported in the simulator:');
+    out.push(supported + ', plus the show/ping commands above. Other listed commands are');
+    out.push('reference — verify exact syntax against the vendor\'s current docs.');
     return out.join('\n');
   }
 

@@ -804,7 +804,7 @@ test('a cisco-ios device presents an IOS-only command surface', () => {
   has(cli.run('help').out, 'ip addr ', 'generic help still lists Linux tools');
 });
 
-test('brand registry: EOS is IOS-family, Junos/PAN-OS are reference, ASA routes to its engine', () => {
+test('brand registry: EOS is IOS-family, Junos/PAN-OS have vendor cards, ASA routes to its engine', () => {
   const { brandsForKind } = require('./net-cli');
   const no = (s, sub, m) => { if (String(s).includes(sub)) throw new Error(`${m}: should not include "${sub}"`); };
   const net = { devices: {
@@ -825,21 +825,84 @@ test('brand registry: EOS is IOS-family, Junos/PAN-OS are reference, ASA routes 
   eq(cli.run('iptables -L').code, 1, 'EOS blocks Linux dialect');
   eq(cli.run('show ip interface brief').code, 0, 'EOS runs IOS show');
 
-  // Juniper Junos: reference card with set/commit syntax and the transparency note.
+  // Juniper Junos: vendor command card with set/commit syntax.
   const jh = cli.on('jun').run('help').out;
-  has(jh, 'JUNIPER JUNOS COMMAND REFERENCE', 'Junos card header');
+  has(jh, 'JUNIPER JUNOS COMMANDS', 'Junos card header');
   has(jh, 'set interfaces', 'Junos config syntax');
   has(jh, 'commit', 'Junos commit');
-  has(jh, 'Reference profile', 'reference transparency note');
 
-  // Palo Alto PAN-OS: reference card, firewall-flavoured.
+  // Palo Alto PAN-OS: vendor card, firewall-flavoured.
   const ph = cli.on('pan').run('help').out;
-  has(ph, 'PALO ALTO PAN-OS COMMAND REFERENCE', 'PAN-OS card header');
+  has(ph, 'PALO ALTO PAN-OS COMMANDS', 'PAN-OS card header');
   has(ph, 'test security-policy-match', 'PAN-OS policy test');
   has(ph, 'set rulebase security', 'PAN-OS rule syntax');
 
   // Cisco ASA routes to the ASA engine (its own help).
   has(cli.on('asa').run('help').out, 'ASA FIREWALL COMMANDS', 'ASA brand uses the ASA engine');
+});
+
+function twoSubnetWorld(routerKind, brand) {
+  return { devices: {
+    h1: { id: 'h1', kind: 'host', ifaces: { eth0: { ip: ip('10.0.1.10'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.1.1') }] },
+    h2: { id: 'h2', kind: 'host', ifaces: { eth0: { ip: ip('10.0.2.10'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }], services: { 80: 'http' } },
+    r1: { id: 'r1', kind: routerKind, brand, ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] },
+  }, links: [{ a: ['h1', 'eth0'], b: ['r1', 'eth0'], up: true }, { a: ['r1', 'eth1'], b: ['h2', 'eth0'], up: true }] };
+}
+
+test('Junos: configuring interfaces and committing actually enables routing', () => {
+  const net = twoSubnetWorld('router', 'juniper-junos');
+  const cli = makeCLI(net, 'r1');
+  eq(C.reachable(net, 'h1', 'h2').ok, false, 'dead before config');
+  cli.run('configure');
+  eq(cli.run('set interfaces eth0 unit 0 family inet address 10.0.1.1/24').code, 0, 'set eth0');
+  eq(cli.run('set interfaces ge-0/0/1 unit 0 family inet address 10.0.2.1/24').code, 0, 'set ge-0/0/1 → eth1');
+  has(cli.run('show | compare').out, 'inet address', 'candidate shows pending');
+  eq(C.reachable(net, 'h1', 'h2').ok, false, 'candidate not applied before commit');
+  has(cli.run('commit').out, 'commit complete', 'commit');
+  eq(C.reachable(net, 'h1', 'h2').ok, true, 'routing works after commit');
+  has(cli.run('run show route').out, 'Direct', 'show route lists connected routes');
+  has(cli.run('run show interfaces terse').out, '10.0.1.1/24', 'show interfaces terse');
+  // rollback discards uncommitted changes
+  cli.run('set interfaces eth0 unit 0 family inet address 10.0.9.9/24');
+  cli.run('rollback');
+  has(cli.run('run show interfaces terse').out, '10.0.1.1/24', 'rollback kept the committed address');
+});
+
+test('Junos: static route lets a host reach a remote subnet', () => {
+  // h1 - r1(junos) - r2 - h3(10.0.3.0/24); r1 needs a static route to 10.0.3.0/24.
+  const net = twoSubnetWorld('router', 'juniper-junos');
+  net.devices.r2 = { id: 'r2', kind: 'router', ifaces: { eth0: { ip: ip('10.0.2.2'), mask: 24, up: true }, eth1: { ip: ip('10.0.3.1'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.2.1') }] };
+  net.devices.h3 = { id: 'h3', kind: 'host', ifaces: { eth0: { ip: ip('10.0.3.10'), mask: 24, up: true } }, routes: [{ dest: 0, mask: 0, via: ip('10.0.3.1') }], services: { 80: 'http' } };
+  net.links.push({ a: ['r1', 'eth1'], b: ['r2', 'eth0'], up: true }, { a: ['r2', 'eth1'], b: ['h3', 'eth0'], up: true });
+  // fix: r1.eth1 is already linked to h2 above; re-point h2 off and use a fresh port
+  net.links = net.links.filter(l => !(l.a[0] === 'r1' && l.a[1] === 'eth1' && l.b[0] === 'h2'));
+  const cli = makeCLI(net, 'r1');
+  cli.run('configure');
+  cli.run('set interfaces eth0 unit 0 family inet address 10.0.1.1/24');
+  cli.run('set interfaces eth1 unit 0 family inet address 10.0.2.1/24');
+  cli.run('set routing-options static route 10.0.3.0/24 next-hop 10.0.2.2');
+  cli.run('commit');
+  eq(C.reachable(net, 'h1', 'h3').ok, true, 'static route reaches the remote subnet');
+  has(cli.run('run show route').out, '10.0.3.0/24', 'show route lists the static route');
+});
+
+test('PAN-OS: interfaces route and a security rule actually blocks traffic', () => {
+  const net = twoSubnetWorld('firewall', 'paloalto-panos');
+  const cli = makeCLI(net, 'r1');
+  cli.run('configure');
+  cli.run('set network interface ethernet1/1 layer3 ip 10.0.1.1/24');   // → eth0
+  cli.run('set network interface ethernet1/2 layer3 ip 10.0.2.1/24');   // → eth1
+  cli.run('commit');
+  eq(C.reachable(net, 'h1', 'h2').ok, true, 'firewall routes between subnets after commit');
+  // deny h1→h2, commit, and confirm it is enforced on real traffic
+  cli.run('set rulebase security rules block-h1 from trust to untrust source 10.0.1.0/24 destination 10.0.2.10/32 service any action deny');
+  eq(C.reachable(net, 'h1', 'h2').ok, true, 'rule not enforced before commit');
+  cli.run('commit');
+  eq(C.reachable(net, 'h1', 'h2').ok, false, 'deny rule blocks the flow after commit');
+  cli.run('exit');
+  has(cli.run('test security-policy-match from trust to untrust source 10.0.1.10 destination 10.0.2.10').out, 'deny', 'policy-match reports deny');
+  has(cli.run('show running security-policy').out, 'block-h1', 'rule listed');
+  has(cli.run('show routing route').out, '10.0.2.0/24', 'routing table shows connected subnet');
 });
 
 let failed = 0;
