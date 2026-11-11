@@ -1142,4 +1142,68 @@ const chapters = [
   },
 ];
 
-module.exports = { chapters };
+// ---------- Phase 2: curriculum tiers & competencies ----------
+// A soft-gated progression layer over the flat mission list. Nothing is locked;
+// tiers give a recommended path, group related competencies, and culminate in a
+// capstone. Each tier lists the mission `chapter` topics it contains and names a
+// capstone mission id (the one that proves the whole tier). The four cross-track
+// "Integrated Operations" cases serve as the Tier 5 capstones.
+//
+// `competency` is the mission's chapter topic (the finest-grained skill label the
+// data already carries); `tier` is the new band. Both are attached to every
+// mission below, and authoring is guaranteed complete: a mission whose chapter is
+// not mapped to exactly one tier throws at load, so CI catches orphans.
+const TIERS = [
+  { id: 't1', name: 'Foundations', order: 1,
+    blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    capstone: 'break-the-switching-loop' },
+  { id: 't2', name: 'Routing', order: 2,
+    blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',
+    chapters: ['Routing', 'Static routing', 'OSPF', 'Redundancy', 'Enterprise routing'],
+    capstone: 'restore-ospf-branch-connectivity' },
+  { id: 't3', name: 'Services & Security', order: 3,
+    blurb: 'Deliver and defend the services users depend on: DHCP, DNS, NAT, firewalls, ACLs and segmentation.',
+    chapters: ['DHCP', 'DNS / naming', 'NAT', 'Firewalls', 'Network security', 'Cisco firewall operations', 'Cisco ASA firewall operations', 'Enterprise network services'],
+    capstone: 'branch-services-restoration' },
+  { id: 't4', name: 'Enterprise & Design', order: 4,
+    blurb: 'Operate at scale: BGP policy, WAN redundancy, design review, multi-fault diagnosis, and building to spec.',
+    chapters: ['BGP', 'Enterprise routing · BGP policy', 'Enterprise WAN · gateway redundancy', 'Design review', 'Multi-fault', 'Design · build to spec'],
+    capstone: 'multi-after-move' },
+  { id: 't5', name: 'Integrated Operations', order: 5,
+    blurb: 'Cross-discipline P1 incidents that span the Linux and network simulators. Each case is a capstone in its own right.',
+    chapters: ['Integrated Operations · Cross-discipline case'],
+    capstone: 'cross-track-web-availability-network' }
+];
+
+// chapter topic -> tier id (built once; a chapter in two tiers is an authoring bug).
+const TIER_OF_CHAPTER = (() => {
+  const map = {};
+  for (const t of TIERS) for (const ch of t.chapters) {
+    if (map[ch]) throw new Error(`curriculum: chapter "${ch}" is claimed by both ${map[ch]} and ${t.id}`);
+    map[ch] = t.id;
+  }
+  return map;
+})();
+
+const tierOf = mission => TIER_OF_CHAPTER[mission.chapter] || null;
+
+// Attach tier + competency to every mission, and guarantee full coverage.
+for (const m of chapters) {
+  const tid = tierOf(m);
+  if (!tid) throw new Error(`curriculum: mission "${m.id}" has chapter "${m.chapter}" which is not mapped to any tier`);
+  m.tier = tid;
+  m.competency = m.chapter;
+}
+
+// Every named capstone must exist and belong to its own tier.
+for (const t of TIERS) {
+  const cap = chapters.find(m => m.id === t.capstone);
+  if (!cap) throw new Error(`curriculum: tier ${t.id} capstone "${t.capstone}" is not a real mission`);
+  if (cap.tier !== t.id) throw new Error(`curriculum: tier ${t.id} capstone "${t.capstone}" lives in ${cap.tier}, not ${t.id}`);
+}
+
+// Missions belonging to a tier, in authored order.
+const missionsInTier = tid => chapters.filter(m => m.tier === tid);
+
+module.exports = { chapters, TIERS, tierOf, missionsInTier };

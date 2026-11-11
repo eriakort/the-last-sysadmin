@@ -4418,7 +4418,71 @@ const chapters = [
   },
 ];
 
-module.exports = { chapters };
+// ---------- Phase 2: curriculum tiers & competencies ----------
+// A soft-gated progression layer over the flat mission list. Nothing is locked;
+// tiers give a recommended path, group related competencies, and culminate in a
+// capstone. Each tier lists the mission `chapter` topics it contains and names a
+// capstone mission id (the one that proves the whole tier). The four cross-track
+// "Integrated Operations" cases serve as the Tier 5 capstones.
+//
+// `competency` is the mission's chapter topic (the finest-grained skill label the
+// data already carries); `tier` is the new band. Both are attached to every
+// mission below, and authoring is guaranteed complete: a mission whose chapter is
+// not mapped to exactly one tier throws at load, so CI catches orphans.
+const TIERS = [
+  { id: 't1', name: 'Foundations', order: 1,
+    blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    capstone: 'break-the-switching-loop' },
+  { id: 't2', name: 'Routing', order: 2,
+    blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',
+    chapters: ['Routing', 'Static routing', 'OSPF', 'Redundancy', 'Enterprise routing'],
+    capstone: 'restore-ospf-branch-connectivity' },
+  { id: 't3', name: 'Services & Security', order: 3,
+    blurb: 'Deliver and defend the services users depend on: DHCP, DNS, NAT, firewalls, ACLs and segmentation.',
+    chapters: ['DHCP', 'DNS / naming', 'NAT', 'Firewalls', 'Network security', 'Cisco firewall operations', 'Cisco ASA firewall operations', 'Enterprise network services'],
+    capstone: 'branch-services-restoration' },
+  { id: 't4', name: 'Enterprise & Design', order: 4,
+    blurb: 'Operate at scale: BGP policy, WAN redundancy, design review, multi-fault diagnosis, and building to spec.',
+    chapters: ['BGP', 'Enterprise routing · BGP policy', 'Enterprise WAN · gateway redundancy', 'Design review', 'Multi-fault', 'Design · build to spec'],
+    capstone: 'multi-after-move' },
+  { id: 't5', name: 'Integrated Operations', order: 5,
+    blurb: 'Cross-discipline P1 incidents that span the Linux and network simulators. Each case is a capstone in its own right.',
+    chapters: ['Integrated Operations · Cross-discipline case'],
+    capstone: 'cross-track-web-availability-network' }
+];
+
+// chapter topic -> tier id (built once; a chapter in two tiers is an authoring bug).
+const TIER_OF_CHAPTER = (() => {
+  const map = {};
+  for (const t of TIERS) for (const ch of t.chapters) {
+    if (map[ch]) throw new Error(`curriculum: chapter "${ch}" is claimed by both ${map[ch]} and ${t.id}`);
+    map[ch] = t.id;
+  }
+  return map;
+})();
+
+const tierOf = mission => TIER_OF_CHAPTER[mission.chapter] || null;
+
+// Attach tier + competency to every mission, and guarantee full coverage.
+for (const m of chapters) {
+  const tid = tierOf(m);
+  if (!tid) throw new Error(`curriculum: mission "${m.id}" has chapter "${m.chapter}" which is not mapped to any tier`);
+  m.tier = tid;
+  m.competency = m.chapter;
+}
+
+// Every named capstone must exist and belong to its own tier.
+for (const t of TIERS) {
+  const cap = chapters.find(m => m.id === t.capstone);
+  if (!cap) throw new Error(`curriculum: tier ${t.id} capstone "${t.capstone}" is not a real mission`);
+  if (cap.tier !== t.id) throw new Error(`curriculum: tier ${t.id} capstone "${t.capstone}" lives in ${cap.tier}, not ${t.id}`);
+}
+
+// Missions belonging to a tier, in authored order.
+const missionsInTier = tid => chapters.filter(m => m.tier === tid);
+
+module.exports = { chapters, TIERS, tierOf, missionsInTier };
 
 });
 __def("./net-builder", function(module, exports, require){
@@ -5027,7 +5091,7 @@ module.exports = { DAY_MS, INTERVALS, add, items, review, dueCount };
 const M = require('./net-model');
 const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
-const { chapters } = require('./net-chapters');
+const { chapters, TIERS, missionsInTier } = require('./net-chapters');
 const LC = require('./net-learning-coach');
 const NR = require('./net-spaced-recall');
 const { makeCLI, BRANDS, brandsForKind, completions } = require('./net-cli');
@@ -5351,6 +5415,29 @@ function renderOverview() {
   const flowRows = d.flows.map(f => `<div class="overview-flow ${f.ok ? 'flow-ok' : 'flow-bad'}"><b>${esc((f.proto || 'icmp').toUpperCase())}</b><span>${esc(M.ipStr(f.src))} → ${esc(M.ipStr(f.dst))}</span><strong>${f.ok ? 'Delivered' : 'Dropped'}</strong></div>`).join('');
   const crossTrack = crossTrackProgress();
   const crossIndex = chapters.findIndex(m => m.id === 'cross-track-web-availability-network');
+  // Curriculum progression (soft-gated: nothing is locked; this is guidance).
+  const tierState = TIERS.map(t => {
+    const ms = missionsInTier(t.id);
+    const done = ms.filter(c => PROG.done[c.id]).length;
+    const nextMission = ms.find(c => !PROG.done[c.id]) || null;
+    return { tier: t, ms, done, total: ms.length, complete: done === ms.length && ms.length > 0,
+      capstoneDone: !!PROG.done[t.capstone], nextMission };
+  });
+  const activeTierState = tierState.find(s => !s.complete) || null; // lowest incomplete tier
+  const recMission = activeTierState && activeTierState.nextMission;
+  const recIndex = recMission ? chapters.findIndex(c => c.id === recMission.id) : -1;
+  const tierCards = tierState.map(s => {
+    const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+    const isActive = activeTierState && s.tier.id === activeTierState.tier.id;
+    const cap = chapters.find(c => c.id === s.tier.capstone);
+    const status = s.complete ? 'complete' : (isActive ? 'active' : (s.done > 0 ? 'started' : 'upcoming'));
+    return `<article class="curriculum-tier tier-${status}">
+      <div class="ct-head"><span class="ct-badge">Tier ${s.tier.order}</span><b>${esc(s.tier.name)}</b><span class="ct-count">${s.done}/${s.total}</span></div>
+      <div class="ct-track"><i style="width:${pct}%"></i></div>
+      <p class="ct-blurb">${esc(s.tier.blurb)}</p>
+      <div class="ct-capstone ${s.capstoneDone ? 'cap-done' : ''}">${s.capstoneDone ? '✓' : '◍'} Capstone: ${esc(cap ? cap.title : s.tier.capstone)}</div>
+    </article>`;
+  }).join('');
   root.innerHTML = `
     <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
     <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
@@ -5359,6 +5446,13 @@ function renderOverview() {
       <article class="overview-metric"><span>Links operational</span><strong>${d.linksUp}<small> / ${d.linksTotal}</small></strong><em>${d.linksTotal - d.linksUp} links down</em></article>
       <article class="overview-metric metric-alert"><span>Open incidents</span><strong>${d.active.length}</strong><em>${d.active.filter(t => t.priority === 'P1' || t.priority === 'P2').length} priority 1–2</em></article>
       <article class="overview-metric"><span>Resolved tickets</span><strong>${d.resolved}<small> / ${d.total}</small></strong><em>${PROG.xp} XP · ${esc(rankFor(PROG.xp))}</em></article>
+    </section>
+    <section class="curriculum-panel" aria-label="Curriculum progression">
+      <div class="curriculum-head">
+        <div><span class="eyebrow">Skills curriculum · recommended path</span><h2>Progression roadmap</h2><p>Five tiers from Foundations to Integrated Operations. Everything stays unlocked — this is the suggested order, not a gate.</p></div>
+        ${recMission ? `<div class="curriculum-next"><span class="eyebrow">Recommended next · Tier ${activeTierState.tier.order}</span><strong>${esc(recMission.chapter)} — ${esc(recMission.title)}</strong><button class="btn sm primary" id="curriculumResume">Resume training →</button></div>` : `<div class="curriculum-next curriculum-done"><strong>🎓 All ${chapters.length} missions cleared</strong><span>Final rank ${esc(rankFor(PROG.xp))} · ${PROG.xp} XP</span></div>`}
+      </div>
+      <div class="curriculum-tiers">${tierCards}</div>
     </section>
     <div class="overview-grid">
       <section class="overview-panel"><div class="overview-panel-head"><div><span class="eyebrow">Integrated operations · P1 case</span><h2>The unavailable Halcyon portal</h2></div><span class="ticket-state ${crossTrack.linux && crossTrack.network ? 'state-resolved' : 'state-investigating'}">${crossTrack.linux && crossTrack.network ? 'case complete' : 'two-track case'}</span></div><p>Coordinate Linux service recovery with network name-resolution and reachability checks. Each discipline is verified in its own simulator.</p><div class="cross-track-status"><span>${crossTrack.linux ? '✓' : '○'} Linux service recovery</span><span>${crossTrack.network ? '✓' : '○'} Network access recovery</span></div><div class="oi-foot"><button class="btn sm primary" id="crossTrackStart">Start network task</button><button class="btn sm" id="crossTrackLinux">Open Linux case</button></div></section>
@@ -5390,6 +5484,7 @@ function renderOverview() {
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
   click('progressStats', openStats);
+  click('curriculumResume', () => { if (recIndex >= 0) { showWorkspaceView('workbench'); reloadMission(recIndex); } });
   click('crossTrackStart', () => { if (crossIndex >= 0) reloadMission(crossIndex); });
   click('crossTrackLinux', () => { window.location.href='../index.html?crossTrack=web-availability'; });
   click('remoteAdminStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-remote-admin-network'); if(index>=0) reloadMission(index); });
@@ -5740,7 +5835,15 @@ function renderDeviceExplorer() {
 }
 function renderBrief() {
   const m = RUN.mission, solved = !!PROG.done[m.id];
-  const opts = chapters.map((c, i) => `<option value="${i}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`).join('');
+  const indexOfMission = new Map(chapters.map((c, i) => [c.id, i]));
+  const opt = c => `<option value="${indexOfMission.get(c.id)}"${c.id === m.id ? ' selected' : ''}>${PROG.done[c.id] ? '✓ ' : ''}${c.chapter} — ${c.title}</option>`;
+  // Group the mission picker by curriculum tier so the recommended path is visible.
+  const opts = TIERS.map(t => {
+    const ms = missionsInTier(t.id);
+    if (!ms.length) return '';
+    const doneN = ms.filter(c => PROG.done[c.id]).length;
+    return `<optgroup label="Tier ${t.order} · ${t.name} (${doneN}/${ms.length})">${ms.map(opt).join('')}</optgroup>`;
+  }).join('');
   const hints = m.hints.slice(0, HINTS).map(h => `<li>${esc(h)}</li>`).join('');
   const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
