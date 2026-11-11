@@ -538,6 +538,17 @@ function forward(net, srcDev, pktIn, opts = {}) {
     const dst = pkt.dst;
     if (ownsIp(dev, dst) || ownsVirtualIp(net, cur, dst)) return { ok: true, path, reason: 'delivered', pkt };
 
+    // VPN: an established site-to-site tunnel carries traffic for its remote
+    // protected subnet straight to the far endpoint (the underlay is hidden).
+    // `noTunnel` is set when probing underlay reachability, to avoid recursion.
+    if (!opts.noTunnel) {
+      const tun = establishedTunnelFor(net, cur, dst);
+      if (tun) {
+        const peerId = deviceOwning(net, tun.tunnelDest);
+        if (peerId && peerId !== cur) { cur = peerId; ingressIface = null; continue; }
+      }
+    }
+
     // choose the egress interface: directly connected, else via a (failover-aware) route
     let eg = directIface(dev, dst), targetIp = dst, viaRoute = null;
     if (!eg) {
@@ -574,6 +585,45 @@ function forward(net, srcDev, pktIn, opts = {}) {
     cur = nd; ingressIface = ni;                 // remember the ASA ingress interface for security-level policy
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
+}
+
+/* ---------- VPN tunnels & PKI (site-to-site) ---------- */
+// A tunnel interface is { kind:'tunnel', up, tunnelSrc, tunnelDest, remote:{net,prefix}, key? }.
+// A device cert is { issuer, expired?, valid? }; trust comes from dev.trustedCAs or net.pki.trusted.
+function certValid(c) { return !!c && c.valid !== false && c.expired !== true; }
+function trustsCA(net, devId, issuer) {
+  const dev = net.devices[devId];
+  const list = (dev && dev.trustedCAs) || (net.pki && net.pki.trusted) || [];
+  return issuer != null && list.includes(issuer);
+}
+// Authentication for a tunnel: a matching pre-shared key, else mutual PKI (both
+// present valid certs issued by a CA the other end trusts). No auth => down.
+function tunnelAuthOk(net, aId, ta, bId, tb) {
+  if (ta.key != null || tb.key != null) return ta.key != null && ta.key === tb.key;
+  const ca = net.devices[aId].cert, cb = net.devices[bId].cert;
+  if (ca && cb) return certValid(ca) && certValid(cb) && trustsCA(net, aId, cb.issuer) && trustsCA(net, bId, ca.issuer);
+  return false;
+}
+// A tunnel is established iff the underlay reaches the remote endpoint, the far
+// router has a mirror-image tunnel, and authentication matches on both ends.
+function tunnelEstablished(net, devId, tn) {
+  const dev = net.devices[devId], t = dev && dev.ifaces && dev.ifaces[tn];
+  if (!t || t.kind !== 'tunnel' || t.up === false || t.tunnelSrc == null || t.tunnelDest == null) return false;
+  const under = forward(net, devId, { src: t.tunnelSrc, dst: t.tunnelDest, proto: 'icmp' }, { noTunnel: true });
+  if (!under.ok) return false;
+  const peerId = deviceOwning(net, t.tunnelDest); if (!peerId) return false;
+  const match = Object.values(net.devices[peerId].ifaces || {}).find(p =>
+    p.kind === 'tunnel' && p.up !== false && p.tunnelSrc === t.tunnelDest && p.tunnelDest === t.tunnelSrc);
+  if (!match) return false;
+  return tunnelAuthOk(net, devId, t, peerId, match);
+}
+// The established tunnel on devId whose protected remote subnet contains dst.
+function establishedTunnelFor(net, devId, dst) {
+  const dev = net.devices[devId]; if (!dev) return null;
+  for (const [tn, t] of Object.entries(dev.ifaces || {})) {
+    if (t.kind === 'tunnel' && t.remote && sameNet(dst, t.remote.net, t.remote.prefix) && tunnelEstablished(net, devId, tn)) return t;
+  }
+  return null;
 }
 
 // The source address a device would use to reach dst (for reply packets).
@@ -770,6 +820,7 @@ module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
+  tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
   resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog

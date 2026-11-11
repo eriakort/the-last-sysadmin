@@ -30,6 +30,8 @@ function evalCheck(net, s) {
     case 'dhcp_lease':     return C.dhcpLease(net, s.dev, s.iface, s.cidr);
     case 'ntp_sync':       return C.ntpSynchronized(net, s.dev);
     case 'syslog_received':return C.syslogReceived(net, s.collector, s.source);
+    case 'vpn_up':         return C.vpnUp(net, s.dev, s.iface);
+    case 'cert_valid':     return C.certValid(net, s.dev, s.peer);
     default:               return { ok: false, reason: `unknown check type: ${s.type}` };
   }
 }

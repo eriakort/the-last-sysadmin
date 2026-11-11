@@ -78,6 +78,17 @@ function hsrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is ' + state.state + ' (active: ' + state.active + ')' : devId + '/' + ifaceName + ' has no active HSRP group' };
 }
+function vpnUp(net, devId, ifaceName) {
+  const up = M.tunnelEstablished(net, devId, ifaceName);
+  return { ok: up, reason: up ? `${devId}/${ifaceName} VPN tunnel is established` : `${devId}/${ifaceName} VPN tunnel is down (check endpoints, routing to the peer, and matching authentication)` };
+}
+function certValid(net, devId, peerId) {
+  const dev = net.devices[devId], cert = dev && dev.cert;
+  if (!cert) return { ok: false, reason: `${devId} has no certificate installed` };
+  if (!M.certValid(cert)) return { ok: false, reason: `${devId}'s certificate is not valid (expired or malformed)` };
+  if (peerId && !M.trustsCA(net, peerId, cert.issuer)) return { ok: false, reason: `${peerId} does not trust ${devId}'s issuer ${cert.issuer}` };
+  return { ok: true, reason: `${devId}'s certificate (issuer ${cert.issuer}) is valid${peerId ? ' and trusted by ' + peerId : ''}` };
+}
 function bgpSession(net, devId, peerId) {
   const ss = M.bgpSessions(net, devId);
   const hit = ss.some(s => s.up && (!peerId || s.peer === peerId));
@@ -138,4 +149,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid };

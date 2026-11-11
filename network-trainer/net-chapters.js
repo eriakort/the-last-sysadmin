@@ -1199,6 +1199,55 @@ const chapters = [
     success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.3.0/24' }, { type: 'reachable', a: 'h1', b: 'h3' }],
     solution: (s) => { s.on('r1').run('ip route add 10.0.3.0/24 via 10.0.12.2'); s.sendComms('p1all'); }
   },
+
+  // Breadth · VPN tunnels — bring up a site-to-site tunnel over the internet
+  // underlay so two private LANs reach each other, authenticated by a shared key.
+  { id: 'vpn-site-to-site', chapter: 'VPN & PKI', mode: 'diagnose',
+    title: 'Bring up the branch VPN',
+    story: 'HQ (r1, LAN 10.0.1.0/24) and the new branch (r2, LAN 10.0.2.0/24) connect over the internet through the ISP. The branch engineer has already configured their half of the site-to-site tunnel and is waiting on HQ. The agreed pre-shared key is Branch-VPN-7f3a. r1 already has internet routing to the branch’s public endpoint 198.51.100.1.',
+    objective: 'On r1, build the GRE tunnel to 198.51.100.1, authenticate it with the agreed pre-shared key, and route the branch LAN 10.0.2.0/24 through it, so h1 can reach the branch server srv.',
+    ticket: { id: 'INC-2440', from: 'Branch engineer · Riverside', priority: 'P2', symptom: 'Our side of the VPN is up and waiting. HQ can ping our public address, but nothing from the HQ LAN can reach our 10.0.2.0/24 servers. We agreed the key Branch-VPN-7f3a. Can you finish the HQ side?' },
+    diagnose: { q: 'h1 can reach the ISP and the branch’s public endpoint 198.51.100.1, but not the branch LAN 10.0.2.0/24. The branch already has its tunnel up. What is missing on r1?', options: ['r1 has no VPN tunnel to the branch (and no route steering 10.0.2.0/24 into it)', 'the ISP link is down', 'h1 has the wrong default gateway'], answer: 0, because: 'The underlay works — you can reach the branch’s public address. What is missing is the overlay: a GRE tunnel on r1 to the branch endpoint, matching authentication, and a route that steers 10.0.2.0/24 into the tunnel.' },
+    console: 'r1',
+    hints: ['Create the tunnel: `ip tunnel add tun0 mode gre local 203.0.113.1 remote 198.51.100.1`.', 'Authenticate it with the agreed key: `ip tunnel key tun0 Branch-VPN-7f3a`.', 'Steer the branch LAN into the tunnel: `ip route add 10.0.2.0/24 dev tun0`. Check status with `ip tunnel`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'), srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.1', 30) }, [{ dest: ip('198.51.100.0'), mask: 30, via: ip('203.0.113.2') }]),
+        r2: R('r2', 'router', { eth0: iface('10.0.2.1', 24), eth1: iface('198.51.100.1', 30), tun0: { kind: 'tunnel', up: true, tunnelSrc: ip('198.51.100.1'), tunnelDest: ip('203.0.113.1'), key: 'Branch-VPN-7f3a', remote: { net: ip('10.0.1.0'), prefix: 24 } } }, [{ dest: ip('203.0.113.0'), mask: 30, via: ip('198.51.100.2') }]),
+        isp: R('isp', 'router', { eth0: iface('203.0.113.2', 30), eth1: iface('198.51.100.2', 30) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r2', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'isp', 'eth0'), L('r2', 'eth1', 'isp', 'eth1')]
+    }),
+    success: [{ type: 'vpn_up', dev: 'r1', iface: 'tun0' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip tunnel add tun0 mode gre local 203.0.113.1 remote 198.51.100.1'], ['r1', 'ip tunnel key tun0 Branch-VPN-7f3a'], ['r1', 'ip route add 10.0.2.0/24 dev tun0']]
+  },
+
+  // Breadth · PKI basics — the tunnel is built on both ends and the certificates
+  // are valid, but HQ does not trust the CA that signed the branch’s cert, so
+  // IKE authentication fails. Establish the trust anchor to bring the VPN up.
+  { id: 'vpn-pki-trust', chapter: 'VPN & PKI', mode: 'diagnose',
+    title: 'The VPN that won’t authenticate',
+    story: 'The HQ–branch VPN was migrated from a pre-shared key to certificate authentication. Both routers present valid certificates issued by CorpRoot-CA, and both tunnels are configured, but the tunnel stays DOWN. On r1, `ip tunnel` shows the tunnel is pki but not established.',
+    objective: 'Diagnose why certificate authentication is failing and establish the missing trust anchor on r1 so the VPN comes up and h1 can reach srv.',
+    ticket: { id: 'INC-2461', from: 'Security engineering', priority: 'P2', symptom: 'We moved the site-to-site VPN to certificate auth. The branch brought up their side and trusts our root CA. Our side still shows the tunnel DOWN even though both certs are valid. Nothing reaches the branch LAN.' },
+    diagnose: { q: 'Both endpoints have tunnels and valid certificates from CorpRoot-CA, yet the tunnel will not authenticate. The branch already trusts CorpRoot-CA. What is wrong on r1?', options: ['r1 does not trust the CA (CorpRoot-CA) that issued the branch certificate', 'the pre-shared keys do not match', 'the branch server is powered off'], answer: 0, because: 'Mutual certificate authentication requires each end to trust the CA that signed the other’s certificate. The branch trusts CorpRoot-CA, but r1 has no trust anchor for it, so it rejects the branch certificate.' },
+    console: 'r1',
+    hints: ['Mutual PKI auth needs BOTH ends to trust the other’s issuer — not just one.', 'The branch certificate is issued by CorpRoot-CA. Check what r1 trusts.', 'Add the trust anchor on r1: `ip tunnel trust CorpRoot-CA`, then re-check with `ip tunnel`.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'), srv: SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 445: 'smb' }),
+        r1: { ...R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.1', 30), tun0: { kind: 'tunnel', up: true, tunnelSrc: ip('203.0.113.1'), tunnelDest: ip('198.51.100.1'), remote: { net: ip('10.0.2.0'), prefix: 24 } } }, [{ dest: ip('198.51.100.0'), mask: 30, via: ip('203.0.113.2') }]), cert: { issuer: 'CorpRoot-CA', valid: true }, trustedCAs: [] },
+        r2: { ...R('r2', 'router', { eth0: iface('10.0.2.1', 24), eth1: iface('198.51.100.1', 30), tun0: { kind: 'tunnel', up: true, tunnelSrc: ip('198.51.100.1'), tunnelDest: ip('203.0.113.1'), remote: { net: ip('10.0.1.0'), prefix: 24 } } }, [{ dest: ip('203.0.113.0'), mask: 30, via: ip('198.51.100.2') }]), cert: { issuer: 'CorpRoot-CA', valid: true }, trustedCAs: ['CorpRoot-CA'] },
+        isp: R('isp', 'router', { eth0: iface('203.0.113.2', 30), eth1: iface('198.51.100.2', 30) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw2', 'p1'), L('r2', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'isp', 'eth0'), L('r2', 'eth1', 'isp', 'eth1')]
+    }),
+    success: [{ type: 'cert_valid', dev: 'r2', peer: 'r1' }, { type: 'vpn_up', dev: 'r1', iface: 'tun0' }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip tunnel trust CorpRoot-CA']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -1223,7 +1272,7 @@ const TIERS = [
     capstone: 'restore-ospf-branch-connectivity' },
   { id: 't3', name: 'Services & Security', order: 3,
     blurb: 'Deliver and defend the services users depend on: DHCP, DNS, NAT, firewalls, ACLs and segmentation.',
-    chapters: ['DHCP', 'DNS / naming', 'NAT', 'Firewalls', 'Network security', 'Cisco firewall operations', 'Cisco ASA firewall operations', 'Enterprise network services'],
+    chapters: ['DHCP', 'DNS / naming', 'NAT', 'Firewalls', 'Network security', 'Cisco firewall operations', 'Cisco ASA firewall operations', 'Enterprise network services', 'VPN & PKI'],
     capstone: 'branch-services-restoration' },
   { id: 't4', name: 'Enterprise & Design', order: 4,
     blurb: 'Operate at scale: BGP policy, WAN redundancy, design review, multi-fault diagnosis, and building to spec.',

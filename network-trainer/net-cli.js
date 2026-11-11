@@ -717,7 +717,7 @@ function brandProfile(dev) { return BRANDS[deviceBrand(dev)]; }
 function brandsForKind(kind) { return Object.keys(BRANDS).filter(id => BRANDS[id].kinds.includes(kind)); }
 function isLinuxDialect(words) {
   if (['iptables', 'ip6tables', 'dhclient', 'resolvectl', 'ifconfig', 'tcpdump', 'nmap', 'dig'].includes(words[0])) return true;
-  if (words[0] === 'ip' && ['addr', 'a', 'link', 'l'].includes(words[1])) return true;   // Linux `ip addr` / `ip link`
+  if (words[0] === 'ip' && ['addr', 'a', 'link', 'l', 'tunnel', 'tun'].includes(words[1])) return true;   // Linux `ip addr` / `ip link` / `ip tunnel`
   return false;
 }
 
@@ -1327,6 +1327,11 @@ const HELP_SECTIONS = [
     ['ip route', 'Display the routing table', ['router', 'firewall']],
     ['ip route add ... via <ip>', 'Add a route through a next-hop router', ['router', 'firewall']],
     ['ip route del ...', 'Remove a configured route', ['router', 'firewall']],
+    ['ip tunnel add <n> mode gre local <ip> remote <ip>', 'Create a site-to-site VPN tunnel', ['router', 'firewall']],
+    ['ip tunnel key <tunnel> <shared-key>', 'Authenticate a VPN tunnel with a pre-shared key', ['router', 'firewall']],
+    ['ip tunnel trust <CA>', 'Trust a certificate authority for VPN PKI auth', ['router', 'firewall']],
+    ['ip route add <cidr> dev <tunnel>', 'Steer a protected subnet into a VPN tunnel', ['router', 'firewall']],
+    ['ip tunnel', 'Show VPN tunnels and their established state', ['router', 'firewall']],
     ['router ospf <process-id>', 'Enter OSPF routing configuration', ['router']],
     ['network <address> <wildcard> ...', 'Advertise a network into OSPF', ['router']],
     ['show ip ospf neighbor', 'Check OSPF neighbour relationships', ['router']],
@@ -1706,7 +1711,42 @@ const COMMANDS = {
         `${n}: ${f.up === false ? 'DOWN' : 'UP'}  ${f.ip != null ? M.ipStr(f.ip) + '/' + f.mask : '(no address)'}${f.vlan != null ? ' vlan ' + f.vlan : ''}`);
       return ok(lines.join('\n'));
     }
+    if (sub === 'tunnel' || sub === 'tun') {                 // site-to-site VPN tunnels
+      if (dev.kind !== 'router' && dev.kind !== 'firewall') return err('% VPN tunnels are configured on a router or firewall');
+      if (a[1] === 'add') {                                  // ip tunnel add <name> mode gre local <ip> remote <ip>
+        const name = a[2], li = a.indexOf('local'), ri = a.indexOf('remote');
+        const src = li >= 0 ? parseIPv4(a[li + 1]) : null, dst = ri >= 0 ? parseIPv4(a[ri + 1]) : null;
+        if (!name || src == null || dst == null) return err('usage: ip tunnel add <name> mode gre local <local-IPv4> remote <remote-IPv4>');
+        if (dev.ifaces[name] && dev.ifaces[name].kind !== 'tunnel') return err('ip tunnel: ' + name + ' already exists as a physical interface');
+        dev.ifaces[name] = { ...(dev.ifaces[name] || {}), kind: 'tunnel', up: true, tunnelSrc: src, tunnelDest: dst };
+        return ok(name + ': gre local ' + M.ipStr(src) + ' remote ' + M.ipStr(dst));
+      }
+      if (a[1] === 'key') {                                  // ip tunnel key <name> <pre-shared-key>
+        const name = a[2], key = a[3];
+        if (!name || !dev.ifaces[name] || dev.ifaces[name].kind !== 'tunnel' || !key) return err('usage: ip tunnel key <tunnel> <shared-key>');
+        dev.ifaces[name].key = key; return ok(name + ': pre-shared key set');
+      }
+      if (a[1] === 'trust') {                                // ip tunnel trust <CA>  (add a PKI trust anchor)
+        const ca = a.slice(2).join(' '); if (!ca) return err('usage: ip tunnel trust <certificate-authority>');
+        dev.trustedCAs = dev.trustedCAs || []; if (!dev.trustedCAs.includes(ca)) dev.trustedCAs.push(ca);
+        return ok('trusting certificate authority ' + ca);
+      }
+      const rows = Object.entries(dev.ifaces).filter(([, p]) => p.kind === 'tunnel').map(([n, p]) =>
+        n + ': local ' + M.ipStr(p.tunnelSrc) + ' remote ' + M.ipStr(p.tunnelDest) +
+        (p.remote ? ' protect ' + M.ipStr(p.remote.net) + '/' + p.remote.prefix : '') +
+        (p.key != null ? ' psk' : (dev.cert ? ' pki' : '')) + '  ' + (M.tunnelEstablished(cli.net, cli.cur, n) ? 'UP' : 'DOWN'));
+      return ok(rows.length ? 'Tunnel            State\n' + rows.join('\n') : '(no VPN tunnels configured)');
+    }
     if (sub === 'route' || sub === 'r') {
+      if ((a[1] === 'add' || a[1] === 'replace')) {          // ip route add <cidr> dev <tunnel> — steer protected traffic into a tunnel
+        const di = a.indexOf('dev'), tn = di >= 0 ? a[di + 1] : null;
+        if (tn && dev.ifaces[tn] && dev.ifaces[tn].kind === 'tunnel') {
+          const target = parseCIDR(a[2]);
+          if (!target) return err('usage: ip route add <valid-CIDR> dev <tunnel>');
+          dev.ifaces[tn].remote = { net: target.net, prefix: target.prefix };
+          return ok('route ' + M.ipStr(target.net) + '/' + target.prefix + ' dev ' + tn);
+        }
+      }
       if (a[1] === 'add' || a[1] === 'replace') {
         const vi = a.indexOf('via');
         if (vi !== 3 || !a[vi + 1]) return err('usage: ip route add <default|valid-CIDR> via <gateway-IPv4>');
@@ -1903,7 +1943,7 @@ function routeLabel(net, cur, r) {
 }
 
 const MAN = {
-  ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      assign a validated address to an existing interface\n  ip addr del A/p dev IF      remove the matching address\n  ip link set IF up|down      change interface state\n  ip route                    show the routing table\n  ip route add default via G  set or replace the default gateway\n  ip route add CIDR via G     add or replace a static route\n  ip route del default|CIDR   remove a matching route\n  Address and gateway input is validated; gateways must be on an active connected subnet.',
+  ip: 'ip — show / configure addresses and routes.\n  ip addr                     list interfaces and addresses\n  ip addr add A/p dev IF      assign a validated address to an existing interface\n  ip addr del A/p dev IF      remove the matching address\n  ip link set IF up|down      change interface state\n  ip route                    show the routing table\n  ip route add default via G  set or replace the default gateway\n  ip route add CIDR via G     add or replace a static route\n  ip route del default|CIDR   remove a matching route\n  ip tunnel add N mode gre local L remote R   create a site-to-site VPN tunnel\n  ip tunnel key N KEY         authenticate a tunnel with a pre-shared key\n  ip tunnel trust CA          trust a certificate authority (PKI auth)\n  ip route add CIDR dev N     steer a protected subnet into a tunnel\n  ip tunnel                   show tunnels and their established state\n  Address and gateway input is validated; gateways must be on an active connected subnet.',
   ping: 'ping HOST — send an echo and wait for the reply. Reports the path and, on failure, where the packet died.',
   traceroute: 'traceroute HOST — list the hops a packet passes through toward HOST.',
   'access-list': 'Cisco IOS extended ACLs: enable, configure terminal, ip access-list extended NAME, then [sequence] permit|deny ip|tcp|udp|icmp SOURCE DESTINATION [eq PORT]. Address forms: any, host IP, or IP WILDCARD. Apply under interface mode with ip access-group NAME in|out. Verify with show access-lists and show ip interface IF. Rules are first-match-wins; unmatched traffic is implicitly denied. Remove a sequence with no SEQUENCE. IOS-style router ACL subset; not ASA syntax.',
