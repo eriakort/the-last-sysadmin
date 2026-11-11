@@ -8,7 +8,7 @@ const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
 const LC = require('./net-learning-coach');
 const NR = require('./net-spaced-recall');
-const { makeCLI, BRANDS, brandsForKind } = require('./net-cli');
+const { makeCLI, BRANDS, brandsForKind, completions } = require('./net-cli');
 const B = require('./net-builder');
 const D = require('./net-design-academy');
 const AW = require('./net-automation-workshop');
@@ -2516,6 +2516,19 @@ function wireTerm() {
   const terminalInputRow = inp.closest('.tline');
   if (terminalInputRow) terminalInputRow.before(mistakePanel);
   inp.addEventListener('keydown', e => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!SEL || !RUN.net.devices[SEL]) return;
+      const cands = completions(RUN.cli.on(SEL), inp.value);
+      if (!cands.length) return;
+      const partial = (inp.value.match(/(\S*)$/) || [''])[0];
+      const base = inp.value.slice(0, inp.value.length - partial.length);
+      if (cands.length === 1) { inp.value = base + cands[0] + ' '; return; }
+      const lcp = cands.reduce((a, b) => { let i = 0; while (i < a.length && i < b.length && a[i].toLowerCase() === b[i].toLowerCase()) i++; return a.slice(0, i); });
+      if (lcp.length > partial.length) inp.value = base + lcp;           // extend to common prefix
+      else termEcho(cands.join('    '));                                // list the options
+      return;
+    }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') { e.preventDefault(); cycleDeviceSession(-1); return; }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowRight') { e.preventDefault(); cycleDeviceSession(1); return; }
     if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); LAST_COMMAND = { line, accepted: r.code === 0 }; if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }

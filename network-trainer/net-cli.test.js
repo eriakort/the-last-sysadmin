@@ -905,6 +905,47 @@ test('PAN-OS: interfaces route and a security rule actually blocks traffic', () 
   has(cli.run('show routing route').out, '10.0.2.0/24', 'routing table shows connected subnet');
 });
 
+test('tab completion is brand/kind-aware and completes interfaces and targets', () => {
+  const { completions } = require('./net-cli');
+  const net = { devices: {
+    jun: { id: 'jun', kind: 'router', brand: 'juniper-junos', ifaces: { eth0: { up: true }, eth1: { up: true } } },
+    cio: { id: 'cio', kind: 'router', brand: 'cisco-ios', ifaces: { eth0: { up: true } } },
+    pan: { id: 'pan', kind: 'firewall', brand: 'paloalto-panos', ifaces: { eth0: { up: true } } },
+    sw:  { id: 'sw', kind: 'switch', ifaces: { p1: { up: true } } },
+    srv: { id: 'srv', kind: 'host', hostname: 'web01', ifaces: { eth0: { up: true } } },
+  }, links: [] };
+  const cli = makeCLI(net, 'jun');
+  const has1 = (arr, v, m) => { if (!arr.includes(v)) throw new Error(`${m}: ${JSON.stringify(arr)} lacks "${v}"`); };
+  const no1 = (arr, v, m) => { if (arr.includes(v)) throw new Error(`${m}: ${JSON.stringify(arr)} should not have "${v}"`); };
+
+  // Junos vocabulary
+  has1(completions(cli, 'set '), 'interfaces', 'junos set');
+  has1(completions(cli, 'set '), 'protocols', 'junos set protocols');
+  has1(completions(cli, 'comm'), 'commit', 'junos commit');
+  no1(completions(cli, ''), 'configure terminal', 'junos has no IOS verbs');
+  // dynamic interface completion
+  has1(completions(cli, 'set interfaces '), 'eth0', 'junos iface eth0');
+  has1(completions(cli, 'set interfaces '), 'eth1', 'junos iface eth1');
+  has1(completions(cli, 'set interfaces eth0 unit 0 family inet '), 'address', 'junos address');
+  // dynamic ping targets (other devices + hostnames)
+  has1(completions(cli, 'ping '), 'cio', 'ping target id');
+  has1(completions(cli, 'ping '), 'web01', 'ping target hostname');
+  no1(completions(cli, 'ping '), 'jun', 'ping excludes self');
+
+  // Cisco IOS vocabulary is different
+  const ios = completions(cli.on('cio'), 'show ip ');
+  has1(ios, 'ospf', 'ios show ip ospf'); has1(ios, 'bgp', 'ios show ip bgp');
+  has1(completions(cli, 'conf'), 'configure', 'ios configure');
+
+  // PAN-OS vocabulary
+  has1(completions(cli.on('pan'), 'test '), 'security-policy-match', 'panos test');
+  has1(completions(cli, 'set rulebase security rules r1 '), 'from', 'panos rule from');
+
+  // Switch shows switching verbs, not routing
+  has1(completions(cli.on('sw'), ''), 'vlan', 'switch vlan');
+  no1(completions(cli, ''), 'router', 'switch has no router ospf verb at top');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

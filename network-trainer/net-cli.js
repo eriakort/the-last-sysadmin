@@ -1921,4 +1921,51 @@ const MAN = {
   vlan: 'vlan ID — create a VLAN (1–4094) on the selected switch.\n  interface PORT — enter switch-port configuration mode.\n  switchport mode access|trunk — set the port mode.\n  switchport access vlan ID — assign an existing VLAN to an access port.\n  switchport trunk native vlan ID — set the untagged VLAN on a trunk.\n  switchport trunk allowed vlan all|10,20 — set the VLANs carried by a trunk.\n  switchport port-security — enable access-port MAC security; maximum N, violation protect|restrict|shutdown, mac-address sticky.\n  show port-security [interface PORT] — inspect secure MACs and violation counters.\n  show vlan brief — list VLANs and access ports.\n  show interfaces trunk — inspect trunk native and allowed VLANs.\n  show interfaces switchport — inspect port modes and VLAN membership.'
 };
 
-module.exports = { makeCLI, resolve, primaryIp, BRANDS, brandsForKind };
+/* ---------------- tab completion ----------------
+ * Candidate next-tokens for a partial line, derived from the SAME command
+ * vocabulary `help` uses (so it is brand/kind-aware automatically), plus dynamic
+ * completion of interface names and ping/traceroute targets. A token is a
+ * placeholder (matches any typed value, not completed literally) when it carries
+ * <>, |, / or . — e.g. <if>, <ip>/<pfx>, 0.0.0.0. */
+const ASA_PHRASES = ['enable', 'disable', 'configure terminal', 'interface <physical-if>', 'nameif <name>', 'ip address <ip> <mask>', 'security-level <n>', 'object network <name>', 'object-group service <name>', 'access-list <name> extended permit <proto> <src> <dst>', 'access-list <name> extended deny <proto> <src> <dst>', 'access-group <name> in interface <name>', 'route <name> <dest> <mask> <gw>', 'show running-config', 'show interface ip brief', 'show route', 'show access-list', 'show nat', 'show xlate', 'packet-tracer input <name> tcp <src> <sport> <dst> <dport>', 'ping <host>', 'traceroute <host>', 'write memory', 'help'];
+function tokenizeTemplate(phrase) { return phrase.trim().split(/\s+/).map(t => ({ t, ph: /[<>|/.]/.test(t) || t === '...' })); }
+function commandTemplates(cli) {
+  const dev = cli.net.devices[cli.cur]; if (!dev) return [];
+  const kind = dev.kind, brand = deviceBrand(dev), prof = BRANDS[brand] || BRANDS.generic, fam = prof.family;
+  const phrases = [];
+  if (REFERENCE_CARDS[brand]) { for (const sec of REFERENCE_CARDS[brand].sections) for (const it of sec.items) if (!kind || it[2].includes(kind)) phrases.push(String(it[0])); }
+  else if (fam === 'asa' || dev.firewallOS === 'asa') phrases.push(...ASA_PHRASES);
+  else for (const sec of HELP_SECTIONS) for (const it of sec.items) { if (kind && !it[2].includes(kind)) continue; if (it[3] && fam && !it[3].includes(fam)) continue; phrases.push(String(it[0])); }
+  const out = [];
+  for (const p of phrases) for (const seg of p.split(' / ')) out.push(tokenizeTemplate(seg));
+  return out;
+}
+function completions(cli, line) {
+  const dev = cli && cli.cur != null ? cli.net.devices[cli.cur] : null;
+  if (!dev) return [];
+  const raw = String(line), trailing = /\s$/.test(raw);
+  const toks = raw.trim().length ? raw.trim().split(/\s+/) : [];
+  const pos = trailing ? toks.length : Math.max(0, toks.length - 1);
+  const partial = (trailing ? '' : (toks[toks.length - 1] || '')).toLowerCase();
+  const typed = toks.slice(0, pos).map(s => s.toLowerCase());
+  const cand = new Set();
+  const addDyn = ph => {
+    const p = ph.toLowerCase();
+    if (/<(if|port|physical-if|interface)/.test(p)) Object.keys(dev.ifaces).forEach(n => cand.add(n));
+    else if (/<(host|name)/.test(p) || p.includes('host|ip')) {
+      if (['ping', 'traceroute', 'dig', 'nmap', 'host'].includes(typed[pos - 1]) || /<(host|name)/.test(p))
+        Object.keys(cli.net.devices).forEach(id => { if (id !== cli.cur) { cand.add(id); const h = cli.net.devices[id].hostname; if (h) cand.add(h); } });
+    }
+  };
+  for (const tpl of commandTemplates(cli)) {
+    if (tpl.length <= pos) continue;
+    let match = true;
+    for (let i = 0; i < pos; i++) { const tt = tpl[i]; if (!tt || (!tt.ph && tt.t.toLowerCase() !== typed[i])) { match = false; break; } }
+    if (!match) continue;
+    const next = tpl[pos];
+    if (next.ph) addDyn(next.t); else cand.add(next.t);
+  }
+  return [...cand].filter(c => c.toLowerCase().startsWith(partial)).sort();
+}
+
+module.exports = { makeCLI, resolve, primaryIp, BRANDS, brandsForKind, completions };
