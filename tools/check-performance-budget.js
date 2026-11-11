@@ -15,8 +15,11 @@ const targets = [
   {
     label: 'Network Trainer',
     file: 'network-trainer/index.html',
-    gzipBudget: 192 * 1024,
-    brotliBudget: 156 * 1024
+    // Raised 192/156 -> 208/168 for roadmap Phase 1-3: design-from-requirements,
+    // the curriculum tier layer, and the decision/tradeoff + incident-command
+    // mission types. Current page ~192 KiB gzip / ~155 KiB Brotli; ~16 KiB headroom.
+    gzipBudget: 208 * 1024,
+    brotliBudget: 168 * 1024
   }
 ];
 

@@ -43,7 +43,7 @@ function startMission(mission) {
     run: line => cli.run(line),
     on: dev => { cli.on(dev); return api; },
     results: () => mission.success.map(s => ({ spec: s, ...evalCheck(net, s) })),
-    done: () => api.results().every(r => r.ok) && api.reviewOk() && api.faultsOk(),
+    done: () => api.results().every(r => r.ok) && api.reviewOk() && api.faultsOk() && api.decisionOk() && api.incidentOk(),
     // Diagnosis gate: the player must localize the fault before fixing it.
     // A mission with no `diagnose` block has no gate (ok for any index).
     requiresDiagnosis: !!mission.diagnose,
@@ -78,12 +78,36 @@ function startMission(mission) {
       if (!d) return { ok: true, because: '' };
       return { ok: idx === d.answer, because: d.because };
     },
+    // Decision / tradeoff: judgment under ambiguity. Options carry a score (not a
+    // single right answer); the call passes when the committed option scores at or
+    // above the mission's bar. A mission with no `decision` block imposes no gate.
+    decisionChoice: null,
+    chooseDecision(id) { api.decisionChoice = id; },
+    decisionOption() { const d = mission.decision; return d && d.options.find(o => o.id === api.decisionChoice) || null; },
+    decisionOk() {
+      const d = mission.decision; if (!d) return true;
+      const opt = api.decisionOption();
+      return !!opt && opt.score >= d.pass;
+    },
+    // Incident-command: a timed, cascading response graded on a required comms step
+    // (correct severity/audience) on top of the technical success checks. A mission
+    // with no `incident` block (or no comms requirement) imposes no comms gate.
+    commsChoice: null,
+    sendComms(id) { api.commsChoice = id; },
+    commsOption() { const inc = mission.incident; return inc && inc.comms && inc.comms.options.find(o => o.id === api.commsChoice) || null; },
+    incidentOk() {
+      const inc = mission.incident; if (!inc || !inc.comms) return true;
+      const c = api.commsOption();
+      return !!c && !!c.correct;
+    },
     // The `check` command: what's still unmet and why (the teaching moment).
     status() {
       const unmet = api.results().filter(r => !r.ok);
       const lines = unmet.map(r => '  ✗ ' + r.reason);
       if (mission.review && !api.reviewOk()) lines.push('  ✗ design review incomplete — check every real fault, and only those');
       if (mission.faults && !api.faultsOk()) lines.push('  ✗ localize every real fault before the ticket closes');
+      if (mission.decision && !api.decisionOk()) lines.push('  ✗ commit a response that holds up to the tradeoffs');
+      if (mission.incident && mission.incident.comms && !api.incidentOk()) lines.push('  ✗ post a status update at the right severity and audience');
       return lines.length
         ? 'Not resolved yet:\n' + lines.join('\n')
         : '✓ All objectives met — ticket resolved.';

@@ -66,12 +66,58 @@ test('every design mission has constraints, checks and a buildable solution', ()
   }
 });
 
+// Decision / tradeoff missions are well-formed: scored options, a reachable pass
+// bar, at least one passing and one failing option, and a programmatic solution.
+test('every decision mission is a well-formed scored tradeoff', () => {
+  for (const m of chapters) {
+    if (m.mode !== 'decision') continue;
+    const d = m.decision;
+    assert(d && Array.isArray(d.options) && d.options.length >= 2, `decision mission "${m.id}" needs >=2 options`);
+    assert(typeof d.pass === 'number', `decision mission "${m.id}" needs a numeric pass bar`);
+    d.options.forEach(o => {
+      assert(o.id && typeof o.score === 'number' && o.rationale, `decision mission "${m.id}" option "${o.id}" needs id/score/rationale`);
+    });
+    const ids = d.options.map(o => o.id);
+    assert(new Set(ids).size === ids.length, `decision mission "${m.id}" has duplicate option ids`);
+    assert(d.options.some(o => o.score >= d.pass), `decision mission "${m.id}" has no passing option`);
+    assert(d.options.some(o => o.score < d.pass), `decision mission "${m.id}" has no failing option (no tradeoff)`);
+    assert(typeof m.solution === 'function', `decision mission "${m.id}" needs a programmatic solution`);
+    // The grader honors the pass bar: a below-bar option must not resolve the mission.
+    const worst = d.options.slice().sort((a, b) => a.score - b.score)[0];
+    const s = startMission(m);
+    s.chooseDecision(worst.id);
+    if (worst.score < d.pass) assert(s.done() === false, `decision mission "${m.id}" accepted a below-bar option`);
+  }
+});
+
+// Incident-command missions are well-formed: ordered stages, a comms step with
+// exactly the right correctness shape, and a programmatic solution.
+test('every incident mission is a well-formed cascading response', () => {
+  for (const m of chapters) {
+    if (m.mode !== 'incident') continue;
+    const inc = m.incident;
+    assert(inc && Array.isArray(inc.stages) && inc.stages.length >= 2, `incident mission "${m.id}" needs ordered stages`);
+    assert(inc.comms && Array.isArray(inc.comms.options) && inc.comms.options.length >= 2, `incident mission "${m.id}" needs a comms step`);
+    assert(inc.comms.options.filter(o => o.correct).length === 1, `incident mission "${m.id}" needs exactly one correct comms option`);
+    assert(Array.isArray(m.success) && m.success.length > 0, `incident mission "${m.id}" needs technical success checks`);
+    assert(typeof m.solution === 'function', `incident mission "${m.id}" needs a programmatic solution`);
+    // Comms gate is real: fixing the network without sending the right update does not resolve it.
+    const s = startMission(m);
+    m.solution(s);                                   // full solution resolves it
+    assert(s.done() === true, `incident mission "${m.id}" not resolved by its solution`);
+    const s2 = startMission(m);
+    const wrong = inc.comms.options.find(o => !o.correct);
+    s2.sendComms(wrong.id);                           // wrong comms alone must not pass
+    assert(s2.done() === false, `incident mission "${m.id}" passed with the wrong status update`);
+  }
+});
+
 // The diagnosis grader: right index passes, every wrong index fails, and the
 // correct answer is always in range (guards against an unanswerable gate).
-// Design missions have no gate, so they are exempt.
+// Missions with no diagnose block (design, decision, incident) have no gate.
 test('diagnosis grader accepts the right answer and rejects wrong ones', () => {
   for (const m of chapters) {
-    if (m.mode === 'design') continue;
+    if (!m.diagnose) continue;
     const s = startMission(m);
     assert(s.requiresDiagnosis === true, `mission "${m.id}" should require diagnosis`);
     const d = m.diagnose;

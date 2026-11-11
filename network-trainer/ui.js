@@ -734,6 +734,35 @@ function renderFaults(m) {
     <p class="dim">This ticket has more than one problem. Investigate, then check each real fault. Fix them all before Check.</p>
     <div class="rev-list">${rows}</div>`;
 }
+function renderDecision(m) {
+  const sel = RUN.decisionChoice;
+  const rows = m.decision.options.map(o => `<label class="decide-row${sel === o.id ? ' chosen' : ''}"><input type="radio" name="decide" data-decide="${esc(o.id)}"${sel === o.id ? ' checked' : ''}> <span>${esc(o.label)}</span></label>`).join('');
+  const chosen = m.decision.options.find(o => o.id === sel);
+  return `<div class="label">Decision — weigh the tradeoffs</div>
+    <p class="dim">${esc(m.decision.prompt)}</p>
+    <div class="decide-list">${rows}</div>
+    ${chosen ? `<div class="decide-rationale"><b>Your call:</b> ${esc(chosen.rationale)}</div>` : '<p class="dim decide-hint">Select a response, then press Check to commit it.</p>'}`;
+}
+function renderIncident(m) {
+  const inc = m.incident, res = RUN.results();
+  // Live stage readout: technical stages reflect the success checks; the comms
+  // stage reflects whether a correct update has been sent.
+  const techDone = res.length > 0 && res.every(r => r.ok);
+  const commsDone = RUN.incidentOk();
+  const marks = (inc.stages || []).map((s, i) => {
+    const last = i === inc.stages.length - 1;
+    const on = last ? commsDone : (techDone && i < inc.stages.length - 1);
+    return `<li class="${on ? 'stage-done' : ''}">${on ? '✓' : '○'} ${esc(s)}</li>`;
+  }).join('');
+  const sel = RUN.commsChoice;
+  const comms = inc.comms ? `<div class="label2">Status communication</div>
+    <p class="dim">${esc(inc.comms.prompt)}</p>
+    ${inc.comms.options.map(o => `<label class="decide-row${sel === o.id ? ' chosen' : ''}"><input type="radio" name="comms" data-comms="${esc(o.id)}"${sel === o.id ? ' checked' : ''}> <span>${esc(o.label)}</span></label>`).join('')}` : '';
+  return `<div class="label">Incident command — cascading response</div>
+    <p class="dim">Work the stages in order, then send the status update. Your response time is on the clock.</p>
+    <ol class="incident-stages">${marks}</ol>
+    <div class="incident-comms">${comms}</div>`;
+}
 function renderDeviceExplorer() {
   const devices = Object.entries(RUN.net.devices || {});
   const rows = devices.map(([id, d]) => {
@@ -763,10 +792,12 @@ function renderBrief() {
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
   const review = m.review ? renderReview(m) : '';
   const faults = m.faults ? renderFaults(m) : '';
+  const decision = m.decision ? renderDecision(m) : '';
+  const incident = m.incident ? renderIncident(m) : '';
   const body = gated
     ? renderDiagnose(m)
     : `${m.diagnose ? `<div class="diag-done">✓ Diagnosed — ${esc(m.diagnose.because)}</div>` : ''}
-    ${review}
+    ${review}${faults}${decision}${incident}
     <div class="label">Objective</div><p>${esc(m.objective)}</p>
     <div class="label">Hints</div><ol>${hints}</ol>
     <div class="row">${hintBtn}<button id="check" class="btn primary">Check</button></div>`;
@@ -1172,14 +1203,20 @@ function doCheck() {
     if (id === 'cross-track-ssh-hardening-network') markCrossTrackProgress('hardeningNetwork');
     if (id === 'cross-track-contractor-containment-network') markCrossTrackProgress('contractorNetwork');
     if (!SOLVED_NOW) { SOLVED_NOW = true; stopTimer(); }
-    const isDesign = RUN.mission.mode === 'design';
+    // Mode-aware success copy: a design/decision/incident mission is not a "ticket".
+    const COPY = {
+      design:   { line: 'All requirements met — design signed off.', past: 'Built to spec',    signoff: 'design signed off' },
+      decision: { line: 'Decision committed — your call holds up to the tradeoffs.', past: 'Call made', signoff: 'decision committed' },
+      incident: { line: 'Service restored and stakeholders informed — incident resolved.', past: 'Incident resolved', signoff: 'incident resolved' }
+    };
+    const c = COPY[RUN.mission.mode] || { line: 'All objectives met — ticket resolved.', past: 'Ticket resolved', signoff: 'ticket resolved' };
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
-    let msg = isDesign ? '✓ All requirements met — design signed off.' : '✓ All objectives met — ticket resolved.';
+    let msg = '✓ ' + c.line;
     if (!PROG.done[id]) {
       const reward = Math.max(25, REWARD - HINT_COST * HINTS);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
-      addJournalEntry({ type: isDesign ? 'design signed off' : 'ticket resolved', device: SEL || '', text: `${isDesign ? 'Built to spec' : 'Resolved'} ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
-      msg = `✓ ${isDesign ? 'Built to spec' : 'Ticket resolved'} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
+      addJournalEntry({ type: c.signoff, device: SEL || '', text: `${c.past}: ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
+      msg = `✓ ${c.past} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
     const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);
@@ -1187,7 +1224,9 @@ function doCheck() {
     box.innerHTML = msg + feedback + (ni >= 0 ? ' <button class="btn sm" id="next">Next ticket →</button>' : (allDone ? `<div class="finale">🎓 All ${chapters.length} tickets cleared — final rank <b>${rankFor(PROG.xp)}</b>, ${PROG.xp} XP.</div>` : ''));
     const nb = $('#next'); if (nb) nb.addEventListener('click', () => reloadMission(ni));
   } else {
-    box.className = 'bad'; box.innerHTML = 'Not resolved yet:' + feedback + '<ul>' + RUN.results().filter(r => !r.ok).map(r => '<li>' + esc(r.reason) + '</li>').join('') + '</ul>';
+    // Unmet reasons come from status() so decision/comms gates surface too, not just failed network checks.
+    const unmet = RUN.status().split('\n').filter(l => /✗/.test(l)).map(l => l.replace(/^[\s✗]+/, ''));
+    box.className = 'bad'; box.innerHTML = 'Not resolved yet:' + feedback + '<ul>' + unmet.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>';
   }
 }
 
@@ -1805,6 +1844,12 @@ function wireBrief() {
   }));
   document.querySelectorAll('#brief [data-fid]').forEach(cb => cb.addEventListener('change', () => {
     RUN.toggleFinding(cb.dataset.fid);
+  }));
+  document.querySelectorAll('#brief [data-decide]').forEach(r => r.addEventListener('change', () => {
+    RUN.chooseDecision(r.dataset.decide); $('#brief').innerHTML = renderBrief(); wireBrief();
+  }));
+  document.querySelectorAll('#brief [data-comms]').forEach(r => r.addEventListener('change', () => {
+    RUN.sendComms(r.dataset.comms); $('#brief').innerHTML = renderBrief(); wireBrief();
   }));
   $('#pick').addEventListener('change', e => reloadMission(+e.target.value));
   const hb = $('#hint'); if (hb) hb.addEventListener('click', () => { if (HINTS < RUN.mission.hints.length) HINTS++; $('#brief').innerHTML = renderBrief(); wireBrief(); });

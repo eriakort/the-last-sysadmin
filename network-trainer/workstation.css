@@ -738,3 +738,17 @@ aside{scrollbar-color:#344a60 transparent}
 .ct-capstone.cap-done{color:var(--good)}
 @media(max-width:900px){.curriculum-tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.curriculum-tiers{grid-template-columns:1fr}}
+
+/* Phase 3 — decision/tradeoff & incident-command mission controls */
+.decide-list{display:flex;flex-direction:column;gap:7px;margin:8px 0}
+.decide-row{display:flex;gap:9px;align-items:flex-start;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:var(--raise);cursor:pointer;font-size:13px;line-height:1.4}
+.decide-row:hover{border-color:var(--amber)}
+.decide-row.chosen{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.decide-row input{margin-top:2px;flex:none}
+.decide-rationale{border-left:3px solid var(--amber);background:color-mix(in srgb,var(--amber) 7%,var(--panel));padding:9px 11px;border-radius:0 7px 7px 0;font-size:12px;line-height:1.5;margin:4px 0 2px}
+.decide-hint{margin:4px 0 2px}
+.incident-stages{margin:8px 0;padding-left:4px;list-style:none;display:flex;flex-direction:column;gap:5px}
+.incident-stages li{font-size:12px;color:var(--muted);padding:3px 0}
+.incident-stages li.stage-done{color:var(--good)}
+.incident-comms{margin-top:10px}
+.incident-comms .label2{margin-top:6px}

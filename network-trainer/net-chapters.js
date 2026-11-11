@@ -1140,6 +1140,65 @@ const chapters = [
       s.on('r1').run('ip addr add 10.0.2.1/24 dev eth1');
     }
   },
+
+  // Tier-5 judgment · Decision / tradeoff — no config to change; the grade is the
+  // quality of the call. Options carry a score, and more than one choice passes.
+  { id: 'decide-saturated-uplink', chapter: 'Decision · tradeoff', mode: 'decision',
+    title: 'The saturated branch uplink',
+    story: 'The Riverside branch uplink runs at 100% during business hours. Users complain that the ERP app stalls every afternoon. The link is a single 50 Mbps circuit; a second circuit can be provisioned but takes two weeks and adds monthly cost. There is no capacity emergency overnight.',
+    objective: 'Commit the response that best balances speed of relief, cost, and risk to legitimate traffic. There is no single right answer — weigh the tradeoffs.',
+    ticket: { id: 'INC-2210', from: 'Branch manager · Riverside', priority: 'P2', symptom: 'Every afternoon the ERP app times out. It clears up after 6pm. The internet "feels slow" all day. Nothing changed on our side that we know of.' },
+    console: 'r1',
+    hints: ['A congested link is a capacity problem; relief can come from more capacity, smarter use of what exists, or shedding load.', 'QoS does not add bandwidth — it decides what suffers first when the link is full.', 'The strongest answers relieve the business impact quickly without harming legitimate users; the weakest ignore the incident or punish users bluntly.'],
+    decision: { prompt: 'It is 2pm and the ERP app is timing out for 40 staff. What do you do?', pass: 2,
+      options: [
+        { id: 'qos', label: 'Apply QoS now to prioritize ERP and other business-critical traffic over bulk/recreational flows, and provision the second circuit for the longer term.', score: 3, rationale: 'Best balance: QoS relieves the business impact within the hour using the capacity you already have, while the second circuit addresses the root cause. It protects legitimate users and buys time without blunt blocking.' },
+        { id: 'parallel', label: 'Provision the second circuit and load-balance across both links.', score: 2, rationale: 'Sound and addresses the root cause, but the two-week lead time does nothing for the staff timing out this afternoon. A good long-term move that needs a short-term bridge beside it.' },
+        { id: 'blockrec', label: 'Block streaming and software-update traffic outright with an ACL during business hours.', score: 1, rationale: 'Crude load-shedding. It may help, but it risks blocking legitimate traffic (updates, SaaS that looks like streaming) and treats a prioritization problem as a blunt allow/deny one. Prefer QoS.' },
+        { id: 'wait', label: 'Take no action; the link clears after 6pm and nothing changed on your side.', score: 0, rationale: 'Ignores an active P2 business impact. "It clears up later" is not a response while 40 staff are timing out now.' }
+      ] },
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('203.0.113.2', 30) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [],
+    solution: (s) => { s.chooseDecision('qos'); }
+  },
+
+  // Tier-5 judgment · Incident-command — a cascading P1 graded on the technical
+  // restoration AND a required status update at the correct severity/audience.
+  { id: 'incident-core-outage', chapter: 'Incident command', mode: 'incident',
+    title: 'Cascading core outage',
+    story: 'A core routing change was backed out badly: r1 lost its route to the data-center network 10.0.3.0/24, and the branch (h1) can no longer reach the application server h3. The link to the core router r2 is up and r2 still knows the way back. As incident commander you must restore service AND keep stakeholders informed at the right severity.',
+    objective: 'Restore reachability from h1 to h3 by repairing the route on r1, then post a status update at the correct severity and audience.',
+    ticket: { id: 'INC-2301', from: 'NOC · Major incident', priority: 'P1', symptom: 'Branch users cannot reach the application server. Started right after the 2am core change window. The inter-router link is up — we can ping the core router — but application traffic goes nowhere.' },
+    console: 'r1',
+    hints: ['Routing is per-direction: r2 knows the way back, but r1 may be missing its route to 10.0.3.0/24.', 'Restore the route with `ip route add 10.0.3.0/24 via 10.0.12.2`, then confirm h1 can reach h3.', 'A confirmed P1 needs a timely, accurate status update to all stakeholders — not a quiet fix and not silence until fully resolved.'],
+    incident: {
+      stages: ['Confirm the scope: which networks are unreachable', 'Restore the route to the data-center network on r1', 'Verify end-to-end reachability from the branch', 'Post a status update to stakeholders at the correct severity'],
+      comms: { prompt: 'The outage is confirmed P1 with a known fix in progress. Which status update do you send?',
+        options: [
+          { id: 'p1all', label: 'P1 to all stakeholders: branch↔data-center reachability down, cause identified, fix in progress, ETA ~15 min, next update in 15 min.', correct: true },
+          { id: 'p4desk', label: 'Low-priority note in the helpdesk queue only; let affected users open their own tickets.', correct: false },
+          { id: 'silent', label: 'Hold all communication until service is fully restored to avoid alarming people.', correct: false }
+        ] }
+    },
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'), h3: H('h3', '10.0.3.10', 24, '10.0.3.1'),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.12.1', 30) }),
+        r2: R('r2', 'router', { eth0: iface('10.0.12.2', 30), eth1: iface('10.0.3.1', 24) }, [{ dest: ip('10.0.1.0'), mask: 24, via: ip('10.0.12.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw3: SW('sw3', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('r1', 'eth1', 'r2', 'eth0'), L('h3', 'eth0', 'sw3', 'p1'), L('r2', 'eth1', 'sw3', 'p2')]
+    }),
+    success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.3.0/24' }, { type: 'reachable', a: 'h1', b: 'h3' }],
+    solution: (s) => { s.on('r1').run('ip route add 10.0.3.0/24 via 10.0.12.2'); s.sendComms('p1all'); }
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -1171,8 +1230,8 @@ const TIERS = [
     chapters: ['BGP', 'Enterprise routing · BGP policy', 'Enterprise WAN · gateway redundancy', 'Design review', 'Multi-fault', 'Design · build to spec'],
     capstone: 'multi-after-move' },
   { id: 't5', name: 'Integrated Operations', order: 5,
-    blurb: 'Cross-discipline P1 incidents that span the Linux and network simulators. Each case is a capstone in its own right.',
-    chapters: ['Integrated Operations · Cross-discipline case'],
+    blurb: 'Principal-tier judgment: command a cascading incident, weigh a decision with no single right answer, and run cross-discipline P1 cases that span the Linux and network simulators.',
+    chapters: ['Integrated Operations · Cross-discipline case', 'Decision · tradeoff', 'Incident command'],
     capstone: 'cross-track-web-availability-network' }
 ];
 
