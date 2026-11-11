@@ -1119,6 +1119,38 @@ function ntpStatus(net, devId) {
     : { synchronized: false, stratum: 16, source: null, reason: associations.length ? 'no reachable NTP master' : 'no NTP servers configured', associations };
 }
 
+// Observability: diagnostic system events derived from the device's CURRENT
+// state (not a time series) — the "read the evidence" layer. These are the log
+// lines a real device would emit for the faults present right now.
+function systemLog(net, devId) {
+  const dev = net.devices[devId]; if (!dev) return [];
+  const out = [];
+  for (const [n, f] of Object.entries(dev.ifaces || {})) {
+    if (f.errDisabled) out.push({ severity: 4, facility: 'PM', message: `%PM-4-ERR_DISABLE: security violation detected, putting ${n} in err-disable state` });
+    else if (f.up === false) out.push({ severity: 3, facility: 'LINK', message: `%LINK-3-UPDOWN: Interface ${n}, changed state to down` });
+  }
+  const ospfOn = dev.ospf || Object.values(dev.ifaces || {}).some(f => f.ospf != null);
+  if (ospfOn && ospfNeighbors(net, devId).length === 0)
+    out.push({ severity: 5, facility: 'OSPF', message: `%OSPF-5-ADJCHG: no neighbor reached FULL state (check interface areas, subnet and link state)` });
+  const bgpNeighbors = (dev.bgp && dev.bgp.neighbors) || [];
+  if (bgpNeighbors.length) {
+    const upCount = bgpSessions(net, devId).filter(s => s.up).length;
+    if (upCount < bgpNeighbors.length) out.push({ severity: 5, facility: 'BGP', message: `%BGP-5-ADJCHANGE: ${bgpNeighbors.length - upCount} neighbor(s) not in Established state` });
+  }
+  return out;
+}
+// Per-device traffic counters, bumped as a packet is forwarded/delivered/dropped
+// along a forwarding path. User-initiated pings record these; grading does not.
+function recordTraffic(net, fwd) {
+  const path = (fwd && fwd.path) || [];
+  path.forEach((id, i) => {
+    const d = net.devices[id]; if (!d) return;
+    d.counters = d.counters || { forwarded: 0, delivered: 0, dropped: 0 };
+    if (i === path.length - 1) { if (fwd.ok) d.counters.delivered++; else d.counters.dropped++; }
+    else d.counters.forwarded++;
+  });
+}
+
 // Record a local operational event and forward it to configured, reachable collectors.
 function recordSyslog(net, devId, message, severity = 6) {
   const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
@@ -1267,7 +1299,7 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic
 };
 
 });
@@ -1357,6 +1389,14 @@ function vrrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
 }
+function logEvent(net, devId, pattern, present) {
+  const want = present !== false;                       // default: the event SHOULD be present
+  const events = M.systemLog(net, devId);
+  const rx = new RegExp(pattern, 'i');
+  const hit = events.some(e => rx.test(e.message));
+  const ok = hit === want;
+  return { ok, reason: ok ? `${devId} system log ${want ? 'shows' : 'is clear of'} "${pattern}"` : (want ? `${devId} system log has no event matching "${pattern}"` : `${devId} still logs "${pattern}" — the fault is not cleared`) };
+}
 function reachable6(net, aId, bId) {
   const bdev = net.devices[bId];
   const target = bdev && Object.values(bdev.ifaces || {}).map(f => f.ip6).find(x => x != null);
@@ -1443,7 +1483,7 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6 };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -1714,7 +1754,13 @@ function ciscoShow(cli, words) {
   if (q === 'logging') {
     if (dev.syslogCollector || (dev.services && dev.services[514])) return ok('Syslog collector: ' + (dev.syslogEvents || []).length + ' events received\n' + (dev.syslogEvents || []).slice(-20).map(x => x.timestamp + ' ' + x.device + ' [' + (x.sourceIp || 'unknown') + '] ' + x.message).join('\n'));
     const cfg = dev.syslog || {};
-    return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n'));
+    const sys = M.systemLog(cli.net, cli.cur);
+    const sysBlock = sys.length ? '\n--- System events (current state) ---\n' + sys.map(e => '*' + String(e.severity) + '* ' + e.message).join('\n') : '\n--- System events (current state) ---\n(no active faults)';
+    return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n') + sysBlock);
+  }
+  if (q === 'counters' || q === 'interface counters' || q === 'traffic counters') {
+    const c = dev.counters || { forwarded: 0, delivered: 0, dropped: 0 };
+    return ok('Traffic counters for ' + cli.cur + '\n  forwarded: ' + c.forwarded + '\n  delivered: ' + c.delivered + '\n  dropped:   ' + c.dropped + '\n(counters accrue from pings you run; dropped marks where traffic died)');
   }
   if (q === 'ip dhcp pool' || q === 'ip dhcp binding' || q === 'ip dhcp server statistics') {
     const pool = dev.dhcp;
@@ -2484,7 +2530,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -3370,6 +3416,7 @@ const COMMANDS = {
     const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
     const r = M.ping(cli.net, cli.cur, dst, base);
+    if (r.forward) M.recordTraffic(cli.net, r.forward);              // observability: user pings accrue traffic counters
     cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
     cli.flows = cli.flows || [];
     cli.flows.unshift({ t: Date.now(), from: cli.cur, ...cli.lastPing });
@@ -3384,6 +3431,7 @@ const COMMANDS = {
     const big = M.ip6(t); if (big == null) return err(`ping6: ${t} is not a valid IPv6 address`);
     const dst = M.ip6Str(big);
     const r = M.ping6(cli.net, cli.cur, dst);
+    if (r.forward) M.recordTraffic(cli.net, r.forward);
     const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
     if (r.ok) return ok(`PING6 ${dst}: reply received — reachable\npath: ${path}`);
     return err(`PING6 ${dst}: ${r.reason}\npath: ${path}`);
@@ -3614,6 +3662,7 @@ function evalCheck(net, s) {
     case 'vrrp_state':    return C.vrrpState(net, s.dev, s.iface, s.state);
     case 'etherchannel_up':return C.etherchannelUp(net, s.dev, s.group);
     case 'reachable6':     return C.reachable6(net, s.a, s.b);
+    case 'log_event':      return C.logEvent(net, s.dev, s.pattern, s.present);
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);
@@ -5047,6 +5096,29 @@ const chapters = [
     success: [{ type: 'reachable6', a: 'h1', b: 'srv' }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip addr add 2001:db8:1::1/64 dev eth0'], ['r1', 'ip addr add 2001:db8:2::1/64 dev eth1']]
   },
+
+  // Breadth · Observability — read the evidence. The fault is invisible from the
+  // topology alone; the device's system log names it and the traffic counters
+  // show where packets die. Diagnose from the logs/metrics, then fix.
+  { id: 'observability-read-the-logs', chapter: 'Observability · logs & metrics', mode: 'diagnose',
+    title: 'Let the logs tell you',
+    story: 'Users on the office LAN cannot reach the application server, and nothing is obviously wrong on the topology. r1 is the router between them. Rather than guess, read the evidence: `show logging` reports the device’s current system events, and `show counters` shows where the traffic you send actually dies.',
+    objective: 'Use r1’s system log and traffic counters to localize the fault, then clear it so h1 can reach srv again.',
+    ticket: { id: 'INC-2631', from: 'Service desk', priority: 'P2', symptom: 'The app server is unreachable from the office. The server team says their host is up and the switch shows link lights. We cannot see an obvious cause — can you check the router?' },
+    diagnose: { q: 'On r1, `show logging` surfaces a current system event and `ping` from h1 drops at r1. What is the evidence pointing to?', options: ['r1’s interface toward the server subnet (eth1) is down — the log shows a LINK-3-UPDOWN event', 'the application server is powered off', 'the office DNS server is misconfigured'], answer: 0, because: 'The system log is state-derived evidence: it reports eth1 changed state to down, and the dropped-traffic counter on r1 confirms packets die there. Bring the interface back up.' },
+    console: 'r1',
+    hints: ['Run `show logging` on r1 and read the "System events (current state)" section.', 'Send traffic (ping the server from h1) and check `show counters` on r1 — the dropped counter marks where packets die.', 'The log shows eth1 is down. Bring it up with `ip link set eth1 up`, then re-test from h1.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.50.0.10', 24, '10.50.0.1'), srv: SRV('srv', '10.50.9.10', 24, '10.50.9.1', { 443: 'https' }),
+        r1: R('r1', 'router', { eth0: iface('10.50.0.1', 24), eth1: { ...iface('10.50.9.1', 24), up: false } }, [{ dest: ip('10.50.9.0'), mask: 24, via: ip('10.50.9.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw9: SW('sw9', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw9', 'p1'), L('r1', 'eth1', 'sw9', 'p2')]
+    }),
+    success: [{ type: 'log_event', dev: 'r1', pattern: 'eth1, changed state to down', present: false }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip link set eth1 up']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -5063,7 +5135,7 @@ const chapters = [
 const TIERS = [
   { id: 't1', name: 'Foundations', order: 1,
     blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
-    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Observability · logs & metrics', 'Switching · VLANs', 'Switching · STP & MAC learning'],
     capstone: 'break-the-switching-loop' },
   { id: 't2', name: 'Routing', order: 2,
     blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',

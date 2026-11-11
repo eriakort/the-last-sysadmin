@@ -841,6 +841,38 @@ function ntpStatus(net, devId) {
     : { synchronized: false, stratum: 16, source: null, reason: associations.length ? 'no reachable NTP master' : 'no NTP servers configured', associations };
 }
 
+// Observability: diagnostic system events derived from the device's CURRENT
+// state (not a time series) — the "read the evidence" layer. These are the log
+// lines a real device would emit for the faults present right now.
+function systemLog(net, devId) {
+  const dev = net.devices[devId]; if (!dev) return [];
+  const out = [];
+  for (const [n, f] of Object.entries(dev.ifaces || {})) {
+    if (f.errDisabled) out.push({ severity: 4, facility: 'PM', message: `%PM-4-ERR_DISABLE: security violation detected, putting ${n} in err-disable state` });
+    else if (f.up === false) out.push({ severity: 3, facility: 'LINK', message: `%LINK-3-UPDOWN: Interface ${n}, changed state to down` });
+  }
+  const ospfOn = dev.ospf || Object.values(dev.ifaces || {}).some(f => f.ospf != null);
+  if (ospfOn && ospfNeighbors(net, devId).length === 0)
+    out.push({ severity: 5, facility: 'OSPF', message: `%OSPF-5-ADJCHG: no neighbor reached FULL state (check interface areas, subnet and link state)` });
+  const bgpNeighbors = (dev.bgp && dev.bgp.neighbors) || [];
+  if (bgpNeighbors.length) {
+    const upCount = bgpSessions(net, devId).filter(s => s.up).length;
+    if (upCount < bgpNeighbors.length) out.push({ severity: 5, facility: 'BGP', message: `%BGP-5-ADJCHANGE: ${bgpNeighbors.length - upCount} neighbor(s) not in Established state` });
+  }
+  return out;
+}
+// Per-device traffic counters, bumped as a packet is forwarded/delivered/dropped
+// along a forwarding path. User-initiated pings record these; grading does not.
+function recordTraffic(net, fwd) {
+  const path = (fwd && fwd.path) || [];
+  path.forEach((id, i) => {
+    const d = net.devices[id]; if (!d) return;
+    d.counters = d.counters || { forwarded: 0, delivered: 0, dropped: 0 };
+    if (i === path.length - 1) { if (fwd.ok) d.counters.delivered++; else d.counters.dropped++; }
+    else d.counters.forwarded++;
+  });
+}
+
 // Record a local operational event and forward it to configured, reachable collectors.
 function recordSyslog(net, devId, message, severity = 6) {
   const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
@@ -989,5 +1021,5 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic
 };

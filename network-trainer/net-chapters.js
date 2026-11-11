@@ -1326,6 +1326,29 @@ const chapters = [
     success: [{ type: 'reachable6', a: 'h1', b: 'srv' }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip addr add 2001:db8:1::1/64 dev eth0'], ['r1', 'ip addr add 2001:db8:2::1/64 dev eth1']]
   },
+
+  // Breadth · Observability — read the evidence. The fault is invisible from the
+  // topology alone; the device's system log names it and the traffic counters
+  // show where packets die. Diagnose from the logs/metrics, then fix.
+  { id: 'observability-read-the-logs', chapter: 'Observability · logs & metrics', mode: 'diagnose',
+    title: 'Let the logs tell you',
+    story: 'Users on the office LAN cannot reach the application server, and nothing is obviously wrong on the topology. r1 is the router between them. Rather than guess, read the evidence: `show logging` reports the device’s current system events, and `show counters` shows where the traffic you send actually dies.',
+    objective: 'Use r1’s system log and traffic counters to localize the fault, then clear it so h1 can reach srv again.',
+    ticket: { id: 'INC-2631', from: 'Service desk', priority: 'P2', symptom: 'The app server is unreachable from the office. The server team says their host is up and the switch shows link lights. We cannot see an obvious cause — can you check the router?' },
+    diagnose: { q: 'On r1, `show logging` surfaces a current system event and `ping` from h1 drops at r1. What is the evidence pointing to?', options: ['r1’s interface toward the server subnet (eth1) is down — the log shows a LINK-3-UPDOWN event', 'the application server is powered off', 'the office DNS server is misconfigured'], answer: 0, because: 'The system log is state-derived evidence: it reports eth1 changed state to down, and the dropped-traffic counter on r1 confirms packets die there. Bring the interface back up.' },
+    console: 'r1',
+    hints: ['Run `show logging` on r1 and read the "System events (current state)" section.', 'Send traffic (ping the server from h1) and check `show counters` on r1 — the dropped counter marks where packets die.', 'The log shows eth1 is down. Bring it up with `ip link set eth1 up`, then re-test from h1.'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.50.0.10', 24, '10.50.0.1'), srv: SRV('srv', '10.50.9.10', 24, '10.50.9.1', { 443: 'https' }),
+        r1: R('r1', 'router', { eth0: iface('10.50.0.1', 24), eth1: { ...iface('10.50.9.1', 24), up: false } }, [{ dest: ip('10.50.9.0'), mask: 24, via: ip('10.50.9.1') }]),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw9: SW('sw9', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('srv', 'eth0', 'sw9', 'p1'), L('r1', 'eth1', 'sw9', 'p2')]
+    }),
+    success: [{ type: 'log_event', dev: 'r1', pattern: 'eth1, changed state to down', present: false }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [['r1', 'ip link set eth1 up']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -1342,7 +1365,7 @@ const chapters = [
 const TIERS = [
   { id: 't1', name: 'Foundations', order: 1,
     blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
-    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Observability · logs & metrics', 'Switching · VLANs', 'Switching · STP & MAC learning'],
     capstone: 'break-the-switching-loop' },
   { id: 't2', name: 'Routing', order: 2,
     blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',

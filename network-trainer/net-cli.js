@@ -265,7 +265,13 @@ function ciscoShow(cli, words) {
   if (q === 'logging') {
     if (dev.syslogCollector || (dev.services && dev.services[514])) return ok('Syslog collector: ' + (dev.syslogEvents || []).length + ' events received\n' + (dev.syslogEvents || []).slice(-20).map(x => x.timestamp + ' ' + x.device + ' [' + (x.sourceIp || 'unknown') + '] ' + x.message).join('\n'));
     const cfg = dev.syslog || {};
-    return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n'));
+    const sys = M.systemLog(cli.net, cli.cur);
+    const sysBlock = sys.length ? '\n--- System events (current state) ---\n' + sys.map(e => '*' + String(e.severity) + '* ' + e.message).join('\n') : '\n--- System events (current state) ---\n(no active faults)';
+    return ok('Syslog logging: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nTrap severity: ' + (cfg.severity ?? 6) + '\nSource interface: ' + (cfg.sourceInterface || 'default') + '\nHosts: ' + (cfg.hosts || []).map(M.ipStr).join(', ') + '\nLocal messages: ' + (cfg.local || []).length + '\nForwarded messages: ' + (cfg.forwarded || 0) + '\n' + (cfg.local || []).slice(-10).map(x => x.timestamp + ' ' + x.message).join('\n') + sysBlock);
+  }
+  if (q === 'counters' || q === 'interface counters' || q === 'traffic counters') {
+    const c = dev.counters || { forwarded: 0, delivered: 0, dropped: 0 };
+    return ok('Traffic counters for ' + cli.cur + '\n  forwarded: ' + c.forwarded + '\n  delivered: ' + c.delivered + '\n  dropped:   ' + c.dropped + '\n(counters accrue from pings you run; dropped marks where traffic died)');
   }
   if (q === 'ip dhcp pool' || q === 'ip dhcp binding' || q === 'ip dhcp server statistics') {
     const pool = dev.dhcp;
@@ -1035,7 +1041,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -1921,6 +1927,7 @@ const COMMANDS = {
     const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
     const r = M.ping(cli.net, cli.cur, dst, base);
+    if (r.forward) M.recordTraffic(cli.net, r.forward);              // observability: user pings accrue traffic counters
     cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
     cli.flows = cli.flows || [];
     cli.flows.unshift({ t: Date.now(), from: cli.cur, ...cli.lastPing });
@@ -1935,6 +1942,7 @@ const COMMANDS = {
     const big = M.ip6(t); if (big == null) return err(`ping6: ${t} is not a valid IPv6 address`);
     const dst = M.ip6Str(big);
     const r = M.ping6(cli.net, cli.cur, dst);
+    if (r.forward) M.recordTraffic(cli.net, r.forward);
     const path = ((r.forward && r.forward.path) || [cli.cur]).join(' -> ');
     if (r.ok) return ok(`PING6 ${dst}: reply received — reachable\npath: ${path}`);
     return err(`PING6 ${dst}: ${r.reason}\npath: ${path}`);

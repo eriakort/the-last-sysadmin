@@ -83,6 +83,14 @@ function vrrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
 }
+function logEvent(net, devId, pattern, present) {
+  const want = present !== false;                       // default: the event SHOULD be present
+  const events = M.systemLog(net, devId);
+  const rx = new RegExp(pattern, 'i');
+  const hit = events.some(e => rx.test(e.message));
+  const ok = hit === want;
+  return { ok, reason: ok ? `${devId} system log ${want ? 'shows' : 'is clear of'} "${pattern}"` : (want ? `${devId} system log has no event matching "${pattern}"` : `${devId} still logs "${pattern}" — the fault is not cleared`) };
+}
 function reachable6(net, aId, bId) {
   const bdev = net.devices[bId];
   const target = bdev && Object.values(bdev.ifaces || {}).map(f => f.ip6).find(x => x != null);
@@ -169,4 +177,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6 };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent };
