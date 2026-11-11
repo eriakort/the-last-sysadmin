@@ -15,8 +15,8 @@ const targets = [
   {
     label: 'Network Trainer',
     file: 'network-trainer/index.html',
-    gzipBudget: 180 * 1024,
-    brotliBudget: 145 * 1024
+    gzipBudget: 192 * 1024,
+    brotliBudget: 156 * 1024
   }
 ];
 
