@@ -1519,7 +1519,7 @@ function wireTopo() {
   if (!window._topoArrowBound) {
     document.addEventListener('keydown', e => {
       if (!canBuild() || !RUN || document.querySelector('.topo-context-menu,.context-menu') || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || !['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
-      const step = e.shiftKey ? 40 : 10;
+      const step = e.shiftKey ? 40 : 10;   // free text, labels and notes move by raw units (they are not grid-snapped)
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
       // Include the focused canvas element even if it is not yet in a selection set
@@ -1541,7 +1541,26 @@ function wireTopo() {
       e.stopPropagation();
       let moved = 0;
       rememberTopology();
-      deviceIds.forEach(id => { if (RUN.net.devices[id]) { const p = nodePos(id); setPos(id, p[0]+dx, p[1]+dy); moved++; } });
+      deviceIds.forEach(id => {
+        if (!RUN.net.devices[id]) return;
+        const before = nodePos(id);
+        // With snap on, a sub-grid step snaps back to the same cell, so the device
+        // never advances. Move it to the adjacent grid cell in the pressed direction.
+        let tx = before[0] + dx, ty = before[1] + dy;
+        if (TOPO_SNAP) {
+          const g = 24, cells = e.shiftKey ? 2 : 1;
+          tx = Math.round(before[0] / g) * g + (dx > 0 ? g * cells : dx < 0 ? -g * cells : 0);
+          ty = Math.round(before[1] / g) * g + (dy > 0 ? g * cells : dy < 0 ? -g * cells : 0);
+        }
+        setPos(id, tx, ty);
+        // A device's own name/type labels travel with it. Default-positioned labels
+        // already follow at render; independently-moved (stored) labels are shifted
+        // by the device's ACTUAL snapped delta so they stay locked to the device.
+        const after = nodePos(id), adx = after[0] - before[0], ady = after[1] - before[1];
+        const lp = RUN.net.deviceLabelPositions && RUN.net.deviceLabelPositions[id];
+        if (lp) ['name', 'type'].forEach(kind => { if (lp[kind] && !labelKeys.has(id + ':' + kind)) { lp[kind][0] += adx; lp[kind][1] += ady; } });
+        moved++;
+      });
       textIdx.forEach(ti => { const t = RUN.net.texts && RUN.net.texts[ti]; if (t) { t.x = (Number(t.x)||0) + dx; t.y = (Number(t.y)||0) + dy; moved++; } });
       labelKeys.forEach(key => {
         const [lid, kind] = key.split(':');
@@ -1727,7 +1746,12 @@ function wireTopo() {
       // Also capture currently selected texts and labels so the whole group moves
       const textStarts = {}; [...TEXT_SELECTED].forEach(ti => { const t = RUN.net.texts && RUN.net.texts[ti]; if(t) textStarts[ti] = [t.x, t.y]; });
       const labelStarts = {}; [...LABEL_SELECTED].forEach(key => { const [lid, kind] = key.split(':'); const pos = RUN.net.deviceLabelPositions && RUN.net.deviceLabelPositions[lid] && RUN.net.deviceLabelPositions[lid][kind]; if(pos) labelStarts[key] = pos.slice(); });
-      DRAG = { id, ids, starts, textStarts, labelStarts, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
+      // Each dragged device's own name/type labels travel with it. Default-positioned
+      // labels already follow at render; only independently-moved (stored) ones need
+      // shifting, and they move by the device's snapped delta (applied in onDragMove).
+      const ownLabels = {};
+      ids.forEach(did => { const lp = RUN.net.deviceLabelPositions && RUN.net.deviceLabelPositions[did]; if(lp) ['name','type'].forEach(kind => { if(lp[kind] && !labelStarts[did+':'+kind]) { ownLabels[did] = ownLabels[did] || {}; ownLabels[did][kind] = lp[kind].slice(); } }); });
+      DRAG = { id, ids, starts, textStarts, labelStarts, ownLabels, before:topologySnapshot(), offX: px - cur[0], offY: py - cur[1], moved: false };
       try { n.setPointerCapture(e.pointerId); } catch (_) {}
     });
   });
@@ -1767,6 +1791,17 @@ function onDragMove(e) {
   if (!DRAG.moved && Math.hypot(nx - prev[0], ny - prev[1]) > 3) DRAG.moved = true;
   const dx=nx-prev[0],dy=ny-prev[1];
   DRAG.ids.forEach(id=>{const start=DRAG.starts[id]||nodePos(id);setPos(id,start[0]+dx,start[1]+dy);const p=nodePos(id),cx=p[0]+24,cy=p[1]+18;const g=document.querySelector(`#topo .node[data-dev="${id}"]`);if(g)g.setAttribute('transform',`translate(${p[0]},${p[1]})`);document.querySelectorAll(`#topo line[data-a="${id}"]`).forEach(l=>{l.setAttribute('x1',cx);l.setAttribute('y1',cy);});document.querySelectorAll(`#topo line[data-b="${id}"]`).forEach(l=>{l.setAttribute('x2',cx);l.setAttribute('y2',cy);});});
+  // Each dragged device's own stored labels track the device's snapped position.
+  if(DRAG.ownLabels) DRAG.ids.forEach(id => {
+    const own = DRAG.ownLabels[id]; if(!own) return;
+    const start = DRAG.starts[id] || nodePos(id), p = nodePos(id), sdx = p[0]-start[0], sdy = p[1]-start[1];
+    RUN.net.deviceLabelPositions = RUN.net.deviceLabelPositions || {}; RUN.net.deviceLabelPositions[id] = RUN.net.deviceLabelPositions[id] || {};
+    Object.entries(own).forEach(([kind, ls]) => {
+      RUN.net.deviceLabelPositions[id][kind] = [ls[0]+sdx, ls[1]+sdy];
+      const el = document.querySelector(`.device-label[data-device-label="${CSS.escape(id)}"][data-label-kind="${kind}"]`);
+      if(el){ el.setAttribute('x', ls[0]+sdx); el.setAttribute('y', ls[1]+sdy); }
+    });
+  });
   // Move selected texts and labels with the group
   if(DRAG.textStarts) Object.entries(DRAG.textStarts).forEach(([ti, start]) => { const t = RUN.net.texts && RUN.net.texts[ti]; if(t){ t.x = start[0]+dx; t.y = start[1]+dy; const el = document.querySelector(`.topo-text[data-text-index="${ti}"]`); if(el){el.setAttribute('x', t.x); el.setAttribute('y', t.y);} } });
   if(DRAG.labelStarts) Object.entries(DRAG.labelStarts).forEach(([key, start]) => { const [lid, kind] = key.split(':'); RUN.net.deviceLabelPositions = RUN.net.deviceLabelPositions || {}; RUN.net.deviceLabelPositions[lid] = RUN.net.deviceLabelPositions[lid] || {}; RUN.net.deviceLabelPositions[lid][kind] = [start[0]+dx, start[1]+dy]; const el = document.querySelector(`.device-label[data-device-label="${CSS.escape(lid)}"][data-label-kind="${kind}"]`); if(el){el.setAttribute('x', start[0]+dx); el.setAttribute('y', start[1]+dy);} });
