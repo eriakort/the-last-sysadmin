@@ -83,6 +83,14 @@ function vrrpState(net, devId, ifaceName, expected) {
   const ok = !!(state && (!expected || state.state.toLowerCase() === String(expected).toLowerCase()));
   return { ok, reason: state ? devId + '/' + ifaceName + ' is VRRP ' + state.state + ' (master: ' + state.master + ', priority ' + state.priority + ')' : devId + '/' + ifaceName + ' has no VRRP group' };
 }
+function etherchannelUp(net, devId, group) {
+  const s = M.etherChannelStatus(net, devId, group);
+  if (!s) return { ok: false, reason: `${devId} has no EtherChannel group ${group} configured` };
+  const peerOk = s.peer && M.etherChannelStatus(net, s.peer, group);   // peer must also bundle these links
+  const ok = !!(s.up && peerOk && peerOk.up);
+  const active = s.members.filter(m => m.active).length, total = s.members.length;
+  return { ok, reason: ok ? `${devId} Po${group} is bundled with ${s.peer} (${active}/${total} members active)` : `${devId} Po${group} is not a formed bundle (configure channel-group ${group} on the member ports of both switches)` };
+}
 function vpnUp(net, devId, ifaceName) {
   const up = M.tunnelEstablished(net, devId, ifaceName);
   return { ok: up, reason: up ? `${devId}/${ifaceName} VPN tunnel is established` : `${devId}/${ifaceName} VPN tunnel is down (check endpoints, routing to the peer, and matching authentication)` };
@@ -154,4 +162,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp };

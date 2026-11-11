@@ -55,6 +55,55 @@ function bridgeCompare(net, vlan, a, b) {
   const pa = stpPriority(net.devices[a], vlan), pb = stpPriority(net.devices[b], vlan);
   return pa - pb || String(a).localeCompare(String(b));
 }
+/* ---------- LACP / EtherChannel link aggregation ----------
+ * Member ports carry `channelGroup`. A bundle between two switches contributes a
+ * single logical link: its deterministic active member link forwards, standby
+ * members are skipped by STP and L2 traversal — so no member is ever STP-blocked
+ * (the win over two independent links), there is no loop, and the bundle survives
+ * the loss of any member. Bandwidth aggregation is conceptual (no bandwidth model). */
+function linkKey(l) { return [l.a[0] + '/' + l.a[1], l.b[0] + '/' + l.b[1]].sort().join('|'); }
+function linkOf(net, devId, portName) {
+  return (net.links || []).find(l => (l.a[0] === devId && l.a[1] === portName) || (l.b[0] === devId && l.b[1] === portName)) || null;
+}
+function bundleLinksBetween(net, aId, bId) {
+  return (net.links || []).filter(l => {
+    const between = (l.a[0] === aId && l.b[0] === bId) || (l.a[0] === bId && l.b[0] === aId);
+    if (!between) return false;
+    const pa = net.devices[l.a[0]].ifaces[l.a[1]], pb = net.devices[l.b[0]].ifaces[l.b[1]];
+    return pa && pb && pa.channelGroup != null && pb.channelGroup != null;
+  });
+}
+// The single forwarding member link of the bundle between two switches (stable
+// regardless of which side asks), or null if every member is down.
+function activeBundleLink(net, aId, bId) {
+  const live = bundleLinksBetween(net, aId, bId).filter(l =>
+    l.up !== false && ifaceUp(net, l.a[0], l.a[1]) && ifaceUp(net, l.b[0], l.b[1]));
+  if (!live.length) return null;
+  return live.slice().sort((p, q) => linkKey(p).localeCompare(linkKey(q)))[0];
+}
+// Is this port usable for forwarding? A non-bundled port always is; a bundle
+// member is only usable when it is its bundle's active member link.
+function portForwards(net, devId, portName) {
+  const port = net.devices[devId] && net.devices[devId].ifaces[portName];
+  if (!port || port.channelGroup == null) return true;
+  const link = linkOf(net, devId, portName); if (!link) return false;
+  const peer = (link.a[0] === devId && link.a[1] === portName) ? link.b[0] : link.a[0];
+  const active = activeBundleLink(net, devId, peer);
+  return !!active && linkKey(active) === linkKey(link);
+}
+// Status of a port-channel group on a switch: its members, which peer it bonds
+// to, and whether the bundle is up (a peer that also bundles these links, with
+// at least one member live on both ends).
+function etherChannelStatus(net, devId, group) {
+  const dev = net.devices[devId]; if (!dev) return null;
+  const members = Object.keys(dev.ifaces || {}).filter(p => dev.ifaces[p].channelGroup === group);
+  if (!members.length) return null;
+  let peer = null;
+  for (const p of members) { const l = linkOf(net, devId, p); if (l) { peer = l.a[0] === devId ? l.b[0] : l.a[0]; break; } }
+  const active = peer ? activeBundleLink(net, devId, peer) : null;
+  const memberInfo = members.map(p => ({ port: p, up: ifaceUp(net, devId, p), active: !!active && (() => { const l = linkOf(net, devId, p); return l && linkKey(l) === linkKey(active); })() }));
+  return { group, peer, members: memberInfo, up: !!active, bundled: members.length };
+}
 function spanningTree(net, vlan = 1) {
   const ids = Object.keys(net.devices).filter(id => net.devices[id].kind === 'switch' && switchVlanExists(net.devices[id], vlan)).sort();
   const edges = [];
@@ -64,6 +113,12 @@ function spanningTree(net, vlan = 1) {
     if (!da || !db || da.kind !== 'switch' || db.kind !== 'switch') continue;
     const pa = da.ifaces[ap], pb = db.ifaces[bp];
     if (!pa || !pb || pa.up === false || pb.up === false) continue;
+    // LACP: a bundle is one logical edge — only its active member link is an STP
+    // edge, so standby members are neither forwarding-duplicated nor blocked.
+    if (pa.channelGroup != null && pb.channelGroup != null) {
+      const active = activeBundleLink(net, a, b);
+      if (!active || linkKey(active) !== linkKey(l)) continue;
+    }
     if (!switchVlanExists(da, vlan) || !switchVlanExists(db, vlan)
         || !switchPortAllowsVlan(pa, vlan) || !switchPortAllowsVlan(pb, vlan)) continue;
     const aWire = pa.mode === 'trunk' && vlan !== switchNativeVlan(pa) ? vlan : null;
@@ -213,6 +268,7 @@ function l2Domain(net, startDev, startIface) {
     for (const p in dev.ifaces) {
       const port = dev.ifaces[p];
       if (p === i || port.up === false || !switchPortAllowsVlan(port, vlan) || (stp && stp.ports[p] && stp.ports[p].state === 'blocking')) continue;
+      if (port.channelGroup != null && !portForwards(net, d, p)) continue;   // LACP: skip standby bundle members
       const nb = neighbor(net, d, p); if (!nb) continue;
       const [nd, ni] = nb, next = net.devices[nd];
       if (!next) continue;
@@ -844,6 +900,7 @@ function packetJourney(net, srcDev, destination, opts = {}) {
 module.exports = {
   ip, ipStr, maskOf, networkOf, sameNet, cidr,
   neighbor, l2Domain, arpResolve, switchAccessVlan, switchNativeVlan, switchPortAllowsVlan, switchVlanExists, spanningTree, switchMacTable, stableMac, learnMacOnSegment, ownsIp, directIface, routeLookup, routeLookupReachable, deviceOwning,
+  portForwards, etherChannelStatus,
   aclDecision, forward, ping, packetJourney, sourceIpToward,
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,

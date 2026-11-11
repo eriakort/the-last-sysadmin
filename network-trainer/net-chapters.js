@@ -1276,6 +1276,32 @@ const chapters = [
       ['r2', 'enable'], ['r2', 'configure terminal'], ['r2', 'interface eth0'], ['r2', 'vrrp 1 ip 10.30.0.1'], ['r2', 'vrrp 1 priority 100'], ['r2', 'vrrp 1 preempt'], ['r2', 'end']
     ]
   },
+
+  // Breadth · Link aggregation (LACP / EtherChannel) — two parallel switch links
+  // where STP blocks one today; bundle them so both members belong to one logical
+  // link (no member blocked) and the bond survives the loss of any single member.
+  { id: 'etherchannel-bundle', chapter: 'Switching · STP & MAC learning', mode: 'diagnose',
+    title: 'Bundle the distribution uplinks (EtherChannel)',
+    story: 'The two distribution switches sw1 and sw2 are joined by two parallel links for capacity and resilience. Today spanning tree blocks one of them, so you get no extra bandwidth and a brief outage every time the active link flaps. The design calls for a single logical link across both members.',
+    objective: 'Bundle the two inter-switch links (ports p3 and p4 on both switches) into EtherChannel group 1 with LACP, so neither member is blocked and h1 keeps reaching srv even if one member link fails.',
+    ticket: { id: 'INC-2577', from: 'Network engineering', priority: 'P3', symptom: 'We cabled a second link between the distribution switches expecting double the throughput, but monitoring shows one link sits idle and spanning tree reports it blocked. We want both links active as one bundle.' },
+    diagnose: { q: 'Two links join sw1 and sw2, but spanning tree blocks one to prevent a loop, so only one is used. How do you make both links forward as a single logical link?', options: ['Bundle the two links into an EtherChannel (channel-group) on all four member ports, so STP treats them as one link', 'Put each link in a different VLAN', 'Lower the spanning-tree priority on sw1'], answer: 0, because: 'Link aggregation bonds parallel links into one logical interface. Spanning tree then sees a single link — no member is blocked — and the bundle load-shares and survives the loss of any member.' },
+    console: 'sw1',
+    hints: ['On each switch, add both member ports to the same channel-group: `interface p3`, `channel-group 1 mode active`, then the same for p4.', 'Both ends must bundle the same links — configure group 1 on p3 and p4 of sw1 AND sw2.', 'Verify with `show etherchannel summary` (Po1 should be U/up) and `show spanning-tree` (no blocked member).'],
+    build: () => ({
+      devices: {
+        h1: H('h1', '10.40.0.10', 24), srv: SRV('srv', '10.40.0.20', 24, null, { 445: 'smb' }),
+        sw1: { ...SW('sw1', [{ n: 'p1' }, { n: 'p3' }, { n: 'p4' }]), stpPriority: 4096 },
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p3' }, { n: 'p4' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw2', 'p1'), L('sw1', 'p3', 'sw2', 'p3'), L('sw1', 'p4', 'sw2', 'p4')]
+    }),
+    success: [{ type: 'etherchannel_up', dev: 'sw1', group: 1 }, { type: 'etherchannel_up', dev: 'sw2', group: 1 }, { type: 'reachable', a: 'h1', b: 'srv' }],
+    solution: [
+      ['sw1', 'interface p3'], ['sw1', 'channel-group 1 mode active'], ['sw1', 'interface p4'], ['sw1', 'channel-group 1 mode active'],
+      ['sw2', 'interface p3'], ['sw2', 'channel-group 1 mode active'], ['sw2', 'interface p4'], ['sw2', 'channel-group 1 mode active']
+    ]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------

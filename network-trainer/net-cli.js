@@ -106,6 +106,7 @@ function ciscoRunConfig(dev) {
         lines.push(' switchport trunk native vlan ' + Number(p.nativeVlan ?? 1));
         if (Array.isArray(p.allowedVlans)) lines.push(' switchport trunk allowed vlan ' + p.allowedVlans.join(','));
       } else lines.push(' switchport access vlan ' + Number(p.accessVlan ?? p.vlan ?? 1));
+      if (p.channelGroup != null) lines.push(' channel-group ' + p.channelGroup + ' mode ' + (p.channelMode || 'active'));
       if (p.portSecurity && p.portSecurity.enabled) {
         lines.push(' switchport port-security');
         if (p.portSecurity.maximum !== 1) lines.push(' switchport port-security maximum ' + p.portSecurity.maximum);
@@ -308,6 +309,15 @@ function ciscoShow(cli, words) {
         (p.vrrp.preempt ? 'Y' : 'N').padEnd(9) + String(s && s.state || 'Unknown').padEnd(10) + M.ipStr(p.vrrp.virtualIp));
     }
     return ok('Interface Grp  Priority  Preempt  State     Virtual IP\n' + (rows.join('\n') || '(no VRRP groups configured)'));
+  }
+  if (q === 'etherchannel summary' || q === 'etherchannel' || q === 'etherchannel brief') {
+    const groups = [...new Set(Object.values(dev.ifaces || {}).filter(p => p.channelGroup != null).map(p => p.channelGroup))].sort((a, b) => a - b);
+    const rows = groups.map(g => {
+      const s = M.etherChannelStatus(cli.net, cli.cur, g);
+      const ports = s.members.map(m => m.port + '(' + (m.up === false ? 'D' : m.active ? 'P' : 'H') + ')').join(' ');   // P=bundled/forwarding, H=hot-standby, D=down
+      return 'Po' + g + String(' LACP').padEnd(8) + (s.up ? 'U' : 'D') + '   ' + ports;
+    });
+    return ok('Group  Port-channel  Protocol  Ports (P=bundled H=standby D=down)\n' + (rows.join('\n') || '(no EtherChannels configured)'));
   }
   if (q === 'ip bgp summary') {
     const sessions = M.bgpSessions(cli.net, cli.cur);
@@ -1025,7 +1035,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -1325,6 +1335,13 @@ function runCisco(cli, line) {
         p.mode = 'trunk'; if (list) p.allowedVlans = [...new Set(list)].sort((a,b)=>a-b); else delete p.allowedVlans; return ok('');
       }
     }
+    if (words[0] === 'channel-group' && dev.kind === 'switch') {   // LACP / EtherChannel bundling
+      const group = Number(words[1]), mode = words[3];
+      if (!Number.isInteger(group) || group < 1 || group > 255 || words[2] !== 'mode' || !['active', 'passive', 'on'].includes(mode))
+        return err('% Use channel-group <1-255> mode active|passive|on');
+      p.channelGroup = group; p.channelMode = mode; return ok('Creating a port-channel interface Port-channel ' + group);
+    }
+    if (words[0] === 'no' && words[1] === 'channel-group') { delete p.channelGroup; delete p.channelMode; return ok(''); }
     return err('% Invalid input in interface configuration mode');
   }
   if (cli.iosMode === 'vlan') {
@@ -1361,6 +1378,8 @@ const HELP_SECTIONS = [
     ['shutdown / no shutdown', 'Disable or re-enable an interface', ['switch']],
     ['vlan <id>', 'Create a VLAN on a switch', ['switch']],
     ['switchport mode access|trunk', 'Set a switch port mode', ['switch']],
+    ['channel-group <id> mode active', 'Bundle a port into an EtherChannel (LACP)', ['switch']],
+    ['show etherchannel summary', 'Show link-aggregation bundles and member state', ['switch']],
     ['switchport access vlan <id>', 'Assign an access port to a VLAN', ['switch']],
     ['switchport trunk allowed vlan ...', 'Choose VLANs carried by a trunk', ['switch']],
     ['show vlan brief', 'List VLANs configured on a switch', ['switch']],
@@ -1553,9 +1572,29 @@ const COMMANDS = {
     }
     return err('usage: switchport mode access|trunk | switchport access vlan <id> | switchport trunk native vlan <id> | switchport trunk allowed vlan <all|id,id,...>');
   },
+  'channel-group': (cli, a) => {
+    const dev = cli.net.devices[cli.cur], name = cli.contextIface;
+    if (dev.kind !== 'switch') return err('channel-group: this command is only available on switches');
+    if (!name || !dev.ifaces[name]) return err('channel-group: enter interface configuration mode first (interface <port>)');
+    if (a[0] === 'no' || (a[0] === undefined)) return err('usage: channel-group <1-255> mode active|passive|on');
+    const group = Number(a[0]), mode = a[2];
+    if (!Number.isInteger(group) || group < 1 || group > 255 || a[1] !== 'mode' || !['active', 'passive', 'on'].includes(mode))
+      return err('usage: channel-group <1-255> mode active|passive|on');
+    dev.ifaces[name].channelGroup = group; dev.ifaces[name].channelMode = mode;
+    return ok(name + ': added to EtherChannel ' + group + ' (' + mode + ')');
+  },
   show: (cli, a) => {
     const dev = cli.net.devices[cli.cur], sub = a[0], detail = a[1];
     if (dev.kind !== 'switch') return err('show: switching commands are only available on switches');
+    if (sub === 'etherchannel') {
+      const groups = [...new Set(Object.values(dev.ifaces).filter(p => p.channelGroup != null).map(p => p.channelGroup))].sort((x, y) => x - y);
+      const rows = groups.map(g => {
+        const s = M.etherChannelStatus(cli.net, cli.cur, g);
+        const ports = s.members.map(m => m.port + '(' + (m.up === false ? 'D' : m.active ? 'P' : 'H') + ')').join(' ');
+        return 'Po' + g + '  LACP  ' + (s.up ? 'up' : 'down') + '  ' + ports;
+      });
+      return ok('Port-channel  Protocol  State  Ports (P=bundled H=standby D=down)\n' + (rows.join('\n') || '(no EtherChannels configured)'));
+    }
     if (sub === 'mac' && detail === 'address-table' && (a.length === 2 || a[2] === 'dynamic')) {
       const rows = M.switchMacTable(cli.net, cli.cur).map(e => e.vlan + '  ' + e.mac + '  DYNAMIC  ' + e.port + '  (' + e.device + '/' + e.iface + ')');
       return ok(rows.length ? 'VLAN  MAC Address        Type     Port  Learned from\n' + rows.join('\n') : '(no dynamically learned MAC addresses)');
