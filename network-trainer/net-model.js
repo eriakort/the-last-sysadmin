@@ -707,7 +707,7 @@ function forward(net, srcDev, pktIn, opts = {}) {
 /* ---------- Snort 3 IDS/IPS inspection (educational subset) ---------- */
 function snortInspect(dev, pkt, path = []) {
   const cfg = dev && dev.snort3;
-  if (!cfg || cfg.enabled === false) return null;
+  if (!cfg) return null;
   cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
   cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
   cfg.stats = cfg.stats || { inspected: 0, matched: 0, blocked: 0 };
