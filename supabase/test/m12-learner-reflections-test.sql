@@ -60,5 +60,17 @@ select test.expect_denied('mission must belong to selected assignment',
     values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
       'a1111111-1111-1111-1111-111111111111','not-in-assignment','Learned','Tried')$$);
 
+-- Removing a learner revokes staff access while preserving the learner's
+-- own access to their reflection history.
+select test.login(:'T1');
+delete from public.enrollments
+where class_id='c1111111-1111-1111-1111-111111111111' and user_id=:'S1';
+select test.expect('class staff cannot read reflection after learner removal',
+  (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'), 0);
+
+select test.login(:'S1');
+select test.expect('learner retains access to own reflection after class removal',
+  (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'), 1);
+
 reset role;
 \echo 'LEARNER REFLECTION RLS TESTS PASSED'
