@@ -224,6 +224,29 @@ create policy "owners update enrollments in their class"
   on public.enrollments for update
   using (public.is_class_owner(class_id)) with check (public.is_class_owner(class_id));
 
+-- Defense in depth: enforce TA role assignment in a trigger as well as RLS.
+-- This prevents any additional permissive enrollment policy from granting
+-- staff-promotion capability to a TA.
+create or replace function public.enforce_enrollment_role_assignment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $enrollment_role_guard$
+begin
+  if new.role = 'ta' and not public.is_class_owner(new.class_id) then
+    raise exception 'Only the class owner may assign the TA role'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$enrollment_role_guard$;
+
+drop trigger if exists enrollment_role_assignment_guard on public.enrollments;
+create trigger enrollment_role_assignment_guard
+  before insert or update of role, class_id on public.enrollments
+  for each row execute function public.enforce_enrollment_role_assignment();
+
 -- A student may drop themselves; an owner may remove anyone from their class.
 drop policy if exists "leave or be removed" on public.enrollments;
 create policy "leave or be removed"
