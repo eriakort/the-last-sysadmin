@@ -1014,24 +1014,40 @@ function panosOperational(cli, words, w, dev) {
 
 function runSnort3(cli, line) {
   const dev = cli.net.devices[cli.cur];
-  const cfg = dev.snort3 || (dev.snort3 = { enabled: true, mode: 'ids', rules: [], alerts: [] });
+  const cfg = dev.snort3 || (dev.snort3 = { enabled: true, mode: 'ids', rules: [], alerts: [], stats: { inspected: 0, matched: 0, blocked: 0 } });
   cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
   cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
+  cfg.stats = cfg.stats || { inspected: 0, matched: 0, blocked: 0 };
   const words = String(line).trim().split(/\s+/), lower = words.map(x => x.toLowerCase());
-  if (!line.trim() || lower[0] === 'help') return ok([
+  if (!line.trim() || lower[0] === 'help' || lower[0] === '--help' || lower[0] === '-?') return ok([
     'SNORT 3 SIMULATOR — supported commands:',
-    '  show snort status | rules | alerts',
+    '  snort --version | -V',
+    '  show snort status | rules | alerts | stats | interfaces',
     '  snort mode ids | ips',
+    '  snort enable | disable',
+    '  snort test | -T',
     '  snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>',
-    '  snort rule delete <sid>',
+    '  snort rule show <sid> | enable <sid> | disable <sid> | delete <sid>',
     '  snort alerts clear',
-    'Educational subset; this is not the Snort binary.'
+    '  snort stats reset',
+    'Educational simulator: command coverage is a documented subset of Snort 3.'
   ].join('\n'));
+  if (lower[0] === 'snort' && (lower[1] === '--version' || lower[1] === '-v' || lower[1] === '-V')) return ok('Snort 3 simulator profile (educational subset) — not the Snort engine');
+  if (lower[0] === 'snort' && (lower[1] === 'enable' || lower[1] === 'disable') && lower.length === 2) {
+    cfg.enabled = lower[1] === 'enable'; return ok('Snort inspection ' + (cfg.enabled ? 'enabled' : 'disabled'));
+  }
+  if (lower[0] === 'snort' && (lower[1] === 'test' || lower[1] === '-t' || lower[1] === '-T')) {
+    const invalid = cfg.rules.filter(r => !Number.isInteger(r.sid) || r.sid < 1 || !['any','icmp','tcp','udp'].includes(r.proto) || !['alert','drop'].includes(r.action) || (r.dport != null && (!Number.isInteger(r.dport) || r.dport < 1 || r.dport > 65535)));
+    const duplicate = cfg.rules.map(r => r.sid).filter((sid, i, all) => all.indexOf(sid) !== i);
+    return invalid.length || duplicate.length ? err('configuration test failed: ' + invalid.length + ' invalid rule(s), ' + duplicate.length + ' duplicate SID(s)') : ok('configuration test passed: ' + cfg.rules.length + ' rule(s) valid; mode ' + String(cfg.mode || 'ids').toUpperCase());
+  }
   if (lower[0] === 'show' && lower[1] === 'snort') {
     if (lower[2] === 'status') return ok('Snort 3 inspection: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nMode: ' + (cfg.mode || 'ids').toUpperCase() + '\nRules: ' + cfg.rules.length + '\nAlerts: ' + cfg.alerts.length);
     if (lower[2] === 'rules') return ok(cfg.rules.length ? cfg.rules.map(r => 'sid:' + r.sid + ' ' + r.proto + ' dport:' + (r.dport == null ? 'any' : r.dport) + ' ' + r.action.toUpperCase() + ' "' + r.message + '"').join('\n') : '(no rules configured)');
     if (lower[2] === 'alerts') return ok(cfg.alerts.length ? cfg.alerts.slice().reverse().map(a => '[' + a.timestamp + '] sid:' + a.sid + ' ' + a.action.toUpperCase() + ' ' + a.message + ' ' + M.ipStr(a.src) + ' -> ' + M.ipStr(a.dst) + (a.dport ? ':' + a.dport : '')).join('\n') : '(no alerts)');
-    return err('usage: show snort status | rules | alerts');
+    if (lower[2] === 'stats') return ok('Packets inspected: ' + (cfg.stats.inspected || 0) + '\nRule matches: ' + (cfg.stats.matched || 0) + '\nPackets blocked: ' + (cfg.stats.blocked || 0) + '\nAlerts retained: ' + cfg.alerts.length);
+    if (lower[2] === 'interfaces') return ok(Object.keys(dev.ifaces || {}).map(name => name + ': ' + ((dev.ifaces[name].up === false) ? 'down' : 'up') + (dev.ifaces[name].ip ? ' ' + M.ipStr(dev.ifaces[name].ip) : '')).join('\n') || '(no interfaces)');
+    return err('usage: show snort status | rules | alerts | stats | interfaces');
   }
   if (lower[0] === 'snort' && lower[1] === 'mode') {
     if (!['ids','ips'].includes(lower[2]) || lower.length !== 3) return err('usage: snort mode ids|ips');
@@ -1048,11 +1064,16 @@ function runSnort3(cli, line) {
     cfg.rules.push({ sid, proto, dport: port, action, message: words.slice(7).join(' ') || 'Snort rule match' });
     return ok('Rule ' + sid + ' added');
   }
-  if (lower[0] === 'snort' && lower[1] === 'rule' && lower[2] === 'delete') {
-    const sid = Number(words[3]), before = cfg.rules.length;
+  if (lower[0] === 'snort' && lower[1] === 'rule' && ['show','enable','disable','delete'].includes(lower[2])) {
+    const sid = Number(words[3]), rule = cfg.rules.find(r => r.sid === sid);
+    if (!Number.isInteger(sid) || sid < 1) return err('usage: snort rule show|enable|disable|delete <sid>');
+    if (!rule) return err('no rule with sid ' + sid);
+    if (lower[2] === 'show') return ok('sid:' + rule.sid + ' proto:' + rule.proto + ' dport:' + (rule.dport == null ? 'any' : rule.dport) + ' action:' + rule.action + ' enabled:' + (rule.enabled !== false) + ' message:' + rule.message);
+    if (lower[2] === 'enable' || lower[2] === 'disable') { rule.enabled = lower[2] === 'enable'; return ok('Rule ' + sid + ' ' + (rule.enabled ? 'enabled' : 'disabled')); }
     cfg.rules = cfg.rules.filter(r => r.sid !== sid);
-    return before === cfg.rules.length ? err('no rule with sid ' + sid) : ok('Rule ' + sid + ' deleted');
+    return ok('Rule ' + sid + ' deleted');
   }
+  if (lower[0] === 'snort' && lower[1] === 'stats' && lower[2] === 'reset') { cfg.stats = { inspected: 0, matched: 0, blocked: 0 }; return ok('Snort statistics reset'); }
   if (lower[0] === 'snort' && lower[1] === 'alerts' && lower[2] === 'clear') { cfg.alerts = []; return ok('Snort alert log cleared'); }
   return err('unknown Snort command — type help');
 }
