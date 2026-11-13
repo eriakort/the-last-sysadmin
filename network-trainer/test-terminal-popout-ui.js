@@ -38,9 +38,11 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.locator('#buildMenu').isHidden()) ok('selecting a menu item closes the dropdown');
   else fail('dropdown stayed open after selecting an item');
 
-  // Floating window can be positioned anywhere; just ensure it is visible and has a titlebar.
-  if (await page.locator('#terminalWindow .terminal-window-titlebar').isVisible()) ok('docked console has a draggable titlebar');
+  // The dock has a dedicated titlebar and an accessible collapse control.
+  if (await page.locator('#terminalWindow .terminal-dock-titlebar').isVisible()) ok('docked console has a visible titlebar');
   else fail('docked console missing titlebar');
+  if (await page.locator('#terminalWindow .terminal-dock-titlebar #terminalMinimize').isVisible()) ok('docked console titlebar exposes its collapse control');
+  else fail('docked console titlebar missing collapse control');
 
   // Collapse from the dock titlebar.
   await page.click('#terminalMinimize');
