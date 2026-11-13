@@ -192,6 +192,14 @@ create policy "read own enrollment or staffed class"
   on public.enrollments for select
   using (user_id = auth.uid() or public.is_class_staff(class_id));
 
+-- Restrictive read guard: permissive SELECT policies are OR-combined. Require
+-- current membership (or ownership) even if another permissive policy exists.
+-- This makes TA removal revoke roster access immediately.
+drop policy if exists "enrollment read membership guard" on public.enrollments;
+create policy "enrollment read membership guard"
+  on public.enrollments as restrictive for select to authenticated
+  using (user_id = auth.uid() or public.is_class_staff(class_id));
+
 -- Students must use the SECURITY DEFINER join-by-code RPC from M2.
 -- Do not allow direct browser inserts: knowing or guessing a class UUID must
 -- never be enough to bypass its join code.
@@ -208,10 +216,44 @@ create policy "staff add students or owners add staff"
     or (role = 'ta' and public.is_class_owner(class_id))
   );
 
+-- Restrictive guard: PostgreSQL combines permissive policies with OR. This
+-- additional restrictive policy ensures no older or future permissive policy
+-- can let a TA create or promote another TA.
+drop policy if exists "enrollment role assignment guard" on public.enrollments;
+create policy "enrollment role assignment guard"
+  on public.enrollments as restrictive for insert to authenticated
+  with check (
+    (role = 'student' and public.is_class_staff(class_id))
+    or (role = 'ta' and public.is_class_owner(class_id))
+  );
+
 drop policy if exists "owners update enrollments in their class" on public.enrollments;
 create policy "owners update enrollments in their class"
   on public.enrollments for update
   using (public.is_class_owner(class_id)) with check (public.is_class_owner(class_id));
+
+-- Defense in depth: enforce TA role assignment in a trigger as well as RLS.
+-- This prevents any additional permissive enrollment policy from granting
+-- staff-promotion capability to a TA.
+create or replace function public.enforce_enrollment_role_assignment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $enrollment_role_guard$
+begin
+  if new.role = 'ta' and not public.is_class_owner(new.class_id) then
+    raise exception 'Only the class owner may assign the TA role'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$enrollment_role_guard$;
+
+drop trigger if exists enrollment_role_assignment_guard on public.enrollments;
+create trigger enrollment_role_assignment_guard
+  before insert or update of role, class_id on public.enrollments
+  for each row execute function public.enforce_enrollment_role_assignment();
 
 -- A student may drop themselves; an owner may remove anyone from their class.
 drop policy if exists "leave or be removed" on public.enrollments;
