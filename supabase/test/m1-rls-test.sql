@@ -91,14 +91,13 @@ select test.login(:'T2');
 insert into public.classes (id, owner_id, name, join_code, term)
   values ('c2222222-2222-2222-2222-222222222222', :'T2', 'Systems 201', 'CODE02', 'F26');
 
--- S1, S2 self-enroll into C1; S3 into C2
-select test.login(:'S1');
-insert into public.enrollments (class_id, user_id, role)
-  values ('c1111111-1111-1111-1111-111111111111', :'S1', 'student');
-select test.login(:'S2');
-insert into public.enrollments (class_id, user_id, role)
-  values ('c1111111-1111-1111-1111-111111111111', :'S2', 'student');
-select test.login(:'S3');
+-- Seed roster fixtures through each class owner. Students cannot insert
+-- enrollment rows directly; they must use enroll_by_code() from M2.
+select test.login(:'T1');
+insert into public.enrollments (class_id, user_id, role) values
+  ('c1111111-1111-1111-1111-111111111111', :'S1', 'student'),
+  ('c1111111-1111-1111-1111-111111111111', :'S2', 'student');
+select test.login(:'T2');
 insert into public.enrollments (class_id, user_id, role)
   values ('c2222222-2222-2222-2222-222222222222', :'S3', 'student');
 
@@ -234,6 +233,13 @@ select test.expect('T1 can still edit feedback text in its own class',
 select test.login(:'S1');
 select test.expect_denied('non-teacher S1 cannot create a class',
   $q$ insert into public.classes (owner_id, name, join_code) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','Sneaky','HACK01') $q$);
+
+-- A student cannot bypass the join-code RPC by inserting themselves
+-- directly, even when they know a valid class UUID.
+select test.expect_denied('S1 cannot directly self-enroll into C2 without its join code',
+  $q$ insert into public.enrollments (class_id,user_id,role)
+      values ('c2222222-2222-2222-2222-222222222222',
+              'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','student') $q$);
 
 -- A student cannot enroll as a TA, nor enroll someone else
 select test.expect_denied('S1 cannot self-enroll as TA',
