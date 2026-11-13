@@ -165,6 +165,29 @@ function ntpSynchronized(net, devId) {
   const status = M.ntpStatus(net, devId);
   return { ok: status.synchronized, reason: status.synchronized ? devId + ' is synchronized to ' + status.source : devId + ' clock is unsynchronized: ' + status.reason };
 }
+// A device's connection log (populated by the player's own traffic) must contain
+// a flow matching the given fields. Lets a mission grade "you observed that the
+// firewall PERMITTED 443 and DENIED 23" — which forces the player to actually
+// generate both flows and read the log, not just configure policy.
+function flowLogged(net, devId, m = {}) {
+  const dev = net.devices[devId];
+  if (!dev) return { ok: false, reason: `unknown device: ${devId}` };
+  const log = dev.flowLog || [];
+  const norm = v => v == null ? null : String(v);
+  const match = f =>
+    (m.action == null || String(f.action) === String(m.action)) &&
+    (m.proto == null || String(f.proto) === String(m.proto)) &&
+    (m.dport == null || Number(f.dport) === Number(m.dport)) &&
+    (m.dst == null || norm(f.dst) === norm(m.dst)) &&
+    (m.src == null || norm(f.src) === norm(m.src));
+  const hit = log.some(match);
+  const want = ['action', 'proto', 'dport', 'dst', 'src'].filter(k => m[k] != null)
+    .map(k => `${k}=${m[k]}`).join(' ') || 'any flow';
+  return { ok: hit, reason: hit
+    ? `${devId} connection log shows a flow (${want})`
+    : `${devId} connection log has no flow matching ${want} — generate the traffic, then check 'show flows'` };
+}
+
 function syslogReceived(net, collectorId, sourceId) {
   const collector = net.devices[collectorId];
   const events = collector && collector.syslogEvents || [];
@@ -177,4 +200,4 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent, flowLogged };

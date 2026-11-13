@@ -19,9 +19,15 @@ for (const m of chapters) {
     if (typeof m.solution === 'function') {
       m.solution(s);
     } else {
+      // Observational probes (ping/traceroute/nmap/dig/tcpdump) may legitimately
+      // report "unreachable" or "blocked" as part of a reference solution — an
+      // audit mission, for instance, deliberately generates a flow the policy
+      // denies. Those non-zero exits are expected; the real success condition is
+      // asserted by s.done() below. Configuration steps must still succeed.
+      const PROBE = /^(ping6?|traceroute|nmap|dig|tcpdump)\b/;
       for (const [dev, cmd] of m.solution) {
         const r = s.on(dev).run(cmd);
-        assert(r.code === 0, `solution command failed on ${dev}: "${cmd}" -> ${r.out}`);
+        assert(r.code === 0 || PROBE.test(cmd.trim()), `solution command failed on ${dev}: "${cmd}" -> ${r.out}`);
       }
     }
     assert(s.done() === true, `mission "${m.id}" NOT resolved after the solution:\n${s.status()}`);

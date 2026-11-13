@@ -273,6 +273,16 @@ function ciscoShow(cli, words) {
     const c = dev.counters || { forwarded: 0, delivered: 0, dropped: 0 };
     return ok('Traffic counters for ' + cli.cur + '\n  forwarded: ' + c.forwarded + '\n  delivered: ' + c.delivered + '\n  dropped:   ' + c.dropped + '\n(counters accrue from pings you run; dropped marks where traffic died)');
   }
+  if (q === 'flows' || q === 'connections' || q === 'conn') {
+    const log = dev.flowLog || [];
+    const hdr = 'TIME      SRC               DST               PROTO:PORT   IN -> OUT          ACTION';
+    const rows = log.map(f => {
+      const svc = (f.proto || 'icmp').toUpperCase() + (f.dport != null ? ':' + f.dport : '');
+      const iface = (f.in_if || '-') + ' -> ' + (f.out_if || '-');
+      return f.ts.padEnd(10) + String(f.src || '-').padEnd(18) + String(f.dst || '-').padEnd(18) + svc.padEnd(13) + iface.padEnd(19) + f.action + (f.reason ? '  (' + f.reason + ')' : '');
+    });
+    return ok('Connection log for ' + cli.cur + ' (' + log.length + ' flow' + (log.length === 1 ? '' : 's') + ', newest first)\n' + hdr + '\n' + (rows.join('\n') || '(no flows logged yet — run a ping, then check again)'));
+  }
   if (q === 'ip dhcp pool' || q === 'ip dhcp binding' || q === 'ip dhcp server statistics') {
     const pool = dev.dhcp;
     if (q === 'ip dhcp binding') return ok('IP address       Client ID   Lease (days)\n' + Object.entries(pool && pool.bindings || {}).map(([id,x]) => M.ipStr(x.ip).padEnd(17) + id.padEnd(12) + x.leaseDays).join('\n') || '(no DHCP bindings)');
@@ -1109,7 +1119,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','flows','connections','conn','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -1485,6 +1495,8 @@ const HELP_SECTIONS = [
     ['traceroute <host|ip>', 'Show the network path to a destination', ALL_KINDS],
     ['arp', 'Display the local IP-to-MAC address cache', ALL_KINDS],
     ['tcpdump', 'Capture and inspect network packets', ALL_KINDS, GENERIC],
+    ['show flows', 'Review this device\'s connection log (per-flow action + interfaces)', ALL_KINDS],
+    ['clear flows', 'Clear this device\'s connection log', ALL_KINDS],
     ['nmap <host|ip>', 'Discover reachable hosts and open ports', ALL_KINDS, GENERIC],
     ['dig <name>', 'Query DNS records for a hostname', ALL_KINDS, GENERIC],
     ['dhclient <interface>', 'Request an IP address using DHCP', ['host', 'server'], GENERIC],
@@ -1570,6 +1582,12 @@ function buildHelp(dev) {
 /* ---------------- commands ---------------- */
 const COMMANDS = {
   clear: (cli, a) => {
+    const q0 = a.join(' ');
+    if (q0 === 'flows' || q0 === 'connections' || q0 === 'conn') {
+      const dev = cli.net.devices[cli.cur]; const n = (dev.flowLog || []).length;
+      dev.flowLog = [];
+      return ok('Cleared connection log on ' + cli.cur + ' (' + n + ' flow' + (n === 1 ? '' : 's') + ' removed)');
+    }
     if (cli.net.devices[cli.cur].kind !== 'switch') return err('clear: switching commands are only available on switches');
     if (a.join(' ') !== 'mac address-table dynamic') return err('usage: clear mac address-table dynamic');
     if (cli.net.macTables) delete cli.net.macTables[cli.cur];
@@ -1995,8 +2013,14 @@ const COMMANDS = {
     const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
     const r = M.ping(cli.net, cli.cur, dst, base);
-    if (r.forward) M.recordTraffic(cli.net, r.forward);              // observability: user pings accrue traffic counters
-    cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
+    const srcIp = M.sourceIpToward(cli.net, cli.cur, dst);
+    if (r.forward) {
+      M.recordTraffic(cli.net, r.forward);                          // observability: user pings accrue traffic counters
+      const proto = base.proto || 'icmp';
+      const bytes = proto === 'icmp' ? 84 : base.dport === 443 ? 1200 : base.dport === 80 ? 800 : base.dport === 53 ? 120 : 560;
+      M.recordFlowLog(cli.net, r.forward, { src: srcIp, dst, proto, dport: base.dport, bytes }); // per-device connection log
+    }
+    cli.lastPing = { src: srcIp, dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
     cli.flows = cli.flows || [];
     cli.flows.unshift({ t: Date.now(), from: cli.cur, ...cli.lastPing });
     if (cli.flows.length > 12) cli.flows.length = 12;

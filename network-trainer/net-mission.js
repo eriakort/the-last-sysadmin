@@ -24,6 +24,7 @@ function evalCheck(net, s) {
     case 'etherchannel_up':return C.etherchannelUp(net, s.dev, s.group);
     case 'reachable6':     return C.reachable6(net, s.a, s.b);
     case 'log_event':      return C.logEvent(net, s.dev, s.pattern, s.present);
+    case 'flow_log':       return C.flowLogged(net, s.dev, { action: s.action, proto: s.proto, dport: s.dport, dst: s.dst, src: s.src });
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);

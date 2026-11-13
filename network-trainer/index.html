@@ -1179,6 +1179,65 @@ function recordTraffic(net, fwd) {
   });
 }
 
+// --- Device connection / flow logging -------------------------------------
+// As a user-initiated flow is forwarded, every device on its path appends one
+// line to its own connection log describing what it did with that flow: the
+// 5-tuple, the ingress/egress interfaces, and the action it took. This is the
+// simulator's analogue of a firewall/router flow log (ASA "Built/Teardown",
+// iptables, NetFlow). Deterministic by design: the timestamp derives from a
+// per-net sequence counter, never the wall clock, so grading and tests are
+// stable. Only user traffic (e.g. `ping`) records; grading never does.
+
+// The interface on `devId` that faces `peerId` across an L2 segment (or null).
+function faceToward(net, devId, peerId) {
+  if (!peerId) return null;
+  const dev = net.devices[devId] || {};
+  for (const name of Object.keys(dev.ifaces || {})) {
+    if (l2Domain(net, devId, name).some(([pid]) => pid === peerId)) return name;
+  }
+  return null;
+}
+
+// Map a drop reason to a log action: DENY for an explicit policy block,
+// DROP for everything else (no route, unreachable, IPS, port-security, TTL).
+function classifyDrop(reason) {
+  return /blocked by ACL|ASA security-level/.test(String(reason || '')) ? 'DENY' : 'DROP';
+}
+
+// A stable, wall-clock-free HH:MM:SS derived from the flow sequence number,
+// so a given scenario always renders the same connection-log timestamps.
+function flowClock(seq) {
+  const s = 36000 + ((seq - 1) % 86400); // base 10:00:00, wrap at a day
+  const p = n => String(n).padStart(2, '0');
+  return p(Math.floor(s / 3600) % 24) + ':' + p(Math.floor(s / 60) % 60) + ':' + p(s % 60);
+}
+
+function recordFlowLog(net, fwd, meta = {}) {
+  if (!fwd || !Array.isArray(fwd.path) || !fwd.path.length) return;
+  const path = fwd.path;
+  net._flowSeq = (net._flowSeq || 0) + 1;
+  const seq = net._flowSeq, ts = flowClock(seq);
+  const src = meta.src != null ? ipStr(meta.src) : null;
+  const dst = meta.dst != null ? ipStr(meta.dst) : null;
+  const proto = meta.proto || 'icmp';
+  const dport = meta.dport != null ? Number(meta.dport) : null;
+  const bytes = Number(meta.bytes) || 0;
+  path.forEach((id, i) => {
+    const dev = net.devices[id]; if (!dev) return;
+    const prev = path[i - 1] || null, next = path[i + 1] || null;
+    const last = i === path.length - 1;
+    const action = last ? (fwd.ok ? 'ACCEPT' : classifyDrop(fwd.reason)) : 'FORWARD';
+    dev.flowLog = dev.flowLog || [];
+    dev.flowLog.unshift({
+      seq, ts, src, dst, proto, dport, bytes, action,
+      in_if: faceToward(net, id, prev),
+      out_if: last ? null : faceToward(net, id, next),
+      reason: last && !fwd.ok ? fwd.reason : null
+    });
+    if (dev.flowLog.length > 50) dev.flowLog.length = 50;
+  });
+}
+
 // Record a local operational event and forward it to configured, reachable collectors.
 function recordSyslog(net, devId, message, severity = 6) {
   const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
@@ -1327,7 +1386,7 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, snortInspect
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, recordFlowLog, snortInspect
 };
 
 });
@@ -1499,6 +1558,29 @@ function ntpSynchronized(net, devId) {
   const status = M.ntpStatus(net, devId);
   return { ok: status.synchronized, reason: status.synchronized ? devId + ' is synchronized to ' + status.source : devId + ' clock is unsynchronized: ' + status.reason };
 }
+// A device's connection log (populated by the player's own traffic) must contain
+// a flow matching the given fields. Lets a mission grade "you observed that the
+// firewall PERMITTED 443 and DENIED 23" — which forces the player to actually
+// generate both flows and read the log, not just configure policy.
+function flowLogged(net, devId, m = {}) {
+  const dev = net.devices[devId];
+  if (!dev) return { ok: false, reason: `unknown device: ${devId}` };
+  const log = dev.flowLog || [];
+  const norm = v => v == null ? null : String(v);
+  const match = f =>
+    (m.action == null || String(f.action) === String(m.action)) &&
+    (m.proto == null || String(f.proto) === String(m.proto)) &&
+    (m.dport == null || Number(f.dport) === Number(m.dport)) &&
+    (m.dst == null || norm(f.dst) === norm(m.dst)) &&
+    (m.src == null || norm(f.src) === norm(m.src));
+  const hit = log.some(match);
+  const want = ['action', 'proto', 'dport', 'dst', 'src'].filter(k => m[k] != null)
+    .map(k => `${k}=${m[k]}`).join(' ') || 'any flow';
+  return { ok: hit, reason: hit
+    ? `${devId} connection log shows a flow (${want})`
+    : `${devId} connection log has no flow matching ${want} — generate the traffic, then check 'show flows'` };
+}
+
 function syslogReceived(net, collectorId, sourceId) {
   const collector = net.devices[collectorId];
   const events = collector && collector.syslogEvents || [];
@@ -1511,7 +1593,7 @@ function stpBlocked(net, switchId, port, vlan) {
   const ok = !!(p && p.state === 'blocking');
   return { ok, reason: ok ? switchId + '/' + port + ' is blocking in VLAN ' + vlan : switchId + '/' + port + ' is not blocking in VLAN ' + vlan };
 }
-module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent };
+module.exports = { primaryIp, reachable, notReachable, routeExists, subnetCorrect, aclBlocks, serviceUp, resolves, ospfNeighbor, ospfRoute, bgpSession, bgpRoute, bgpRouteAbsent, hsrpState, portForward, macEntry, stpRoot, stpBlocked, dhcpLease, ntpSynchronized, syslogReceived, vpnUp, certValid, vrrpState, etherchannelUp, reachable6, logEvent, flowLogged };
 
 });
 __def("./net-cli", function(module, exports, require){
@@ -1789,6 +1871,16 @@ function ciscoShow(cli, words) {
   if (q === 'counters' || q === 'interface counters' || q === 'traffic counters') {
     const c = dev.counters || { forwarded: 0, delivered: 0, dropped: 0 };
     return ok('Traffic counters for ' + cli.cur + '\n  forwarded: ' + c.forwarded + '\n  delivered: ' + c.delivered + '\n  dropped:   ' + c.dropped + '\n(counters accrue from pings you run; dropped marks where traffic died)');
+  }
+  if (q === 'flows' || q === 'connections' || q === 'conn') {
+    const log = dev.flowLog || [];
+    const hdr = 'TIME      SRC               DST               PROTO:PORT   IN -> OUT          ACTION';
+    const rows = log.map(f => {
+      const svc = (f.proto || 'icmp').toUpperCase() + (f.dport != null ? ':' + f.dport : '');
+      const iface = (f.in_if || '-') + ' -> ' + (f.out_if || '-');
+      return f.ts.padEnd(10) + String(f.src || '-').padEnd(18) + String(f.dst || '-').padEnd(18) + svc.padEnd(13) + iface.padEnd(19) + f.action + (f.reason ? '  (' + f.reason + ')' : '');
+    });
+    return ok('Connection log for ' + cli.cur + ' (' + log.length + ' flow' + (log.length === 1 ? '' : 's') + ', newest first)\n' + hdr + '\n' + (rows.join('\n') || '(no flows logged yet — run a ping, then check again)'));
   }
   if (q === 'ip dhcp pool' || q === 'ip dhcp binding' || q === 'ip dhcp server statistics') {
     const pool = dev.dhcp;
@@ -2626,7 +2718,7 @@ function runCisco(cli, line) {
   }
   if (words[0] === 'show') {
     const query = words.slice(1).join(' ');
-    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
+    const iosOnly = ['port-security','version','running-config','run','startup-config','start','ip interface brief','ip int brief','ip route','route','ip bgp','ip bgp ipv4 unicast','ip bgp summary','ip bgp neighbors','ip bgp advertised-routes','ip ospf neighbor','ip ospf interface brief','standby brief','standby','vrrp','vrrp brief','etherchannel summary','etherchannel','etherchannel brief','counters','interface counters','traffic counters','flows','connections','conn','ip protocols','interfaces status','int status','access-lists','hosts','ntp status','ntp associations','logging','ip dhcp pool','ip dhcp binding','ip dhcp server statistics'];
     if (query.startsWith('port-security interface ') || query.startsWith('access-lists ') || query.startsWith('ip interface ') || query.startsWith('ip bgp advertised-routes')) return ciscoShow(cli, words.slice(1));
     return iosOnly.includes(query) ? ciscoShow(cli, words.slice(1)) : dispatch(cli, raw);
   }
@@ -3002,6 +3094,8 @@ const HELP_SECTIONS = [
     ['traceroute <host|ip>', 'Show the network path to a destination', ALL_KINDS],
     ['arp', 'Display the local IP-to-MAC address cache', ALL_KINDS],
     ['tcpdump', 'Capture and inspect network packets', ALL_KINDS, GENERIC],
+    ['show flows', 'Review this device\'s connection log (per-flow action + interfaces)', ALL_KINDS],
+    ['clear flows', 'Clear this device\'s connection log', ALL_KINDS],
     ['nmap <host|ip>', 'Discover reachable hosts and open ports', ALL_KINDS, GENERIC],
     ['dig <name>', 'Query DNS records for a hostname', ALL_KINDS, GENERIC],
     ['dhclient <interface>', 'Request an IP address using DHCP', ['host', 'server'], GENERIC],
@@ -3087,6 +3181,12 @@ function buildHelp(dev) {
 /* ---------------- commands ---------------- */
 const COMMANDS = {
   clear: (cli, a) => {
+    const q0 = a.join(' ');
+    if (q0 === 'flows' || q0 === 'connections' || q0 === 'conn') {
+      const dev = cli.net.devices[cli.cur]; const n = (dev.flowLog || []).length;
+      dev.flowLog = [];
+      return ok('Cleared connection log on ' + cli.cur + ' (' + n + ' flow' + (n === 1 ? '' : 's') + ' removed)');
+    }
     if (cli.net.devices[cli.cur].kind !== 'switch') return err('clear: switching commands are only available on switches');
     if (a.join(' ') !== 'mac address-table dynamic') return err('usage: clear mac address-table dynamic');
     if (cli.net.macTables) delete cli.net.macTables[cli.cur];
@@ -3512,8 +3612,14 @@ const COMMANDS = {
     const pi = a.indexOf('-p'); if (pi >= 0) base.proto = a[pi + 1];
     const di = a.indexOf('--dport'); if (di >= 0) base.dport = Number(a[di + 1]);
     const r = M.ping(cli.net, cli.cur, dst, base);
-    if (r.forward) M.recordTraffic(cli.net, r.forward);              // observability: user pings accrue traffic counters
-    cli.lastPing = { src: M.sourceIpToward(cli.net, cli.cur, dst), dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
+    const srcIp = M.sourceIpToward(cli.net, cli.cur, dst);
+    if (r.forward) {
+      M.recordTraffic(cli.net, r.forward);                          // observability: user pings accrue traffic counters
+      const proto = base.proto || 'icmp';
+      const bytes = proto === 'icmp' ? 84 : base.dport === 443 ? 1200 : base.dport === 80 ? 800 : base.dport === 53 ? 120 : 560;
+      M.recordFlowLog(cli.net, r.forward, { src: srcIp, dst, proto, dport: base.dport, bytes }); // per-device connection log
+    }
+    cli.lastPing = { src: srcIp, dst, proto: base.proto || 'icmp', dport: base.dport, path: (r.forward && r.forward.path) || [cli.cur], ok: r.ok };
     cli.flows = cli.flows || [];
     cli.flows.unshift({ t: Date.now(), from: cli.cur, ...cli.lastPing });
     if (cli.flows.length > 12) cli.flows.length = 12;
@@ -3759,6 +3865,7 @@ function evalCheck(net, s) {
     case 'etherchannel_up':return C.etherchannelUp(net, s.dev, s.group);
     case 'reachable6':     return C.reachable6(net, s.a, s.b);
     case 'log_event':      return C.logEvent(net, s.dev, s.pattern, s.present);
+    case 'flow_log':       return C.flowLogged(net, s.dev, { action: s.action, proto: s.proto, dport: s.dport, dst: s.dst, src: s.src });
     case 'bgp_session':    return C.bgpSession(net, s.dev, s.peer);
     case 'bgp_route':      return C.bgpRoute(net, s.dev, s.cidr);
     case 'bgp_route_absent': return C.bgpRouteAbsent(net, s.dev, s.cidr);
@@ -5214,6 +5321,41 @@ const chapters = [
     }),
     success: [{ type: 'log_event', dev: 'r1', pattern: 'eth1, changed state to down', present: false }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip link set eth1 up']]
+  },
+
+  // Breadth · Observability — read the connection log. The border router's policy
+  // is already correct; the task is to PROVE it from evidence. The player must
+  // generate the HTTPS and Telnet flows themselves, then read r1's connection log
+  // ("show flows") to confirm it forwarded 443 and denied 23. Teaches that a flow
+  // log is a per-device record of what each box did with each connection it saw.
+  { id: 'observability-read-the-flows', chapter: 'Observability · logs & metrics', mode: 'diagnose',
+    title: 'Prove it with the connection log',
+    story: 'Security says the border router r1 should let the office reach the DMZ web server over HTTPS (tcp/443) and block legacy Telnet (tcp/23). The policy is already configured. Before you sign off the audit, prove it from evidence rather than from the config: generate both connections from h1, then read r1’s connection log with `show flows`. Each device keeps a log of what it did with every flow it saw — forwarded, accepted, or denied — with the ingress/egress interfaces.',
+    objective: 'From h1, generate an HTTPS flow and a Telnet flow to the web server, then confirm on r1’s connection log that HTTPS was forwarded and Telnet was denied.',
+    ticket: { id: 'INC-2647', from: 'Security · quarterly audit', priority: 'P3', symptom: 'We need evidence that the border router is actually enforcing the HTTPS-only policy to the DMZ — not just that a rule exists in the config. Can you produce the connection-log proof?' },
+    diagnose: { q: 'After you ping the web server from h1 on tcp/443 and tcp/23, `show flows` on r1 lists two flows. Which pair of actions proves the policy is enforced?', options: ['One flow to :443 with action FORWARD and one to :23 with action DENY', 'Both flows with action FORWARD', 'Both flows with action DENY'], answer: 0, because: 'The connection log records r1’s decision per flow. FORWARD on the :443 flow shows r1 permitted and routed HTTPS toward the DMZ; DENY on the :23 flow shows the ingress ACL dropped Telnet at r1. That pair is the evidence the audit wants.' },
+    console: 'h1',
+    hints: ['From h1, run `ping web -p tcp --dport 443` and then `ping web -p tcp --dport 23` to generate both connections.', 'Select r1 and run `show flows` (or `show connections`) to see what r1 did with each flow.', 'You are proving, not fixing: the :443 flow should read FORWARD and the :23 flow should read DENY. If the log is empty, you have not generated the traffic yet.'],
+    build: () => {
+      const r1 = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) },
+        [{ dest: ip('10.0.2.0'), mask: 24, via: ip('10.0.2.1') }]);
+      r1.acls = [
+        { aclName: 'DMZ-IN', seq: 10, action: 'allow', proto: 'tcp', src: ip('10.0.1.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 443 },
+        { aclName: 'DMZ-IN', seq: 20, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null }
+      ];
+      r1.ifaces.eth0.accessGroups = { in: 'DMZ-IN' };
+      return { devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 443: 'https', 23: 'telnet' }),
+        r1,
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')] };
+    },
+    success: [
+      { type: 'flow_log', dev: 'r1', action: 'FORWARD', proto: 'tcp', dport: 443 },
+      { type: 'flow_log', dev: 'r1', action: 'DENY', proto: 'tcp', dport: 23 }
+    ],
+    solution: [['h1', 'ping web -p tcp --dport 443'], ['h1', 'ping web -p tcp --dport 23'], ['r1', 'show flows']]
   },
 ];
 

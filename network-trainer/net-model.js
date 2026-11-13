@@ -901,6 +901,65 @@ function recordTraffic(net, fwd) {
   });
 }
 
+// --- Device connection / flow logging -------------------------------------
+// As a user-initiated flow is forwarded, every device on its path appends one
+// line to its own connection log describing what it did with that flow: the
+// 5-tuple, the ingress/egress interfaces, and the action it took. This is the
+// simulator's analogue of a firewall/router flow log (ASA "Built/Teardown",
+// iptables, NetFlow). Deterministic by design: the timestamp derives from a
+// per-net sequence counter, never the wall clock, so grading and tests are
+// stable. Only user traffic (e.g. `ping`) records; grading never does.
+
+// The interface on `devId` that faces `peerId` across an L2 segment (or null).
+function faceToward(net, devId, peerId) {
+  if (!peerId) return null;
+  const dev = net.devices[devId] || {};
+  for (const name of Object.keys(dev.ifaces || {})) {
+    if (l2Domain(net, devId, name).some(([pid]) => pid === peerId)) return name;
+  }
+  return null;
+}
+
+// Map a drop reason to a log action: DENY for an explicit policy block,
+// DROP for everything else (no route, unreachable, IPS, port-security, TTL).
+function classifyDrop(reason) {
+  return /blocked by ACL|ASA security-level/.test(String(reason || '')) ? 'DENY' : 'DROP';
+}
+
+// A stable, wall-clock-free HH:MM:SS derived from the flow sequence number,
+// so a given scenario always renders the same connection-log timestamps.
+function flowClock(seq) {
+  const s = 36000 + ((seq - 1) % 86400); // base 10:00:00, wrap at a day
+  const p = n => String(n).padStart(2, '0');
+  return p(Math.floor(s / 3600) % 24) + ':' + p(Math.floor(s / 60) % 60) + ':' + p(s % 60);
+}
+
+function recordFlowLog(net, fwd, meta = {}) {
+  if (!fwd || !Array.isArray(fwd.path) || !fwd.path.length) return;
+  const path = fwd.path;
+  net._flowSeq = (net._flowSeq || 0) + 1;
+  const seq = net._flowSeq, ts = flowClock(seq);
+  const src = meta.src != null ? ipStr(meta.src) : null;
+  const dst = meta.dst != null ? ipStr(meta.dst) : null;
+  const proto = meta.proto || 'icmp';
+  const dport = meta.dport != null ? Number(meta.dport) : null;
+  const bytes = Number(meta.bytes) || 0;
+  path.forEach((id, i) => {
+    const dev = net.devices[id]; if (!dev) return;
+    const prev = path[i - 1] || null, next = path[i + 1] || null;
+    const last = i === path.length - 1;
+    const action = last ? (fwd.ok ? 'ACCEPT' : classifyDrop(fwd.reason)) : 'FORWARD';
+    dev.flowLog = dev.flowLog || [];
+    dev.flowLog.unshift({
+      seq, ts, src, dst, proto, dport, bytes, action,
+      in_if: faceToward(net, id, prev),
+      out_if: last ? null : faceToward(net, id, next),
+      reason: last && !fwd.ok ? fwd.reason : null
+    });
+    if (dev.flowLog.length > 50) dev.flowLog.length = 50;
+  });
+}
+
 // Record a local operational event and forward it to configured, reachable collectors.
 function recordSyslog(net, devId, message, severity = 6) {
   const dev = net.devices[devId]; if (!dev) return { recorded: false, forwarded: 0 };
@@ -1049,5 +1108,5 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, snortInspect
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, recordFlowLog, snortInspect
 };

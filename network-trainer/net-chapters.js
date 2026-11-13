@@ -1349,6 +1349,41 @@ const chapters = [
     success: [{ type: 'log_event', dev: 'r1', pattern: 'eth1, changed state to down', present: false }, { type: 'reachable', a: 'h1', b: 'srv' }],
     solution: [['r1', 'ip link set eth1 up']]
   },
+
+  // Breadth · Observability — read the connection log. The border router's policy
+  // is already correct; the task is to PROVE it from evidence. The player must
+  // generate the HTTPS and Telnet flows themselves, then read r1's connection log
+  // ("show flows") to confirm it forwarded 443 and denied 23. Teaches that a flow
+  // log is a per-device record of what each box did with each connection it saw.
+  { id: 'observability-read-the-flows', chapter: 'Observability · logs & metrics', mode: 'diagnose',
+    title: 'Prove it with the connection log',
+    story: 'Security says the border router r1 should let the office reach the DMZ web server over HTTPS (tcp/443) and block legacy Telnet (tcp/23). The policy is already configured. Before you sign off the audit, prove it from evidence rather than from the config: generate both connections from h1, then read r1’s connection log with `show flows`. Each device keeps a log of what it did with every flow it saw — forwarded, accepted, or denied — with the ingress/egress interfaces.',
+    objective: 'From h1, generate an HTTPS flow and a Telnet flow to the web server, then confirm on r1’s connection log that HTTPS was forwarded and Telnet was denied.',
+    ticket: { id: 'INC-2647', from: 'Security · quarterly audit', priority: 'P3', symptom: 'We need evidence that the border router is actually enforcing the HTTPS-only policy to the DMZ — not just that a rule exists in the config. Can you produce the connection-log proof?' },
+    diagnose: { q: 'After you ping the web server from h1 on tcp/443 and tcp/23, `show flows` on r1 lists two flows. Which pair of actions proves the policy is enforced?', options: ['One flow to :443 with action FORWARD and one to :23 with action DENY', 'Both flows with action FORWARD', 'Both flows with action DENY'], answer: 0, because: 'The connection log records r1’s decision per flow. FORWARD on the :443 flow shows r1 permitted and routed HTTPS toward the DMZ; DENY on the :23 flow shows the ingress ACL dropped Telnet at r1. That pair is the evidence the audit wants.' },
+    console: 'h1',
+    hints: ['From h1, run `ping web -p tcp --dport 443` and then `ping web -p tcp --dport 23` to generate both connections.', 'Select r1 and run `show flows` (or `show connections`) to see what r1 did with each flow.', 'You are proving, not fixing: the :443 flow should read FORWARD and the :23 flow should read DENY. If the log is empty, you have not generated the traffic yet.'],
+    build: () => {
+      const r1 = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) },
+        [{ dest: ip('10.0.2.0'), mask: 24, via: ip('10.0.2.1') }]);
+      r1.acls = [
+        { aclName: 'DMZ-IN', seq: 10, action: 'allow', proto: 'tcp', src: ip('10.0.1.0'), srcWildcard: ip('0.0.0.255'), dst: ip('10.0.2.10'), dstWildcard: 0, dport: 443 },
+        { aclName: 'DMZ-IN', seq: 20, action: 'deny', proto: 'ip', src: null, srcWildcard: null, dst: null, dstWildcard: null }
+      ];
+      r1.ifaces.eth0.accessGroups = { in: 'DMZ-IN' };
+      return { devices: {
+        h1: H('h1', '10.0.1.10', 24, '10.0.1.1'),
+        web: SRV('web', '10.0.2.10', 24, '10.0.2.1', { 443: 'https', 23: 'telnet' }),
+        r1,
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]), sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }])
+      }, links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('web', 'eth0', 'sw2', 'p1'), L('r1', 'eth1', 'sw2', 'p2')] };
+    },
+    success: [
+      { type: 'flow_log', dev: 'r1', action: 'FORWARD', proto: 'tcp', dport: 443 },
+      { type: 'flow_log', dev: 'r1', action: 'DENY', proto: 'tcp', dport: 23 }
+    ],
+    solution: [['h1', 'ping web -p tcp --dport 443'], ['h1', 'ping web -p tcp --dport 23'], ['r1', 'show flows']]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
