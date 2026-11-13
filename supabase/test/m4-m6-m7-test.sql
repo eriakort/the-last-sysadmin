@@ -57,6 +57,10 @@ reset role;
 select test.expect('non-staff call created no enrollment',
   (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'OU'), 0);
 
+-- Resume the simulated API session. The assertions below must run as the
+-- non-superuser authenticated role so PostgreSQL actually enforces RLS.
+set role authenticated;
+
 -- A TA may enroll students, but cannot grant staff privileges or change roles.
 select test.login(:'TE');
 insert into public.enrollments (class_id,user_id,role)
@@ -85,21 +89,6 @@ select test.expect('removed TA membership row is gone',
   (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TT'), 0);
 select test.expect('removed TA is no longer class staff',
   (select case when public.is_class_staff('fc111111-1111-1111-1111-111111111111') then 1 else 0 end), 0);
--- Diagnose the exact RLS execution context before the revocation assertion.
-select current_user as current_role, session_user as session_role,
-       r.rolsuper, r.rolbypassrls, current_setting('row_security') as row_security
-from pg_roles r where r.rolname = current_user;
-select c.relowner::regrole as table_owner, c.relrowsecurity, c.relforcerowsecurity
-from pg_class c where c.oid = 'public.enrollments'::regclass;
-select policyname, permissive, roles, cmd, qual, with_check
-from pg_policies where schemaname='public' and tablename='enrollments'
-order by policyname;
-select auth.uid() as jwt_uid,
-       public.is_class_staff('fc111111-1111-1111-1111-111111111111') as staff_now,
-       count(*) as visible_roster_rows
-from public.enrollments
-where class_id='fc111111-1111-1111-1111-111111111111';
-
 select test.expect('removed TA no longer sees the class roster',
   (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111'), 0);
 select test.expect('removed TA can no longer enroll by email',
