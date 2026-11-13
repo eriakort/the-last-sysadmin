@@ -189,7 +189,11 @@ delete from public.feedback where author_id=:'A1' and body='TA feedback after re
 reset role;
 select test.expect('removed TA cannot delete feedback they authored', 
   (select count(*) from public.feedback where author_id=:'A1' and body='TA feedback after revocation'), 1);
+-- Restore the shared TA fixture so downstream M12 reflection tests remain isolated.
 set role authenticated;
+select test.login(:'T1');
+insert into public.enrollments (class_id, user_id, role)
+  values ('c1111111-1111-1111-1111-111111111111', :'A1', 'ta');
 
 
 -- Add the C2 assignment only after the existing assignment-visibility assertions.
