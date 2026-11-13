@@ -91,7 +91,11 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  const deviceScaleAfter=await page.locator('#topo .node[data-dev="h1"] .device-art-scale').getAttribute('transform');
  assert(deviceScaleAfter!==deviceScaleBefore,'Dragging device resize handle did not resize device artwork');
  ok('device artwork and device labels resize independently');
+ // Keep the topology canvas unobstructed if a prior interaction opened the floating console.
+ const terminal=page.locator('#terminalWindow');
+ if(await terminal.count()&&await terminal.isVisible()) await page.locator('#terminalMinimize').click();
  await page.click('#textBtn');
+ assert((await page.locator('#textBtn').getAttribute('class')||'').includes('active'),'Text insertion mode did not activate');
  const svgBox=await page.locator('#topo').boundingBox();
  page.once('dialog',d=>d.accept('WAN handoff'));
  await page.mouse.click(svgBox.x+svgBox.width*.55,svgBox.y+svgBox.height*.55);
