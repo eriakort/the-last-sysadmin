@@ -711,8 +711,8 @@ function snortInspect(dev, pkt, path = []) {
   cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
   cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
   cfg.stats = cfg.stats || { inspected: 0, matched: 0, blocked: 0 };
-  cfg.stats.inspected = (cfg.stats.inspected || 0) + 1;
   if (cfg.enabled === false) return null;
+  cfg.stats.inspected = (cfg.stats.inspected || 0) + 1;
   const rule = cfg.rules.find(r => r.enabled !== false &&
     (r.proto === 'any' || r.proto === String(pkt.proto || 'icmp').toLowerCase()) &&
     (r.dport == null || r.dport === Number(pkt.dport || 0)) &&
