@@ -8335,7 +8335,7 @@ function toggleBuildMenu(force) {
 function closeBuildMenu() { toggleBuildMenu(false); }
 function openDeviceTerminal() {
   closeBuildMenu();
-  // Bring the workbench into view so the docked console is visible, then open it.
+  // Bring the workbench into view, then show the floating console.
   const cols = $('#cols');
   if (!cols || cols.hidden) { if (MODE === 'build') enterBuild(); else showWorkspaceView('workbench'); }
   openTerminalWindow(true);
