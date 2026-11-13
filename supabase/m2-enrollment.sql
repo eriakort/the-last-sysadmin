@@ -56,6 +56,8 @@ begin
 end;
 $$;
 
+revoke all on function public.enroll_by_code(text) from public;
+revoke all on function public.enroll_by_code(text) from anon;
 grant execute on function public.enroll_by_code(text) to authenticated;
 
 commit;
