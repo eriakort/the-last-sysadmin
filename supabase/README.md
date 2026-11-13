@@ -9,7 +9,7 @@ Run these **in order**. All are safe to re-run.
 
 1. **`../supabase-setup.sql`** — base: `profiles`, `progress`, `race_results` (accounts, progress sync, race leaderboard).
 2. **`m1-classroom.sql`** — M1: `classes`, `enrollments`, `assignments`, `attempts`, `feedback`, the `profiles.is_teacher` flag, the RLS helper functions, and every Row Level Security policy.
-3. **`m12-learner-reflections.sql`** — M12: private learner-authored reflections with optional assignment/mission context and learner/class-staff RLS.
+3. **`m12-learner-reflections.sql`** — M12: private learner-authored reflections with optional assignment/mission context; staff reads are limited to currently enrolled learners.
 4. **`m13-learning-evidence.sql`** — M13: append-only hint-request and mission-completion evidence, with learner and currently enrolled class-staff RLS.
 5. **`m2-enrollment.sql`** — M2: `enroll_by_code()` so a student can join a class with a code.
 6. **`m4-enroll-by-email.sql`** — M4: `enroll_by_email()` so class staff can add a student by email.
@@ -57,7 +57,7 @@ it should and nothing it shouldn't. It covers:
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
 - **M11** — transactional progress sync: authenticated RPC writes, row locking, recursive merge behavior and deletion-tombstone handling.
-- **M12** — learner reflections: own-row access, class-owner/TA read access, cross-class denial, and assignment/mission consistency.
+- **M12** — learner reflections: own-row access, class-owner/TA reads only for currently enrolled learners, cross-class denial, assignment/mission consistency, and staff-access revocation after learner removal.
 - **M13** — learning evidence: own-history access, class-owner/TA reads for currently enrolled learners, cross-class denial, append-only enforcement, and staff-access revocation after learner removal.
 - **Network Trainer** — author-only scenario CRUD, mixed-assignment filtering, class-member delivery, outsider denial, and anonymous execution denial.
 
