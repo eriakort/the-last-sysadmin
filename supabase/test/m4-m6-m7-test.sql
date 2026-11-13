@@ -6,17 +6,22 @@
 -- AU = mission/scenario author, BU = another author
 \set TE 'f1111111-1111-1111-1111-111111111111'
 \set TS 'f2222222-2222-2222-2222-222222222222'
+\set TT 'f6666666-6666-6666-6666-666666666666'
+\set T2 'f7777777-7777-7777-7777-777777777777'
 \set OU 'f3333333-3333-3333-3333-333333333333'
 \set AU 'f4444444-4444-4444-4444-444444444444'
 \set BU 'f5555555-5555-5555-5555-555555555555'
 
 reset role;
 insert into auth.users (id, email) values
-  (:'TE','te@uni.edu'), (:'TS','target@uni.edu'), (:'OU','ou@uni.edu'),
+  (:'TE','te@uni.edu'), (:'TS','target@uni.edu'), (:'TT','ta@uni.edu'),
+  (:'T2','second-target@uni.edu'), (:'OU','ou@uni.edu'),
   (:'AU','au@uni.edu'), (:'BU','bu@uni.edu')
 on conflict do nothing;
 insert into public.profiles (id, display_name, is_teacher) values
-  (:'TE','M4 Prof', true), (:'TS','Target Student', false), (:'OU','Outsider', false),
+  (:'TE','M4 Prof', true), (:'TS','Target Student', false),
+  (:'TT','M4 Teaching Assistant', false), (:'T2','Second Target', false),
+  (:'OU','Outsider', false),
   (:'AU','Author One', true), (:'BU','Author Two', true)
 on conflict (id) do update set is_teacher = excluded.is_teacher;
 
@@ -51,6 +56,35 @@ select test.expect('non-staff enroll_by_email is refused',
 reset role;
 select test.expect('non-staff call created no enrollment',
   (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'OU'), 0);
+
+-- A TA may enroll students, but cannot grant staff privileges or change roles.
+select test.login(:'TE');
+insert into public.enrollments (class_id,user_id,role)
+ values ('fc111111-1111-1111-1111-111111111111',:'TT','ta');
+select test.login(:'TT');
+select test.expect('TA can enroll a student by email',
+  (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','second-target@uni.edu') ? 'ok' then 1 else 0 end), 1);
+select test.expect('TA cannot add another TA',
+  $q$ insert into public.enrollments (class_id,user_id,role)
+      values ('fc111111-1111-1111-1111-111111111111','f3333333-3333-3333-3333-333333333333','ta') $q$);
+select test.expect_denied('TA cannot promote an enrolled student to TA',
+  $q$ update public.enrollments set role='ta'
+      where class_id='fc111111-1111-1111-1111-111111111111'
+        and user_id='f2222222-2222-2222-2222-222222222222' $q$);
+
+-- Removing the TA must immediately revoke staff-only capabilities.
+select test.login(:'TE');
+delete from public.enrollments
+ where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TT';
+select test.login(:'TT');
+select test.expect('removed TA no longer sees the class roster',
+  (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111'), 0);
+select test.expect('removed TA can no longer enroll by email',
+  (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','second-target@uni.edu') ? 'error' then 1 else 0 end), 1);
+reset role;
+select test.expect('removed TA did not create a further enrollment',
+  (select count(*) from public.enrollments
+   where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'OU'), 0);
 set role authenticated;
 
 \echo '--- M6: authored_missions are author-isolated ---'
