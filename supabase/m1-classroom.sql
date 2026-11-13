@@ -437,12 +437,24 @@ create trigger feedback_scope_immutable
 -- grants: let the API roles use the helper functions
 -- (RLS still governs every row; these just allow calling the functions)
 -- ======================================================================
+revoke all on function
+  public.is_class_owner(uuid),
+  public.is_class_staff(uuid),
+  public.is_class_member(uuid),
+  public.staffs_class_of(uuid)
+from public;
+revoke all on function
+  public.is_class_owner(uuid),
+  public.is_class_staff(uuid),
+  public.is_class_member(uuid),
+  public.staffs_class_of(uuid)
+from anon;
 grant execute on function
   public.is_class_owner(uuid),
   public.is_class_staff(uuid),
   public.is_class_member(uuid),
   public.staffs_class_of(uuid)
-to anon, authenticated;
+to authenticated;
 
 -- Join-code generation is an internal class-creation default, not a public
 -- RPC. Keep it unavailable to anonymous API callers.
