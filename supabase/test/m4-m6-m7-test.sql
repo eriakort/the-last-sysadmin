@@ -79,6 +79,12 @@ select test.login(:'TE');
 delete from public.enrollments
  where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TT';
 select test.login(:'TT');
+select test.expect('removed TA identity is active after revocation',
+  (select case when auth.uid() = :'TT'::uuid then 1 else 0 end), 1);
+select test.expect('removed TA membership row is gone',
+  (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111' and user_id=:'TT'), 0);
+select test.expect('removed TA is no longer class staff',
+  (select case when public.is_class_staff('fc111111-1111-1111-1111-111111111111') then 1 else 0 end), 0);
 select test.expect('removed TA no longer sees the class roster',
   (select count(*) from public.enrollments where class_id='fc111111-1111-1111-1111-111111111111'), 0);
 select test.expect('removed TA can no longer enroll by email',
