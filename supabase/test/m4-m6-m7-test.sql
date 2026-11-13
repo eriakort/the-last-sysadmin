@@ -73,10 +73,15 @@ select test.expect('TA can enroll a student by email',
 select test.expect_denied('TA cannot add another TA',
   $q$ insert into public.enrollments (class_id,user_id,role)
       values ('fc111111-1111-1111-1111-111111111111','f3333333-3333-3333-3333-333333333333','ta') $q$);
-select test.expect_denied('TA cannot promote an enrolled student to TA',
-  $q$ update public.enrollments set role='ta'
-      where class_id='fc111111-1111-1111-1111-111111111111'
-        and user_id='f2222222-2222-2222-2222-222222222222' $q$);
+-- RLS blocks this UPDATE by filtering the target row, so PostgreSQL
+-- correctly reports zero affected rows rather than raising an exception.
+update public.enrollments set role='ta'
+ where class_id='fc111111-1111-1111-1111-111111111111'
+   and user_id='f2222222-2222-2222-2222-222222222222';
+select test.expect('TA cannot promote an enrolled student to TA (role unchanged)',
+  (select count(*) from public.enrollments
+   where class_id='fc111111-1111-1111-1111-111111111111'
+     and user_id='f2222222-2222-2222-2222-222222222222' and role='student'), 1);
 
 -- Removing the TA must immediately revoke staff-only capabilities.
 select test.login(:'TE');
