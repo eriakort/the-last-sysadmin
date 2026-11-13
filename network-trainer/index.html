@@ -8311,51 +8311,6 @@ function mountTerminalWindow() {
     observer.observe(win);
   }
 }
-function mountTerminalWindow() {
-  const term = $('#term');
-  if (!term || $('#terminalWindow')) return;
-  const win = document.createElement('section');
-  win.id = 'terminalWindow';
-  win.className = 'terminal-floating';
-  win.setAttribute('role', 'region');
-  win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-dock-titlebar" id="terminalDragHandle"><span><i></i> DEVICE TERMINAL</span><div class="terminal-window-actions"><button type="button" class="btn sm" id="terminalExpand" aria-label="Expand device terminal" title="Expand window" aria-pressed="false">□</button><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize console">—</button></div></header><div class="terminal-dock-content"></div>';
-  document.body.appendChild(win);
-  win.querySelector('.terminal-dock-content').appendChild(term);
-  applyTerminalLayout(win);
-  win.hidden = true;
-  $('#terminalMinimize').addEventListener('click', collapseTerminalWindow);
-  $('#terminalExpand').addEventListener('click', () => setTerminalExpanded(!win.classList.contains('terminal-expanded')));
-  const handle = $('#terminalDragHandle');
-  let drag = null;
-  handle.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || e.target.closest('button')) return;
-    if (win.classList.contains('terminal-expanded')) return;
-    const rect = win.getBoundingClientRect();
-    drag = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, left: rect.left, top: rect.top };
-    handle.setPointerCapture(e.pointerId);
-    e.preventDefault();
-  });
-  handle.addEventListener('pointermove', e => {
-    if (!drag || drag.pointerId !== e.pointerId) return;
-    const rect = win.getBoundingClientRect();
-    const next = terminalBounds(drag.left + e.clientX - drag.x, drag.top + e.clientY - drag.y, rect.width, rect.height);
-    win.style.left = next.left + 'px'; win.style.top = next.top + 'px';
-  });
-  const stopDrag = e => {
-    if (!drag || (e && drag.pointerId !== e.pointerId)) return;
-    drag = null; saveTerminalLayout();
-  };
-  handle.addEventListener('pointerup', stopDrag);
-  handle.addEventListener('pointercancel', stopDrag);
-  window.addEventListener('resize', () => {
-    if (!win.classList.contains('terminal-expanded')) { applyTerminalLayout(win); saveTerminalLayout(); }
-  });
-  if (typeof ResizeObserver !== 'undefined') {
-    const observer = new ResizeObserver(() => saveTerminalLayout());
-    observer.observe(win);
-  }
-}
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
   if (win) win.hidden = true;
