@@ -25,7 +25,19 @@ create index if not exists learning_evidence_class_time
 drop policy if exists "learners and class staff read learning evidence" on public.learning_evidence;
 create policy "learners and class staff read learning evidence"
   on public.learning_evidence for select
-  using (user_id = auth.uid() or (class_id is not null and public.is_class_staff(class_id)));
+  using (
+    user_id = auth.uid()
+    or (
+      class_id is not null
+      and public.is_class_staff(class_id)
+      and exists (
+        select 1 from public.enrollments e
+        where e.class_id = learning_evidence.class_id
+          and e.user_id = learning_evidence.user_id
+          and e.role = 'student'
+      )
+    )
+  );
 
 drop policy if exists "learners append their own learning evidence" on public.learning_evidence;
 create policy "learners append their own learning evidence"

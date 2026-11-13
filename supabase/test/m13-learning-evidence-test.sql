@@ -50,9 +50,24 @@ select test.login(:'S1');
 select test.expect_denied('evidence history is append-only for learners',
   $$update public.learning_evidence set hints=9
     where id='e1311111-1111-1111-1111-111111111111'$$);
+select test.expect_denied('learners cannot delete evidence history',
+  $$delete from public.learning_evidence
+    where id='e1311111-1111-1111-1111-111111111111'$$);
 select test.expect_denied('negative hint counts are rejected',
   $$insert into public.learning_evidence(user_id, mission_id, event_type, hints)
     values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '1-2', 'hint_requested', -1)$$);
+
+-- Removing a learner revokes staff access to that learner's class evidence,
+-- while the learner retains access to their own history.
+select test.login(:'T1');
+delete from public.enrollments
+where class_id='c1111111-1111-1111-1111-111111111111' and user_id=:'S1';
+select test.expect('class staff cannot read evidence after learner removal',
+  (select count(*) from public.learning_evidence where user_id=:'S1'), 0);
+
+select test.login(:'S1');
+select test.expect('learner retains access to own evidence after class removal',
+  (select count(*) from public.learning_evidence where user_id=:'S1'), 2);
 
 reset role;
 \echo 'LEARNING EVIDENCE RLS TESTS PASSED'
