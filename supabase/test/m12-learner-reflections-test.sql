@@ -72,5 +72,11 @@ select test.login(:'S1');
 select test.expect('learner retains access to own reflection after class removal',
   (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'), 1);
 
+-- Restore the shared M1 fixture so the following M13 evidence tests start
+-- with S1 enrolled, independent of the M12 revocation scenario above.
+select test.login(:'T1');
+insert into public.enrollments (class_id, user_id, role)
+values ('c1111111-1111-1111-1111-111111111111', :'S1', 'student');
+
 reset role;
 \echo 'LEARNER REFLECTION RLS TESTS PASSED'
