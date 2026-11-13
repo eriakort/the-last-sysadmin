@@ -56,9 +56,14 @@ select test.expect('learner can update own reflection',
   (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'
     and next_step='Review file ownership too.'), 1);
 select test.expect_denied('mission must belong to selected assignment',
-  $$insert into public.learner_reflections(class_id,user_id,assignment_id,mission_id,learned,approach)
+  $insert into public.learner_reflections(class_id,user_id,assignment_id,mission_id,learned,approach)
     values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'a1111111-1111-1111-1111-111111111111','not-in-assignment','Learned','Tried')$$);
+      'a1111111-1111-1111-1111-111111111111','not-in-assignment','Learned','Tried')$);
+
+select test.expect_denied('learner cannot create a mission reflection without an assignment',
+  $insert into public.learner_reflections(class_id,user_id,mission_id,learned,approach)
+    values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      'ch1-t1','Unlinked mission','Tried')$);
 
 -- Removing a learner revokes staff access while preserving the learner's
 -- own access to their reflection history.
@@ -77,6 +82,25 @@ select test.expect('learner retains access to own reflection after class removal
 select test.login(:'T1');
 insert into public.enrollments (class_id, user_id, role)
 values ('c1111111-1111-1111-1111-111111111111', :'S1', 'student');
+
+-- Deleting an assignment must not destroy or invalidate the learner's
+-- historical mission reflection. The FK clears only assignment_id.
+select test.login(:'T1');
+delete from public.assignments
+where id='a1111111-1111-1111-1111-111111111111';
+select test.expect('assignment deletion preserves reflection and mission id',
+  (select count(*) from public.learner_reflections
+    where id='e1111111-1111-1111-1111-111111111111'
+      and assignment_id is null and mission_id='ch1-t1'), 1);
+select test.expect('class staff can read reflection after assignment deletion',
+  (select count(*) from public.learner_reflections
+    where id='e1111111-1111-1111-1111-111111111111'), 1);
+
+select test.login(:'S1');
+select test.expect('learner retains reflection after assignment deletion',
+  (select count(*) from public.learner_reflections
+    where id='e1111111-1111-1111-1111-111111111111'
+      and assignment_id is null and mission_id='ch1-t1'), 1);
 
 reset role;
 \echo 'LEARNER REFLECTION RLS TESTS PASSED'
