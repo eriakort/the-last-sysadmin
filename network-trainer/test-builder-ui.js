@@ -66,9 +66,17 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.click('#btnBuild'); await page.click('#buildMenuOpen'); await page.waitForTimeout(150);
   if (await page.$('#aTitle')) ok('build mode: authoring panel shown'); else fail('authoring panel missing; brief=' + (await page.locator('#brief').innerText().catch(() => '<unavailable>')));
   if (await page.$('#config .pal[data-add="host"]')) ok('device palette present'); else fail('palette missing; config=' + (await page.locator('#config').innerText().catch(() => '<unavailable>')));
-  if (await page.locator('#config .device-palette .pal').count() === 5 && await page.locator('#config .palette-device-icon').count() === 5) ok('five-device palette has compact isometric previews');
+  if (await page.locator('#config .device-palette .pal').count() === 6 && await page.locator('#config .palette-device-icon').count() === 6) ok('six-device palette includes the Snort 3 IDS/IPS appliance');
   else fail('device palette is missing one or more illustrated device types');
   if (await page.$('.canvas-empty')) ok('canvas starts empty'); else fail('expected empty canvas; topology=' + (await page.locator('#topoWrap').innerText().catch(() => '<unavailable>')));
+  await addDev('snort');
+  if (await page.locator('#topo .node[data-dev="snort1"]').count() === 1 &&
+      (await page.locator('#topo .device-label[data-device-label="snort1"][data-label-kind="type"]').textContent()).includes('Snort 3 IDS/IPS'))
+    ok('Snort 3 appliance can be placed and is clearly labelled');
+  else fail('Snort 3 appliance was not added or labelled correctly');
+  await page.click('#delDev'); await page.waitForTimeout(70);
+  if (await page.locator('#topo .node').count() === 0) ok('Snort appliance can be removed without leaving topology links');
+  else fail('Snort appliance removal left unexpected topology devices');
   const emptyCanvas = await page.locator('#topo').boundingBox();
   await page.click('[data-draw-tool="rect"]');
   await page.mouse.move(emptyCanvas.x + 110, emptyCanvas.y + 100);
