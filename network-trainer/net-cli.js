@@ -743,6 +743,7 @@ const BRANDS = {
   'cisco-asa':      { label: 'Cisco ASA',          kinds: ['firewall'], family: 'asa' },
   'juniper-junos':  { label: 'Juniper Junos',      kinds: ['switch', 'router', 'firewall'], family: 'junos' },
   'paloalto-panos': { label: 'Palo Alto PAN-OS',   kinds: ['firewall'], family: 'panos' },
+  'snort3':         { label: 'Snort 3 IDS/IPS',     kinds: ['router'], family: 'snort3', note: 'Simulated inline inspection appliance: IDS alerts; IPS blocks matching drop rules.' },
 };
 function deviceBrand(dev) { const b = dev && dev.brand; return BRANDS[b] ? b : 'generic'; }
 function brandProfile(dev) { return BRANDS[deviceBrand(dev)]; }
@@ -1011,11 +1012,57 @@ function panosOperational(cli, words, w, dev) {
   return err('error: unknown command "' + words[0] + '"');
 }
 
+function runSnort3(cli, line) {
+  const dev = cli.net.devices[cli.cur];
+  const cfg = dev.snort3 || (dev.snort3 = { enabled: true, mode: 'ids', rules: [], alerts: [] });
+  cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+  cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
+  const words = String(line).trim().split(/\s+/), lower = words.map(x => x.toLowerCase());
+  if (!line.trim() || lower[0] === 'help') return ok([
+    'SNORT 3 SIMULATOR — supported commands:',
+    '  show snort status | rules | alerts',
+    '  snort mode ids | ips',
+    '  snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>',
+    '  snort rule delete <sid>',
+    '  snort alerts clear',
+    'Educational subset; this is not the Snort binary.'
+  ].join('\n'));
+  if (lower[0] === 'show' && lower[1] === 'snort') {
+    if (lower[2] === 'status') return ok('Snort 3 inspection: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nMode: ' + (cfg.mode || 'ids').toUpperCase() + '\nRules: ' + cfg.rules.length + '\nAlerts: ' + cfg.alerts.length);
+    if (lower[2] === 'rules') return ok(cfg.rules.length ? cfg.rules.map(r => 'sid:' + r.sid + ' ' + r.proto + ' dport:' + (r.dport == null ? 'any' : r.dport) + ' ' + r.action.toUpperCase() + ' "' + r.message + '"').join('\n') : '(no rules configured)');
+    if (lower[2] === 'alerts') return ok(cfg.alerts.length ? cfg.alerts.slice().reverse().map(a => '[' + a.timestamp + '] sid:' + a.sid + ' ' + a.action.toUpperCase() + ' ' + a.message + ' ' + M.ipStr(a.src) + ' -> ' + M.ipStr(a.dst) + (a.dport ? ':' + a.dport : '')).join('\n') : '(no alerts)');
+    return err('usage: show snort status | rules | alerts');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'mode') {
+    if (!['ids','ips'].includes(lower[2]) || lower.length !== 3) return err('usage: snort mode ids|ips');
+    cfg.mode = lower[2]; return ok('Snort 3 mode set to ' + cfg.mode.toUpperCase());
+  }
+  if (lower[0] === 'snort' && lower[1] === 'rule' && lower[2] === 'add') {
+    if (words.length < 8) return err('usage: snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>');
+    const sid = Number(words[3]), proto = lower[4], port = lower[5] === 'any' ? null : Number(words[5]), action = lower[6];
+    if (!Number.isInteger(sid) || sid < 1) return err('sid must be a positive integer');
+    if (!['any','icmp','tcp','udp'].includes(proto)) return err('proto must be any, icmp, tcp or udp');
+    if (port != null && (!Number.isInteger(port) || port < 1 || port > 65535)) return err('dport must be any or 1-65535');
+    if (!['alert','drop'].includes(action)) return err('action must be alert or drop');
+    if (cfg.rules.some(r => r.sid === sid)) return err('rule sid already exists: ' + sid);
+    cfg.rules.push({ sid, proto, dport: port, action, message: words.slice(7).join(' ') || 'Snort rule match' });
+    return ok('Rule ' + sid + ' added');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'rule' && lower[2] === 'delete') {
+    const sid = Number(words[3]), before = cfg.rules.length;
+    cfg.rules = cfg.rules.filter(r => r.sid !== sid);
+    return before === cfg.rules.length ? err('no rule with sid ' + sid) : ok('Rule ' + sid + ' deleted');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'alerts' && lower[2] === 'clear') { cfg.alerts = []; return ok('Snort alert log cleared'); }
+  return err('unknown Snort command — type help');
+}
+
 function runCisco(cli, line) {
   if (!line) return ok('');
   const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
   if (!dev) return dispatch(cli, raw);
   const brandFamily = brandProfile(dev).family;
+  if (brandFamily === 'snort3') return runSnort3(cli, raw);
   if (brandFamily === 'asa' || dev.firewallOS === 'asa') return runASA(cli, raw);
   if (brandFamily === 'junos') return runJunos(cli, raw);
   if (brandFamily === 'panos') return runPanos(cli, raw);
