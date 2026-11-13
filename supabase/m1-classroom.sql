@@ -360,7 +360,7 @@ create policy "authors edit their feedback"
 drop policy if exists "authors delete their feedback" on public.feedback;
 create policy "authors delete their feedback"
   on public.feedback for delete
-  using (author_id = auth.uid());
+  using (author_id = auth.uid() and public.is_class_staff(class_id));
 
 -- Feedback can be edited by its author, but its tenant and recipient
 -- are part of the privacy boundary and must never be reassigned.
