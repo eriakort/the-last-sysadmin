@@ -18,6 +18,12 @@ insert into public.profiles (id, display_name, is_teacher) values
   (:'MT','M2 Prof', true), (:'MS','M2 Student', false), (:'MX','M2 Other', false)
 on conflict (id) do update set is_teacher = excluded.is_teacher;
 
+-- Anonymous API clients must not be able to invoke the join-by-code RPC.
+set role anon;
+select test.expect_denied('anonymous caller cannot execute enroll_by_code',
+  $q$ select * from public.enroll_by_code('JOINME') $q$);
+reset role;
+
 -- teacher creates a class with a known code
 set role authenticated;
 select test.login(:'MT');
