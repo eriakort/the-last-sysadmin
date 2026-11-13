@@ -758,7 +758,7 @@ aside{scrollbar-color:#344a60 transparent}
 @media(max-width:760px){
   #top .hud{
     display:grid;
-    grid-template-columns:repeat(3,max-content);
+    grid-template-columns:repeat(3,minmax(0,1fr));
     justify-content:start;
     align-content:start;
     gap:6px;

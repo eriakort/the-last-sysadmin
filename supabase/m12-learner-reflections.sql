@@ -29,7 +29,18 @@ create index if not exists learner_reflections_user_created
 drop policy if exists "learners and class staff read reflections" on public.learner_reflections;
 create policy "learners and class staff read reflections"
   on public.learner_reflections for select
-  using (user_id = auth.uid() or public.is_class_staff(class_id));
+  using (
+    user_id = auth.uid()
+    or (
+      public.is_class_staff(class_id)
+      and exists (
+        select 1 from public.enrollments e
+        where e.class_id = learner_reflections.class_id
+          and e.user_id = learner_reflections.user_id
+          and e.role = 'student'
+      )
+    )
+  );
 
 drop policy if exists "enrolled learners create their own reflections" on public.learner_reflections;
 create policy "enrolled learners create their own reflections"
