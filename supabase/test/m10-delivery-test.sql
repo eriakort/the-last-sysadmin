@@ -35,10 +35,10 @@ insert into public.assignments (class_id, title, mission_ids)
   values ('0c111111-1111-1111-1111-111111111111', 'A2',
           array['0b111111-1111-1111-1111-111111111111']);
 
--- student joins the class
+-- student joins through the same join-code RPC used by the application
 select test.login(:'GS');
-insert into public.enrollments (class_id, user_id, role)
-  values ('0c111111-1111-1111-1111-111111111111', :'GS', 'student');
+select test.expect('student joins delivery class through join code',
+  (select count(*) from public.enroll_by_code('DELIV1')), 1);
 
 \echo '--- M10: authored-mission delivery ---'
 
