@@ -1,7 +1,7 @@
 -- M10 tests: get_class_missions delivers assigned authored missions to class
 -- members, directly and via scenarios, and to no one else. Runs after the other
 -- suites; reuses the test.* helpers; uses its own identities.
-
+ 
 -- GT = teacher/author, GS = enrolled student, GO = outsider
 \set GT '01111111-1111-1111-1111-111111111111'
 \set GS '02222222-2222-2222-2222-222222222222'
@@ -56,6 +56,14 @@ select test.expect('delivered mission carries its check spec',
 -- An outsider (not a class member) gets nothing
 select test.login(:'GO');
 select test.expect('outsider gets no missions from delivery',
+  (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111')), 0);
+
+-- Removing a student from the class revokes delivery access immediately.
+select test.login(:'GT');
+delete from public.enrollments
+  where class_id='0c111111-1111-1111-1111-111111111111' and user_id=:'GS';
+select test.login(:'GS');
+select test.expect('removed student loses access to delivered missions',
   (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111')), 0);
 
 -- The teacher (owner/member) also gets them (for preview)
