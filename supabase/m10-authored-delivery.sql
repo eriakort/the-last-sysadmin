@@ -49,6 +49,11 @@ begin
 end;
 $$;
 
+-- PostgreSQL grants function execution to PUBLIC by default. This SECURITY
+-- DEFINER function exposes assigned mission content, so limit execution to
+-- authenticated class members only.
+revoke all on function public.get_class_missions(uuid) from public;
+revoke all on function public.get_class_missions(uuid) from anon;
 grant execute on function public.get_class_missions(uuid) to authenticated;
 
 commit;
