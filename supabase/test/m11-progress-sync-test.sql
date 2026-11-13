@@ -10,6 +10,11 @@ returns void language plpgsql as $$ begin
  raise notice '  ok: %',label;
 end; $$;
 grant execute on function test.sync_expect(text,boolean) to authenticated;
+set role anon;
+select test.expect_denied('anonymous caller cannot execute merge_progress',
+  $q$ select public.merge_progress('{"v":1,"fs":{"type":"dir","children":[]}}'::jsonb) $q$);
+reset role;
+
 set role authenticated;
 select test.login(:'U1');
 select public.merge_progress('{"v":1,"fs":{"type":"dir","mtime":1700000000000,"children":{"home":{"type":"dir","mtime":1700000000000,"children":{"keep.txt":{"type":"file","content":"first","mtime":1700000000000},"gone":{"type":"dir","mtime":1700000000000,"children":{"nested.txt":{"type":"file","content":"stale","mtime":1700000000000}}}}}}},"done":["ticket-a"],"xp":10,"mission":1,"finished":false,"syncUpdatedAt":"2026-11-07T10:00:00Z"}'::jsonb);
