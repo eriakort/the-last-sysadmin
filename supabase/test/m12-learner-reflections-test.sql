@@ -56,14 +56,14 @@ select test.expect('learner can update own reflection',
   (select count(*) from public.learner_reflections where id='e1111111-1111-1111-1111-111111111111'
     and next_step='Review file ownership too.'), 1);
 select test.expect_denied('mission must belong to selected assignment',
-  $insert into public.learner_reflections(class_id,user_id,assignment_id,mission_id,learned,approach)
+  $$insert into public.learner_reflections(class_id,user_id,assignment_id,mission_id,learned,approach)
     values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'a1111111-1111-1111-1111-111111111111','not-in-assignment','Learned','Tried')$);
+      'a1111111-1111-1111-1111-111111111111','not-in-assignment','Learned','Tried')$$);
 
 select test.expect_denied('learner cannot create a mission reflection without an assignment',
-  $insert into public.learner_reflections(class_id,user_id,mission_id,learned,approach)
+  $$insert into public.learner_reflections(class_id,user_id,mission_id,learned,approach)
     values ('c1111111-1111-1111-1111-111111111111','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'ch1-t1','Unlinked mission','Tried')$);
+      'ch1-t1','Unlinked mission','Tried')$$);
 
 -- Removing a learner revokes staff access while preserving the learner's
 -- own access to their reflection history.
