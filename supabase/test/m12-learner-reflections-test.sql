@@ -110,7 +110,7 @@ select test.expect('learner can update historical reflection after assignment de
     where id='e1111111-1111-1111-1111-111111111111'
       and next_step='Continue practising permissions after assignment removal.'), 1);
 select test.expect_denied('learner cannot rewrite historical mission identity',
-  $update public.learner_reflections set mission_id='forged-mission'
+  $$update public.learner_reflections set mission_id='forged-mission'
     where id='e1111111-1111-1111-1111-111111111111'$$);
 
 reset role;
