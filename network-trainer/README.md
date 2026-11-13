@@ -37,6 +37,8 @@ audit** ("spot the planted problems, ignore the distractors") and a **multi-faul
 incident** (two or three interacting faults to localise). An **observability
 flows panel** lets the player read the traffic to find the cause.
 
+**Snort 3 IDS/IPS appliance.** The Build device library includes a Snort 3 inline inspection appliance with two routed interfaces. Configure rules in its terminal using `snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>`, then choose `snort mode ids` (alert and pass) or `snort mode ips` (block matching `drop` rules). Inspect state with `show snort status`, `show snort rules`, and `show snort alerts`. The simulator inspects packets that traverse the appliance; it does not capture arbitrary mirrored traffic, parse PCAPs, run the Snort binary, or implement full Snort rule syntax.
+
 **Scenario builder (🛠 Build).** A design-mode canvas for authoring. Place
 devices from a palette (host, server, switch, router, firewall), wire them,
 address them, and set the **objectives** the student must satisfy (any of the
