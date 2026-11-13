@@ -2423,23 +2423,104 @@ function ensureBuildMenuStyles() {
   `;
   document.head.appendChild(style);
 }
+const TERMINAL_LAYOUT_KEY = 'network-device-terminal-layout-v1';
+function readTerminalLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TERMINAL_LAYOUT_KEY) || '{}');
+    return saved && typeof saved === 'object' ? saved : {};
+  } catch (_) { return {}; }
+}
+function terminalBounds(left, top, width, height) {
+  const margin = 12, maxWidth = Math.max(280, window.innerWidth - margin * 2);
+  const maxHeight = Math.max(180, window.innerHeight - margin * 2);
+  width = Math.min(Math.max(320, Number(width) || Math.min(680, maxWidth)), maxWidth);
+  height = Math.min(Math.max(190, Number(height) || Math.min(420, maxHeight)), maxHeight);
+  return {
+    left: Math.max(margin, Math.min(Number(left) || margin, window.innerWidth - width - margin)),
+    top: Math.max(margin, Math.min(Number(top) || margin, window.innerHeight - height - margin)),
+    width, height
+  };
+}
+function saveTerminalLayout() {
+  const win = $('#terminalWindow');
+  if (!win || win.classList.contains('terminal-expanded')) return;
+  const rect = win.getBoundingClientRect();
+  const layout = terminalBounds(rect.left, rect.top, rect.width, rect.height);
+  try { localStorage.setItem(TERMINAL_LAYOUT_KEY, JSON.stringify(layout)); } catch (_) {}
+}
+function applyTerminalLayout(win) {
+  const saved = readTerminalLayout();
+  const layout = terminalBounds(saved.left == null ? window.innerWidth - Math.min(680, window.innerWidth - 24) - 24 : saved.left,
+    saved.top == null ? Math.max(72, window.innerHeight - 460) : saved.top, saved.width, saved.height);
+  win.style.left = layout.left + 'px';
+  win.style.top = layout.top + 'px';
+  win.style.width = layout.width + 'px';
+  win.style.height = layout.height + 'px';
+  win.style.right = 'auto';
+  win.style.bottom = 'auto';
+}
+function setTerminalExpanded(expanded) {
+  const win = $('#terminalWindow'), button = $('#terminalExpand');
+  if (!win) return;
+  if (expanded) {
+    win.classList.add('terminal-expanded');
+    win.style.left = '12px'; win.style.top = '12px';
+    win.style.width = 'calc(100vw - 24px)'; win.style.height = 'calc(100vh - 24px)';
+  } else {
+    win.classList.remove('terminal-expanded');
+    applyTerminalLayout(win);
+  }
+  if (button) {
+    button.textContent = expanded ? '❐' : '□';
+    button.setAttribute('aria-label', expanded ? 'Restore device terminal size' : 'Expand device terminal');
+    button.title = expanded ? 'Restore window size' : 'Expand window';
+    button.setAttribute('aria-pressed', String(expanded));
+  }
+}
 function mountTerminalWindow() {
   const term = $('#term');
   if (!term || $('#terminalWindow')) return;
-  // Keep the console inside the workbench so it cannot cover the fixed header
-  // or drift over controls when the page is refreshed.
-  const host = term.parentElement;
-  if (!host) return;
   const win = document.createElement('section');
   win.id = 'terminalWindow';
-  win.className = 'terminal-dock';
+  win.className = 'terminal-floating';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-dock-titlebar"><span><i></i> DEVICE TERMINAL</span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Collapse device terminal" title="Collapse console">—</button></header><div class="terminal-dock-content"></div>';
-  host.insertBefore(win, term);
+  win.innerHTML = '<header class="terminal-dock-titlebar" id="terminalDragHandle"><span><i></i> DEVICE TERMINAL</span><div class="terminal-window-actions"><button type="button" class="btn sm" id="terminalExpand" aria-label="Expand device terminal" title="Expand window" aria-pressed="false">□</button><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize console">—</button></div></header><div class="terminal-dock-content"></div>';
+  document.body.appendChild(win);
   win.querySelector('.terminal-dock-content').appendChild(term);
+  applyTerminalLayout(win);
   win.hidden = true;
   $('#terminalMinimize').addEventListener('click', collapseTerminalWindow);
+  $('#terminalExpand').addEventListener('click', () => setTerminalExpanded(!win.classList.contains('terminal-expanded')));
+  const handle = $('#terminalDragHandle');
+  let drag = null;
+  handle.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    if (win.classList.contains('terminal-expanded')) return;
+    const rect = win.getBoundingClientRect();
+    drag = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, left: rect.left, top: rect.top };
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const rect = win.getBoundingClientRect();
+    const next = terminalBounds(drag.left + e.clientX - drag.x, drag.top + e.clientY - drag.y, rect.width, rect.height);
+    win.style.left = next.left + 'px'; win.style.top = next.top + 'px';
+  });
+  const stopDrag = e => {
+    if (!drag || (e && drag.pointerId !== e.pointerId)) return;
+    drag = null; saveTerminalLayout();
+  };
+  handle.addEventListener('pointerup', stopDrag);
+  handle.addEventListener('pointercancel', stopDrag);
+  window.addEventListener('resize', () => {
+    if (!win.classList.contains('terminal-expanded')) { applyTerminalLayout(win); saveTerminalLayout(); }
+  });
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(() => saveTerminalLayout());
+    observer.observe(win);
+  }
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
@@ -2448,6 +2529,8 @@ function collapseTerminalWindow() {
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
   if (!win) return;
+  if (win.classList.contains('terminal-expanded')) setTerminalExpanded(false);
+  applyTerminalLayout(win);
   win.hidden = false;
   if (focusInput) setTimeout(() => { const input = $('#tin'); if (input) input.focus(); }, 0);
 }
@@ -2463,7 +2546,7 @@ function toggleBuildMenu(force) {
 function closeBuildMenu() { toggleBuildMenu(false); }
 function openDeviceTerminal() {
   closeBuildMenu();
-  // Bring the workbench into view so the docked console is visible, then open it.
+  // Bring the workbench into view, then show the floating console.
   const cols = $('#cols');
   if (!cols || cols.hidden) { if (MODE === 'build') enterBuild(); else showWorkspaceView('workbench'); }
   openTerminalWindow(true);
