@@ -2425,174 +2425,31 @@ function ensureBuildMenuStyles() {
 }
 function mountTerminalWindow() {
   const term = $('#term');
-  if (!term) return;
-  const existing = $('#terminalWindow');
-  if (existing) {
-    // Already mounted; just ensure the terminal element is still inside it
-    const content = existing.querySelector('.terminal-window-content');
-    if (content && term.parentElement !== content) content.appendChild(term);
-    return;
-  }
-  // Inject styles once
-  if (!document.getElementById('terminalWindowStyles')) {
-    const style = document.createElement('style');
-    style.id = 'terminalWindowStyles';
-    style.textContent = `
-      #terminalWindow.terminal-window {
-        position: fixed;
-        z-index: 1000;
-        width: 520px;
-        height: 340px;
-        min-width: 280px;
-        min-height: 180px;
-        max-width: calc(100vw - 16px);
-        max-height: calc(100vh - 16px);
-        background: #0b1220;
-        border: 1px solid #334155;
-        border-radius: 10px;
-        box-shadow: 0 12px 40px rgba(0,0,0,.45);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        resize: both;
-        color: #e2e8f0;
-      }
-      #terminalWindow[hidden] { display: none !important; }
-      #terminalWindow .terminal-window-titlebar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 10px;
-        background: #1e293b;
-        cursor: move;
-        user-select: none;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: .04em;
-        border-bottom: 1px solid #334155;
-      }
-      #terminalWindow .terminal-window-titlebar small { opacity: .6; font-weight: 400; margin-left: 8px; }
-      #terminalWindow .terminal-window-actions { display: flex; gap: 4px; }
-      #terminalWindow .terminal-window-actions .btn { min-width: 28px; padding: 2px 8px; }
-      #terminalWindow .terminal-window-content {
-        flex: 1;
-        min-height: 0;
-        overflow: auto;
-        display: flex;
-        flex-direction: column;
-      }
-      #terminalWindow #term { flex: 1 !important; min-height: 0 !important; height: auto !important; border: none !important; width: 100%; }
-    `;
-    document.head.appendChild(style);
-  }
+  if (!term || $('#terminalWindow')) return;
+  // Keep the console inside the workbench so it cannot cover the fixed header
+  // or drift over controls when the page is refreshed.
+  const host = term.parentElement;
+  if (!host) return;
   const win = document.createElement('section');
   win.id = 'terminalWindow';
-  win.className = 'terminal-window';
+  win.className = 'terminal-dock';
   win.setAttribute('role', 'region');
   win.setAttribute('aria-label', 'Device terminal');
-  win.innerHTML = '<header class="terminal-window-titlebar"><span><i></i> DEVICE TERMINAL <small>DRAG TO MOVE · RESIZE</small></span><span class="terminal-window-actions"><button type="button" class="btn sm" id="terminalMinimize" aria-label="Minimize device terminal" title="Minimize">—</button><button type="button" class="btn sm" id="terminalClose" aria-label="Close device terminal" title="Close">✕</button></span></header><div class="terminal-window-content"></div>';
-  win.querySelector('.terminal-window-content').appendChild(term);
-  // Critical layout as inline styles so the window floats even if the stylesheet is late or overridden
-  Object.assign(win.style, {
-    position: 'fixed',
-    zIndex: '1000',
-    width: '520px',
-    height: '340px',
-    minWidth: '280px',
-    minHeight: '180px',
-    maxWidth: 'calc(100vw - 16px)',
-    maxHeight: 'calc(100vh - 16px)',
-    background: '#0b1220',
-    border: '1px solid #334155',
-    borderRadius: '10px',
-    boxShadow: '0 12px 40px rgba(0,0,0,.45)',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    resize: 'both',
-    color: '#e2e8f0'
-  });
+  win.innerHTML = '<header class="terminal-dock-titlebar"><span><i></i> DEVICE TERMINAL</span><button type="button" class="btn sm" id="terminalMinimize" aria-label="Collapse device terminal" title="Collapse console">—</button></header><div class="terminal-dock-content"></div>';
+  host.insertBefore(win, term);
+  win.querySelector('.terminal-dock-content').appendChild(term);
   win.hidden = true;
-  document.body.appendChild(win);
-  // Position and size from saved or default
-  try {
-    const saved = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}');
-    if (Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
-      win.style.left = Math.max(0, Math.min(window.innerWidth - 260, saved.left)) + 'px';
-      win.style.top = Math.max(0, Math.min(window.innerHeight - 120, saved.top)) + 'px';
-      win.style.right = 'auto'; win.style.bottom = 'auto';
-    } else {
-      win.style.right = '22px'; win.style.bottom = '18px';
-    }
-    if (Number.isFinite(saved.width) && saved.width >= 280) win.style.width = Math.min(saved.width, window.innerWidth - 16) + 'px';
-    if (Number.isFinite(saved.height) && saved.height >= 180) win.style.height = Math.min(saved.height, window.innerHeight - 16) + 'px';
-    if (saved.open === true) {
-      win.hidden = false;
-      win.style.display = 'flex';
-    }
-  } catch (_) {}
-  $('#terminalMinimize').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); });
-  $('#terminalClose').addEventListener('click', () => { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); });
-  const bar = win.querySelector('.terminal-window-titlebar');
-  let drag = null;
-  bar.addEventListener('pointerdown', e => {
-    if (e.target.closest('button') || e.button !== 0) return;
-    const rect = win.getBoundingClientRect();
-    drag = { x: e.clientX, y: e.clientY, left: rect.left, top: rect.top };
-    bar.setPointerCapture(e.pointerId); e.preventDefault();
-  });
-  bar.addEventListener('pointermove', e => {
-    if (!drag) return;
-    const left = Math.max(0, Math.min(window.innerWidth - 220, drag.left + e.clientX - drag.x));
-    const top = Math.max(0, Math.min(window.innerHeight - 90, drag.top + e.clientY - drag.y));
-    win.style.left = left + 'px'; win.style.top = top + 'px'; win.style.right = 'auto'; win.style.bottom = 'auto';
-  });
-  const finishDrag = () => {
-    if (!drag) return;
-    drag = null;
-    saveTerminalWindowState(win);
-  };
-  bar.addEventListener('pointerup', finishDrag);
-  bar.addEventListener('pointercancel', finishDrag);
-  // Persist size on resize (CSS resize or window resize)
-  const ro = new ResizeObserver(() => saveTerminalWindowState(win));
-  ro.observe(win);
-  window.addEventListener('resize', () => saveTerminalWindowState(win));
-}
-function saveTerminalWindowState(win, forceOpen) {
-  if (!win) return;
-  const open = forceOpen !== undefined ? forceOpen : !win.hidden;
-  let prev = {};
-  try { prev = JSON.parse(localStorage.getItem('network-terminal-window-v1') || '{}'); } catch (_) {}
-  const rect = win.getBoundingClientRect();
-  try {
-    localStorage.setItem('network-terminal-window-v1', JSON.stringify({
-      left: open ? rect.left : (prev.left ?? rect.left),
-      top: open ? rect.top : (prev.top ?? rect.top),
-      width: open ? Math.round(rect.width) : (prev.width ?? Math.round(rect.width)),
-      height: open ? Math.round(rect.height) : (prev.height ?? Math.round(rect.height)),
-      open: open
-    }));
-  } catch (_) {}
+  $('#terminalMinimize').addEventListener('click', collapseTerminalWindow);
 }
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
-  if (win) { win.hidden = true; win.style.display = 'none'; saveTerminalWindowState(win, false); }
+  if (win) win.hidden = true;
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
-  if (!win) { mountTerminalWindow(); return openTerminalWindow(focusInput); }
-  // Re-assert floating layout in case something cleared it
-  if (win.style.position !== 'fixed') {
-    win.style.position = 'fixed';
-    win.style.zIndex = '1000';
-    if (!win.style.width) win.style.width = '520px';
-    if (!win.style.height) win.style.height = '340px';
-  }
+  if (!win) return;
   win.hidden = false;
-  win.style.display = 'flex';
-  win.style.zIndex = String((Number(win.style.zIndex) || 1000) + 1);
-  saveTerminalWindowState(win, true);
-  if (focusInput) setTimeout(() => { const input=$('#tin'); if(input) input.focus(); }, 0);
+  if (focusInput) setTimeout(() => { const input = $('#tin'); if (input) input.focus(); }, 0);
 }
 // Top-bar "Build ▾" dropdown: a menu anchored in the fixed header, so its
 // controls are always in a stable place and can never float over the page.
