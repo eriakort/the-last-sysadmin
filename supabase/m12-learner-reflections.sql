@@ -85,18 +85,36 @@ create policy "learners update their own reflections"
         and e.role = 'student'
     )
     and (
-      (assignment_id is null and mission_id is null)
-      or (
-        assignment_id is not null
-        and exists (
-          select 1 from public.assignments a
-          where a.id = learner_reflections.assignment_id
-            and a.class_id = learner_reflections.class_id
-            and (mission_id is null or mission_id = any(a.mission_ids))
-        )
+      assignment_id is null
+      or exists (
+        select 1 from public.assignments a
+        where a.id = learner_reflections.assignment_id
+          and a.class_id = learner_reflections.class_id
+          and (mission_id is null or mission_id = any(a.mission_ids))
       )
     )
   );
+
+-- Mission identity is historical context. Once recorded, it cannot be
+-- rewritten, including after the linked assignment has been deleted.
+create or replace function public.prevent_reflection_mission_change()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $reflection_guard$
+begin
+  if new.mission_id is distinct from old.mission_id then
+    raise exception 'Reflection mission identity is immutable'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$reflection_guard$;
+
+drop trigger if exists learner_reflection_mission_immutable on public.learner_reflections;
+create trigger learner_reflection_mission_immutable
+  before update on public.learner_reflections
+  for each row execute function public.prevent_reflection_mission_change();
 
 drop policy if exists "learners delete their own reflections" on public.learner_reflections;
 create policy "learners delete their own reflections"
