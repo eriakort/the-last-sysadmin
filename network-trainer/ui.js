@@ -71,8 +71,9 @@ const NODE_ICONS = {
   switch: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 12 20-9v14l-20 9z\"/><path class=\"iso-front\" d=\"m4 3 21 9v14L4 17z\"/><path class=\"iso-top\" d=\"m4 3 20-9 21 9-20 9z\"/><path class=\"iso-port\" d=\"m9 7 3 1.5v3L9 10zM15 9.5l3 1.5v3L15 12zM21 12l3 1.5v3L21 15z\"/><path class=\"iso-port-side\" d=\"m29 13 3-1.4v3L29 16zM35 10.3l3-1.4v3L35 13z\"/><path class=\"iso-detail\" d=\"m9 14 12 5M29 20l12-5\"/></g>",
   router: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 16 20-9v13l-20 9z\"/><path class=\"iso-front\" d=\"m4 7 21 9v13L4 20z\"/><path class=\"iso-top\" d=\"m4 7 20-9 21 9-20 9z\"/><path class=\"iso-antenna\" d=\"m11 3-1-8M37 5l3-9\"/><path class=\"iso-port\" d=\"m9 12 3 1.3v3L9 15zM16 15l3 1.3v3L16 18zM23 18l3 1.3v3L23 21z\"/><path class=\"iso-detail\" d=\"m31 19 10-4\"/></g>",
   firewall: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 13 20-9v20l-20 9z\"/><path class=\"iso-front\" d=\"m4 4 21 9v20L4 24z\"/><path class=\"iso-top\" d=\"m4 4 20-9 21 9-20 9z\"/><path class=\"iso-brick\" d=\"m7 8 8 3.5v5L7 13zM17 12.5l6 2.5v5l-6-2.5zM7 17l8 3.5v5L7 22zM17 21.5l6 2.5v5l-6-2.5z\"/><path class=\"iso-shield\" d=\"m32 11 6-2.5v6l-6 3z\"/><path class=\"iso-detail\" d=\"m34 12 1.5 1.5 3-4\"/></g>"
+  snort: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 13 20-9v20l-20 9z\"/><path class=\"iso-front\" d=\"m4 4 21 9v20L4 24z\"/><path class=\"iso-top\" d=\"m4 4 20-9 21 9-20 9z\"/><path class=\"iso-shield\" d=\"m15 13 8 3v7l-8-3z\"/><path class=\"iso-detail\" d=\"m17 16 2 2 4-5\"/><circle class=\"iso-led\" cx=\"34\" cy=\"22\" r=\"2\"/></g>"
 };
-const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
+const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw', snort: 'k-snort' };
 function linkDown(net, l) { if (l.up === false) return true; const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; }; return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1])); }
 function renderFlows() {
   const flows = (RUN && RUN.cli && RUN.cli.flows) || [];
@@ -231,7 +232,7 @@ function renderTopo() {
 
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
-    const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
+    const kindKey = d.brand === 'snort3' ? 'snort' : d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
     const devSelected = TOPO_SELECTED.has(id) || id === SEL;
     s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="60" height="48" rx="6" fill="transparent"/><g class="device-art-scale" transform="translate(24 18) scale(${Math.max(.5,Math.min(2.5,Number((net.deviceSizes||{})[id])||1))}) translate(-24 -18)">${ico}</g></g>${devSelected?`<circle class="topo-device-resize" data-resize-kind="device" data-dev="${esc(id)}" cx="${x+68}" cy="${y+50}" r="7" role="button" tabindex="0" aria-label="Resize device ${esc(id)}" fill="#38bdf8" stroke="#eafaff" stroke-width="1.5" pointer-events="all"/>`:''}`;
@@ -1412,7 +1413,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
     'device-label': hiddenLabel ? [['Restore label','restore-device-label']] : [['Edit label text','edit-device-label'],['Delete label','clear-device-label',true],['Reset label position','reset-device-label']],
     text: [['Edit text', 'edit-text'], ['Remove text', 'delete-text', true]],
     canvas: [
-      ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
+      ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'], ['Add Snort 3 IDS/IPS', 'add:snort'],
       ['Add note here', 'add-note'], ['Add text here', 'add-text'], ['Paste selection', 'paste', false, !TOPO_CLIPBOARD],
       ['Select all devices', 'select-all'], ['Fit topology', 'fit'], [TOPO_GRID ? 'Hide grid' : 'Show grid', 'toggle-grid'], [TOPO_SNAP ? 'Disable snap' : 'Enable snap', 'toggle-snap']
     ]
@@ -2622,7 +2623,7 @@ function openStats() {
 }
 
 /* ---------- build mode: scenario authoring + design canvas ---------- */
-const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
+const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall'], ['snort', 'Snort 3 IDS/IPS']];
 function renderPalette() {
   if (!canBuild()) return '';
   const add = PALETTE.map(([k, n]) => '<button class="btn sm pal" data-add="' + k + '" title="Add a ' + n.toLowerCase() + ' to the topology canvas"><svg class="palette-device-icon" viewBox="0 -12 48 58" aria-hidden="true">' + NODE_ICONS[k] + '</svg><span>' + n + '</span><span class="palette-add" aria-hidden="true">＋</span></button>').join('');
