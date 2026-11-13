@@ -442,7 +442,7 @@ grant execute on function
   public.is_class_staff(uuid),
   public.is_class_member(uuid),
   public.staffs_class_of(uuid)
-to anon, authenticated;
+to authenticated;
 
 -- Join-code generation is an internal class-creation default, not a public
 -- RPC. Keep it unavailable to anonymous API callers.
