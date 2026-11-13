@@ -192,6 +192,14 @@ create policy "read own enrollment or staffed class"
   on public.enrollments for select
   using (user_id = auth.uid() or public.is_class_staff(class_id));
 
+-- Restrictive read guard: permissive SELECT policies are OR-combined. Require
+-- current membership (or ownership) even if another permissive policy exists.
+-- This makes TA removal revoke roster access immediately.
+drop policy if exists "enrollment read membership guard" on public.enrollments;
+create policy "enrollment read membership guard"
+  on public.enrollments as restrictive for select to authenticated
+  using (user_id = auth.uid() or public.is_class_staff(class_id));
+
 -- Students must use the SECURITY DEFINER join-by-code RPC from M2.
 -- Do not allow direct browser inserts: knowing or guessing a class UUID must
 -- never be enough to bypass its join code.
