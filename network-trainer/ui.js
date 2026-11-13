@@ -2443,7 +2443,7 @@ function terminalBounds(left, top, width, height) {
 }
 function saveTerminalLayout() {
   const win = $('#terminalWindow');
-  if (!win || win.classList.contains('terminal-expanded')) return;
+  if (!win || win.hidden || win.classList.contains('terminal-expanded')) return;
   const rect = win.getBoundingClientRect();
   const layout = terminalBounds(rect.left, rect.top, rect.width, rect.height);
   try { localStorage.setItem(TERMINAL_LAYOUT_KEY, JSON.stringify(layout)); } catch (_) {}
