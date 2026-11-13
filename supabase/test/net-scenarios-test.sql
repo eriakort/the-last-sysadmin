@@ -69,8 +69,8 @@ insert into public.assignments (class_id,title,mission_ids) values
   array['builtin-network-mission','aa111111-1111-1111-1111-111111111111','ad111111-1111-1111-1111-111111111111']);
 
 select test.login(:'NS');
-insert into public.enrollments (class_id,user_id,role)
- values ('ac111111-1111-1111-1111-111111111111',:'NS','student');
+select test.expect('student joins network class through join-code RPC',
+ (select count(*) from public.enroll_by_code('NETCLS')),1);
 
 \echo '--- Network classroom scenario delivery ---'
 select test.expect('student cannot read raw network scenario table',
