@@ -113,6 +113,13 @@ insert into public.assignments (id, class_id, title, mission_ids, due_at)
           'c1111111-1111-1111-1111-111111111111',
           'Week 1: files & permissions', array['ch1-t1','ch1-t2'], now() + interval '7 days');
 
+-- T2 creates an assignment in C2 for cross-tenant feedback checks.
+select test.login(:'T2');
+insert into public.assignments (id, class_id, title, mission_ids, due_at)
+  values ('a2222222-2222-2222-2222-222222222222',
+          'c2222222-2222-2222-2222-222222222222',
+          'Week 1: systems', array['sys-1'], now() + interval '7 days');
+
 -- S1 and S3 each record an attempt
 select test.login(:'S1');
 insert into public.attempts (user_id, mission_id, passed, ms, hints)
@@ -194,6 +201,12 @@ select test.expect_denied('T1 cannot reassign existing feedback to S3',
   $q$ update public.feedback set student_id='cccccccc-cccc-cccc-cccc-cccccccccccc'
       where author_id='11111111-1111-1111-1111-111111111111'
         and body='Nice work on permissions.' $q$);
+update public.feedback
+  set body='Edited feedback within the original class.'
+  where author_id='11111111-1111-1111-1111-111111111111'
+    and body='Nice work on permissions.';
+select test.expect('T1 can still edit feedback text in its own class',
+  (select count(*) from public.feedback where body='Edited feedback within the original class.'), 1);
 
 \echo '--- WRITE isolation (each must be DENIED) ---'
 
