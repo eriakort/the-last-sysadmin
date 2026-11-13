@@ -177,6 +177,21 @@ select test.expect('S2 cannot read feedback about S1', (select count(*) from pub
 select test.login(:'T2');
 select test.expect('T2 cannot read C1 feedback', (select count(*) from public.feedback), 0);
 
+-- A former TA must lose write access immediately after the owner removes them.
+select test.login(:'A1');
+insert into public.feedback (class_id, student_id, author_id, body)
+  values ('c1111111-1111-1111-1111-111111111111', :'S1', :'A1', 'TA feedback after revocation');
+select test.login(:'T1');
+delete from public.enrollments
+  where class_id='c1111111-1111-1111-1111-111111111111' and user_id=:'A1';
+select test.login(:'A1');
+delete from public.feedback where author_id=:'A1' and body='TA feedback after revocation';
+reset role;
+select test.expect('removed TA cannot delete feedback they authored', 
+  (select count(*) from public.feedback where author_id=:'A1' and body='TA feedback after revocation'), 1);
+set role authenticated;
+
+
 -- Add the C2 assignment only after the existing assignment-visibility assertions.
 -- This keeps the original single-assignment expectations intact.
 select test.login(:'T2');
