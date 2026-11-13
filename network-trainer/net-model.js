@@ -649,6 +649,8 @@ function forward(net, srcDev, pktIn, opts = {}) {
     const dev = net.devices[cur];
     if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
     path.push(cur);
+    const snort = dev.brand === 'snort3' ? snortInspect(dev, pkt, path) : null;
+    if (snort && snort.blocked) return { ok: false, path, reason: 'blocked by Snort 3 IPS rule ' + snort.sid, at: cur, alert: snort.alert };
     if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
     const dst = pkt.dst;
     if (ownsIp(dev, dst) || ownsVirtualIp(net, cur, dst)) return { ok: true, path, reason: 'delivered', pkt };
@@ -700,6 +702,26 @@ function forward(net, srcDev, pktIn, opts = {}) {
     cur = nd; ingressIface = ni;                 // remember the ASA ingress interface for security-level policy
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
+}
+
+/* ---------- Snort 3 IDS/IPS inspection (educational subset) ---------- */
+function snortInspect(dev, pkt, path = []) {
+  const cfg = dev && dev.snort3;
+  if (!cfg || cfg.enabled === false) return null;
+  cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+  cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
+  const rule = cfg.rules.find(r =>
+    (r.proto === 'any' || r.proto === String(pkt.proto || 'icmp').toLowerCase()) &&
+    (r.dport == null || r.dport === Number(pkt.dport || 0)) &&
+    (r.src == null || r.src === pkt.src) &&
+    (r.dst == null || r.dst === pkt.dst));
+  if (!rule) return null;
+  const alert = { sid: rule.sid, message: rule.message, action: rule.action || 'alert',
+    proto: pkt.proto || 'icmp', src: pkt.src, dst: pkt.dst, dport: pkt.dport || null,
+    path: path.slice(), timestamp: new Date().toISOString() };
+  cfg.alerts.push(alert);
+  if (cfg.alerts.length > 200) cfg.alerts.shift();
+  return { alert, sid: rule.sid, blocked: cfg.mode === 'ips' && rule.action === 'drop' };
 }
 
 /* ---------- VPN tunnels & PKI (site-to-site) ---------- */
@@ -1021,5 +1043,5 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, snortInspect
 };
