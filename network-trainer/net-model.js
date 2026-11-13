@@ -710,7 +710,10 @@ function snortInspect(dev, pkt, path = []) {
   if (!cfg || cfg.enabled === false) return null;
   cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
   cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
-  const rule = cfg.rules.find(r =>
+  cfg.stats = cfg.stats || { inspected: 0, matched: 0, blocked: 0 };
+  cfg.stats.inspected = (cfg.stats.inspected || 0) + 1;
+  if (cfg.enabled === false) return null;
+  const rule = cfg.rules.find(r => r.enabled !== false &&
     (r.proto === 'any' || r.proto === String(pkt.proto || 'icmp').toLowerCase()) &&
     (r.dport == null || r.dport === Number(pkt.dport || 0)) &&
     (r.src == null || r.src === pkt.src) &&
@@ -719,9 +722,12 @@ function snortInspect(dev, pkt, path = []) {
   const alert = { sid: rule.sid, message: rule.message, action: rule.action || 'alert',
     proto: pkt.proto || 'icmp', src: pkt.src, dst: pkt.dst, dport: pkt.dport || null,
     path: path.slice(), timestamp: new Date().toISOString() };
+  cfg.stats.matched = (cfg.stats.matched || 0) + 1;
+  const blocked = cfg.mode === 'ips' && rule.action === 'drop';
+  if (blocked) cfg.stats.blocked = (cfg.stats.blocked || 0) + 1;
   cfg.alerts.push(alert);
   if (cfg.alerts.length > 200) cfg.alerts.shift();
-  return { alert, sid: rule.sid, blocked: cfg.mode === 'ips' && rule.action === 'drop' };
+  return { alert, sid: rule.sid, blocked };
 }
 
 /* ---------- VPN tunnels & PKI (site-to-site) ---------- */
