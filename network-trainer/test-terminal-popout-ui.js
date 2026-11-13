@@ -65,6 +65,17 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
   ok('console minimizes from its titlebar button');
 
+  // The user's placement survives a page reload and a minimized state.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#terminalWindow #term', { state: 'attached' });
+  await page.click('#btnBuild');
+  await page.waitForSelector('#buildMenu:not([hidden])');
+  await page.click('#terminalRestore');
+  await page.waitForFunction(() => !document.querySelector('#terminalWindow')?.hidden);
+  const restoredPosition = await page.locator('#terminalWindow').boundingBox();
+  if (restoredPosition && Math.abs(restoredPosition.x - afterDrag.x) < 5 && Math.abs(restoredPosition.y - afterDrag.y) < 5) ok('floating position persists across reload and minimize');
+  else fail('floating position was not preserved across reload');
+
   // Double-click a device opens its console directly (no menu needed).
   await page.waitForSelector('#topo .node');
   const first = page.locator('#topo .node').first();
