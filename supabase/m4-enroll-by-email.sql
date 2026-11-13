@@ -26,4 +26,6 @@ begin
 end;
 $$;
 
+revoke all on function public.enroll_by_email(uuid, text) from public;
+revoke all on function public.enroll_by_email(uuid, text) from anon;
 grant execute on function public.enroll_by_email(uuid, text) to authenticated;
