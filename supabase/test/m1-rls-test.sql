@@ -177,6 +177,24 @@ select test.expect('S2 cannot read feedback about S1', (select count(*) from pub
 select test.login(:'T2');
 select test.expect('T2 cannot read C1 feedback', (select count(*) from public.feedback), 0);
 
+-- Feedback must stay inside the author's class and the student's enrollment.
+select test.login(:'T1');
+select test.expect_denied('T1 cannot write feedback about another tenant student S3',
+  $q$ insert into public.feedback (class_id,student_id,author_id,body)
+      values ('c1111111-1111-1111-1111-111111111111',
+              'cccccccc-cccc-cccc-cccc-cccccccccccc',
+              '11111111-1111-1111-1111-111111111111','cross-tenant') $q$);
+select test.expect_denied('T1 cannot attach C2 assignment to C1 feedback',
+  $q$ insert into public.feedback (class_id,student_id,assignment_id,author_id,body)
+      values ('c1111111-1111-1111-1111-111111111111',
+              'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+              '22222222-2222-2222-2222-222222222222',
+              '11111111-1111-1111-1111-111111111111','wrong assignment') $q$);
+select test.expect_denied('T1 cannot reassign existing feedback to S3',
+  $q$ update public.feedback set student_id='cccccccc-cccc-cccc-cccc-cccccccccccc'
+      where author_id='11111111-1111-1111-1111-111111111111'
+        and body='Nice work on permissions.' $q$);
+
 \echo '--- WRITE isolation (each must be DENIED) ---'
 
 -- A non-teacher cannot create a class
