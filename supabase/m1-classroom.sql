@@ -368,7 +368,7 @@ create or replace function public.prevent_feedback_scope_change()
 returns trigger
 language plpgsql
 set search_path = pg_catalog, public
-as $
+as $feedback_guard$
 begin
   if new.class_id is distinct from old.class_id
      or new.student_id is distinct from old.student_id
@@ -380,7 +380,7 @@ begin
   end if;
   return new;
 end;
-$;
+$feedback_guard$;
 
 drop trigger if exists feedback_scope_immutable on public.feedback;
 create trigger feedback_scope_immutable
