@@ -322,7 +322,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   if (await page.locator('#config .device-palette').isVisible() &&
-      await page.locator('#config .device-palette .pal').count() === 5 &&
+      await page.locator('#config .device-palette .pal').count() === 6 &&
       await page.locator('#topo').isVisible()) ok('device palette and topology remain available on a narrow viewport');
   else fail('narrow viewport hides the palette or topology canvas');
 
