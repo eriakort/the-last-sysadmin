@@ -441,8 +441,13 @@ grant execute on function
   public.is_class_owner(uuid),
   public.is_class_staff(uuid),
   public.is_class_member(uuid),
-  public.staffs_class_of(uuid),
-  public.gen_join_code()
+  public.staffs_class_of(uuid)
 to anon, authenticated;
+
+-- Join-code generation is an internal class-creation default, not a public
+-- RPC. Keep it unavailable to anonymous API callers.
+revoke all on function public.gen_join_code() from public;
+revoke all on function public.gen_join_code() from anon;
+grant execute on function public.gen_join_code() to authenticated;
 
 commit;
