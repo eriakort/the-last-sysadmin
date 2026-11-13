@@ -102,5 +102,16 @@ select test.expect('learner retains reflection after assignment deletion',
     where id='e1111111-1111-1111-1111-111111111111'
       and assignment_id is null and mission_id='ch1-t1'), 1);
 
+update public.learner_reflections
+set next_step='Continue practising permissions after assignment removal.'
+where id='e1111111-1111-1111-1111-111111111111';
+select test.expect('learner can update historical reflection after assignment deletion',
+  (select count(*) from public.learner_reflections
+    where id='e1111111-1111-1111-1111-111111111111'
+      and next_step='Continue practising permissions after assignment removal.'), 1);
+select test.expect_denied('learner cannot rewrite historical mission identity',
+  $update public.learner_reflections set mission_id='forged-mission'
+    where id='e1111111-1111-1111-1111-111111111111'$);
+
 reset role;
 \echo 'LEARNER REFLECTION RLS TESTS PASSED'
