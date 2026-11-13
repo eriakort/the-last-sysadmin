@@ -113,13 +113,6 @@ insert into public.assignments (id, class_id, title, mission_ids, due_at)
           'c1111111-1111-1111-1111-111111111111',
           'Week 1: files & permissions', array['ch1-t1','ch1-t2'], now() + interval '7 days');
 
--- T2 creates an assignment in C2 for cross-tenant feedback checks.
-select test.login(:'T2');
-insert into public.assignments (id, class_id, title, mission_ids, due_at)
-  values ('a2222222-2222-2222-2222-222222222222',
-          'c2222222-2222-2222-2222-222222222222',
-          'Week 1: systems', array['sys-1'], now() + interval '7 days');
-
 -- S1 and S3 each record an attempt
 select test.login(:'S1');
 insert into public.attempts (user_id, mission_id, passed, ms, hints)
@@ -183,6 +176,14 @@ select test.login(:'S2');
 select test.expect('S2 cannot read feedback about S1', (select count(*) from public.feedback), 0);
 select test.login(:'T2');
 select test.expect('T2 cannot read C1 feedback', (select count(*) from public.feedback), 0);
+
+-- Add the C2 assignment only after the existing assignment-visibility assertions.
+-- This keeps the original single-assignment expectations intact.
+select test.login(:'T2');
+insert into public.assignments (id, class_id, title, mission_ids, due_at)
+  values ('a2222222-2222-2222-2222-222222222222',
+          'c2222222-2222-2222-2222-222222222222',
+          'Week 1: systems', array['sys-1'], now() + interval '7 days');
 
 -- Feedback must stay inside the author's class and the student's enrollment.
 select test.login(:'T1');
