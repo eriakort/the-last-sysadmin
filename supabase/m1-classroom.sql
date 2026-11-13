@@ -192,13 +192,10 @@ create policy "read own enrollment or staffed class"
   on public.enrollments for select
   using (user_id = auth.uid() or public.is_class_staff(class_id));
 
--- A student enrolls THEMSELVES as a student. (Join-code validation is enforced
--- in the app in M2; this policy guarantees you can only ever add yourself, and
--- only as a student — never as a TA, never as someone else.)
+-- Students must use the SECURITY DEFINER join-by-code RPC from M2.
+-- Do not allow direct browser inserts: knowing or guessing a class UUID must
+-- never be enough to bypass its join code.
 drop policy if exists "students self-enroll" on public.enrollments;
-create policy "students self-enroll"
-  on public.enrollments for insert
-  with check (user_id = auth.uid() and role = 'student');
 
 -- Class staff manage enrollments in their class (add a TA, change a role).
 drop policy if exists "staff add enrollments to their class" on public.enrollments;
