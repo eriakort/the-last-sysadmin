@@ -245,4 +245,5 @@ drop policy if exists "users update their own progress" on public.progress;
 revoke insert, update on public.progress from PUBLIC, anon, authenticated;
 revoke all on function public.sync_merge_node(jsonb, jsonb, jsonb, text) from PUBLIC;
 revoke all on function public.merge_progress(jsonb) from PUBLIC;
+revoke all on function public.merge_progress(jsonb) from anon;
 grant execute on function public.merge_progress(jsonb) to authenticated;
