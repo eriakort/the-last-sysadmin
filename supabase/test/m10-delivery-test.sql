@@ -53,6 +53,14 @@ select test.expect('delivery includes the scenario-expanded mission',
 select test.expect('delivered mission carries its check spec',
   (select count(*) from public.get_class_missions('0c111111-1111-1111-1111-111111111111') where check_type='file_exists' and check_arg1='/home/rookie/report.txt'), 1);
 
+-- Anonymous callers must not execute this SECURITY DEFINER entry point.
+reset role;
+set role anon;
+select test.expect_denied('anonymous caller cannot execute authored mission delivery',
+  $q$ select * from public.get_class_missions('0c111111-1111-1111-1111-111111111111') $q$);
+reset role;
+set role authenticated;
+
 -- An outsider (not a class member) gets nothing
 select test.login(:'GO');
 select test.expect('outsider gets no missions from delivery',
