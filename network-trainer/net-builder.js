@@ -2,13 +2,14 @@
 // The design-mode UI and the no-code authoring tool are thin layers over these;
 // keeping them pure means the builder is testable without a DOM. Every op keeps
 // the topology valid for the engine (unique ids, real interfaces, no dangling links).
-const PREFIX = { host: 'h', server: 'srv', switch: 'sw', router: 'r', firewall: 'fw' };
+const PREFIX = { host: 'h', server: 'srv', switch: 'sw', router: 'r', firewall: 'fw', snort: 'snort' };
 const SPEC = {
   host:     () => ({ kind: 'host',     ifaces: { eth0: { up: true } }, routes: [] }),
   server:   () => ({ kind: 'host',     ifaces: { eth0: { up: true } }, routes: [], services: {} }),
   switch:   () => ({ kind: 'switch',   ifaces: { p1: { up: true }, p2: { up: true }, p3: { up: true }, p4: { up: true } } }),
   router:   () => ({ kind: 'router',   ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] }),
-  firewall: () => ({ kind: 'firewall', ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] })
+  firewall: () => ({ kind: 'firewall', ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] }),
+  snort: () => ({ kind: 'router', brand: 'snort3', displayType: 'Snort 3 IDS/IPS', snort3: { enabled: true, mode: 'ids', rules: [], alerts: [] }, ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] })
 };
 const KINDS = Object.keys(SPEC);
 
@@ -80,7 +81,7 @@ function removeLink(topo, index) {
 // The new device receives a unique id and a nearby canvas position.
 function cloneDevice(topo, id) {
   const source = topo.devices[id]; if (!source) throw new Error('no such device: ' + id);
-  const kind = source.services ? 'server' : source.kind;
+  const kind = source.snort3 ? 'snort' : source.services ? 'server' : source.kind;
   const newId = uniqueId(topo, PREFIX[kind] || PREFIX.host);
   const copy = JSON.parse(JSON.stringify(source));
   copy.id = newId;
