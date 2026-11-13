@@ -203,6 +203,7 @@ create policy "students self-enroll"
 -- Class staff manage enrollments in their class (add a TA, change a role).
 drop policy if exists "staff add enrollments to their class" on public.enrollments;
 drop policy if exists "owners add enrollments to their class" on public.enrollments;
+drop policy if exists "staff add students or owners add staff" on public.enrollments;
 create policy "staff add students or owners add staff"
   on public.enrollments for insert
   with check (
