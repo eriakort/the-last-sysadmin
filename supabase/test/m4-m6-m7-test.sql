@@ -25,6 +25,12 @@ insert into public.profiles (id, display_name, is_teacher) values
   (:'AU','Author One', true), (:'BU','Author Two', true)
 on conflict (id) do update set is_teacher = excluded.is_teacher;
 
+-- Anonymous API clients must not be able to invoke email enrollment.
+set role anon;
+select test.expect_denied('anonymous caller cannot execute enroll_by_email',
+  $q$ select public.enroll_by_email('fc111111-1111-1111-1111-111111111111','target@uni.edu') $q$);
+reset role;
+
 set role authenticated;
 
 -- TE creates a class
