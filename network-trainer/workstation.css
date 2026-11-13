@@ -752,3 +752,21 @@ aside{scrollbar-color:#344a60 transparent}
 .incident-stages li.stage-done{color:var(--good)}
 .incident-comms{margin-top:10px}
 .incident-comms .label2{margin-top:6px}
+
+
+/* Keep the full workstation action bar inside narrow mobile viewports. */
+@media(max-width:760px){
+  #top .hud{
+    display:grid;
+    grid-template-columns:repeat(3,max-content);
+    justify-content:start;
+    align-content:start;
+    gap:6px;
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    box-sizing:border-box;
+  }
+  #top .hud>*{min-width:0;max-width:100%;}
+  #top .hud .build-menu{justify-self:start;}
+}
