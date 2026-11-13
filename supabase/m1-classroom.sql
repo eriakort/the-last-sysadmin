@@ -313,17 +313,81 @@ create policy "read feedback about you or in your staffed class"
 drop policy if exists "staff write feedback in their class" on public.feedback;
 create policy "staff write feedback in their class"
   on public.feedback for insert
-  with check (author_id = auth.uid() and public.is_class_staff(class_id));
+  with check (
+    author_id = auth.uid()
+    and public.is_class_staff(class_id)
+    and exists (
+      select 1 from public.enrollments e
+      where e.class_id = feedback.class_id
+        and e.user_id = feedback.student_id
+        and e.role = 'student'
+    )
+    and (
+      assignment_id is null
+      or exists (
+        select 1 from public.assignments a
+        where a.id = feedback.assignment_id
+          and a.class_id = feedback.class_id
+          and (feedback.mission_id is null or feedback.mission_id = any(a.mission_ids))
+      )
+    )
+  );
 
 drop policy if exists "authors edit their feedback" on public.feedback;
 create policy "authors edit their feedback"
   on public.feedback for update
-  using (author_id = auth.uid()) with check (author_id = auth.uid());
+  using (author_id = auth.uid() and public.is_class_staff(class_id))
+  with check (
+    author_id = auth.uid()
+    and public.is_class_staff(class_id)
+    and exists (
+      select 1 from public.enrollments e
+      where e.class_id = feedback.class_id
+        and e.user_id = feedback.student_id
+        and e.role = 'student'
+    )
+    and (
+      assignment_id is null
+      or exists (
+        select 1 from public.assignments a
+        where a.id = feedback.assignment_id
+          and a.class_id = feedback.class_id
+          and (feedback.mission_id is null or feedback.mission_id = any(a.mission_ids))
+      )
+    )
+  );
 
 drop policy if exists "authors delete their feedback" on public.feedback;
 create policy "authors delete their feedback"
   on public.feedback for delete
   using (author_id = auth.uid());
+
+-- Feedback can be edited by its author, but its tenant and recipient
+-- are part of the privacy boundary and must never be reassigned.
+create or replace function public.prevent_feedback_scope_change()
+returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $feedback_guard$
+begin
+  if new.class_id is distinct from old.class_id
+     or new.student_id is distinct from old.student_id
+     or new.author_id is distinct from old.author_id
+     or new.assignment_id is distinct from old.assignment_id
+     or new.mission_id is distinct from old.mission_id then
+    raise exception 'Feedback ownership and scope fields are immutable'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$feedback_guard$;
+
+drop trigger if exists feedback_scope_immutable on public.feedback;
+create trigger feedback_scope_immutable
+  before update on public.feedback
+  for each row execute function public.prevent_feedback_scope_change();
+
+
 
 -- ======================================================================
 -- grants: let the API roles use the helper functions
