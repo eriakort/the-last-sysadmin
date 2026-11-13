@@ -61,6 +61,13 @@ end; $$;
 grant execute on function test.login(uuid), test.expect(text,bigint,bigint),
   test.expect_denied(text,text) to anon, authenticated, service_role;
 
+-- Anonymous API clients must not be able to invoke the class join-code
+-- generator directly; it is only used by authenticated class creation.
+set role anon;
+select test.expect_denied('anonymous caller cannot execute gen_join_code',
+  'select public.gen_join_code()');
+reset role;
+
 -- ======================================================================
 -- Seed identities as superuser (bypasses RLS — this is the DB admin, not a
 -- browser). Teachers get is_teacher = true; everyone else false.
