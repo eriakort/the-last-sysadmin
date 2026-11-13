@@ -927,6 +927,8 @@ function forward(net, srcDev, pktIn, opts = {}) {
     const dev = net.devices[cur];
     if (!dev) return { ok: false, path, reason: 'unknown device', at: cur };
     path.push(cur);
+    const snort = dev.brand === 'snort3' ? snortInspect(dev, pkt, path) : null;
+    if (snort && snort.blocked) return { ok: false, path, reason: 'blocked by Snort 3 IPS rule ' + snort.sid, at: cur, alert: snort.alert };
     if (dev.nat) pkt = applyNat(dev, pkt, ct, reverse);   // DNAT / reverse-NAT on arrival
     const dst = pkt.dst;
     if (ownsIp(dev, dst) || ownsVirtualIp(net, cur, dst)) return { ok: true, path, reason: 'delivered', pkt };
@@ -978,6 +980,26 @@ function forward(net, srcDev, pktIn, opts = {}) {
     cur = nd; ingressIface = ni;                 // remember the ASA ingress interface for security-level policy
   }
   return { ok: false, path, reason: 'TTL exceeded (routing loop?)' };
+}
+
+/* ---------- Snort 3 IDS/IPS inspection (educational subset) ---------- */
+function snortInspect(dev, pkt, path = []) {
+  const cfg = dev && dev.snort3;
+  if (!cfg || cfg.enabled === false) return null;
+  cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+  cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
+  const rule = cfg.rules.find(r =>
+    (r.proto === 'any' || r.proto === String(pkt.proto || 'icmp').toLowerCase()) &&
+    (r.dport == null || r.dport === Number(pkt.dport || 0)) &&
+    (r.src == null || r.src === pkt.src) &&
+    (r.dst == null || r.dst === pkt.dst));
+  if (!rule) return null;
+  const alert = { sid: rule.sid, message: rule.message, action: rule.action || 'alert',
+    proto: pkt.proto || 'icmp', src: pkt.src, dst: pkt.dst, dport: pkt.dport || null,
+    path: path.slice(), timestamp: new Date().toISOString() };
+  cfg.alerts.push(alert);
+  if (cfg.alerts.length > 200) cfg.alerts.shift();
+  return { alert, sid: rule.sid, blocked: cfg.mode === 'ips' && rule.action === 'drop' };
 }
 
 /* ---------- VPN tunnels & PKI (site-to-site) ---------- */
@@ -1299,7 +1321,7 @@ module.exports = {
   tunnelEstablished, establishedTunnelFor, certValid, trustsCA,
   ospfNeighbors, ospfLearned, ospfAdvertised, hsrpStatus, vrrpStatus, ownsVirtualIp,
   bgpSessions, bgpLearned, bgpAdvertised, bgpPrefixListAllows,
-  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic
+  resolveName, dhclient, dhcpServerFor, ntpStatus, recordSyslog, systemLog, recordTraffic, snortInspect
 };
 
 });
@@ -2232,6 +2254,7 @@ const BRANDS = {
   'cisco-asa':      { label: 'Cisco ASA',          kinds: ['firewall'], family: 'asa' },
   'juniper-junos':  { label: 'Juniper Junos',      kinds: ['switch', 'router', 'firewall'], family: 'junos' },
   'paloalto-panos': { label: 'Palo Alto PAN-OS',   kinds: ['firewall'], family: 'panos' },
+  'snort3':         { label: 'Snort 3 IDS/IPS',     kinds: ['router'], family: 'snort3', note: 'Simulated inline inspection appliance: IDS alerts; IPS blocks matching drop rules.' },
 };
 function deviceBrand(dev) { const b = dev && dev.brand; return BRANDS[b] ? b : 'generic'; }
 function brandProfile(dev) { return BRANDS[deviceBrand(dev)]; }
@@ -2500,11 +2523,57 @@ function panosOperational(cli, words, w, dev) {
   return err('error: unknown command "' + words[0] + '"');
 }
 
+function runSnort3(cli, line) {
+  const dev = cli.net.devices[cli.cur];
+  const cfg = dev.snort3 || (dev.snort3 = { enabled: true, mode: 'ids', rules: [], alerts: [] });
+  cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+  cfg.alerts = Array.isArray(cfg.alerts) ? cfg.alerts : [];
+  const words = String(line).trim().split(/\s+/), lower = words.map(x => x.toLowerCase());
+  if (!line.trim() || lower[0] === 'help') return ok([
+    'SNORT 3 SIMULATOR — supported commands:',
+    '  show snort status | rules | alerts',
+    '  snort mode ids | ips',
+    '  snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>',
+    '  snort rule delete <sid>',
+    '  snort alerts clear',
+    'Educational subset; this is not the Snort binary.'
+  ].join('\n'));
+  if (lower[0] === 'show' && lower[1] === 'snort') {
+    if (lower[2] === 'status') return ok('Snort 3 inspection: ' + (cfg.enabled === false ? 'disabled' : 'enabled') + '\nMode: ' + (cfg.mode || 'ids').toUpperCase() + '\nRules: ' + cfg.rules.length + '\nAlerts: ' + cfg.alerts.length);
+    if (lower[2] === 'rules') return ok(cfg.rules.length ? cfg.rules.map(r => 'sid:' + r.sid + ' ' + r.proto + ' dport:' + (r.dport == null ? 'any' : r.dport) + ' ' + r.action.toUpperCase() + ' "' + r.message + '"').join('\n') : '(no rules configured)');
+    if (lower[2] === 'alerts') return ok(cfg.alerts.length ? cfg.alerts.slice().reverse().map(a => '[' + a.timestamp + '] sid:' + a.sid + ' ' + a.action.toUpperCase() + ' ' + a.message + ' ' + M.ipStr(a.src) + ' -> ' + M.ipStr(a.dst) + (a.dport ? ':' + a.dport : '')).join('\n') : '(no alerts)');
+    return err('usage: show snort status | rules | alerts');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'mode') {
+    if (!['ids','ips'].includes(lower[2]) || lower.length !== 3) return err('usage: snort mode ids|ips');
+    cfg.mode = lower[2]; return ok('Snort 3 mode set to ' + cfg.mode.toUpperCase());
+  }
+  if (lower[0] === 'snort' && lower[1] === 'rule' && lower[2] === 'add') {
+    if (words.length < 8) return err('usage: snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>');
+    const sid = Number(words[3]), proto = lower[4], port = lower[5] === 'any' ? null : Number(words[5]), action = lower[6];
+    if (!Number.isInteger(sid) || sid < 1) return err('sid must be a positive integer');
+    if (!['any','icmp','tcp','udp'].includes(proto)) return err('proto must be any, icmp, tcp or udp');
+    if (port != null && (!Number.isInteger(port) || port < 1 || port > 65535)) return err('dport must be any or 1-65535');
+    if (!['alert','drop'].includes(action)) return err('action must be alert or drop');
+    if (cfg.rules.some(r => r.sid === sid)) return err('rule sid already exists: ' + sid);
+    cfg.rules.push({ sid, proto, dport: port, action, message: words.slice(7).join(' ') || 'Snort rule match' });
+    return ok('Rule ' + sid + ' added');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'rule' && lower[2] === 'delete') {
+    const sid = Number(words[3]), before = cfg.rules.length;
+    cfg.rules = cfg.rules.filter(r => r.sid !== sid);
+    return before === cfg.rules.length ? err('no rule with sid ' + sid) : ok('Rule ' + sid + ' deleted');
+  }
+  if (lower[0] === 'snort' && lower[1] === 'alerts' && lower[2] === 'clear') { cfg.alerts = []; return ok('Snort alert log cleared'); }
+  return err('unknown Snort command — type help');
+}
+
 function runCisco(cli, line) {
   if (!line) return ok('');
   const raw = line.trim(), lower = raw.toLowerCase(), words = lower.split(/\s+/), dev = cli.cur == null ? null : cli.net.devices[cli.cur];
   if (!dev) return dispatch(cli, raw);
   const brandFamily = brandProfile(dev).family;
+  if (brandFamily === 'snort3') return runSnort3(cli, raw);
   if (brandFamily === 'asa' || dev.firewallOS === 'asa') return runASA(cli, raw);
   if (brandFamily === 'junos') return runJunos(cli, raw);
   if (brandFamily === 'panos') return runPanos(cli, raw);
@@ -5193,13 +5262,14 @@ __def("./net-builder", function(module, exports, require){
 // The design-mode UI and the no-code authoring tool are thin layers over these;
 // keeping them pure means the builder is testable without a DOM. Every op keeps
 // the topology valid for the engine (unique ids, real interfaces, no dangling links).
-const PREFIX = { host: 'h', server: 'srv', switch: 'sw', router: 'r', firewall: 'fw' };
+const PREFIX = { host: 'h', server: 'srv', switch: 'sw', router: 'r', firewall: 'fw', snort: 'snort' };
 const SPEC = {
   host:     () => ({ kind: 'host',     ifaces: { eth0: { up: true } }, routes: [] }),
   server:   () => ({ kind: 'host',     ifaces: { eth0: { up: true } }, routes: [], services: {} }),
   switch:   () => ({ kind: 'switch',   ifaces: { p1: { up: true }, p2: { up: true }, p3: { up: true }, p4: { up: true } } }),
   router:   () => ({ kind: 'router',   ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] }),
-  firewall: () => ({ kind: 'firewall', ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] })
+  firewall: () => ({ kind: 'firewall', ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] }),
+  snort: () => ({ kind: 'router', brand: 'snort3', displayType: 'Snort 3 IDS/IPS', snort3: { enabled: true, mode: 'ids', rules: [], alerts: [] }, ifaces: { eth0: { up: true }, eth1: { up: true } }, routes: [], acls: [] })
 };
 const KINDS = Object.keys(SPEC);
 
@@ -5271,7 +5341,7 @@ function removeLink(topo, index) {
 // The new device receives a unique id and a nearby canvas position.
 function cloneDevice(topo, id) {
   const source = topo.devices[id]; if (!source) throw new Error('no such device: ' + id);
-  const kind = source.services ? 'server' : source.kind;
+  const kind = source.snort3 ? 'snort' : source.services ? 'server' : source.kind;
   const newId = uniqueId(topo, PREFIX[kind] || PREFIX.host);
   const copy = JSON.parse(JSON.stringify(source));
   copy.id = newId;
@@ -5860,8 +5930,9 @@ const NODE_ICONS = {
   switch: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 12 20-9v14l-20 9z\"/><path class=\"iso-front\" d=\"m4 3 21 9v14L4 17z\"/><path class=\"iso-top\" d=\"m4 3 20-9 21 9-20 9z\"/><path class=\"iso-port\" d=\"m9 7 3 1.5v3L9 10zM15 9.5l3 1.5v3L15 12zM21 12l3 1.5v3L21 15z\"/><path class=\"iso-port-side\" d=\"m29 13 3-1.4v3L29 16zM35 10.3l3-1.4v3L35 13z\"/><path class=\"iso-detail\" d=\"m9 14 12 5M29 20l12-5\"/></g>",
   router: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 16 20-9v13l-20 9z\"/><path class=\"iso-front\" d=\"m4 7 21 9v13L4 20z\"/><path class=\"iso-top\" d=\"m4 7 20-9 21 9-20 9z\"/><path class=\"iso-antenna\" d=\"m11 3-1-8M37 5l3-9\"/><path class=\"iso-port\" d=\"m9 12 3 1.3v3L9 15zM16 15l3 1.3v3L16 18zM23 18l3 1.3v3L23 21z\"/><path class=\"iso-detail\" d=\"m31 19 10-4\"/></g>",
   firewall: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 13 20-9v20l-20 9z\"/><path class=\"iso-front\" d=\"m4 4 21 9v20L4 24z\"/><path class=\"iso-top\" d=\"m4 4 20-9 21 9-20 9z\"/><path class=\"iso-brick\" d=\"m7 8 8 3.5v5L7 13zM17 12.5l6 2.5v5l-6-2.5zM7 17l8 3.5v5L7 22zM17 21.5l6 2.5v5l-6-2.5z\"/><path class=\"iso-shield\" d=\"m32 11 6-2.5v6l-6 3z\"/><path class=\"iso-detail\" d=\"m34 12 1.5 1.5 3-4\"/></g>"
+  snort: "<g class=\"ico device-art\" stroke=\"currentColor\" stroke-linejoin=\"round\" stroke-width=\"1.15\"><path class=\"iso-side\" d=\"m25 13 20-9v20l-20 9z\"/><path class=\"iso-front\" d=\"m4 4 21 9v20L4 24z\"/><path class=\"iso-top\" d=\"m4 4 20-9 21 9-20 9z\"/><path class=\"iso-shield\" d=\"m15 13 8 3v7l-8-3z\"/><path class=\"iso-detail\" d=\"m17 16 2 2 4-5\"/><circle class=\"iso-led\" cx=\"34\" cy=\"22\" r=\"2\"/></g>"
 };
-const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw' };
+const KINDCLASS = { host: 'k-host', switch: 'k-switch', router: 'k-router', firewall: 'k-fw', snort: 'k-snort' };
 function linkDown(net, l) { if (l.up === false) return true; const up = (d, i) => { const f = net.devices[d] && net.devices[d].ifaces[i]; return f && f.up !== false; }; return !(up(l.a[0], l.a[1]) && up(l.b[0], l.b[1])); }
 function renderFlows() {
   const flows = (RUN && RUN.cli && RUN.cli.flows) || [];
@@ -6020,7 +6091,7 @@ function renderTopo() {
 
   if (layers.devices) for (const id in net.devices) {
     const d = net.devices[id], [x, y] = pos[id], ip = primaryIp(d);
-    const kindKey = d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
+    const kindKey = d.brand === 'snort3' ? 'snort' : d.kind === 'switch' ? 'switch' : d.kind === 'router' ? 'router' : d.kind === 'firewall' ? 'firewall' : ((d.services || /^(srv|web|db|dns|www|site)/.test(id)) ? 'server' : 'host');
     const ico = NODE_ICONS[kindKey] || NODE_ICONS.host;
     const devSelected = TOPO_SELECTED.has(id) || id === SEL;
     s += `<g class="node ${KINDCLASS[d.kind]||''} k-${kindKey} ${id === SEL ? 'sel' : ''} ${TOPO_SELECTED.has(id) ? 'multi-selected' : ''}" data-dev="${esc(id)}" role="button" tabindex="0" aria-label="${esc((d.label || id) + ", " + d.kind + (ip ? ", " + ip : "") + ", network device")}" aria-pressed="${TOPO_SELECTED.has(id) ? "true" : "false"}" transform="translate(${x},${y})"><rect class="hit" x="-4" y="-4" width="60" height="48" rx="6" fill="transparent"/><g class="device-art-scale" transform="translate(24 18) scale(${Math.max(.5,Math.min(2.5,Number((net.deviceSizes||{})[id])||1))}) translate(-24 -18)">${ico}</g></g>${devSelected?`<circle class="topo-device-resize" data-resize-kind="device" data-dev="${esc(id)}" cx="${x+68}" cy="${y+50}" r="7" role="button" tabindex="0" aria-label="Resize device ${esc(id)}" fill="#38bdf8" stroke="#eafaff" stroke-width="1.5" pointer-events="all"/>`:''}`;
@@ -7201,7 +7272,7 @@ function showTopologyContextMenu(e, kind, target = {}) {
     'device-label': hiddenLabel ? [['Restore label','restore-device-label']] : [['Edit label text','edit-device-label'],['Delete label','clear-device-label',true],['Reset label position','reset-device-label']],
     text: [['Edit text', 'edit-text'], ['Remove text', 'delete-text', true]],
     canvas: [
-      ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'],
+      ['Add host', 'add:host'], ['Add server', 'add:server'], ['Add switch', 'add:switch'], ['Add router', 'add:router'], ['Add firewall', 'add:firewall'], ['Add Snort 3 IDS/IPS', 'add:snort'],
       ['Add note here', 'add-note'], ['Add text here', 'add-text'], ['Paste selection', 'paste', false, !TOPO_CLIPBOARD],
       ['Select all devices', 'select-all'], ['Fit topology', 'fit'], [TOPO_GRID ? 'Hide grid' : 'Show grid', 'toggle-grid'], [TOPO_SNAP ? 'Disable snap' : 'Enable snap', 'toggle-snap']
     ]
@@ -8411,7 +8482,7 @@ function openStats() {
 }
 
 /* ---------- build mode: scenario authoring + design canvas ---------- */
-const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall']];
+const PALETTE = [['host', 'Host'], ['server', 'Server'], ['switch', 'Switch'], ['router', 'Router'], ['firewall', 'Firewall'], ['snort', 'Snort 3 IDS/IPS']];
 function renderPalette() {
   if (!canBuild()) return '';
   const add = PALETTE.map(([k, n]) => '<button class="btn sm pal" data-add="' + k + '" title="Add a ' + n.toLowerCase() + ' to the topology canvas"><svg class="palette-device-icon" viewBox="0 -12 48 58" aria-hidden="true">' + NODE_ICONS[k] + '</svg><span>' + n + '</span><span class="palette-add" aria-hidden="true">＋</span></button>').join('');
