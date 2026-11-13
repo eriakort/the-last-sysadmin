@@ -39,6 +39,8 @@ flows panel** lets the player read the traffic to find the cause.
 
 **Snort 3 IDS/IPS appliance.** The Build device library includes a Snort 3 inline inspection appliance with two routed interfaces. Configure rules in its terminal using `snort rule add <sid> <proto|any> <dport|any> <alert|drop> <message>`, then choose `snort mode ids` (alert and pass) or `snort mode ips` (block matching `drop` rules). Inspect state with `show snort status`, `show snort rules`, and `show snort alerts`. The simulator inspects packets that traverse the appliance; it does not capture arbitrary mirrored traffic, parse PCAPs, run the Snort binary, or implement full Snort rule syntax.
 
+**Snort command expansion.** The appliance also supports simulator commands inspired by the Snort 3 CLI: snort --version / -V, snort test / -T, snort enable|disable, snort rule show|enable|disable|delete <sid>, show snort stats, show snort interfaces, and snort stats reset. These operate on the simulator rule and packet-inspection model; they do not invoke Snort, load real Lua configuration, capture live interfaces, or read PCAP files.
+
 **Scenario builder (🛠 Build).** A design-mode canvas for authoring. Place
 devices from a palette (host, server, switch, router, firewall), wire them,
 address them, and set the **objectives** the student must satisfy (any of the
