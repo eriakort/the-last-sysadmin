@@ -241,6 +241,18 @@ select test.expect_denied('S1 cannot self-enroll as TA',
 select test.expect_denied('S1 cannot enroll another user (S2)',
   $q$ insert into public.enrollments (class_id,user_id,role) values ('c1111111-1111-1111-1111-111111111111','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','student') $q$);
 
+-- A TA is staff for reading/teaching, but cannot expand class membership or
+-- grant staff privileges. Only the class owner can add enrollment rows.
+select test.login(:'A1');
+select test.expect_denied('TA cannot add an arbitrary student to C1',
+  $q$ insert into public.enrollments (class_id,user_id,role)
+      values ('c1111111-1111-1111-1111-111111111111',
+              'cccccccc-cccc-cccc-cccc-cccccccccccc','student') $q$);
+select test.expect_denied('TA cannot promote an arbitrary user to TA in C1',
+  $q$ insert into public.enrollments (class_id,user_id,role)
+      values ('c1111111-1111-1111-1111-111111111111',
+              'cccccccc-cccc-cccc-cccc-cccccccccccc','ta') $q$);
+
 -- A student cannot write an attempt as another student
 select test.login(:'S2');
 select test.expect_denied('S2 cannot write an attempt as S1',
