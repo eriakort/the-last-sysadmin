@@ -91,6 +91,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   // Mobile: the Build button stays within the viewport.
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => matchMedia('(max-width: 760px)').matches);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const mobileBtn = await page.locator('#btnBuild').boundingBox();
   if (mobileBtn && mobileBtn.x >= 0 && mobileBtn.x + mobileBtn.width <= 390 && mobileBtn.y >= 0) ok('mobile Build ▾ button stays inside the viewport');
   else fail('mobile Build ▾ button is outside the viewport');
