@@ -208,6 +208,17 @@ create policy "staff add students or owners add staff"
     or (role = 'ta' and public.is_class_owner(class_id))
   );
 
+-- Restrictive guard: PostgreSQL combines permissive policies with OR. This
+-- additional restrictive policy ensures no older or future permissive policy
+-- can let a TA create or promote another TA.
+drop policy if exists "enrollment role assignment guard" on public.enrollments;
+create policy "enrollment role assignment guard"
+  on public.enrollments as restrictive for insert to authenticated
+  with check (
+    (role = 'student' and public.is_class_staff(class_id))
+    or (role = 'ta' and public.is_class_owner(class_id))
+  );
+
 drop policy if exists "owners update enrollments in their class" on public.enrollments;
 create policy "owners update enrollments in their class"
   on public.enrollments for update
