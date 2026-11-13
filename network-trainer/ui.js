@@ -294,8 +294,8 @@ function showWorkspaceView(view, options = {}) {
   journal.hidden = view !== 'journal';
   changes.hidden = view !== 'changes';
   cols.hidden = view !== 'workbench' && view !== 'build';
-  // The console is docked inside #cols, so it hides with the workspace. Its opener
-  // lives in the fixed top-bar "Build ▾" menu, which is always in a stable place.
+  // The floating console is explicitly minimized when leaving the workbench; its
+  // restore action remains available from the fixed top-bar "Build ▾" menu.
   if (cols.hidden) collapseTerminalWindow();
   document.querySelectorAll('#navRail .nav-item[data-view]').forEach(b => {
     if (b.dataset.view === view) b.setAttribute('aria-current', 'page');
