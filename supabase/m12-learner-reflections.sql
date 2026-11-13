@@ -20,6 +20,11 @@ create table if not exists public.learner_reflections (
     check (mission_id is null or assignment_id is not null)
 );
 
+-- Assignment deletion uses ON DELETE SET NULL. Keep mission_id as historical
+-- evidence while clearing the live assignment link.
+alter table public.learner_reflections
+  drop constraint if exists learner_reflections_mission_needs_assignment;
+
 alter table public.learner_reflections enable row level security;
 create index if not exists learner_reflections_class_created
   on public.learner_reflections (class_id, created_at desc);
@@ -54,12 +59,15 @@ create policy "enrolled learners create their own reflections"
         and e.role = 'student'
     )
     and (
-      assignment_id is null
-      or exists (
-        select 1 from public.assignments a
-        where a.id = learner_reflections.assignment_id
-          and a.class_id = learner_reflections.class_id
-          and (mission_id is null or mission_id = any(a.mission_ids))
+      (assignment_id is null and mission_id is null)
+      or (
+        assignment_id is not null
+        and exists (
+          select 1 from public.assignments a
+          where a.id = learner_reflections.assignment_id
+            and a.class_id = learner_reflections.class_id
+            and (mission_id is null or mission_id = any(a.mission_ids))
+        )
       )
     )
   );
@@ -77,12 +85,15 @@ create policy "learners update their own reflections"
         and e.role = 'student'
     )
     and (
-      assignment_id is null
-      or exists (
-        select 1 from public.assignments a
-        where a.id = learner_reflections.assignment_id
-          and a.class_id = learner_reflections.class_id
-          and (mission_id is null or mission_id = any(a.mission_ids))
+      (assignment_id is null and mission_id is null)
+      or (
+        assignment_id is not null
+        and exists (
+          select 1 from public.assignments a
+          where a.id = learner_reflections.assignment_id
+            and a.class_id = learner_reflections.class_id
+            and (mission_id is null or mission_id = any(a.mission_ids))
+        )
       )
     )
   );
