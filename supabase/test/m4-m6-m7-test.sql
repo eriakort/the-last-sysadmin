@@ -62,6 +62,8 @@ select test.login(:'TE');
 insert into public.enrollments (class_id,user_id,role)
  values ('fc111111-1111-1111-1111-111111111111',:'TT','ta');
 select test.login(:'TT');
+select test.expect('TA identity is active for role-boundary tests',
+  (select case when auth.uid() = :'TT'::uuid then 1 else 0 end), 1);
 select test.expect('TA can enroll a student by email',
   (select case when public.enroll_by_email('fc111111-1111-1111-1111-111111111111','second-target@uni.edu') ? 'ok' then 1 else 0 end), 1);
 select test.expect_denied('TA cannot add another TA',
