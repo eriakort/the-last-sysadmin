@@ -15,6 +15,8 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForSelector('#terminalWindow #term', { state: 'attached' });
+  if (await page.locator('#terminalWindow').evaluate(el => el.classList.contains('terminal-dock'))) ok('device console uses the in-workbench dock layout');
+  else fail('device console is not using the dock layout');
 
   // The console is docked inside the workbench and starts collapsed.
   if (await page.locator('#terminalWindow').isHidden()) ok('device console starts collapsed so the topology has full height');
@@ -31,14 +33,14 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForSelector('#buildMenu:not([hidden])');
   await page.click('#terminalRestore');
   await page.waitForFunction(() => document.activeElement?.id === 'tin');
-  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Device terminal opens the floating console and focuses the input');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Device terminal opens the docked console and focuses the input');
   else fail('Build menu did not open the console');
   if (await page.locator('#buildMenu').isHidden()) ok('selecting a menu item closes the dropdown');
   else fail('dropdown stayed open after selecting an item');
 
   // Floating window can be positioned anywhere; just ensure it is visible and has a titlebar.
-  if (await page.locator('#terminalWindow .terminal-window-titlebar').isVisible()) ok('floating console has a draggable titlebar');
-  else fail('floating console missing titlebar');
+  if (await page.locator('#terminalWindow .terminal-window-titlebar').isVisible()) ok('docked console has a draggable titlebar');
+  else fail('docked console missing titlebar');
 
   // Collapse from the dock titlebar.
   await page.click('#terminalMinimize');
@@ -51,7 +53,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const device = await first.getAttribute('data-dev');
   await first.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, device);
-  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its floating terminal');
+  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its docked terminal');
   else fail('double-click did not open the docked terminal');
 
   // Leaving the workspace hides the workbench, so the console collapses with it.
