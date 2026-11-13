@@ -1,6 +1,4 @@
-// Browser regression coverage for the docked device console and the top-bar
-// "Build ▾" dropdown that opens it. The dropdown is anchored in the fixed header,
-// so its controls stay in a stable place and can never float over the page.
+// Browser regression coverage for the draggable floating device console and its opener.
 const path = require('path');
 const { chromium } = require('playwright');
 const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
@@ -15,39 +13,57 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
 
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForSelector('#terminalWindow #term', { state: 'attached' });
-  if (await page.locator('#terminalWindow').evaluate(el => el.classList.contains('terminal-dock'))) ok('device console uses the in-workbench dock layout');
-  else fail('device console is not using the dock layout');
+  if (await page.locator('#terminalWindow').evaluate(el => el.classList.contains('terminal-floating') && getComputedStyle(el).position === 'fixed')) ok('device console is an independent fixed-position floating window');
+  else fail('device console is not using the floating layout');
 
-  // The console is docked inside the workbench and starts collapsed.
+  // The console floats independently of the workbench and starts collapsed.
   if (await page.locator('#terminalWindow').isHidden()) ok('device console starts collapsed so the topology has full height');
   else fail('device console was not collapsed on load');
 
   // The opener is a menu item in the top-bar "Build ▾" dropdown, closed by default.
   if (await page.locator('#buildMenu').isHidden()) ok('Build dropdown is closed by default');
   else fail('Build dropdown was open on load');
-  if (await page.locator('#terminalRestore').evaluate(el => !!el.closest('#top .build-menu'))) ok('Device terminal control lives in the fixed top-bar Build menu, not floating over the page');
-  else fail('Device terminal control is not anchored in the top-bar Build menu');
+  if (await page.locator('#terminalRestore').evaluate(el => !!el.closest('#top .build-menu'))) ok('Device terminal can still be restored from the fixed top-bar Build menu');
+  else fail('Device terminal restore control is missing from the top-bar Build menu');
 
   // Open the menu and launch the console from it.
   await page.click('#btnBuild');
   await page.waitForSelector('#buildMenu:not([hidden])');
   await page.click('#terminalRestore');
   await page.waitForFunction(() => document.activeElement?.id === 'tin');
-  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Device terminal opens the docked console and focuses the input');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Device terminal opens the floating console and focuses the input');
   else fail('Build menu did not open the console');
   if (await page.locator('#buildMenu').isHidden()) ok('selecting a menu item closes the dropdown');
   else fail('dropdown stayed open after selecting an item');
 
-  // The dock has a dedicated titlebar and an accessible collapse control.
-  if (await page.locator('#terminalWindow .terminal-dock-titlebar').isVisible()) ok('docked console has a visible titlebar');
-  else fail('docked console missing titlebar');
-  if (await page.locator('#terminalWindow .terminal-dock-titlebar #terminalMinimize').isVisible()) ok('docked console titlebar exposes its collapse control');
-  else fail('docked console titlebar missing collapse control');
+  // The floating window has an accessible drag handle, expand control and minimize control.
+  if (await page.locator('#terminalWindow #terminalDragHandle').isVisible()) ok('floating console exposes a draggable titlebar');
+  else fail('floating console missing drag handle');
+  if (await page.locator('#terminalWindow #terminalMinimize').isVisible() && await page.locator('#terminalWindow #terminalExpand').isVisible()) ok('titlebar exposes minimize and expand controls');
+  else fail('titlebar missing minimize or expand control');
 
-  // Collapse from the dock titlebar.
+  // Drag the window and confirm it stays inside the viewport.
+  const beforeDrag = await page.locator('#terminalWindow').boundingBox();
+  await page.locator('#terminalDragHandle').hover();
+  await page.mouse.down(); await page.mouse.move(beforeDrag.x + 90, beforeDrag.y + 70); await page.mouse.up();
+  const afterDrag = await page.locator('#terminalWindow').boundingBox();
+  if (afterDrag && (Math.abs(afterDrag.x - beforeDrag.x) > 20 || Math.abs(afterDrag.y - beforeDrag.y) > 20)) ok('dragging the titlebar repositions the floating console');
+  else fail('dragging the titlebar did not reposition the console');
+  if (afterDrag && afterDrag.x >= 0 && afterDrag.y >= 0 && afterDrag.x + afterDrag.width <= 1440 && afterDrag.y + afterDrag.height <= 1000) ok('dragged console remains within viewport bounds');
+  else fail('dragged console escaped viewport bounds');
+
+  // Expand and restore the floating window without changing its saved position.
+  await page.click('#terminalExpand');
+  if (await page.locator('#terminalWindow').evaluate(el => el.classList.contains('terminal-expanded'))) ok('expand control maximizes the console');
+  else fail('expand control did not maximize the console');
+  await page.click('#terminalExpand');
+  if (!(await page.locator('#terminalWindow').evaluate(el => el.classList.contains('terminal-expanded')))) ok('expand control restores the previous floating size and position');
+  else fail('expand control did not restore the floating window');
+
+  // Collapse from the floating titlebar.
   await page.click('#terminalMinimize');
   await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
-  ok('console collapses from its titlebar button');
+  ok('console minimizes from its titlebar button');
 
   // Double-click a device opens its console directly (no menu needed).
   await page.waitForSelector('#topo .node');
@@ -55,7 +71,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const device = await first.getAttribute('data-dev');
   await first.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, device);
-  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its docked terminal');
+  if (await page.locator('#terminalWindow').isVisible()) ok('double-clicking a topology device opens its floating terminal');
   else fail('double-click did not open the docked terminal');
 
   // Leaving the workspace hides the workbench, so the console collapses with it.
@@ -71,7 +87,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   await page.waitForSelector('#buildMenu:not([hidden])');
   await page.click('#terminalRestore');
   await page.waitForSelector('#cols:not([hidden])');
-  if (await page.locator('#terminalWindow').isVisible()) ok('Device terminal from another workspace returns to the workbench and opens the console');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Device terminal from another workspace returns to the workbench and opens the floating console');
   else fail('Device terminal did not restore the workbench console');
 
   // Build mode via the dropdown.
@@ -86,7 +102,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   const buildId = await buildDevice.getAttribute('data-dev');
   await buildDevice.dblclick();
   await page.waitForFunction(id => document.querySelector('#termTarget')?.textContent === id, buildId);
-  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Open build workspace enters Build mode and double-click opens the console');
+  if (await page.locator('#terminalWindow').isVisible()) ok('Build ▾ → Open build workspace enters Build mode and double-click opens the floating console');
   else fail('Build workspace or its console did not open from the menu');
 
   // Mobile: the Build button stays within the viewport.
