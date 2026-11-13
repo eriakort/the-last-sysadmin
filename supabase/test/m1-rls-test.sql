@@ -72,13 +72,13 @@ reset role;
 -- are required by authenticated policy evaluation, not anonymous callers.
 set role anon;
 select test.expect_denied('anonymous caller cannot execute is_class_owner',
-  'select public.is_class_owner(\'11111111-1111-1111-1111-111111111111\')');
+  $q$select public.is_class_owner('11111111-1111-1111-1111-111111111111')$q$);
 select test.expect_denied('anonymous caller cannot execute is_class_staff',
-  'select public.is_class_staff(\'11111111-1111-1111-1111-111111111111\')');
+  $q$select public.is_class_staff('11111111-1111-1111-1111-111111111111')$q$);
 select test.expect_denied('anonymous caller cannot execute is_class_member',
-  'select public.is_class_member(\'11111111-1111-1111-1111-111111111111\')');
+  $q$select public.is_class_member('11111111-1111-1111-1111-111111111111')$q$);
 select test.expect_denied('anonymous caller cannot execute staffs_class_of',
-  'select public.staffs_class_of(\'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\')');
+  $q$select public.staffs_class_of('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')$q$);
 reset role;
 
 -- ======================================================================
