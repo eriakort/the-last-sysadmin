@@ -52,7 +52,7 @@ M11 is a required deployment migration. Until it is applied to the connected Sup
 students, and a TA, then asserts that each role can read and write exactly what
 it should and nothing it shouldn't. It covers:
 
-- **M1** — tenant isolation across classes, enrollments, assignments, attempts, feedback (30 checks).
+- **M1** — tenant isolation across classes, enrollments, assignments, attempts, and feedback; TAs may add students but cannot grant TA privileges.
 - **M2** — join-by-code (valid / invalid / duplicate, roster visibility).
 - **M4 / M6 / M7** — enroll-by-email (staff only, student role forced), and author-isolation of authored missions and scenarios.
 - **M10** — authored-mission delivery: a class member gets exactly the authored missions assigned to their class (directly or via a scenario); outsiders get none.
