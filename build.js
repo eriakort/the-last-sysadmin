@@ -23,7 +23,11 @@ function build() {
   const head = read('shell-head.html');
   const version = read('version.txt').trim();
   const packageVersion = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
-  const game = read('game.html')
+  const gameTemplate = read('game.html');
+  const appScript = read('app.js');
+  if (!gameTemplate.includes('<!--APP_SCRIPT-->')) throw new Error('src/game.html is missing the app script insertion point');
+  const game = gameTemplate
+    .replace('<!--APP_SCRIPT-->', '<script>\\n' + appScript + '\\n</script>')
     .replace(/__APP_VERSION__/g, packageVersion)
     .replace(/__APP_BUILD__/g, version);
   const tail = read('shell-tail.html');
