@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { parentOf, baseName, joinAbs } = require('./src/path-utils');
+assert.equal(parentOf('/'), '/');
+assert.equal(parentOf('/etc'), '/');
+assert.equal(parentOf('/etc/ssh/sshd_config'), '/etc/ssh');
+assert.equal(baseName('/'), '/');
+assert.equal(baseName('/etc/ssh/sshd_config'), 'sshd_config');
+assert.equal(joinAbs('/', 'etc'), '/etc');
+assert.equal(joinAbs('/etc', 'ssh'), '/etc/ssh');
+console.log('Path utility tests passed.');
