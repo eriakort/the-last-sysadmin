@@ -70,6 +70,7 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
 const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
+const { breToJs, readDelim } = globalThis.LSATextPatternUtils;
 const enc = new TextEncoder();
 const byteLen = s => enc.encode(s).length;
 
@@ -1057,36 +1058,11 @@ function inputs(files, ctx, name) {
 }
 
 /* ---------- regex helpers (grep/sed) ---------- */
-function breToJs(p) {
-  let r = '';
-  for (let i = 0; i < p.length; i++) {
-    const c = p[i];
-    if (c === '\\') {
-      const n = p[++i];
-      if (n === undefined) r += '\\\\';
-      else if ('+?|(){}'.includes(n)) r += n;
-      else if (n === '<' || n === '>') r += '\\b';
-      else r += '\\' + n;
-    } else if ('+?|(){}'.includes(c)) r += '\\' + c;
-    else r += c;
-  }
-  return r;
-}
 function buildRe(p, o = {}) {
   let src = o.fixed ? reEsc(p) : o.ere ? p : breToJs(p);
   if (o.word) src = '\\b(?:' + src + ')\\b';
   try { return new RegExp(src, (o.icase ? 'i' : '') + (o.global ? 'g' : '')); }
   catch (e) { throw new Error(`invalid regular expression: ${p}`); }
-}
-function readDelim(s, i, d) {
-  let out = '';
-  while (i < s.length) {
-    const c = s[i];
-    if (c === '\\' && i + 1 < s.length) { if (s[i + 1] === d) { out += d; i += 2; continue; } out += c + s[i + 1]; i += 2; continue; }
-    if (c === d) return [out, i + 1];
-    out += c; i++;
-  }
-  return [out, -1];
 }
 
 /* ============================================================
