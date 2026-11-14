@@ -1,0 +1,13 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { parseOptions } = require('./src/command-options');
+assert.deepEqual(parseOptions(['-la', 'file'], 'la', '', 'ls'), { f: { l: true, a: true }, rest: ['file'] });
+assert.deepEqual(parseOptions(['-n', '5', 'file'], '', 'n', 'head'), { f: { n: '5' }, rest: ['file'] });
+assert.deepEqual(parseOptions(['-n5', 'file'], '', 'n', 'head'), { f: { n: '5' }, rest: ['file'] });
+assert.deepEqual(parseOptions(['file', '--', '-x', '--other'], 'x', '', 'cmd'), { f: {}, rest: ['file', '-x', '--other'] });
+assert.deepEqual(parseOptions(['-', 'file'], '', '', 'cmd'), { f: {}, rest: ['-', 'file'] });
+assert.throws(() => parseOptions(['--unknown'], 'a', '', 'ls'), /unrecognized option '--unknown'\nTry 'man ls'/);
+assert.throws(() => parseOptions(['-z'], 'a', '', 'ls'), /invalid option -- 'z'\nTry 'man ls'/);
+assert.throws(() => parseOptions(['-n'], '', 'n', 'head'), /option requires an argument -- 'n'/);
+assert.deepEqual(parseOptions(['-an5', 'file'], 'a', 'n', 'head'), { f: { a: true, n: '5' }, rest: ['file'] });
+console.log('Command option parser tests passed.');
