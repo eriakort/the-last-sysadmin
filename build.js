@@ -30,12 +30,13 @@ function build() {
   const permissionUtilsScript = read('permission-utils.js');
   const globPatternScript = read('glob-pattern.js');
   const textPatternScript = read('text-pattern-utils.js');
+  const sedParserScript = read('sed-parser.js');
   const shellParserScript = read('shell-parser.js');
   const checkerScript = read('checkers.js');
   const appScript = read('app.js');
   if (!gameTemplate.includes('<!--APP_SCRIPT-->')) throw new Error('src/game.html is missing the app script insertion point');
   const game = gameTemplate
-    .replace('<!--APP_SCRIPT-->', () => '<script>\n' + helperScript + '\n</script>\n<script>\n' + filesystemScript + '\n</script>\n<script>\n' + pathUtilsScript + '\n</script>\n<script>\n' + permissionUtilsScript + '\n</script>\n<script>\n' + globPatternScript + '\n</script>\n<script>\n' + textPatternScript + '\n</script>\n<script>\n' + shellParserScript + '\n</script>\n<script>\n' + checkerScript + '\n</script>\n<script>\n' + appScript + '\n</script>')
+    .replace('<!--APP_SCRIPT-->', () => '<script>\n' + helperScript + '\n</script>\n<script>\n' + filesystemScript + '\n</script>\n<script>\n' + pathUtilsScript + '\n</script>\n<script>\n' + permissionUtilsScript + '\n</script>\n<script>\n' + globPatternScript + '\n</script>\n<script>\n' + textPatternScript + '\n</script>\n<script>\n' + sedParserScript + '\n</script>\n<script>\n' + shellParserScript + '\n</script>\n<script>\n' + checkerScript + '\n</script>\n<script>\n' + appScript + '\n</script>')
     .replace(/__APP_VERSION__/g, packageVersion)
     .replace(/__APP_BUILD__/g, version);
   const tail = read('shell-tail.html');
