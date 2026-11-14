@@ -1,0 +1,27 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { create } = require('./src/sed-parser');
+const { breToJs, readDelim } = require('./src/text-pattern-utils');
+function buildRe(pattern, options = {}) {
+  const source = options.ere ? pattern : breToJs(pattern);
+  return new RegExp(source, (options.icase ? 'i' : '') + (options.global ? 'g' : ''));
+}
+const { sedRep, parseSed } = create({ buildRe, readDelim });
+assert.equal(sedRep('\\\\1\\\\n\\\\t\\\\$&'), '$1\\n\\t$$$&');
+assert.deepEqual(parseSed('2d', false), [{ addr: { n: 2 }, cmd: 'd' }]);
+assert.deepEqual(parseSed('$p', false), [{ addr: { last: true }, cmd: 'p' }]);
+assert.equal(parseSed('/^foo$/p', true)[0].addr.re.test('foo'), true);
+const sub = parseSed('s/foo/bar/g', false)[0];
+assert.equal(sub.re.global, true);
+assert.equal('foo foo'.replace(sub.re, sub.rep), 'bar bar');
+const escaped = parseSed('s#foo#<&>#', false)[0];
+assert.equal('foo'.replace(escaped.re, escaped.rep), '<foo>');
+const delimiter = parseSed('s/a\\\\/b/x/', false)[0];
+assert.equal('a/b'.replace(delimiter.re, delimiter.rep), 'x');
+const insensitive = parseSed('s/cat/dog/I', false)[0];
+assert.equal('CAT'.replace(insensitive.re, insensitive.rep), 'dog');
+assert.throws(() => parseSed('/unterminated/p', false), /unterminated address regex/);
+assert.throws(() => parseSed('s/foo/bar', false), /unterminated/);
+assert.throws(() => parseSed('z', false), /unknown command/);
+assert.throws(() => create({}), /requires buildRe and readDelim/);
+console.log('Sed parser tests passed.');
