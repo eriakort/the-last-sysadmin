@@ -3,6 +3,8 @@
 function create(dependencies) {
   const buildRe = dependencies && dependencies.buildRe;
   const readDelim = dependencies && dependencies.readDelim;
+  const splitLines = dependencies && dependencies.splitLines;
+  if (typeof splitLines !== 'function') throw new TypeError('sed parser requires splitLines function');
   if (typeof buildRe !== 'function' || typeof readDelim !== 'function') {
     throw new TypeError('sed parser requires buildRe and readDelim functions');
   }
@@ -51,7 +53,30 @@ function create(dependencies) {
     }
     return cmds;
   }
-  return { sedRep, parseSed };
+  function runSed(program, content, options = {}) {
+    const lines = splitLines(content), output = [];
+    lines.forEach((line, index) => {
+      const last = index === lines.length - 1;
+      let current = line, deleted = false;
+      for (const command of program) {
+        const address = command.addr;
+        const matches = !address || (address.n !== undefined
+          ? index + 1 === address.n
+          : address.last ? last : address.re.test(current));
+        if (!matches) continue;
+        if (command.cmd === 'd') { deleted = true; break; }
+        if (command.cmd === 'p') output.push(current);
+        if (command.cmd === 's') {
+          const hit = command.test.test(current);
+          current = current.replace(command.re, command.rep);
+          if (command.p && hit) output.push(current);
+        }
+      }
+      if (!deleted && !options.quiet) output.push(current);
+    });
+    return output.length ? output.join('\n') + '\n' : '';
+  }
+  return { sedRep, parseSed, runSed };
 }
 const api = { create };
 root.LSASedParser = api;

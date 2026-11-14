@@ -6,7 +6,8 @@ function buildRe(pattern, options = {}) {
   const source = options.ere ? pattern : breToJs(pattern);
   return new RegExp(source, (options.icase ? 'i' : '') + (options.global ? 'g' : ''));
 }
-const { sedRep, parseSed } = create({ buildRe, readDelim });
+const splitLines = value => { if (!value) return []; const text = value.endsWith('\n') ? value.slice(0, -1) : value; return text.split('\n'); };
+const { sedRep, parseSed, runSed } = create({ buildRe, readDelim, splitLines });
 assert.equal(sedRep('\\1\\n\\t\\$&'), '$1\n\t$$$&');
 assert.deepEqual(parseSed('2d', false), [{ addr: { n: 2 }, cmd: 'd' }]);
 assert.deepEqual(parseSed('$p', false), [{ addr: { last: true }, cmd: 'p' }]);
@@ -23,5 +24,11 @@ assert.equal('CAT'.replace(insensitive.re, insensitive.rep), 'dog');
 assert.throws(() => parseSed('/unterminatedp', false), /unterminated address regex/);
 assert.throws(() => parseSed('s/foo/bar', false), /unterminated/);
 assert.throws(() => parseSed('z', false), /unknown command/);
-assert.throws(() => create({}), /requires buildRe and readDelim/);
+assert.equal(runSed(parseSed('2d', false), 'one\ntwo\nthree\n'), 'one\nthree\n');
+assert.equal(runSed(parseSed('s/foo/bar/g', false), 'foo foo\nplain\n'), 'bar bar\nplain\n');
+assert.equal(runSed(parseSed('2p', false), 'one\ntwo\nthree\n', { quiet: true }), 'two\n');
+assert.equal(runSed(parseSed('s/foo/bar/p', false), 'foo\nplain\n', { quiet: true }), 'bar\n');
+assert.equal(runSed(parseSed('s/foo/bar/', false), 'foo\n'), 'bar\n');
+assert.throws(() => create({ buildRe, readDelim }), /requires splitLines/);
+assert.throws(() => create({ splitLines }), /requires buildRe and readDelim/);
 console.log('Sed parser tests passed.');
