@@ -4046,8 +4046,8 @@ let campaignS = null;
    enter it once in the Race dialog (saved in their browser). The anon key is a
    public client key by design. Used only when the claude.ai room backend is
    absent (i.e. a self-hosted / GitHub Pages copy). */
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://yhzefqoplunmseuwcwku.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloemVmcW9wbHVubXNldXdjd2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNDM0NTQsImV4cCI6MjEwODgxOTQ1NH0.5CWs0AtbFtrAYOYiPjgKfvWivAMPeXGXSzOblZMCS3c';
 let roomCap;
 let RACE_BACKEND = '';
 function supaConfig() {
