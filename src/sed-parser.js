@@ -74,7 +74,7 @@ function create(dependencies) {
       }
       if (!deleted && !options.quiet) output.push(current);
     });
-    return output.length ? output.join('\\n') + '\\n' : '';
+    return output.length ? output.join('\n') + '\n' : '';
   }
   return { sedRep, parseSed, runSed };
 }
