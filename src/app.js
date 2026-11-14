@@ -1206,22 +1206,7 @@ CMDS.passwd = (a, ctx) => {
   if (!rest[0]) throw new Error('missing user name');
   return CMDS.usermod([f.l ? '-L' : '-U', rest[0]], ctx);
 };
-function parseMode(spec, cur, isDir) {
-  if (/^[0-7]{1,4}$/.test(spec)) return parseInt(spec, 8);
-  let m = cur;
-  for (const clause of spec.split(',')) {
-    const mm = clause.match(/^([ugoa]*)([+\-=])([rwxX]*)$/);
-    if (!mm) return null;
-    let who = mm[1] || 'a'; if (who.includes('a')) who = 'ugo';
-    let v = 0;
-    for (const c of mm[3]) v |= c === 'r' ? 4 : c === 'w' ? 2 : c === 'x' ? 1 : (isDir || (cur & 0o111)) ? 1 : 0;
-    for (const w of new Set(who)) {
-      const sh = { u: 6, g: 3, o: 0 }[w], mask = 7 << sh, val = v << sh;
-      if (mm[2] === '+') m |= val; else if (mm[2] === '-') m &= ~val; else m = (m & ~mask) | val;
-    }
-  }
-  return m;
-}
+const parseMode = permissionUtils.parseMode;
 function walkTargets(ctx, cmd, files, rec, fn) {
   let st = 0;
   for (const t of files) {
