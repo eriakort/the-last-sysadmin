@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const linux = fs.readFileSync(path.join(__dirname, 'src/game.html'), 'utf8');
+const linux = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 const network = fs.readFileSync(path.join(__dirname, 'network-trainer/ui.js'), 'utf8');
 const feedback = require('./src/feedback');
 assert.match(linux, /LSAFeedback\.classifyOutcome\(\{ objectiveMet: objectiveMet && masteryMet \}\)/, 'Linux mission checks use the shared outcome classifier');

@@ -4,12 +4,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const html = fs.readFileSync('src/game.html', 'utf8');
-const start = html.indexOf('function syncRecordDeletion(');
-const end = html.indexOf('async function syncPull()', start);
+const appSource = fs.readFileSync('src/app.js', 'utf8');
+const start = appSource.indexOf('function syncRecordDeletion(');
+const end = appSource.indexOf('async function syncPull()', start);
 assert.notEqual(start, -1, 'sync merge helpers should exist in the app');
 assert.notEqual(end, -1, 'sync merge helpers should end before syncPull');
-const helpers = html.slice(start, end);
+const helpers = appSource.slice(start, end);
 const context = {};
 vm.runInNewContext(helpers + '\nthis.mergeProgressStates = mergeProgressStates; this.syncMergeTombstones = syncMergeTombstones; this.syncApplyTombstones = syncApplyTombstones; this.syncRecordDeletion = syncRecordDeletion;', context);
 

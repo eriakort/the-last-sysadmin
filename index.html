@@ -3460,7 +3460,8 @@ CMDS.dpkg = (a, ctx) => {
   const { f, rest } = opts(a, 'l', '', 'dpkg');
   if (f.l) {
     const q = rest[0];
-    const names = Object.keys(S.packages.installed).filter(n => !q || n === q || new RegExp('^' + q.replace(/[.]/g, '\\.').replace(/\*/g, '.*') + '$').test(n)).sort();
+    const pattern = q ? new RegExp('^' + q.split('*').map(reEsc).join('.*') + '$') : null;
+    const names = Object.keys(S.packages.installed).filter(n => !q || n === q || pattern.test(n)).sort();
     if (q && !names.length) { ctx.err(`dpkg-query: no packages found matching ${q}\n`); return 1; }
     ctx.out('Desired=Unknown/Install/Remove/Purge/Hold\n| Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend\n|/ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)\n||/ Name           Version        Architecture Description\n+++-==============-==============-============-=================================\n');
     for (const n of names) ctx.out(`ii  ${n.padEnd(14)} ${S.packages.installed[n].padEnd(14)} amd64        ${PKG_DESC[n] || n}\n`);

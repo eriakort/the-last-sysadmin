@@ -19,12 +19,13 @@ never edit it by hand. You edit the sources under `src/` and run the build.
 
 | File | What it is | Edit it? |
 |------|-----------|----------|
-| `src/game.html` | **THE game** — title, CSS, `<body>`, and the game `<script>`. This is where almost all real work happens. | ✅ yes |
+| `src/game.html` | Main HTML and CSS source; contains the app-script insertion point. | ✅ yes |
 | `src/shell-head.html` | Fixed `<head>` boilerplate (doctype, metas, manifest + icon links, reset `<style>`). | rarely |
 | `src/shell-tail.html` | Fixed tail — service-worker registration + `</body></html>`. | rarely |
 | `src/service-worker.js` | Service-worker template; `__VERSION__` is filled from `version.txt`. | rarely |
 | `src/version.txt` | The cache version number. **Bump it to force clients to refresh** after a deploy. | ✅ on release |
-| `src/helpers.js` | Pure helpers (`pad`, `esc`, `norm`, `permStr`, `human`, …), extracted for unit testing. | ✅ |
+| `src/app.js` | Canonical Linux application runtime script, bundled inline into the generated page. | ✅ yes |
+| `src/helpers.js` | Pure helpers (`pad`, `esc`, `norm`, `permStr`, `human`, …), currently mirrored for unit testing. | ✅ |
 | `src/checkers.js` | Pure mission checkers (`checkExecutable`, `checkContains`, …) returning `{ ok, reason? }`. | ✅ |
 
 `helpers.js` / `checkers.js` are the pure logic, mirrored from `game.html` so
