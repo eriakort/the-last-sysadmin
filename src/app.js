@@ -44,10 +44,8 @@ function toggleRack() {
   }
 }
 
-const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KB = 1024, MB = KB * 1024, GB = MB * 1024;
-const pad = (n, w = 2) => String(n).padStart(w, '0');
 const $ = s => document.querySelector(s);
 document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
 document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
@@ -71,13 +69,10 @@ document.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const md = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
 const enc = new TextEncoder();
 const byteLen = s => enc.encode(s).length;
-const splitLines = s => { if (!s) return []; const t = s.endsWith('\n') ? s.slice(0, -1) : s; return t.split('\n'); };
-function mulberry32(a) { return function () { let t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
 
 /* ============================================================
    Story data: generated logs (seeded, so every player gets the same files)
@@ -633,13 +628,7 @@ function load() {
 }
 
 /* ---------- paths and lookups ---------- */
-function norm(path, cwd) {
-  if (path === '~' || path.startsWith('~/')) path = HOME + path.slice(1);
-  const parts = (path.startsWith('/') ? path : cwd + '/' + path).split('/');
-  const out = [];
-  for (const p of parts) { if (!p || p === '.') continue; if (p === '..') out.pop(); else out.push(p); }
-  return '/' + out.join('/');
-}
+const norm = (path, cwd) => globalThis.LSAHelpers.norm(path, cwd, HOME);
 const parentOf = abs => { const i = abs.lastIndexOf('/'); return i <= 0 ? '/' : abs.slice(0, i); };
 const baseName = abs => abs === '/' ? '/' : abs.slice(abs.lastIndexOf('/') + 1);
 const joinAbs = (a, b) => a === '/' ? '/' + b : a + '/' + b;
@@ -719,26 +708,7 @@ function cloneOwned(node) {
 const sizeOf = n => n.type === 'dir' ? 4096 : (n.size ?? byteLen(n.content));
 function treeSize(n) { if (n.type !== 'dir') return sizeOf(n); let s = 4096; for (const c of Object.values(n.children)) s += treeSize(c); return s; }
 function walkAll(abs, node, fn) { if (!node) return; fn(abs, node); if (node.type === 'dir') for (const [k, c] of Object.entries(node.children)) walkAll(joinAbs(abs, k), c, fn); }
-function permStr(n) {
-  const m = n.mode, b = 'rwxrwxrwx';
-  let s = n.type === 'dir' ? 'd' : '-';
-  for (let i = 0; i < 9; i++) s += (m & (1 << (8 - i))) ? b[i] : '-';
-  if (m & 0o4000) s = s.slice(0, 3) + ((m & 0o100) ? 's' : 'S') + s.slice(4);
-  if (m & 0o2000) s = s.slice(0, 6) + ((m & 0o010) ? 's' : 'S') + s.slice(7);
-  if (m & 0o1000) s = s.slice(0, 9) + ((m & 1) ? 't' : 'T');
-  return s;
-}
-function human(n) {
-  if (n < 1024) return String(n);
-  const u = ['K', 'M', 'G', 'T']; let v = n, i = -1;
-  do { v /= 1024; i++; } while (v >= 1024 && i < 3);
-  return (v < 10 ? (Math.ceil(v * 10) / 10).toFixed(1) : String(Math.ceil(v))) + u[i];
-}
-function lsDate(ms) {
-  const d = new Date(ms);
-  const recent = Math.abs(Date.now() - ms) < 182 * 864e5;
-  return `${MON[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2)} ${recent ? pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) : ' ' + d.getUTCFullYear()}`;
-}
+const { permStr, human, lsDate } = globalThis.LSAHelpers;
 const tag = (ctx, s, k) => ctx.tty ? `\u0001${k}${s}\u0001e` : s;
 const nameDisp = (ctx, name, node) => !ctx.tty ? name : node.type === 'dir' ? tag(ctx, name, 'd') : (node.mode & 0o111) ? tag(ctx, name, 'x') : name;
 

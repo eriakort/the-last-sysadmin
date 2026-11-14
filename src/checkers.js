@@ -1,3 +1,5 @@
+(function (root) {
+'use strict';
 // Pure mission checkers
 // Each takes a snapshot of relevant state and returns { ok: boolean, reason?: string }
 // No DOM or live game state. Easy to unit-test.
@@ -85,10 +87,8 @@ function checkMinSize(fs, path, min) {
   return { ok: false, reason: `size ${sz} < ${min}` };
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    walk, fileExists, fileMode, fileOwner, fileSize,
-    checkExecutable, checkContains, checkMatches,
-    checkOwner, checkIsDir, checkMinSize
-  };
-}
+
+const api = { walk, fileExists, fileMode, fileOwner, fileSize, checkExecutable, checkContains, checkMatches, checkOwner, checkIsDir, checkMinSize };
+root.LSACheckers = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
