@@ -749,6 +749,201 @@ body.practicing{padding-top:40px}
 
 <script src="src/feedback.js"></script>
 <script>
+(function (root) {
+'use strict';
+// Pure helpers extracted from index.html
+// These have no DOM or game-state dependencies and can be unit-tested in isolation.
+// A future build step can concatenate this file (plus others) back into a single index.html.
+
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const md = s => esc(s)
+  .replace(/`([^`]+)`/g, '<code>$1</code>')
+  .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+
+const splitLines = s => {
+  if (!s) return [];
+  const t = s.endsWith('\n') ? s.slice(0, -1) : s;
+  return t.split('\n');
+};
+
+function mulberry32(a) {
+  return function () {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const ticketId = i => `INC-1025-${pad(i + 1)}`;
+
+// Path normalization (pure — needs HOME and cwd passed in)
+function norm(path, cwd, HOME) {
+  if (path === '~' || path.startsWith('~/')) path = HOME + path.slice(1);
+  const parts = (path.startsWith('/') ? path : cwd + '/' + path).split('/');
+  const out = [];
+  for (const p of parts) {
+    if (!p || p === '.') continue;
+    if (p === '..') out.pop();
+    else out.push(p);
+  }
+  return '/' + out.join('/');
+}
+
+const basename = p => p.split('/').filter(Boolean).pop() || '/';
+const dirname = p => {
+  const parts = p.split('/').filter(Boolean);
+  parts.pop();
+  return '/' + parts.join('/');
+};
+const parentOf = dirname;
+
+// Permission string (pure)
+function permStr(n) {
+  const m = n.mode, b = 'rwxrwxrwx';
+  let s = n.type === 'dir' ? 'd' : '-';
+  for (let i = 0; i < 9; i++) s += (m & (1 << (8 - i))) ? b[i] : '-';
+  if (m & 0o4000) s = s.slice(0, 3) + ((m & 0o100) ? 's' : 'S') + s.slice(4);
+  if (m & 0o2000) s = s.slice(0, 6) + ((m & 0o010) ? 's' : 'S') + s.slice(7);
+  if (m & 0o1000) s = s.slice(0, 9) + ((m & 0o001) ? 't' : 'T') + s.slice(10);
+  return s;
+}
+
+// Simple permission bit checks (owner bits)
+const canRead = m => !!(m & 0o400);
+const canWrite = m => !!(m & 0o200);
+const canExec = m => !!(m & 0o100);
+
+// Human-readable size (pure)
+function human(n) {
+  if (n < 1024) return String(n);
+  const u = ['K', 'M', 'G', 'T']; let v = n, i = -1;
+  do { v /= 1024; i++; } while (v >= 1024 && i < 3);
+  return (v < 10 ? (Math.ceil(v * 10) / 10).toFixed(1) : String(Math.ceil(v))) + u[i];
+}
+
+// Date helpers (pure — pass MON array)
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function lsDate(ms) {
+  const d = new Date(ms);
+  const recent = Math.abs(Date.now() - ms) < 182 * 864e5;
+  return `${MON[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2)} ${recent ? pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) : ' ' + d.getUTCFullYear()}`;
+}
+function fmtLogTime(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
+
+const api = { pad, esc, md, reEsc, splitLines, mulberry32, ticketId, norm, basename, dirname, parentOf, permStr, canRead, canWrite, canExec, human, lsDate, fmtLogTime, MON };
+root.LSAHelpers = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+(function (root) {
+'use strict';
+// Pure mission checkers
+// Each takes a snapshot of relevant state and returns { ok: boolean, reason?: string }
+// No DOM or live game state. Easy to unit-test.
+
+function walk(fs, path) {
+  const parts = path.split('/').filter(Boolean);
+  let n = fs;
+  for (const p of parts) {
+    if (!n || n.type !== 'dir' || !n.children || !n.children[p]) return null;
+    n = n.children[p];
+  }
+  return n;
+}
+
+function fileExists(fs, path) {
+  return !!walk(fs, path);
+}
+
+function fileMode(fs, path) {
+  const n = walk(fs, path);
+  return n && n.mode != null ? n.mode : null;
+}
+
+function fileOwner(fs, path) {
+  const n = walk(fs, path);
+  return n ? n.owner : null;
+}
+
+function fileSize(fs, path) {
+  const n = walk(fs, path);
+  if (!n || n.type !== 'file') return null;
+  return n.content ? String(n.content).length : (n.size || 0);
+}
+
+// File must exist and be executable by owner
+function checkExecutable(fs, path) {
+  const mode = fileMode(fs, path);
+  if (mode == null) return { ok: false, reason: 'file missing' };
+  if (!(mode & 0o100)) return { ok: false, reason: 'not executable' };
+  return { ok: true };
+}
+
+// Content contains a string
+function checkContains(fs, path, needle) {
+  const n = walk(fs, path);
+  if (!n) return { ok: false, reason: 'file missing' };
+  if (n.type !== 'file') return { ok: false, reason: 'not a file' };
+  if (String(n.content || '').includes(needle)) return { ok: true };
+  return { ok: false, reason: 'content mismatch' };
+}
+
+// Content matches a regex
+function checkMatches(fs, path, re) {
+  const n = walk(fs, path);
+  if (!n) return { ok: false, reason: 'file missing' };
+  if (n.type !== 'file') return { ok: false, reason: 'not a file' };
+  // RegExp instances with global/sticky flags retain lastIndex between calls.
+  // Reset it so repeated mission checks are deterministic.
+  re.lastIndex = 0;
+  if (re.test(String(n.content || ''))) return { ok: true };
+  return { ok: false, reason: 'regex mismatch' };
+}
+
+// Owner matches
+function checkOwner(fs, path, owner) {
+  const o = fileOwner(fs, path);
+  if (o == null) return { ok: false, reason: 'file missing' };
+  if (o === owner) return { ok: true };
+  return { ok: false, reason: `owner is ${o}, expected ${owner}` };
+}
+
+// Is a directory
+function checkIsDir(fs, path) {
+  const n = walk(fs, path);
+  if (!n) return { ok: false, reason: 'missing' };
+  if (n.type === 'dir') return { ok: true };
+  return { ok: false, reason: 'not a directory' };
+}
+
+// Size at least N bytes
+function checkMinSize(fs, path, min) {
+  const sz = fileSize(fs, path);
+  if (sz == null) return { ok: false, reason: 'missing or not a file' };
+  if (sz >= min) return { ok: true };
+  return { ok: false, reason: `size ${sz} < ${min}` };
+}
+
+
+const api = { walk, fileExists, fileMode, fileOwner, fileSize, checkExecutable, checkContains, checkMatches, checkOwner, checkIsDir, checkMinSize };
+root.LSACheckers = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
 (() => {
 'use strict';
 try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
@@ -795,10 +990,8 @@ function toggleRack() {
   }
 }
 
-const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const KB = 1024, MB = KB * 1024, GB = MB * 1024;
-const pad = (n, w = 2) => String(n).padStart(w, '0');
 const $ = s => document.querySelector(s);
 document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
 document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
@@ -822,9 +1015,7 @@ document.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const md = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
 const enc = new TextEncoder();
 const byteLen = s => enc.encode(s).length;
 const splitLines = s => { if (!s) return []; const t = s.endsWith('\n') ? s.slice(0, -1) : s; return t.split('\n'); };
@@ -1384,13 +1575,7 @@ function load() {
 }
 
 /* ---------- paths and lookups ---------- */
-function norm(path, cwd) {
-  if (path === '~' || path.startsWith('~/')) path = HOME + path.slice(1);
-  const parts = (path.startsWith('/') ? path : cwd + '/' + path).split('/');
-  const out = [];
-  for (const p of parts) { if (!p || p === '.') continue; if (p === '..') out.pop(); else out.push(p); }
-  return '/' + out.join('/');
-}
+const norm = (path, cwd) => globalThis.LSAHelpers.norm(path, cwd, HOME);
 const parentOf = abs => { const i = abs.lastIndexOf('/'); return i <= 0 ? '/' : abs.slice(0, i); };
 const baseName = abs => abs === '/' ? '/' : abs.slice(abs.lastIndexOf('/') + 1);
 const joinAbs = (a, b) => a === '/' ? '/' + b : a + '/' + b;
@@ -1470,26 +1655,7 @@ function cloneOwned(node) {
 const sizeOf = n => n.type === 'dir' ? 4096 : (n.size ?? byteLen(n.content));
 function treeSize(n) { if (n.type !== 'dir') return sizeOf(n); let s = 4096; for (const c of Object.values(n.children)) s += treeSize(c); return s; }
 function walkAll(abs, node, fn) { if (!node) return; fn(abs, node); if (node.type === 'dir') for (const [k, c] of Object.entries(node.children)) walkAll(joinAbs(abs, k), c, fn); }
-function permStr(n) {
-  const m = n.mode, b = 'rwxrwxrwx';
-  let s = n.type === 'dir' ? 'd' : '-';
-  for (let i = 0; i < 9; i++) s += (m & (1 << (8 - i))) ? b[i] : '-';
-  if (m & 0o4000) s = s.slice(0, 3) + ((m & 0o100) ? 's' : 'S') + s.slice(4);
-  if (m & 0o2000) s = s.slice(0, 6) + ((m & 0o010) ? 's' : 'S') + s.slice(7);
-  if (m & 0o1000) s = s.slice(0, 9) + ((m & 1) ? 't' : 'T');
-  return s;
-}
-function human(n) {
-  if (n < 1024) return String(n);
-  const u = ['K', 'M', 'G', 'T']; let v = n, i = -1;
-  do { v /= 1024; i++; } while (v >= 1024 && i < 3);
-  return (v < 10 ? (Math.ceil(v * 10) / 10).toFixed(1) : String(Math.ceil(v))) + u[i];
-}
-function lsDate(ms) {
-  const d = new Date(ms);
-  const recent = Math.abs(Date.now() - ms) < 182 * 864e5;
-  return `${MON[d.getUTCMonth()]} ${String(d.getUTCDate()).padStart(2)} ${recent ? pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) : ' ' + d.getUTCFullYear()}`;
-}
+const { permStr, human, lsDate } = globalThis.LSAHelpers;
 const tag = (ctx, s, k) => ctx.tty ? `\u0001${k}${s}\u0001e` : s;
 const nameDisp = (ctx, name, node) => !ctx.tty ? name : node.type === 'dir' ? tag(ctx, name, 'd') : (node.mode & 0o111) ? tag(ctx, name, 'x') : name;
 
