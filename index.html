@@ -1018,8 +1018,7 @@ document.addEventListener('keydown', event => {
 const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
 const enc = new TextEncoder();
 const byteLen = s => enc.encode(s).length;
-const splitLines = s => { if (!s) return []; const t = s.endsWith('\n') ? s.slice(0, -1) : s; return t.split('\n'); };
-function mulberry32(a) { return function () { let t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
 
 /* ============================================================
    Story data: generated logs (seeded, so every player gets the same files)
