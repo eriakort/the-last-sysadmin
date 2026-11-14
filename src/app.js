@@ -69,7 +69,7 @@ document.addEventListener('click', event => {
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
 });
-const { esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
+const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
 const enc = new TextEncoder();
 const byteLen = s => enc.encode(s).length;
 const splitLines = s => { if (!s) return []; const t = s.endsWith('\n') ? s.slice(0, -1) : s; return t.split('\n'); };
