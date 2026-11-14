@@ -60,7 +60,8 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   }
 
   const finalCopy = await page.locator('#investigationTourCopy').innerText();
-  if (finalCopy.includes('Correlate the evidence')) ok('final tour step teaches evidence correlation before making changes');
+  const finalTitle = await page.locator('#investigationTourTitle').innerText();
+  if (finalTitle === 'Correlate the evidence' && finalCopy.includes('Correlate timestamps')) ok('final tour step teaches evidence correlation before making changes');
   else fail('final tour step omitted evidence correlation guidance');
   await page.click('#investigationTourNext');
   if (!(await page.locator('#investigationTour').isVisible()) && await page.evaluate(() => localStorage.getItem('lsa-investigation-tour-complete')) === '1')
