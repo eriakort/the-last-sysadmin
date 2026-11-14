@@ -777,6 +777,7 @@ function tokenize(line) {
   return toks;
 }
 const parse = globalThis.LSAShellParser.parse;
+const { splitStatements, findCloser, findElse } = globalThis.LSAShellScriptParser;
 const { hasGlob, unesc, segRe } = globalThis.LSAGlobPattern;
 function globExpand(pat) {
   const isAbs = pat.startsWith('/');
@@ -898,42 +899,6 @@ function exec(argv, ctx) {
 
 
 /* ---------- script interpreter ---------- */
-function splitStatements(content) {
-  const out = [];
-  for (const raw of content.split('\n')) {
-    let cur = '', q = null;
-    const flush = () => { const t = cur.trim(); if (t) out.push(t); cur = ''; };
-    for (let i = 0; i < raw.length; i++) {
-      const c = raw[i];
-      if (q) { cur += c; if (c === q) q = null; continue; }
-      if (c === "'" || c === '"') { q = c; cur += c; continue; }
-      if (c === '#' && (i === 0 || /\s/.test(raw[i - 1]))) break;
-      if (c === ';') { flush(); continue; }
-      cur += c;
-    }
-    flush();
-  }
-  return out;
-}
-function findCloser(stmts, start, end) {
-  let depth = 0;
-  for (let j = start; j < end; j++) {
-    const s2 = stmts[j];
-    if (/^(for|while|if)\b/.test(s2)) depth++;
-    if (s2 === 'done' || s2 === 'fi' || /^(done|fi)\b/.test(s2)) { depth--; if (depth === 0) return j; }
-  }
-  return -1;
-}
-function findElse(stmts, start, fiIdx) {
-  let depth = 0;
-  for (let j = start; j < fiIdx; j++) {
-    const s2 = stmts[j];
-    if (/^(for|while|if)\b/.test(s2)) depth++;
-    else if (s2 === 'done' || s2 === 'fi' || /^(done|fi)\b/.test(s2)) depth--;
-    else if (depth === 0 && (s2 === 'else' || s2.startsWith('else ') || s2.startsWith('elif '))) return j;
-  }
-  return -1;
-}
 function expandListWords(str) { return expandWords(tokenize(str).filter(t => t.t === 'w')); }
 function execList(stmts, start, end) {
   let i = start, status = 0, m;
