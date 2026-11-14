@@ -84,7 +84,8 @@ Topology drafts, journal evidence and configuration checkpoints described as bro
 
 | Path | Responsibility |
 |---|---|
-| `src/game.html` | Main Linux Sysadmin application source (large, currently mostly single-file). |
+| `src/game.html` | Main Linux page markup and CSS; the application script is inserted by the build. |
+| `src/app.js` | Linux Sysadmin application runtime entry script (bundled inline into the generated page). |
 | `build.js` | Builds the deployable root `index.html` from application source and assets. |
 | `src/helpers.js` | Extracted pure helpers used by the Linux application. |
 | `src/service-worker.js` | Offline caching and service-worker lifecycle. |
