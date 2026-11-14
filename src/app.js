@@ -629,9 +629,7 @@ function load() {
 
 /* ---------- paths and lookups ---------- */
 const norm = (path, cwd) => globalThis.LSAHelpers.norm(path, cwd, HOME);
-const parentOf = abs => { const i = abs.lastIndexOf('/'); return i <= 0 ? '/' : abs.slice(0, i); };
-const baseName = abs => abs === '/' ? '/' : abs.slice(abs.lastIndexOf('/') + 1);
-const joinAbs = (a, b) => a === '/' ? '/' + b : a + '/' + b;
+const { parentOf, baseName, joinAbs } = globalThis.LSAPathUtils;
 function getNode(abs) { return globalThis.LSAFileSystem.walk(S.fs, abs); }
 let RUNAS = USER;
 let grpCache = { src: null, list: [] };
