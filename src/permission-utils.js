@@ -12,7 +12,7 @@ function parseMode(spec, cur, isDir) {
   if (/^[0-7]{1,4}$/.test(spec)) return parseInt(spec, 8);
   let mode = cur;
   for (const clause of spec.split(',')) {
-    const match = clause.match(/^([ugoa]*)([+\\-=])([rwxX]*)$/);
+    const match = clause.match(/^([ugoa]*)([+=-])([rwxX]*)$/);
     if (!match) return null;
     let who = match[1] || 'a';
     if (who.includes('a')) who = 'ugo';
