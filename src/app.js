@@ -721,26 +721,8 @@ function testEval(a) {
   }
   return 2;
 }
-/* ---------- option parsing ---------- */
-function opts(args, allowed, valued, cmd) {
-  const f = {}, rest = [];
-  for (let k = 0; k < args.length; k++) {
-    const a = args[k];
-    if (a === '--') { rest.push(...args.slice(k + 1)); break; }
-    if (a.startsWith('--') && a.length > 2) throw new Error(`unrecognized option '${a}'\nTry 'man ${cmd}' for the options this game supports.`);
-    if (a.length > 1 && a[0] === '-') {
-      for (let j = 1; j < a.length; j++) {
-        const l = a[j];
-        if (valued.includes(l)) { let v = a.slice(j + 1); if (v === '') v = args[++k]; if (v === undefined) throw new Error(`option requires an argument -- '${l}'`); f[l] = v; break; }
-        if (!allowed.includes(l)) throw new Error(`invalid option -- '${l}'\nTry 'man ${cmd}' for the options this game supports.`);
-        f[l] = true;
-      }
-      continue;
-    }
-    rest.push(a);
-  }
-  return { f, rest };
-}
+const opts = globalThis.LSACommandOptions.parseOptions;
+
 const READERS = ['cat', 'less', 'more', 'head', 'tail'];
 function inputs(files, ctx, name) {
   const res = []; let st = 0;

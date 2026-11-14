@@ -1532,6 +1532,40 @@ if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
 </script>
 <script>
+(function (root) {
+'use strict';
+function parseOptions(args, allowed, valued, cmd) {
+  const flags = {}, rest = [];
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === '--') { rest.push(...args.slice(k + 1)); break; }
+    if (arg.startsWith('--') && arg.length > 2) throw new Error(`unrecognized option '${arg}'\nTry 'man ${cmd}' for the options this game supports.`);
+    if (arg.length > 1 && arg[0] === '-') {
+      for (let j = 1; j < arg.length; j++) {
+        const letter = arg[j];
+        if (valued.includes(letter)) {
+          let value = arg.slice(j + 1);
+          if (value === '') value = args[++k];
+          if (value === undefined) throw new Error(`option requires an argument -- '${letter}'`);
+          flags[letter] = value;
+          break;
+        }
+        if (!allowed.includes(letter)) throw new Error(`invalid option -- '${letter}'\nTry 'man ${cmd}' for the options this game supports.`);
+        flags[letter] = true;
+      }
+      continue;
+    }
+    rest.push(arg);
+  }
+  return { f: flags, rest };
+}
+const api = { parseOptions };
+root.LSACommandOptions = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
 (() => {
 'use strict';
 try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
@@ -2255,26 +2289,8 @@ function testEval(a) {
   }
   return 2;
 }
-/* ---------- option parsing ---------- */
-function opts(args, allowed, valued, cmd) {
-  const f = {}, rest = [];
-  for (let k = 0; k < args.length; k++) {
-    const a = args[k];
-    if (a === '--') { rest.push(...args.slice(k + 1)); break; }
-    if (a.startsWith('--') && a.length > 2) throw new Error(`unrecognized option '${a}'\nTry 'man ${cmd}' for the options this game supports.`);
-    if (a.length > 1 && a[0] === '-') {
-      for (let j = 1; j < a.length; j++) {
-        const l = a[j];
-        if (valued.includes(l)) { let v = a.slice(j + 1); if (v === '') v = args[++k]; if (v === undefined) throw new Error(`option requires an argument -- '${l}'`); f[l] = v; break; }
-        if (!allowed.includes(l)) throw new Error(`invalid option -- '${l}'\nTry 'man ${cmd}' for the options this game supports.`);
-        f[l] = true;
-      }
-      continue;
-    }
-    rest.push(a);
-  }
-  return { f, rest };
-}
+const opts = globalThis.LSACommandOptions.parseOptions;
+
 const READERS = ['cat', 'less', 'more', 'head', 'tail'];
 function inputs(files, ctx, name) {
   const res = []; let st = 0;
