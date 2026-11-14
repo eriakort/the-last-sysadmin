@@ -1,0 +1,18 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { hasBit, canWrite } = require('./src/permission-utils');
+const node = { owner: 'alice', group: 'admins', mode: 0o754 };
+assert.equal(hasBit(node, 4, 'alice', 'alice', []), true);
+assert.equal(hasBit(node, 2, 'alice', 'alice', []), true);
+assert.equal(hasBit(node, 1, 'alice', 'alice', []), true);
+assert.equal(hasBit(node, 2, 'bob', 'alice', []), false);
+assert.equal(hasBit(node, 4, 'bob', 'bob', ['admins']), true);
+assert.equal(hasBit(node, 2, 'bob', 'bob', ['admins']), false);
+assert.equal(hasBit(node, 1, 'root', 'root', []), true);
+assert.equal(hasBit(null, 4, 'root', 'root', []), false);
+assert.equal(canWrite('/home/alice/file', 'alice', ['/home/alice']), true);
+assert.equal(canWrite('/home/alice', 'alice', ['/home/alice']), false);
+assert.equal(canWrite('/etc/passwd', 'alice', ['/home/alice', '/tmp']), false);
+assert.equal(canWrite('/etc/passwd', 'root', ['/home/alice']), true);
+assert.equal(canWrite('/', 'root', ['/home/alice']), false);
+console.log('Permission utility tests passed.');
