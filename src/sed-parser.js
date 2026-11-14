@@ -26,7 +26,7 @@ function create(dependencies) {
   }
   function parseSed(s, ere) {
     const cmds = []; let i = 0;
-    const fail = msg => { throw new Error(\`-e expression #1, char \${i + 1}: \${msg}\`); };
+    const fail = msg => { throw new Error('-e expression #1, char ' + (i + 1) + ': ' + msg); };
     while (i < s.length) {
       while (i < s.length && /[\s;]/.test(s[i])) i++;
       if (i >= s.length) break;
