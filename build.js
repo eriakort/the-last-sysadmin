@@ -26,11 +26,12 @@ function build() {
   const gameTemplate = read('game.html');
   const helperScript = read('helpers.js');
   const filesystemScript = read('filesystem.js');
+  const pathUtilsScript = read('path-utils.js');
   const checkerScript = read('checkers.js');
   const appScript = read('app.js');
   if (!gameTemplate.includes('<!--APP_SCRIPT-->')) throw new Error('src/game.html is missing the app script insertion point');
   const game = gameTemplate
-    .replace('<!--APP_SCRIPT-->', () => '<script>\n' + helperScript + '\n</script>\n<script>\n' + filesystemScript + '\n</script>\n<script>\n' + checkerScript + '\n</script>\n<script>\n' + appScript + '\n</script>')
+    .replace('<!--APP_SCRIPT-->', () => '<script>\n' + helperScript + '\n</script>\n<script>\n' + filesystemScript + '\n</script>\n<script>\n' + pathUtilsScript + '\n</script>\n<script>\n' + checkerScript + '\n</script>\n<script>\n' + appScript + '\n</script>')
     .replace(/__APP_VERSION__/g, packageVersion)
     .replace(/__APP_BUILD__/g, version);
   const tail = read('shell-tail.html');
