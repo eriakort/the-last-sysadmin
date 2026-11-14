@@ -30,5 +30,5 @@ assert.equal(runSed(parseSed('2p', false), 'one\ntwo\nthree\n', { quiet: true })
 assert.equal(runSed(parseSed('s/foo/bar/p', false), 'foo\nplain\n', { quiet: true }), 'bar\n');
 assert.equal(runSed(parseSed('s/foo/bar/', false), 'foo\n'), 'bar\n');
 assert.throws(() => create({ buildRe, readDelim }), /requires splitLines/);
-assert.throws(() => create({}), /requires buildRe and readDelim/);
+assert.throws(() => create({ splitLines }), /requires buildRe and readDelim/);
 console.log('Sed parser tests passed.');
