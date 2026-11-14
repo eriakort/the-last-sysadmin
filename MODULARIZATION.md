@@ -1,3 +1,9 @@
+# Modularization roadmap
+
+The repository-wide, phased refactoring plan is maintained in [docs/architecture/modularization-roadmap.md](docs/architecture/modularization-roadmap.md). It supersedes this file as the forward-looking architecture plan; this document remains the current reference for the existing root build and generated-file workflow until Phase 1 updates it.
+
+---
+
 # Build & source layout
 
 The game **ships** as a single self-contained `index.html` (easy offline use,
