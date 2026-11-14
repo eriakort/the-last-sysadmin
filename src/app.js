@@ -1754,28 +1754,13 @@ CMDS.tr = (a, ctx) => {
   ctx.out(s);
 };
 
-const { parseSed } = globalThis.LSASedParser.create({ buildRe, readDelim });
+const { parseSed, runSed } = globalThis.LSASedParser.create({ buildRe, readDelim, splitLines });
 CMDS.sed = (a, ctx) => {
   const { f, rest } = opts(a, 'niEr', 'e', 'sed');
   let script = f.e;
   if (script === undefined) { if (!rest.length) throw new Error('usage: sed [-n] [-i] [-E] SCRIPT [FILE]...'); script = rest.shift(); }
   const prog = parseSed(script, f.E || f.r);
-  const am = (ad, line, n, last) => !ad || (ad.n !== undefined ? n === ad.n : ad.last ? last : ad.re.test(line));
-  const run = content => {
-    const lines = splitLines(content), out = [];
-    lines.forEach((ln, i) => {
-      const last = i === lines.length - 1;
-      let cur = ln, del = false;
-      for (const c of prog) {
-        if (!am(c.addr, cur, i + 1, last)) continue;
-        if (c.cmd === 'd') { del = true; break; }
-        if (c.cmd === 'p') out.push(cur);
-        if (c.cmd === 's') { const hit = c.test.test(cur); cur = cur.replace(c.re, c.rep); if (c.p && hit) out.push(cur); }
-      }
-      if (!del && !f.n) out.push(cur);
-    });
-    return out.length ? out.join('\n') + '\n' : '';
-  };
+  const run = content => runSed(prog, content, { quiet: f.n });
   if (f.i) {
     if (!rest.length) throw new Error('no input files');
     let st = 0;
