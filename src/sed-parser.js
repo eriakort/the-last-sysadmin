@@ -47,7 +47,7 @@ function create(dependencies) {
         const icase = /[iI]/.test(fl);
         cmds.push({ addr, cmd: 's', re: buildRe(pat, { ere, icase, global: fl.includes('g') }), test: buildRe(pat, { ere, icase }), rep: sedRep(rep), p: fl.includes('p') });
       }
-      else fail(c === undefined ? 'missing command' : \`unknown command: \\\`\${c}' (this game supports s, d and p)\`);
+      else fail(c === undefined ? 'missing command' : 'unknown command: ' + String.fromCharCode(96) + c + "' (this game supports s, d and p)");
     }
     return cmds;
   }
