@@ -6,7 +6,7 @@ function buildRe(pattern, options = {}) {
   const source = options.ere ? pattern : breToJs(pattern);
   return new RegExp(source, (options.icase ? 'i' : '') + (options.global ? 'g' : ''));
 }
-const splitLines = value => value.split(/\\r?\\n/).filter((line, index, lines) => index < lines.length - 1 || line !== '');
+const splitLines = value => { if (!value) return []; const text = value.endsWith('\\n') ? value.slice(0, -1) : value; return text.split('\\n'); };
 const { sedRep, parseSed, runSed } = create({ buildRe, readDelim, splitLines });
 assert.equal(sedRep('\\1\\n\\t\\$&'), '$1\n\t$$$&');
 assert.deepEqual(parseSed('2d', false), [{ addr: { n: 2 }, cmd: 'd' }]);
