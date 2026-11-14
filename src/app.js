@@ -776,23 +776,7 @@ function tokenize(line) {
   return toks;
 }
 const parse = globalThis.LSAShellParser.parse;
-const hasGlob = seg => /(^|[^\\])[*?[]/.test(seg);
-const unesc = seg => seg.replace(/\\(.)/g, '$1');
-function segRe(seg, icase) {
-  let r = '^';
-  for (let i = 0; i < seg.length; i++) {
-    const ch = seg[i];
-    if (ch === '\\') r += reEsc(seg[++i] ?? '');
-    else if (ch === '*') r += '.*';
-    else if (ch === '?') r += '.';
-    else if (ch === '[') {
-      const j = seg.indexOf(']', i + 2);
-      if (j < 0) r += '\\[';
-      else { let cls = seg.slice(i + 1, j); if (cls[0] === '!') cls = '^' + cls.slice(1); r += '[' + cls.replace(/\\/g, '\\\\') + ']'; i = j; }
-    } else r += reEsc(ch);
-  }
-  return new RegExp(r + '$', icase ? 'i' : '');
-}
+const { hasGlob, unesc, segRe } = globalThis.LSAGlobPattern;
 function globExpand(pat) {
   const isAbs = pat.startsWith('/');
   const segs = pat.split('/'); if (isAbs) segs.shift();
