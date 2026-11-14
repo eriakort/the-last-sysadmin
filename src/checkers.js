@@ -4,7 +4,9 @@
 // Each takes a snapshot of relevant state and returns { ok: boolean, reason?: string }
 // No DOM or live game state. Easy to unit-test.
 
-const { walk, fileExists, fileMode, fileOwner, fileSize } = root.LSAFileSystem;
+const filesystem = root.LSAFileSystem || (typeof module !== 'undefined' && module.exports ? require('./filesystem') : null);
+if (!filesystem) throw new Error('LSAFileSystem must be loaded before mission checkers');
+const { walk, fileExists, fileMode, fileOwner, fileSize } = filesystem;
 
 // File must exist and be executable by owner
 function checkExecutable(fs, path) {
