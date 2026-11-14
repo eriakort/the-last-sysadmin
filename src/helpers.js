@@ -1,3 +1,5 @@
+(function (root) {
+'use strict';
 // Pure helpers extracted from index.html
 // These have no DOM or game-state dependencies and can be unit-tested in isolation.
 // A future build step can concatenate this file (plus others) back into a single index.html.
@@ -86,12 +88,8 @@ function fmtLogTime(ms) {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
-// Export for Node testing (ignored in browser)
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    pad, esc, md, reEsc, splitLines, mulberry32, ticketId,
-    norm, basename, dirname, parentOf,
-    permStr, canRead, canWrite, canExec,
-    human, lsDate, fmtLogTime, MON
-  };
-}
+
+const api = { pad, esc, md, reEsc, splitLines, mulberry32, ticketId, norm, basename, dirname, parentOf, permStr, canRead, canWrite, canExec, human, lsDate, fmtLogTime, MON };
+root.LSAHelpers = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
