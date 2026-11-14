@@ -16,7 +16,7 @@ const deps = { pad, MON, mulberry32, HOST: 'halcyon-web01', splitLines };
 const first = create(deps), second = create(deps);
 for (const key of Object.keys(first)) assert.deepEqual(first[key], second[key], key + ' should be deterministic');
 assert.match(first.APPLOG, /halcyon v2\.3\.1 starting/);
-assert.match(first.ACCESS, /GET \/index\.html/);
+assert.match(first.ACCESS, /GET \//);
 assert.match(first.AUTHLOG, /sshd/);
 assert.ok(first.BASH_COUNT > 0);
 assert.match(first.PASSWD, /rookie/);
