@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { parse } = require('./src/shell-parser');
+const word = v => ({ t: 'w', v });
+const op = v => ({ t: 'op', v });
+assert.deepEqual(parse([word('echo'), word('hello')]), [{ pipe: [{ words: [word('echo'), word('hello')], redir: [] }], op: null }]);
+assert.deepEqual(parse([word('cat'), op('|'), word('grep'), word('x')])[0].pipe.length, 2);
+assert.deepEqual(parse([word('echo'), op('&&'), word('true')]).map(x => x.op), ['&&', null]);
+assert.deepEqual(parse([word('echo'), op('>'), word('out')])[0].pipe[0].redir, [{ op: '>', target: 'out' }]);
+assert.deepEqual(parse([word('echo'), op('2>&1')])[0].pipe[0].redir, [{ op: '2>&1' }]);
+assert.throws(() => parse([op('|'), word('x')]), /syntax error/);
+assert.throws(() => parse([word('echo'), op('>')]), /syntax error/);
+assert.throws(() => parse([word('echo'), op('&')]), /background jobs/);
+console.log('Shell parser tests passed.');
