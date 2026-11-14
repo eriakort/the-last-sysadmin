@@ -173,6 +173,22 @@ button{font:inherit;cursor:pointer}
 .incident-challenge-feedback{font-size:12px;color:var(--muted);min-height:18px}
 .incident-challenge-feedback[data-result="success"]{color:var(--green)}
 .incident-challenge-feedback[data-result="retry"]{color:var(--amber)}
+.investigation-tour{background:var(--raise);border:1px solid color-mix(in srgb,var(--amber) 58%,var(--line));border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px;box-shadow:0 8px 24px #0003}
+.investigation-tour-head{display:flex;align-items:center;gap:10px}
+.investigation-guide-avatar{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--panel);border:1px solid var(--amber);font-size:25px}
+.investigation-tour-heading{min-width:0;flex:1}
+.investigation-tour-heading .eyebrow{font-size:9px;color:var(--amber);letter-spacing:.12em}
+.investigation-tour-heading h3{font:600 14px var(--f-display);color:var(--ink);margin:1px 0 0}
+.investigation-tour-step{font:10px var(--f-mono);color:var(--muted)}
+.investigation-tour-copy{font-size:12px!important;color:var(--ink)!important;line-height:1.55}
+.investigation-tour-status{font-size:11px;color:var(--muted);min-height:16px}
+.investigation-tour-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.investigation-tour-actions .btn,.investigation-tour-nav .btn{font-size:11px;padding:6px 9px}
+.investigation-tour-nav{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.investigation-tour-nav .tour-skip{margin-left:auto}
+.tour-focus{outline:2px solid var(--amber)!important;outline-offset:4px!important;box-shadow:0 0 0 6px color-mix(in srgb,var(--amber) 18%,transparent)!important;border-radius:5px}
+#tin.tour-focus{border-radius:3px}
+@media(max-width:520px){.investigation-tour-nav .tour-skip{margin-left:0}.investigation-tour-nav{display:grid;grid-template-columns:1fr 1fr}.investigation-tour-nav .tour-skip{grid-column:1/-1}}
 
 @media(max-width:700px){.skill-progress-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.first-run-steps{grid-template-columns:1fr}}
@@ -599,6 +615,7 @@ body.practicing{padding-top:40px}
         <div class="top-menu-list" aria-label="Account and help">
           <button class="btn" id="btnSettings" type="button" title="Change themes, avatar and account settings">⚙ Settings</button>
           <button class="btn" id="btnAbout" type="button" title="Read the app purpose and current version">About this app</button>
+          <button class="btn" id="btnInvestigationTour" type="button">Guided investigation tour</button>
         </div>
       </details>
       <button class="btn primary" id="btnNew" type="button" title="Start a new learning run. You will be asked to confirm before progress is erased.">New game</button>
@@ -625,6 +642,7 @@ body.practicing{padding-top:40px}
           <button class="btn" type="button" data-onboard-command="whoami">Try whoami</button>
           <button class="btn" type="button" data-onboard-command="pwd">Try pwd</button>
           <button class="btn" type="button" data-onboard-command="ls -a">Try ls -a</button>
+          <button class="btn primary" id="firstRunInvestigationTour" type="button">Guided investigation</button>
         </div>
         <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
       </section>
@@ -640,7 +658,17 @@ body.practicing{padding-top:40px}
         <div class="incident-challenge-task" id="commandIncidentTask">Start the challenge when you're ready. You'll inspect service state, recent logs, and listening sockets.</div>
         <div class="incident-challenge-progress" id="commandIncidentProgress" aria-live="polite">0/3 investigation steps</div>
         <p class="incident-challenge-feedback" id="commandIncidentFeedback" role="status" aria-live="polite">No changes are made to the simulated server.</p>
-        <button class="btn" id="commandIncidentStart" type="button">Start investigation</button>
+        <div class="row"><button class="btn primary" id="commandIncidentStart" type="button">Start investigation</button><button class="btn" id="commandIncidentTour" type="button">Take the tour</button></div>
+        <section class="investigation-tour" id="investigationTour" aria-label="Guided service investigation" hidden>
+          <div class="investigation-tour-head">
+            <div class="investigation-guide-avatar" id="investigationTourAvatar" aria-hidden="true">🧑‍💻</div>
+            <div class="investigation-tour-heading"><div class="eyebrow">FIELD GUIDE · LINUX SYSADMIN</div><h3 id="investigationTourTitle">Your first investigation</h3><div class="investigation-tour-step" id="investigationTourStep">STEP 1 / 6</div></div>
+            <button class="btn" id="investigationTourClose" type="button" aria-label="Close investigation tour">×</button>
+          </div>
+          <p class="investigation-tour-copy" id="investigationTourCopy" aria-live="polite"></p>
+          <div class="investigation-tour-actions"><button class="btn primary" id="investigationTourAction" type="button" hidden></button><span class="investigation-tour-status" id="investigationTourStatus" role="status" aria-live="polite"></span></div>
+          <div class="investigation-tour-nav"><button class="btn" id="investigationTourBack" type="button">Back</button><button class="btn primary" id="investigationTourNext" type="button">Next</button><button class="btn tour-skip" id="investigationTourSkip" type="button">Skip tour</button></div>
+        </section>
       </section>
       <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
         <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
