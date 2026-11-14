@@ -632,12 +632,7 @@ const norm = (path, cwd) => globalThis.LSAHelpers.norm(path, cwd, HOME);
 const parentOf = abs => { const i = abs.lastIndexOf('/'); return i <= 0 ? '/' : abs.slice(0, i); };
 const baseName = abs => abs === '/' ? '/' : abs.slice(abs.lastIndexOf('/') + 1);
 const joinAbs = (a, b) => a === '/' ? '/' + b : a + '/' + b;
-function getNode(abs) {
-  if (abs === '/') return S.fs;
-  let n = S.fs;
-  for (const p of abs.split('/').slice(1)) { if (!n || n.type !== 'dir') return null; n = n.children[p]; }
-  return n || null;
-}
+function getNode(abs) { return globalThis.LSAFileSystem.walk(S.fs, abs); }
 let RUNAS = USER;
 let grpCache = { src: null, list: [] };
 function groupsOf(user) {
