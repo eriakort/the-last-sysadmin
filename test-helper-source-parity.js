@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 const H = require('./src/helpers');
-const browserSource = fs.readFileSync(require.resolve('./src/game.html'), 'utf8');
+const browserSource = fs.readFileSync(require.resolve('./src/app.js'), 'utf8');
 
 function declaration(name) {
   const match = browserSource.match(new RegExp('^const ' + name + ' = .*;$', 'm'));
