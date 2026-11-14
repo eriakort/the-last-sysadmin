@@ -1249,83 +1249,12 @@ if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
 </script>
 <script>
-(() => {
+(function (root) {
 'use strict';
-try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
-/* ============================================================
-   Constants and helpers
-   ============================================================ */
-const APP_VERSION = '0.27.0', APP_BUILD = '97';
-const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
-const KEY = 'last-sysadmin-v1';
-const AVATARS = ['👤','🧑‍💻','👩‍💻','🦊','🐧','🐢','🚀','⚡','🔧','🛡️','🎯','🌟'];
-function loadAvatar() {
-  try { return localStorage.getItem('lsa-avatar') || '👤'; } catch(e) { return '👤'; }
-}
-function saveAvatar(a) {
-  try { localStorage.setItem('lsa-avatar', a); } catch(e) {}
-  if (typeof renderAuthBtn === 'function') renderAuthBtn();
-}
-let rackExpanded = false;
-
-let chipsExpanded = false;
-const CHIPS_DEFAULT = 8;
-function toggleChips() {
-  chipsExpanded = !chipsExpanded;
-  const chips = document.getElementById('chips');
-  const btn = document.getElementById('btnChipsToggle');
-  if (chips) chips.classList.toggle('collapsed', !chipsExpanded);
-  if (btn) {
-    btn.textContent = chipsExpanded ? 'Show less' : 'Show all';
-    btn.setAttribute('aria-expanded', chipsExpanded);
-  }
-}
-
-function toggleRack() {
-  rackExpanded = !rackExpanded;
-  const leds = document.getElementById('leds');
-  const btn = document.getElementById('btnRackToggle');
-  if (leds) {
-    leds.classList.toggle('collapsed', !rackExpanded);
-    leds.classList.toggle('expanded', rackExpanded);
-  }
-  if (btn) {
-    btn.textContent = rackExpanded ? 'Show current' : 'Show all';
-    btn.setAttribute('aria-expanded', rackExpanded);
-  }
-}
-
-const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const KB = 1024, MB = KB * 1024, GB = MB * 1024;
-const $ = s => document.querySelector(s);
-document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
-document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
-  const current = summary.parentElement;
-  document.querySelectorAll('.top-menu[open]').forEach(menu => { if (menu !== current) menu.removeAttribute('open'); });
-  if (window.matchMedia('(max-width: 700px)').matches) {
-    const rect = summary.getBoundingClientRect();
-    const width = Math.min(256, window.innerWidth - 32);
-    const preferredLeft = current.id === 'menuProgress' ? rect.right - width : rect.left;
-    const left = Math.max(16, Math.min(preferredLeft, window.innerWidth - width - 16));
-    current.style.setProperty('--menu-left', left + 'px');
-    current.style.setProperty('--menu-top', Math.min(rect.bottom + 7, window.innerHeight - 120) + 'px');
-    const panel = current.querySelector('.top-menu-list');
-    if (panel) { panel.style.left = left + 'px'; panel.style.right = 'auto'; }
-  }
-}));
-document.addEventListener('click', event => {
-  if (event.target.closest('.top-menu')) return;
-  document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
-});
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
-});
-const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
-const { breToJs, readDelim } = globalThis.LSATextPatternUtils;
-const enc = new TextEncoder();
-const byteLen = s => enc.encode(s).length;
-
-
+function create(deps) {
+  deps = deps || {};
+  const { pad, MON, mulberry32, HOST, splitLines } = deps;
+  if (typeof pad !== 'function' || !Array.isArray(MON) || typeof mulberry32 !== 'function' || typeof HOST !== 'string' || typeof splitLines !== 'function') throw new Error('Story data requires pad, MON, mulberry32, HOST and splitLines');
 /* ============================================================
    Story data: generated logs (seeded, so every player gets the same files)
    ============================================================ */
@@ -1592,6 +1521,98 @@ alias ll='ls -l'
 const PROFILE = `# ~/.profile
 if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi
 `;
+
+
+  return { START, CRASH, BAD_IP, LAST_TIME, APPLOG, ACCESS, ERR_COUNT, EVIDENCE, HANDOVER, README, CONF231, CONF220, SYNC, CSV, DRAFT, MOTD, PASSWD, GROUP, OSREL, AUTHLOG, BASH_COUNT, SHADOW, SUDOERS, JM_HISTORY, JM_KEYS, BASHRC, PROFILE };
+}
+const api = { create };
+root.LSAStoryData = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+(() => {
+'use strict';
+try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
+/* ============================================================
+   Constants and helpers
+   ============================================================ */
+const APP_VERSION = '0.27.0', APP_BUILD = '97';
+const USER = 'rookie', HOST = 'halcyon-web01', HOME = '/home/rookie';
+const KEY = 'last-sysadmin-v1';
+const AVATARS = ['👤','🧑‍💻','👩‍💻','🦊','🐧','🐢','🚀','⚡','🔧','🛡️','🎯','🌟'];
+function loadAvatar() {
+  try { return localStorage.getItem('lsa-avatar') || '👤'; } catch(e) { return '👤'; }
+}
+function saveAvatar(a) {
+  try { localStorage.setItem('lsa-avatar', a); } catch(e) {}
+  if (typeof renderAuthBtn === 'function') renderAuthBtn();
+}
+let rackExpanded = false;
+
+let chipsExpanded = false;
+const CHIPS_DEFAULT = 8;
+function toggleChips() {
+  chipsExpanded = !chipsExpanded;
+  const chips = document.getElementById('chips');
+  const btn = document.getElementById('btnChipsToggle');
+  if (chips) chips.classList.toggle('collapsed', !chipsExpanded);
+  if (btn) {
+    btn.textContent = chipsExpanded ? 'Show less' : 'Show all';
+    btn.setAttribute('aria-expanded', chipsExpanded);
+  }
+}
+
+function toggleRack() {
+  rackExpanded = !rackExpanded;
+  const leds = document.getElementById('leds');
+  const btn = document.getElementById('btnRackToggle');
+  if (leds) {
+    leds.classList.toggle('collapsed', !rackExpanded);
+    leds.classList.toggle('expanded', rackExpanded);
+  }
+  if (btn) {
+    btn.textContent = rackExpanded ? 'Show current' : 'Show all';
+    btn.setAttribute('aria-expanded', rackExpanded);
+  }
+}
+
+const DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const KB = 1024, MB = KB * 1024, GB = MB * 1024;
+const $ = s => document.querySelector(s);
+document.querySelectorAll('.top-menu button').forEach(button => button.addEventListener('click', () => button.closest('details')?.removeAttribute('open')));
+document.querySelectorAll('.top-menu > summary').forEach(summary => summary.addEventListener('click', () => {
+  const current = summary.parentElement;
+  document.querySelectorAll('.top-menu[open]').forEach(menu => { if (menu !== current) menu.removeAttribute('open'); });
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    const rect = summary.getBoundingClientRect();
+    const width = Math.min(256, window.innerWidth - 32);
+    const preferredLeft = current.id === 'menuProgress' ? rect.right - width : rect.left;
+    const left = Math.max(16, Math.min(preferredLeft, window.innerWidth - width - 16));
+    current.style.setProperty('--menu-left', left + 'px');
+    current.style.setProperty('--menu-top', Math.min(rect.bottom + 7, window.innerHeight - 120) + 'px');
+    const panel = current.querySelector('.top-menu-list');
+    if (panel) { panel.style.left = left + 'px'; panel.style.right = 'auto'; }
+  }
+}));
+document.addEventListener('click', event => {
+  if (event.target.closest('.top-menu')) return;
+  document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
+});
+const { pad, MON, esc, md, reEsc, splitLines, mulberry32 } = globalThis.LSAHelpers;
+const { breToJs, readDelim } = globalThis.LSATextPatternUtils;
+const enc = new TextEncoder();
+const byteLen = s => enc.encode(s).length;
+
+
+/* ============================================================
+   Story data fixtures
+   ============================================================ */
+const { START, CRASH, BAD_IP, LAST_TIME, APPLOG, ACCESS, ERR_COUNT, EVIDENCE, HANDOVER, README, CONF231, CONF220, SYNC, CSV, DRAFT, MOTD, PASSWD, GROUP, OSREL, AUTHLOG, BASH_COUNT, SHADOW, SUDOERS, JM_HISTORY, JM_KEYS, BASHRC, PROFILE } = globalThis.LSAStoryData.create({ pad, MON, mulberry32, HOST, splitLines });
 
 /* ============================================================
    Virtual filesystem
