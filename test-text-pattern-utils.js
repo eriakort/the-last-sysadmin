@@ -9,7 +9,7 @@ assert.equal(breToJs('word\\>'), 'word\\b');
 assert.equal(breToJs('tail\\'), 'tail\\\\');
 assert.deepEqual(readDelim('abc/next', 0, '/'), ['abc', 4]);
 assert.deepEqual(readDelim('a\\/b/rest', 0, '/'), ['a/b', 5]);
-assert.deepEqual(readDelim('a\\xb/rest', 0, '/'), ['a\\xb', 6]);
+assert.deepEqual(readDelim('a\\xb/rest', 0, '/'), ['a\\xb', 5]);
 assert.deepEqual(readDelim('unterminated', 0, '/'), ['unterminated', -1]);
 assert.deepEqual(readDelim('x|y|z', 0, '|'), ['x', 2]);
 console.log('Text pattern utility tests passed.');
