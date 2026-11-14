@@ -1,0 +1,15 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { breToJs, readDelim } = require('./src/text-pattern-utils');
+assert.equal(breToJs('a\\+b'), 'a+b');
+assert.equal(breToJs('a+b'), 'a\\+b');
+assert.equal(breToJs('\\(cat\\|dog\\)'), '(cat|dog)');
+assert.equal(breToJs('word\\<'), 'word\\b');
+assert.equal(breToJs('word\\>'), 'word\\b');
+assert.equal(breToJs('tail\\'), 'tail\\\\');
+assert.deepEqual(readDelim('abc/next', 0, '/'), ['abc', 4]);
+assert.deepEqual(readDelim('a\\/b/rest', 0, '/'), ['a/b', 5]);
+assert.deepEqual(readDelim('a\\xb/rest', 0, '/'), ['a\\xb', 6]);
+assert.deepEqual(readDelim('unterminated', 0, '/'), ['unterminated', -1]);
+assert.deepEqual(readDelim('x|y|z', 0, '|'), ['x', 2]);
+console.log('Text pattern utility tests passed.');
