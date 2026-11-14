@@ -4,7 +4,15 @@
 // browser runs exactly the code the Node tests cover.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const read = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
+// Cache-busting fingerprint for a linked same-origin asset. The service worker
+// (scope "/") serves static sub-resources cache-first, so a changed stylesheet
+// or script would otherwise be served stale from the old cache even though the
+// navigation (index.html) is network-first. Appending a content hash to the URL
+// gives a changed asset a new URL the cache cannot stale; it is deterministic,
+// so the generated index.html stays drift-stable until the asset truly changes.
+const assetUrl = f => './' + f + '?v=' + crypto.createHash('sha256').update(read(f)).digest('hex').slice(0, 10);
 
 const MODULES = ['../src/feedback.js', 'net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js', 'net-classroom.js', 'net-design-academy.js', 'net-automation-workshop.js', 'net-learning-coach.js', 'net-spaced-recall.js'];
 const wrap = f => { const id = f === '../src/feedback.js' ? './src/feedback' : './' + f.replace(/\.js$/, ''); return `__def(${JSON.stringify(id)}, function(module, exports, require){\n${read(f)}\n});`; };
@@ -255,8 +263,8 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 
 const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Networking Trainer — prototype</title><style>${css}</style><link rel="stylesheet" href="./workstation.css"></head>
-<body><div id="app"></div><script>${bundle}</script><script src="./workstation-shell.js"></script></body></html>`;
+<title>Networking Trainer — prototype</title><style>${css}</style><link rel="stylesheet" href="${assetUrl('workstation.css')}"></head>
+<body><div id="app"></div><script>${bundle}</script><script src="${assetUrl('workstation-shell.js')}"></script></body></html>`;
 
 // index.html so GitHub Pages serves it cleanly at /network-trainer/
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);
