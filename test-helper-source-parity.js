@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Keep Node-testable helpers aligned with their browser copies in src/game.html. */
+/* Keep Node-testable helpers aligned with their browser copies in src/app.js. */
 const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
