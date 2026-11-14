@@ -12,7 +12,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   const ok = m => console.log('  ✓ ' + m);
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
   // Every chapter should offer at least one complete six-part guide.
-  const gameSource = fs.readFileSync(path.join(process.cwd(), 'src/game.html'), 'utf8') + '\n' + fs.readFileSync(path.join(process.cwd(), 'src/app.js'), 'utf8');
+  // Mission content lives in src/missions.js (extracted from app.js); include it so
+  // the static guide-coverage scan sees every mission definition.
+  const gameSource = fs.readFileSync(path.join(process.cwd(), 'src/game.html'), 'utf8') + '\n' + fs.readFileSync(path.join(process.cwd(), 'src/app.js'), 'utf8') + '\n' + fs.readFileSync(path.join(process.cwd(), 'src/missions.js'), 'utf8');
   const missionLines = gameSource.split(/\r?\n/);
   const missionStarts = [];
   for (let line = 0; line < missionLines.length; line++) {
