@@ -647,16 +647,11 @@ function myGroups() {
   if (grpCache.src !== src) grpCache = { src, list: groupsOf(USER) };
   return grpCache.list;
 }
-function permBit(n, b) {
-  if (RUNAS === 'root') return true;
-  if (n.owner === USER) return !!(n.mode & (b << 6));
-  if (myGroups().includes(n.group)) return !!(n.mode & (b << 3));
-  return !!(n.mode & b);
-}
-const canRead = n => permBit(n, 4);
-const canEnter = n => permBit(n, 1);
+const permissionUtils = globalThis.LSAPermissionUtils;
+const canRead = n => permissionUtils.hasBit(n, 4, RUNAS, USER, myGroups());
+const canEnter = n => permissionUtils.hasBit(n, 1, RUNAS, USER, myGroups());
 const WRITABLE = [HOME, '/tmp', '/srv/halcyon'];
-const canWrite = abs => RUNAS === 'root' ? abs !== '/' : WRITABLE.some(w => abs.startsWith(w + '/'));
+const canWrite = abs => permissionUtils.canWrite(abs, RUNAS, WRITABLE);
 function lookup(path) {
   const abs = norm(path, S.cwd);
   if (abs === '/') return { abs, node: S.fs };
