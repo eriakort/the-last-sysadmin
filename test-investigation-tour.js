@@ -43,9 +43,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('tour did not start the existing investigation challenge');
 
   const commands = [
-    { command: 'systemctl status halcyon', title: '1 · Inspect service state', progress: '1/3' },
-    { command: 'journalctl -u halcyon -n 20', title: '2 · Read recent service logs', progress: '2/3' },
-    { command: 'ss -tuln', title: '3 · Check listening sockets', progress: '3/3' }
+    { command: 'systemctl status halcyon', title: '2 · Read recent service logs', progress: '1/3' },
+    { command: 'journalctl -u halcyon -n 20', title: '3 · Check listening sockets', progress: '2/3' },
+    { command: 'ss -tuln', title: 'Correlate the evidence', progress: '3/3' }
   ];
   for (const item of commands) {
     const before = await page.locator('#tout .cmdl').count();
