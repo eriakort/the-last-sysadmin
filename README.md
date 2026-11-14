@@ -82,6 +82,8 @@ Topology drafts, journal evidence and configuration checkpoints described as bro
 
 ## Architecture and source map
 
+See the [modularization roadmap](docs/architecture/modularization-roadmap.md) for the phased target architecture, reuse strategy, dependency rules, implementation sequence and acceptance criteria.
+
 | Path | Responsibility |
 |---|---|
 | `src/game.html` | Main Linux Sysadmin application source (large, currently mostly single-file). |
