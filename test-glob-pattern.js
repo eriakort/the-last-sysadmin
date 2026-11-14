@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { hasGlob, unesc, segRe } = require('./src/glob-pattern');
+assert.equal(hasGlob('plain'), false);
+assert.equal(hasGlob('file*.txt'), true);
+assert.equal(hasGlob('file\\*.txt'), false);
+assert.equal(unesc('file\\*.txt'), 'file*.txt');
+assert.equal(segRe('*.txt').test('notes.txt'), true);
+assert.equal(segRe('*.txt').test('notes.log'), false);
+assert.equal(segRe('a?c').test('abc'), true);
+assert.equal(segRe('[ab]x').test('ax'), true);
+assert.equal(segRe('[!a]x').test('bx'), true);
+assert.equal(segRe('A.TXT', true).test('a.txt'), true);
+console.log('Glob pattern tests passed.');
