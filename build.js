@@ -25,6 +25,7 @@ function build() {
   const packageVersion = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).version;
   const gameTemplate = read('game.html');
   const helperScript = read('helpers.js');
+  const filesystemScript = read('filesystem.js');
   const checkerScript = read('checkers.js');
   const appScript = read('app.js');
   if (!gameTemplate.includes('<!--APP_SCRIPT-->')) throw new Error('src/game.html is missing the app script insertion point');
