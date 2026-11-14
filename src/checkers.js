@@ -4,35 +4,7 @@
 // Each takes a snapshot of relevant state and returns { ok: boolean, reason?: string }
 // No DOM or live game state. Easy to unit-test.
 
-function walk(fs, path) {
-  const parts = path.split('/').filter(Boolean);
-  let n = fs;
-  for (const p of parts) {
-    if (!n || n.type !== 'dir' || !n.children || !n.children[p]) return null;
-    n = n.children[p];
-  }
-  return n;
-}
-
-function fileExists(fs, path) {
-  return !!walk(fs, path);
-}
-
-function fileMode(fs, path) {
-  const n = walk(fs, path);
-  return n && n.mode != null ? n.mode : null;
-}
-
-function fileOwner(fs, path) {
-  const n = walk(fs, path);
-  return n ? n.owner : null;
-}
-
-function fileSize(fs, path) {
-  const n = walk(fs, path);
-  if (!n || n.type !== 'file') return null;
-  return n.content ? String(n.content).length : (n.size || 0);
-}
+const { walk, fileExists, fileMode, fileOwner, fileSize } = root.LSAFileSystem;
 
 // File must exist and be executable by owner
 function checkExecutable(fs, path) {
