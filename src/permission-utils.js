@@ -3,7 +3,7 @@
 function hasBit(node, bit, runAs, user, groups) {
   if (!node) return false;
   if (runAs === 'root') return true;
-  if (node.owner === user) return !!(node.mode & (bit << 6));
+  if (node.owner === runAs) return !!(node.mode & (bit << 6));
   if (Array.isArray(groups) && groups.includes(node.group)) return !!(node.mode & (bit << 3));
   return !!(node.mode & bit);
 }
