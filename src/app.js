@@ -4516,8 +4516,60 @@ function applyUser(u, initial) {
   const prevId = authUser && authUser.id;
   authUser = u ? { id: u.id, email: u.email, name: userLabel(u) } : null;
   renderAuthBtn();
+  if (authUser) hideGate();
+  else if (gateNeeded()) showGate();
   if (authUser && authUser.id !== prevId) onLogin();
   else if (!authUser && prevId) emitSys('Signed out. Progress stays saved in this browser.', 'hint');
+}
+
+/* ---------- Mandatory sign-in gate ----------
+   When a Supabase project is configured, the app requires sign-in before use:
+   the whole UI is covered by a full-screen login page until a session exists.
+   Bypassed under browser automation (navigator.webdriver) and with an explicit
+   lsa-e2e flag, so the test suite and local dev run without a backend session.
+   This is a UI/account gate, not content protection — the app is a static page,
+   so it controls what a visitor sees first and enables cross-device progress sync. */
+function gateBypassed() {
+  try { if (localStorage.getItem('lsa-e2e') === '1') return true; } catch (e) {}
+  return typeof navigator !== 'undefined' && navigator.webdriver === true;
+}
+function gateNeeded() { return !!supaConfig() && !gateBypassed(); }
+function renderGate() {
+  const body = document.getElementById('authGateBody'); if (!body) return;
+  let saved = ''; try { saved = localStorage.getItem('lsa-auth-email') || ''; } catch (e) {}
+  const oauthBtns = OAUTH_PROVIDERS.map(p => `<button class="btn" data-oauth="${p.id}" type="button">${esc(p.label)}</button>`).join('');
+  body.innerHTML = `<div class="auth-gate-brand"><span class="mark"></span><b>The Last Sysadmin</b></div>
+    <h2 id="authGateTitle">Sign in to continue</h2>
+    <p class="rlead">An account keeps your campaign progress in sync across devices. Sign in or create one to begin.</p>
+    <div class="rlabel">Email</div>
+    <input id="auEmail" type="text" inputmode="email" placeholder="you@example.com" value="${esc(saved)}" autocomplete="email" aria-label="Email">
+    <div class="rlabel" style="margin-top:8px">Password</div>
+    <input id="auPass" type="password" placeholder="••••••••" autocomplete="current-password" aria-label="Password">
+    <div class="race-err" id="auErr" hidden></div>
+    <div class="race-row" style="margin-top:12px;flex-wrap:wrap">
+      <button class="btn primary" id="auSignin" type="button">Sign in</button>
+      <button class="btn" id="auSignup" type="button">Create account</button>
+      <button class="btn" id="auLink" type="button">Email me a link</button>
+    </div>
+    <div class="auth-gate-sep">or continue with</div>
+    <div class="auth-gate-oauth">${oauthBtns}</div>
+    <div class="race-note">Google, Microsoft, GitHub and LinkedIn each need the matching provider enabled in the project's Supabase dashboard (Authentication → Providers). Email and password work as soon as the project is connected.</div>`;
+  body.querySelectorAll('[data-oauth]').forEach(btn => btn.addEventListener('click', () => doOAuth(btn.dataset.oauth)));
+  const si = document.getElementById('auSignin'); if (si) si.addEventListener('click', () => doPasswordAuth(false));
+  const su = document.getElementById('auSignup'); if (su) su.addEventListener('click', () => doPasswordAuth(true));
+  const lk = document.getElementById('auLink'); if (lk) lk.addEventListener('click', doMagicLink);
+}
+function showGate() {
+  const g = document.getElementById('authGate'); if (!g) return;
+  renderGate();
+  g.hidden = false;
+  const app = document.querySelector('.app'); if (app) { app.setAttribute('inert', ''); app.setAttribute('aria-hidden', 'true'); }
+  const first = document.getElementById('auEmail'); if (first) { try { first.focus({ preventScroll: true }); } catch (e) {} }
+}
+function hideGate() {
+  const g = document.getElementById('authGate'); if (!g || g.hidden) return;
+  g.hidden = true;
+  const app = document.querySelector('.app'); if (app) { app.removeAttribute('inert'); app.removeAttribute('aria-hidden'); }
 }
 function renderAuthBtn() {
   const b = $('#btnSettings'); if (!b) return;
@@ -4696,7 +4748,8 @@ async function fetchLeaderboard(scn) {
 const OAUTH_PROVIDERS = [
   { id: 'google', label: 'Google' },
   { id: 'azure', label: 'Microsoft / Outlook' },
-  { id: 'github', label: 'GitHub' }
+  { id: 'github', label: 'GitHub' },
+  { id: 'linkedin_oidc', label: 'LinkedIn' }
 ];
 function openAuth() {
   if (!supaConfig()) return;
@@ -5642,6 +5695,7 @@ async function cxDoCreate() {
   emitSys(`Created <b>${esc(row ? row.name : nm)}</b>. Share join code <code>${esc(row ? row.join_code : '')}</code> with your students.`, 'ok');
 }
 
+if (gateNeeded()) showGate();   // cover the app before anything renders; authInit() lifts it if a session exists
 boot(load());
 try { authInit(); } catch (e) {}
 

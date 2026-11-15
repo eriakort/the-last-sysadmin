@@ -284,6 +284,17 @@ body.practicing{padding-top:40px}
 .race-modal input[type=text]:focus{border-color:var(--amber)}
 .race-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .race-row .btn{flex:0 0 auto}
+/* Mandatory sign-in gate (full-screen, opaque, above everything) */
+#authGate{position:fixed;inset:0;z-index:2000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left)) 16px;overflow:auto}
+#authGate[hidden]{display:none}
+#authGate .auth-gate-card{width:min(440px,100%);max-height:92vh;max-height:92svh}
+.auth-gate-brand{display:flex;align-items:center;gap:10px;margin:0 0 16px}
+.auth-gate-brand .mark{width:30px;height:30px;border-radius:8px;background:var(--amber);flex:0 0 auto}
+.auth-gate-brand b{font-family:var(--f-display);letter-spacing:.04em;font-size:15px}
+.auth-gate-oauth{display:flex;flex-direction:column;gap:7px;margin-top:2px}
+.auth-gate-oauth .btn{width:100%;justify-content:center}
+.auth-gate-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:18px 0 10px}
+.auth-gate-sep::before,.auth-gate-sep::after{content:'';flex:1;height:1px;background:var(--line)}
 .scenarios{display:flex;flex-direction:column;gap:7px;margin-top:4px}
 .scn{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--raise);color:var(--ink);cursor:pointer}
 .scn:hover{border-color:var(--muted)}
@@ -556,6 +567,9 @@ body.practicing{padding-top:40px}
 </style>
 </head>
 <body>
+<div id="authGate" hidden role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+  <div class="race-modal auth-gate-card"><div id="authGateBody"></div></div>
+</div>
 <div class="app">
   <header class="top">
     <div class="apphdr">
