@@ -4654,7 +4654,7 @@ function renderGate() {
   const body = document.getElementById('authGateBody'); if (!body) return;
   let saved = ''; try { saved = localStorage.getItem('lsa-auth-email') || ''; } catch (e) {}
   const oauthBtns = OAUTH_PROVIDERS.map(p => `<button class="btn" data-oauth="${p.id}" type="button">${esc(p.label)}</button>`).join('');
-  body.innerHTML = `<div class="auth-gate-brand"><span class="mark"></span><b>The Last Sysadmin</b></div>
+  body.innerHTML = `<div class="auth-gate-brand"><span class="mark"><svg viewBox="74 88 364 364"><g fill="#f2b04b"><rect x="112" y="104" width="288" height="96" rx="24"/><rect x="112" y="212" width="288" height="96" rx="24"/></g><g fill="#0f141c"><circle cx="160" cy="152" r="15"/><circle cx="160" cy="260" r="15"/><rect x="320" y="142" width="44" height="11" rx="5.5"/><rect x="320" y="160" width="44" height="11" rx="5.5"/><rect x="320" y="250" width="44" height="11" rx="5.5"/><rect x="320" y="268" width="44" height="11" rx="5.5"/></g><path d="M150 336 L214 378 L150 420" fill="none" stroke="#f2b04b" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/><rect x="250" y="361" width="112" height="34" rx="17" fill="#f2b04b"/></svg></span><b>The Last Sysadmin</b></div>
     <h2 id="authGateTitle">Sign in to continue</h2>
     <p class="rlead">An account keeps your campaign progress in sync across devices. Sign in or create one to begin.</p>
     <div class="rlabel">Email</div>
