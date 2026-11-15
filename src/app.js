@@ -2795,6 +2795,7 @@ function updateCommandIncident(name, args) {
   }
   if (commandIncidentStep === COMMAND_INCIDENT_STEPS.length) commandIncidentActive = false;
   renderCommandIncident();
+  if (investigationTourOpen) setInvestigationTourStep(2 + commandIncidentStep);
 }
 
 const COMMAND_DRILLS = {
@@ -3205,6 +3206,7 @@ const commandIncidentStart = $('#commandIncidentStart');
 if (commandIncidentStart) commandIncidentStart.addEventListener('click', () => {
   commandIncidentStep = 0;
   commandIncidentActive = true;
+  if (investigationTourOpen) setInvestigationTourStep(2);
   const feedback = $('#commandIncidentFeedback');
   if (feedback) { feedback.textContent = 'Investigation started. Enter the requested command in the terminal, then press Enter.'; feedback.dataset.result = ''; }
   renderCommandIncident();
@@ -3995,6 +3997,113 @@ function initFirstRunGuide(restored) {
     tin.setSelectionRange(tin.value.length, tin.value.length);
   }));
 }
+
+const INVESTIGATION_TOUR_STEPS = [
+  { title: 'Your first investigation', body: 'A web service is reported unavailable. We will collect three kinds of evidence before recommending a change: service state, recent logs, and listening sockets. This is a safe, read-only simulation; it does not touch your computer or a real server.', target: '#commandIncidentChallenge' },
+  { title: 'Start the investigation', body: 'Start the challenge. The task card will tell you exactly what to inspect, and the progress counter will confirm each check. We will not restart the service or change configuration while gathering evidence.', target: '#commandIncidentStart', action: 'start' },
+  { title: '1 · Inspect service state', body: 'Check whether systemd considers the Halcyon service active and note its main process. A service can be running while the application is still unhealthy, so treat this as one clue—not the whole answer.', target: '#tin', command: 'systemctl status halcyon', commandStep: 0 },
+  { title: '2 · Read recent service logs', body: 'Read the latest 20 journal entries for this service. Look for repeated errors, timestamps, and the process that emitted them. In this lab, pay attention to the export-hook permission failure; do not assume it is the only cause.', target: '#tin', command: 'journalctl -u halcyon -n 20', commandStep: 1 },
+  { title: '3 · Check listening sockets', body: 'List listening TCP and UDP sockets with numeric ports. The flags mean TCP, UDP, listening only, and numeric output. Compare the application port you expect with the ports actually listening.', target: '#tin', command: 'ss -tuln', commandStep: 2 },
+  { title: 'Correlate the evidence', body: 'You have collected service state, log evidence, and network-listener evidence. Correlate timestamps, process names, and ports; write down what is known, what is still uncertain, and the next safe test. Good incident work gathers evidence before changing or restarting anything.', target: '#commandIncidentFeedback' }
+];
+let investigationTourOpen = false;
+let investigationTourStep = 0;
+function clearInvestigationTourTarget() {
+  document.querySelectorAll('.tour-focus').forEach(node => node.classList.remove('tour-focus'));
+}
+function renderInvestigationTour() {
+  const root = $('#investigationTour');
+  if (!root) return;
+  root.hidden = !investigationTourOpen;
+  clearInvestigationTourTarget();
+  if (!investigationTourOpen) return;
+  const step = INVESTIGATION_TOUR_STEPS[investigationTourStep];
+  if (!step) return;
+  $('#investigationTourAvatar').textContent = loadAvatar() || '🧑‍💻';
+  $('#investigationTourTitle').textContent = step.title;
+  $('#investigationTourCopy').textContent = step.body;
+  $('#investigationTourStep').textContent = 'STEP ' + (investigationTourStep + 1) + ' / ' + INVESTIGATION_TOUR_STEPS.length;
+  const action = $('#investigationTourAction');
+  const status = $('#investigationTourStatus');
+  action.hidden = !(step.action || step.command);
+  action.disabled = false;
+  if (step.action === 'start') {
+    action.textContent = commandIncidentActive ? 'Investigation started' : 'Start investigation';
+    action.disabled = commandIncidentActive;
+    status.textContent = commandIncidentActive ? 'The challenge is active.' : 'Start the read-only challenge to unlock the first check.';
+  } else if (step.command) {
+    const complete = commandIncidentStep > step.commandStep;
+    action.textContent = complete ? 'Evidence collected' : 'Load command into terminal';
+    action.disabled = complete;
+    status.textContent = complete ? 'This check is complete. Use Back to review earlier guidance.' : 'Load the command, review it, then press Enter in the terminal. The guide advances when the tracker confirms it.';
+  } else {
+    status.textContent = investigationTourStep === INVESTIGATION_TOUR_STEPS.length - 1
+      ? 'Investigation complete · three read-only checks collected.'
+      : 'Follow the highlighted area, then continue.';
+  }
+  const back = $('#investigationTourBack');
+  const next = $('#investigationTourNext');
+  back.disabled = investigationTourStep === 0;
+  next.textContent = investigationTourStep === INVESTIGATION_TOUR_STEPS.length - 1 ? 'Finish tour' : 'Next';
+  let canAdvance = investigationTourStep === 0 || investigationTourStep === INVESTIGATION_TOUR_STEPS.length - 1;
+  if (investigationTourStep === 1) canAdvance = commandIncidentActive;
+  if (step.commandStep !== undefined) canAdvance = commandIncidentStep > step.commandStep;
+  next.disabled = !canAdvance;
+  const target = document.querySelector(step.target);
+  if (target) {
+    target.classList.add('tour-focus');
+    if (typeof target.scrollIntoView === 'function') {
+      const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+  }
+}
+function setInvestigationTourStep(index) {
+  investigationTourStep = Math.max(0, Math.min(INVESTIGATION_TOUR_STEPS.length - 1, index));
+  investigationTourOpen = true;
+  renderInvestigationTour();
+}
+function openInvestigationTour() {
+  investigationTourOpen = true;
+  investigationTourStep = commandIncidentActive ? 2 + commandIncidentStep : 0;
+  renderInvestigationTour();
+  $('#investigationTourNext')?.focus({ preventScroll: true });
+}
+function closeInvestigationTour(completed) {
+  if (completed) {
+    try { localStorage.setItem('lsa-investigation-tour-complete', '1'); } catch (e) {}
+  }
+  investigationTourOpen = false;
+  renderInvestigationTour();
+  $('#commandIncidentTour')?.focus({ preventScroll: true });
+}
+function runInvestigationTourAction() {
+  const step = INVESTIGATION_TOUR_STEPS[investigationTourStep];
+  if (!step) return;
+  if (step.action === 'start') {
+    $('#commandIncidentStart')?.click();
+    if (commandIncidentActive) setInvestigationTourStep(2);
+    return;
+  }
+  if (step.command && commandIncidentStep <= step.commandStep) {
+    tin.value = step.command;
+    tin.focus({ preventScroll: true });
+    tin.setSelectionRange(tin.value.length, tin.value.length);
+    $('#investigationTourStatus').textContent = 'Command loaded. Read it, then press Enter in the terminal.';
+  }
+}
+$('#investigationTourAction')?.addEventListener('click', runInvestigationTourAction);
+$('#investigationTourNext')?.addEventListener('click', () => {
+  if (investigationTourStep === INVESTIGATION_TOUR_STEPS.length - 1) {
+    closeInvestigationTour(true);
+    return;
+  }
+  setInvestigationTourStep(investigationTourStep + 1);
+});
+$('#investigationTourBack')?.addEventListener('click', () => setInvestigationTourStep(investigationTourStep - 1));
+$('#investigationTourSkip')?.addEventListener('click', () => closeInvestigationTour(false));
+$('#investigationTourClose')?.addEventListener('click', () => closeInvestigationTour(false));
+
 function boot(restored) {
   const healthButton = document.getElementById('btnHealthDashboard');
   if (healthButton && !healthButton.dataset.bound) { healthButton.dataset.bound='true'; healthButton.addEventListener('click',openServerHealth); }
@@ -4013,6 +4122,13 @@ function boot(restored) {
   if(crossButton&&!crossButton.dataset.bound){crossButton.dataset.bound='true';crossButton.addEventListener('click',openCrossTrackCase);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
+  for (const id of ['firstRunInvestigationTour', 'commandIncidentTour', 'btnInvestigationTour']) {
+    const button = document.getElementById(id);
+    if (button && !button.dataset.bound) {
+      button.dataset.bound = 'true';
+      button.addEventListener('click', openInvestigationTour);
+    }
+  }
   initFilesystemExplorer();
   motd(restored);
   if (restored) { const fixed = repairWorld(); if (fixed) { S.checkpoint = JSON.stringify(S.fs); emitSys(`Restored ${fixed} game file${fixed === 1 ? '' : 's'} that had been deleted, so you can keep going.`, 'hint'); } }
