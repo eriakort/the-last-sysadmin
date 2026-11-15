@@ -17,7 +17,7 @@ const NC = require('./net-classroom');
 
 const REWARD = 100, HINT_COST = 25;
 const RANKS = [[0, 'Cadet'], [120, 'Apprentice'], [280, 'Technician'], [460, 'Engineer'], [640, 'Senior Engineer'], [820, 'Network Architect']];
-const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber', 'Amber CRT'], ['green', 'Green Phosphor'], ['paper', 'Paper (light)']];
+const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber', 'Amber CRT'], ['green', 'Green Phosphor'], ['tokyo-night', 'Tokyo Night'], ['dracula', 'Dracula'], ['catppuccin', 'Catppuccin Mocha'], ['gruvbox', 'Gruvbox'], ['solarized', 'Solarized Dark'], ['rose-pine', 'Rosé Pine'], ['latte', 'Catppuccin Latte'], ['solarized-light', 'Solarized Light']];
 
 let RUN = null, SEL = null, HINTS = 0, PROG = loadProg(), LAST_COMMAND = null;
 let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer

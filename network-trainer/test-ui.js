@@ -134,8 +134,8 @@ let URL;
   await page.click('#btnSet'); await page.waitForTimeout(150);
   if (await page.$('#modal .themes')) ok('settings modal opens with themes');
   else fail('settings modal did not open');
-  await page.click('#modal .tm[data-th="paper"]'); await page.waitForTimeout(150);
-  if ((await page.getAttribute('html', 'data-theme')) === 'paper') ok('selecting a theme applies it');
+  await page.click('#modal .tm[data-th="tokyo-night"]'); await page.waitForTimeout(150);
+  if ((await page.getAttribute('html', 'data-theme')) === 'tokyo-night') ok('selecting a theme applies it');
   else fail('theme not applied: ' + (await page.getAttribute('html', 'data-theme')));
   await page.click('#modal #closeS'); await page.waitForTimeout(100);   // close settings (reopened after theme pick)
 

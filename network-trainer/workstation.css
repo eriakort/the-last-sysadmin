@@ -691,16 +691,6 @@ aside{scrollbar-color:#344a60 transparent}
 @media(max-width:760px){.builder{padding:11px}.device-palette{grid-template-columns:repeat(2,minmax(0,1fr))}.builder-heading p{max-width:none}.builder .pal-row .btn{flex:0 1 auto}}
 @media(prefers-reduced-motion:reduce){.btn.pal{transition:none}.btn.pal:hover{transform:none}}
 
-/* Keep action controls legible when the light Paper palette is active. */
-:root[data-theme="paper"] .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
-:root[data-theme="paper"] #top .btn:not(.primary){background:#f3f6fa;color:#1a2230;border-color:#d4dae3}
-
-/* Paper theme must override legacy button backgrounds in the workstation shell. */
-:root[data-theme="paper"] #btnSearch,
-:root[data-theme="paper"] #btnQueue,
-:root[data-theme="paper"] #btnHelp,
-:root[data-theme="paper"] .btn:not(.primary){background-color:#f3f6fa!important;color:#1a2230!important;border-color:#d4dae3!important}
-
 
 
 /* Device command-set (brand) selector in the inspector */

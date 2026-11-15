@@ -4955,13 +4955,14 @@ const THEMES = [
   { id: 'amber', name: 'Amber CRT', bg: '#120d02', dot: '#ffb224' },
   { id: 'green', name: 'Green Phosphor', bg: '#02100a', dot: '#7dff9e' },
   { id: 'nord', name: 'Nord Night', bg: '#2e3440', dot: '#88c0d0' },
-  { id: 'paper', name: 'Paper (light)', bg: '#eef1f5', dot: '#c47f12' },
   { id: 'tokyo-night', name: 'Tokyo Night', bg: '#1a1b26', dot: '#7aa2f7' },
   { id: 'dracula', name: 'Dracula', bg: '#282a36', dot: '#bd93f9' },
   { id: 'catppuccin', name: 'Catppuccin Mocha', bg: '#181825', dot: '#cba6f7' },
   { id: 'gruvbox', name: 'Gruvbox', bg: '#282828', dot: '#fabd2f' },
   { id: 'solarized', name: 'Solarized Dark', bg: '#002b36', dot: '#b58900' },
-  { id: 'rose-pine', name: 'Rosé Pine', bg: '#191724', dot: '#ebbcba' }
+  { id: 'rose-pine', name: 'Rosé Pine', bg: '#191724', dot: '#ebbcba' },
+  { id: 'latte', name: 'Catppuccin Latte', bg: '#eff1f5', dot: '#8839ef' },
+  { id: 'solarized-light', name: 'Solarized Light', bg: '#fdf6e3', dot: '#b58900' }
 ];
 function currentTheme() { try { return localStorage.getItem('lsa-theme') || ''; } catch (e) { return ''; } }
 function applyTheme(id) {
