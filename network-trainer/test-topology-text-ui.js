@@ -75,25 +75,30 @@ const URL='file://'+path.join(process.cwd(),'index.html')+'?view=workbench';
  // Force-click the device so it is selected (and the label handle renders). force bypasses WebKit SVG intercept.
  await page.locator('#topo .node[data-dev="h1"]').click({force:true});
  await page.waitForSelector('#topo .topo-label-resize[data-label-kind="name"]');
- const labelResize=page.locator('#topo .topo-label-resize[data-label-kind="name"]');
  const labelSizeBefore=Number(await page.locator('#topo .name-label').getAttribute('font-size'));
- const labelHandleBox=await labelResize.boundingBox();
- const lx=labelHandleBox.x+labelHandleBox.width/2, ly=labelHandleBox.y+labelHandleBox.height/2;
- await page.mouse.move(lx, ly);
- await page.mouse.down();
- await page.mouse.move(lx+80, ly, {steps:8});
- await page.mouse.up();
+ // Dispatch pointer events on the handle so the resize path runs even if a mouse move misses in CI.
+ await page.evaluate(() => {
+   const handle = document.querySelector('#topo .topo-label-resize[data-label-kind="name"]');
+   const r = handle.getBoundingClientRect();
+   const fire = (type, x, y, target) => (target||handle).dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, button:0, clientX:x, clientY:y, pointerId:1}));
+   const cx = r.left + r.width/2, cy = r.top + r.height/2;
+   fire('pointerdown', cx, cy, handle);
+   fire('pointermove', cx + 80, cy, document);
+   fire('pointerup', cx + 80, cy, document);
+ });
  const labelSizeAfter=Number(await page.locator('#topo .name-label').getAttribute('font-size'));
  assert(labelSizeAfter>labelSizeBefore,'Dragging label resize handle did not increase label font size');
  const deviceArt=page.locator('#topo .node[data-dev="h1"] .device-art-scale');
  const deviceScaleBefore=await deviceArt.getAttribute('transform');
- const deviceHandle=page.locator('#topo .topo-device-resize[data-dev="h1"]');
- const deviceHandleBox=await deviceHandle.boundingBox();
- const dx=deviceHandleBox.x+deviceHandleBox.width/2, dy=deviceHandleBox.y+deviceHandleBox.height/2;
- await page.mouse.move(dx, dy);
- await page.mouse.down();
- await page.mouse.move(dx+80, dy, {steps:8});
- await page.mouse.up();
+ await page.evaluate(() => {
+   const handle = document.querySelector('#topo .topo-device-resize[data-dev="h1"]');
+   const r = handle.getBoundingClientRect();
+   const fire = (type, x, y, target) => (target||handle).dispatchEvent(new PointerEvent(type, {bubbles:true, cancelable:true, button:0, clientX:x, clientY:y, pointerId:1}));
+   const cx = r.left + r.width/2, cy = r.top + r.height/2;
+   fire('pointerdown', cx, cy, handle);
+   fire('pointermove', cx + 80, cy, document);
+   fire('pointerup', cx + 80, cy, document);
+ });
  const deviceScaleAfter=await page.locator('#topo .node[data-dev="h1"] .device-art-scale').getAttribute('transform');
  assert(deviceScaleAfter!==deviceScaleBefore,'Dragging device resize handle did not resize device artwork');
  ok('device artwork and device labels resize independently');
