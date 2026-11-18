@@ -60,10 +60,13 @@
     btn.title = "Ask the learning assistant";
     btn.textContent = "✦ Ask";
     hud.insertBefore(btn, hud.firstChild);
-
-    const panel = document.createElement("section");
+    btn.addEventListener("click", openPanel);
+  }
+  function openPanel() {
+    let panel = $("#aiAssistPanel");
+    if (panel) { panel.hidden = false; panel.removeAttribute("inert"); $("#aiAssistInput").focus(); return; }
+    panel = document.createElement("section");
     panel.id = "aiAssistPanel";
-    panel.hidden = true;
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Learning assistant");
     panel.innerHTML = `
@@ -97,9 +100,7 @@
       log.appendChild(d);
       log.scrollTop = log.scrollHeight;
     }
-
-    btn.addEventListener("click", () => { panel.hidden = false; $("#aiAssistInput").focus(); });
-    $("#aiAssistClose").addEventListener("click", () => { panel.hidden = true; });
+    $("#aiAssistClose").addEventListener("click", () => { panel.hidden = true; panel.setAttribute("inert", ""); });
     $("#aiAssistForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const input = $("#aiAssistInput");
@@ -124,9 +125,8 @@
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount);
-  else setTimeout(mount, 0);
-  // Re-mount after boot overwrites #app
-  const obs = new MutationObserver(() => { if (!$("#aiAssistBtn") && $(".hud")) mount(); });
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  function tryMount() { if ($(".hud")) mount(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => setTimeout(tryMount, 50));
+  else setTimeout(tryMount, 50);
+  window.addEventListener("pageshow", tryMount);
 })();
