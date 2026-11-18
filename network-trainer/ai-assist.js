@@ -1,6 +1,9 @@
 // Client for the AI learning assistant.
 // Packs current Network Trainer context and calls the Supabase Edge Function.
 (function () {
+  // Build-time switch. Set to false and rebuild to hide the assistant entirely.
+  const AI_ASSIST_ENABLED = true;
+  if (!AI_ASSIST_ENABLED) return;
   const $ = (s) => document.querySelector(s);
 
   function context() {
@@ -120,7 +123,13 @@
         add("assistant", reply);
       } catch (err) {
         pending.remove();
-        add("assistant", "Error: " + (err.message || err));
+        const msg = String(err.message || err);
+        add("assistant", "Error: " + msg);
+        if (/disabled/i.test(msg)) {
+          const btn = $("#aiAssistBtn");
+          if (btn) btn.hidden = true;
+          panel.hidden = true;
+        }
       }
     });
   }
