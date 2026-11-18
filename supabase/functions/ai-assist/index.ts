@@ -35,6 +35,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method" }, 405);
 
+  // Owner kill switch. Set AI_ENABLED=false (or 0 / off) to reject all requests
+  // without a code change. Unset or any other value keeps the assistant on.
+  const enabled = (Deno.env.get("AI_ENABLED") || "true").toLowerCase();
+  if (enabled === "false" || enabled === "0" || enabled === "off") {
+    return json({ error: "disabled", reply: "AI assistance is turned off." }, 403);
+  }
+
   const auth = req.headers.get("Authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "missing auth" }, 401);

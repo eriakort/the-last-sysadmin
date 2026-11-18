@@ -27,3 +27,25 @@ supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=
 ## Safety
 
 The system prompt states this is an educational simulator. The function requires a valid Supabase session. Do not put the LLM key in the browser.
+
+## Disable the assistant
+
+Two independent switches. Either one is enough.
+
+**Runtime (no deploy of the app):**
+
+```bash
+supabase secrets set AI_ENABLED=false
+```
+
+The function rejects every request with `{ error: "disabled" }`. The Network Trainer panel hides the Ask button after the first disabled response. Set `AI_ENABLED=true` (or unset it) to turn it back on.
+
+**Build time (hide the UI entirely):**
+
+In `network-trainer/ai-assist.js`, set `AI_ASSIST_ENABLED` to `false`, then rebuild:
+
+```bash
+npm run build:net
+```
+
+The Ask button is never mounted. Redeploy the static site for this to take effect for visitors.
