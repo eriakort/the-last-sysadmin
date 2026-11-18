@@ -277,7 +277,7 @@ const html = `<!doctype html>
 <link rel="icon" href="${rootAsset('icon.svg')}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="${rootAsset('icon-192.png')}">
 <title>Networking Trainer — prototype</title><style>${css}</style><link rel="stylesheet" href="${assetUrl('workstation.css')}"></head>
-<body><div id="app"></div><script>${bundle}</script><script src="${assetUrl('workstation-shell.js')}"></script></body></html>`;
+<body><div id="app"></div><script>${bundle}</script><script src="${assetUrl('workstation-shell.js')}"></script><script src="${assetUrl('ai-assist.js')}"></script></body></html>`;
 
 // index.html so GitHub Pages serves it cleanly at /network-trainer/
 fs.writeFileSync(path.join(__dirname, 'index.html'), html);
