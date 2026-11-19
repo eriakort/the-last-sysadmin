@@ -241,7 +241,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 .qt-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:650px){.queue-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-ticket{grid-template-columns:1fr}.qt-actions{justify-content:flex-start}.queue-toolbar .dim{width:100%;margin:0}}
 @media(max-width:900px){#cols{grid-template-columns:1fr}#app{height:auto}aside{max-height:none}}
-</style><link rel="stylesheet" href="./workstation.css?v=340ebb9dad"></head>
+</style><link rel="stylesheet" href="./workstation.css?v=49efab73ac"></head>
 <body><div id="app"></div><script>
 // ---- tiny CommonJS shim ----
 var __mods = {};
@@ -9090,6 +9090,23 @@ function wireGlobalPalette() {
 function boot() {
   applyTheme(PROG.theme);
   document.getElementById('app').innerHTML = `
+    <header id="top">
+      <div class="apphdr">
+        <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
+        <nav class="apptabs" aria-label="Application navigation">
+          <a class="apptab" href="../" title="Return to Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+          <a class="apptab on" href="#" aria-current="page" title="Current Network Sysadmin workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
+        </nav>
+      </div>
+      <div class="hud"><button id="btnSearch" class="btn palette-launch" title="Search workstation (Ctrl+K)">⌕ Search <kbd>Ctrl K</kbd></button><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
+        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
+        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
+        <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
+        <div class="build-menu"><button id="btnBuild" class="btn" type="button" title="Build tools" aria-haspopup="true" aria-expanded="false">🛠 Build <span class="caret" aria-hidden="true">▾</span></button><div class="build-menu-panel" id="buildMenu" role="menu" aria-label="Build tools" hidden><button class="build-menu-item" id="buildMenuOpen" type="button" role="menuitem"><span aria-hidden="true">🛠</span> Open build workspace</button><button class="build-menu-item" id="terminalRestore" type="button" role="menuitem" aria-label="Open device terminal"><span aria-hidden="true">▣</span> Device terminal</button></div></div>
+        <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
+        <button id="btnStats" class="btn" type="button" title="Stats" aria-label="Open statistics">📊</button>
+        <button id="btnSet" class="btn" type="button" title="Settings" aria-label="Open settings">⚙</button></div>
+    </header>
     <div id="shell">
       <aside id="navRail" aria-label="Network workspace navigation">
         <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
@@ -9108,23 +9125,6 @@ function boot() {
         <div class="nav-spacer"></div><div class="nav-foot">LAB STATUS · SIMULATED<br>LOCAL PROGRESS ENABLED</div>
       </aside>
       <div id="mainArea">
-    <header id="top">
-      <div class="apphdr">
-        <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
-        <nav class="apptabs" aria-label="Application navigation">
-          <a class="apptab" href="../" title="Return to Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
-          <a class="apptab on" href="#" aria-current="page" title="Current Network Sysadmin workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
-        </nav>
-      </div>
-      <div class="hud"><button id="btnSearch" class="btn palette-launch" title="Search workstation (Ctrl+K)">⌕ Search <kbd>Ctrl K</kbd></button><span>Time <b id="time">0:00</b></span><span>XP <b id="xp">0</b></span><span>Rank <b id="rank">Cadet</b></span><span>Solved <b id="prog">0/0</b></span>
-        <button id="btnQueue" class="btn queue-launch" title="Daily incident queue">▤ Tickets <span id="queueOpenCount"></span></button>
-        <button id="btnHelp" class="btn help-launch" title="Help and command reference">? Help</button>
-        <button id="btnJournal" class="btn" title="Personal work journal">▤ Journal</button>
-        <div class="build-menu"><button id="btnBuild" class="btn" type="button" title="Build tools" aria-haspopup="true" aria-expanded="false">🛠 Build <span class="caret" aria-hidden="true">▾</span></button><div class="build-menu-panel" id="buildMenu" role="menu" aria-label="Build tools" hidden><button class="build-menu-item" id="buildMenuOpen" type="button" role="menuitem"><span aria-hidden="true">🛠</span> Open build workspace</button><button class="build-menu-item" id="terminalRestore" type="button" role="menuitem" aria-label="Open device terminal"><span aria-hidden="true">▣</span> Device terminal</button></div></div>
-        <button id="btnClass" class="btn" title="Classroom — classes & assigned scenarios">🎓 Class</button>
-        <button id="btnStats" class="btn" type="button" title="Stats" aria-label="Open statistics">📊</button>
-        <button id="btnSet" class="btn" type="button" title="Settings" aria-label="Open settings">⚙</button></div>
-    </header>
     <section id="overview" aria-label="Operations overview"></section>
     <section id="incidentsView" aria-label="Incident management" hidden></section>
     <section id="infrastructureView" aria-label="Infrastructure inventory" hidden></section>
