@@ -215,6 +215,19 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('[data-panel-tab="mission"]');
   await page.fill('#tin', 'pwd');
   await page.press('#tin', 'Enter');
+  await page.waitForTimeout(100);
+  const firstTicketNudge = await page.textContent('#tout');
+  const guidedFocus = await page.$eval('#learningPath', el => el.classList.contains('learning-attention'));
+  const focusedCheck = await page.$eval('#learningQuickCheck', el => document.activeElement === el);
+  if (firstTicketNudge.includes('Nice—now answer the quick check below to close your first ticket') && guidedFocus && focusedCheck)
+    ok('Mission 1 automatically guides the learner to the quick check after both commands');
+  else fail('Mission 1 did not guide the learner to the quick check after both commands');
+  if ((await page.textContent('#learningPath')).includes('Quick check · prove your understanding') && (await page.locator('.learning-more').count()) === 1)
+    ok('quick check is prioritized and optional learning detail is collapsible');
+  else fail('quick check is not prioritized or optional learning detail is missing');
+  if ((await page.textContent('#learningPath')).includes('/home/rookie'))
+    ok('Mission 1 learning example matches rookie home directory');
+  else fail('Mission 1 learning example does not match the simulated rookie account');
   await page.fill('#tin', 'check');
   await page.press('#tin', 'Enter');
   await page.waitForTimeout(120);
