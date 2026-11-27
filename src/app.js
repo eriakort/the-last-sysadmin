@@ -988,6 +988,26 @@ CMDS.tree = (a, ctx) => {
   ctx.out(lines.join('\n') + `\n\n${nd} director${nd === 1 ? 'y' : 'ies'}${f.d ? '' : `, ${nf} file${nf === 1 ? '' : 's'}`}\n`);
 };
 
+CMDS.nano = (a, ctx) => {
+  const path = a.find(x => !x.startsWith('-'));
+  if (!path) { ctx.err('nano: usage: nano FILE\n'); return 2; }
+  const abs = norm(path, S.cwd), current = lookup(abs);
+  if (!current.err && current.node.type !== 'file') { ctx.err('nano: ' + path + ': Is a directory\n'); return 1; }
+  if (!current.err && !canRead(current.node)) { ctx.err('nano: ' + path + ': Permission denied\n'); return 1; }
+  if (current.err && current.err !== 'No such file or directory') { ctx.err('nano: ' + path + ': ' + current.err + '\n'); return 1; }
+  const parent = lookup(parentOf(abs));
+  if (parent.err || parent.node.type !== 'dir') { ctx.err('nano: ' + path + ': ' + (parent.err || 'Not a directory') + '\n'); return 1; }
+  if (!globalThis.LSANanoEditor) { ctx.err('nano: editor is unavailable\n'); return 1; }
+  const opened = globalThis.LSANanoEditor.open({
+    path: abs,
+    value: current.node ? current.node.content : '',
+    write: value => writeFile(abs, value, false),
+    onSave: () => { save(); emit('[ Saved ' + abs + ' ]\n', 'sys'); }
+  });
+  if (!opened) { ctx.err('nano: unable to open editor\n'); return 1; }
+  return 0;
+};
+
 CMDS.cat = (a, ctx) => {
   const { f, rest } = opts(a, 'n', '', 'cat');
   const I = inputs(rest, ctx, 'cat');
@@ -2613,6 +2633,7 @@ const MAN = {
   cd: ['change the working directory', 'cd [DIR]', [['(no DIR)', 'go to your home directory'], ['~', 'your home directory'], ['..', 'the parent directory'], ['-', 'the previous directory']], ['cd /srv/halcyon', 'cd ..', 'cd -']],
   tree: ['list a directory as a tree', 'tree [-a] [-d] [DIR]', [['-a', 'include hidden files'], ['-d', 'list directories only']], ['tree ~', 'tree -d /srv']],
   cat: ['concatenate files and print them', 'cat [OPTION]... [FILE]...', [['-n', 'number every output line']], ['cat notes.txt', 'cat a.txt b.txt > both.txt']],
+  nano: ['edit a file in the simulated text editor', 'nano FILE', [], ['nano ~/notes.txt', 'nano /etc/ssh/sshd_config'], 'Save with Ctrl+S. Permissions are enforced when saving; Esc exits without saving'],
   less: ['view a file', 'less FILE', [], ['less /var/log/halcyon/app.log'], 'On a real system less shows one screen at a time (q quits, / searches). In this game it prints the whole file.'],
   more: ['view a file', 'more FILE', [], ['more README'], 'In this game, more prints the whole file.'],
   head: ['print the first lines of files', 'head [-n N] [FILE]...', [['-n N', 'print the first N lines (default 10)'], ['-N', 'same as -n N']], ['head -n 5 app.log', 'head -3 access.log']],
