@@ -7,6 +7,7 @@ assert.deepEqual(parse([word('echo'), word('hello')]), [{ pipe: [{ words: [word(
 assert.deepEqual(parse([word('cat'), op('|'), word('grep'), word('x')])[0].pipe.length, 2);
 assert.deepEqual(parse([word('echo'), op('&&'), word('true')]).map(x => x.op), ['&&', null]);
 assert.deepEqual(parse([word('echo'), op('>'), word('out')])[0].pipe[0].redir, [{ op: '>', target: 'out' }]);
+assert.deepEqual(parse([word('cat'), op('<<'), { ...word('EOF'), quoted: true }])[0].pipe[0].redir, [{ op: '<<', target: 'EOF', quoted: true }]);
 assert.deepEqual(parse([word('echo'), op('2>&1')])[0].pipe[0].redir, [{ op: '2>&1' }]);
 assert.throws(() => parse([op('|'), word('x')]), /syntax error/);
 assert.throws(() => parse([word('echo'), op('>')]), /syntax error/);
