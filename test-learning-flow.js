@@ -53,6 +53,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
 
+  await page.locator('#missionHints summary').click();
   if ((await page.textContent('#btnHint')).includes('Free')) ok('first mission hint is clearly marked free');
   else fail('first mission hint should be marked free');
   await page.click('#btnHint');
