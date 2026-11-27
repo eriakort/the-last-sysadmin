@@ -499,7 +499,7 @@ function expandWords(words) {
 }
 
 let clearRequested = false;
-function runLine(line) {
+function runLine(line, heredocInput) {
   clearMistakeCoach();
   let seq;
   try { seq = parse(tokenize(line)); } catch (e) { emit('bash: ' + e.message + '\n', 'err'); S.lastStatus = 2; return; }
@@ -508,18 +508,18 @@ function runLine(line) {
     const prevOp = k > 0 ? seq[k - 1].op : null;
     if (prevOp === '&&' && status !== 0) continue;
     if (prevOp === '||' && status === 0) continue;
-    status = runPipeline(seq[k].pipe);
+    status = runPipeline(seq[k].pipe, k === 0 ? heredocInput : null);
     S.lastStatus = status;
   }
   S.lastStatus = status;
 }
-function runPipeline(cmds) {
+function runPipeline(cmds, heredocInput) {
   let input = null, status = 0;
   for (let j = 0; j < cmds.length; j++) {
     const c = cmds[j], last = j === cmds.length - 1;
     const argv = expandWords(c.words);
     let out = '', errs = '';
-    const ctx = { stdin: j > 0 ? input : null, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
+    const ctx = { stdin: j > 0 ? input : heredocInput, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
     let rOut = null, rErr = null, errToOut = false, bad = false;
     for (const r0 of c.redir) {
       const r = r0.target === undefined ? r0 : { ...r0, target: expandVars(r0.target) };
@@ -3044,11 +3044,11 @@ function updatePrompt() { tprompt.innerHTML = promptHTML(); }
 function scrollEnd() { tbody.scrollTop = tbody.scrollHeight; }
 
 let pendingComplete = false;
-function submitLine(line) {
+function submitLine(line, heredocInput) {
   echoCmd(line);
   if (line.trim()) { S.history.push(line); if (S.history.length > 300) S.history.shift(); }
   pendingComplete = false;
-  try { runLine(line); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
+  try { runLine(line, heredocInput); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
   if (clearRequested) { tout.innerHTML = ''; clearRequested = false; }
   afterCommand();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
@@ -3370,13 +3370,45 @@ if (coachUse) coachUse.addEventListener('click', () => {
 });
 const coachDrillStart = $('#commandCoachDrillStart');
 if (coachDrillStart) coachDrillStart.addEventListener('click', () => startSkillDrill($('#commandCoachSummary').dataset.command));
+let pendingHeredoc = null;
 tin.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); histMove(-1); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); histMove(1); }
-  else if (e.key === 'Tab') { e.preventDefault(); complete(); }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const value = tin.value;
+    tin.value = '';
+    hIdx = null;
+    if (pendingHeredoc) {
+      if (value === pendingHeredoc.delimiter) {
+        const capture = pendingHeredoc;
+        pendingHeredoc = null;
+        emit('> ' + value + '\n');
+        let body = capture.lines.length ? capture.lines.join('\n') + '\n' : '';
+        if (!capture.quoted) body = expandVars(body);
+        submitLine(capture.command, body);
+      } else {
+        pendingHeredoc.lines.push(value);
+        emit('> ' + value + '\n');
+      }
+      return;
+    }
+    const request = globalThis.LSAHeredocParser && globalThis.LSAHeredocParser.parseHeader(value);
+    if (request) {
+      pendingHeredoc = { ...request, lines: [] };
+      emit('> ');
+      return;
+    }
+    submitLine(value);
+  }
+  else if (e.key === 'ArrowUp' && !pendingHeredoc) { e.preventDefault(); histMove(-1); }
+  else if (e.key === 'ArrowDown' && !pendingHeredoc) { e.preventDefault(); histMove(1); }
+  else if (e.key === 'Tab' && !pendingHeredoc) { e.preventDefault(); complete(); }
   else if (e.ctrlKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); tout.innerHTML = ''; }
-  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) { e.preventDefault(); echoCmd(tin.value + '^C'); tin.value = ''; hIdx = null; scrollEnd(); }
+  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) {
+    e.preventDefault();
+    if (pendingHeredoc) { emit('^C\n', 'err'); pendingHeredoc = null; }
+    else echoCmd(tin.value + '^C');
+    tin.value = ''; hIdx = null; scrollEnd();
+  }
 });
 tbody.addEventListener('mouseup', () => { if (!String(window.getSelection()).length) tin.focus({ preventScroll: true }); });
 document.querySelectorAll('.key').forEach(b => b.addEventListener('click', () => {
