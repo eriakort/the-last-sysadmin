@@ -66,7 +66,13 @@ button{font:inherit;cursor:pointer}
 .btn:focus-visible,.chip:focus-visible,.key:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 
 .stage{display:grid;grid-template-columns:minmax(290px,370px) minmax(0,1fr);gap:16px;min-height:0;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.panel{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:20px;padding-right:6px}
+.panel{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:16px;padding-right:6px}
+.panel-tabs{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:var(--raise);border:1px solid var(--line);border-radius:9px}
+.panel-tab{font-family:var(--f-display);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:transparent;border:0;border-radius:6px;color:var(--muted);padding:7px 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s}
+.panel-tab:hover{color:var(--ink);background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.panel-tab[aria-selected="true"]{color:var(--on-amber);background:var(--amber)}
+.panel-tab:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+.panel-pane{display:flex;flex-direction:column;gap:18px;min-width:0}
 .eyebrow{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
 .ticket{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:2px}
 .panel h1{font-family:var(--f-display);font-weight:600;font-size:26px;line-height:1.15;margin:6px 0 0;text-wrap:balance}
@@ -167,6 +173,8 @@ button{font:inherit;cursor:pointer}
 .incident-challenge{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px}
 .incident-challenge h2{font:600 15px var(--f-display);color:var(--blue);margin:0}
 .incident-challenge p{font-size:11.5px;color:var(--muted);margin:0}
+.incident-challenge-lock{background:var(--raise);border:1px dashed var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.incident-challenge-lock p{font-size:12px;color:var(--ink);margin:0}
 .incident-challenge-task{background:var(--raise);border:1px solid var(--line);border-radius:6px;padding:9px;font-size:12px;color:var(--ink)}
 .incident-challenge-progress{font:11px var(--f-mono);color:var(--muted)}
 .incident-challenge-feedback{font-size:12px;color:var(--muted);min-height:18px}
@@ -282,9 +290,9 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--term);border:1px
 @media (prefers-reduced-motion:reduce){.led.cur{animation:none}}
 
 /* ---- Race mode ---- */
-body.racing #leds,body.racing #chips,body.racing #speed,body.racing #finale,body.racing .panel>div:last-child{display:none!important}
+body.racing .panel-tabs,body.racing #rackWrap,body.racing #leds,body.racing #chips,body.racing #chipsWrap,body.racing #speed,body.racing #finale{display:none!important}
 body.racing #raceBoard{display:block!important}
-body.practicing #leds,body.practicing #chips,body.practicing #speed,body.practicing #finale{display:none!important}
+body.practicing #rackWrap,body.practicing #leds,body.practicing #chips,body.practicing #chipsWrap,body.practicing #speed,body.practicing #finale{display:none!important}
 #practiceBar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:var(--amber);color:#1a1205;font-weight:600;font-size:13px}
 #practiceBar button{background:rgba(0,0,0,.18);border:1px solid rgba(0,0,0,.25);color:inherit}
 body.practicing{padding-top:40px}
@@ -673,91 +681,111 @@ body.practicing{padding-top:40px}
 
   <main class="stage">
     <aside class="panel" id="panel" aria-label="Mission briefing">
-      <div id="brief">
-        <div class="eyebrow" id="pChapter"></div>
-        <div class="ticket" id="pTicket"></div>
-        <h1 id="pTitle"></h1>
+      <div class="panel-tabs" role="tablist" aria-label="Briefing workspace">
+        <button class="panel-tab" id="tabMission" type="button" role="tab" aria-selected="true" aria-controls="panelPaneMission" data-panel-tab="mission" tabindex="0">Mission</button>
+        <button class="panel-tab" id="tabFiles" type="button" role="tab" aria-selected="false" aria-controls="panelPaneFiles" data-panel-tab="files" tabindex="-1">Files</button>
+        <button class="panel-tab" id="tabProgress" type="button" role="tab" aria-selected="false" aria-controls="panelPaneProgress" data-panel-tab="progress" tabindex="-1">Progress</button>
       </div>
-      <p class="story" id="pStory"></p>
-      <section class="first-run" id="firstRunGuide" aria-labelledby="firstRunTitle" hidden>
-        <div class="first-run-head"><h2 id="firstRunTitle">Your first 2 minutes</h2><button class="btn" id="firstRunDismiss" type="button">Got it</button></div>
-        <p>You're connected to a <strong>simulated Linux server</strong>. Try a command, read the result, and experiment safely — this does not change your computer.</p>
-        <div class="first-run-steps">
-          <div class="first-run-step"><strong>1 · Read the prompt</strong><code>rookie@halcyon-web01:~$</code> means user, server, and current folder. The <code>$</code> is where you type.</div>
-          <div class="first-run-step"><strong>2 · Explore</strong><code>pwd</code> shows where you are; <code>ls</code> lists what is here; <code>whoami</code> shows your user.</div>
+
+      <div class="panel-pane" id="panelPaneMission" role="tabpanel" aria-labelledby="tabMission">
+        <div id="brief">
+          <div class="eyebrow" id="pChapter"></div>
+          <div class="ticket" id="pTicket"></div>
+          <h1 id="pTitle"></h1>
         </div>
-        <div class="first-run-actions" aria-label="Try a starter command">
-          <button class="btn" type="button" data-onboard-command="whoami">Try whoami</button>
-          <button class="btn" type="button" data-onboard-command="pwd">Try pwd</button>
-          <button class="btn" type="button" data-onboard-command="ls -a">Try ls -a</button>
-          <button class="btn primary" id="firstRunInvestigationTour" type="button">Guided investigation</button>
+        <p class="story" id="pStory"></p>
+        <div class="objective">
+          <div class="label">Objective</div>
+          <p id="pObj"></p>
         </div>
-        <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
-      </section>
-      <section class="journey" id="journey" aria-label="Linux learning journey"></section>
-      <section class="skill-progress" id="commandSkillProgress" aria-labelledby="commandSkillTitle">
-        <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Practise core commands and keep your progress between visits.</p></div><span id="commandSkillCount">0/7</span></div>
-        <div class="skill-progress-track" role="progressbar" aria-label="Command skills practised" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0"><span></span></div>
-        <div class="skill-progress-grid" id="commandSkillGrid"></div>
-      </section>
-      <section class="incident-challenge" id="commandIncidentChallenge" aria-labelledby="commandIncidentTitle">
-        <h2 id="commandIncidentTitle">Apply · Service outage</h2>
-        <p>A web service is unavailable. Investigate safely before recommending a change. This exercise uses read-only commands in the simulator.</p>
-        <div class="incident-challenge-task" id="commandIncidentTask">Start the challenge when you're ready. You'll inspect service state, recent logs, and listening sockets.</div>
-        <div class="incident-challenge-progress" id="commandIncidentProgress" aria-live="polite">0/3 investigation steps</div>
-        <p class="incident-challenge-feedback" id="commandIncidentFeedback" role="status" aria-live="polite">No changes are made to the simulated server.</p>
-        <div class="row"><button class="btn primary" id="commandIncidentStart" type="button">Start investigation</button><button class="btn" id="commandIncidentTour" type="button">Take the tour</button></div>
-        <section class="investigation-tour" id="investigationTour" aria-label="Guided service investigation" hidden>
-          <div class="investigation-tour-head">
-            <div class="investigation-guide-avatar" id="investigationTourAvatar" aria-hidden="true">🧑‍💻</div>
-            <div class="investigation-tour-heading"><div class="eyebrow">FIELD GUIDE · LINUX SYSADMIN</div><h3 id="investigationTourTitle">Your first investigation</h3><div class="investigation-tour-step" id="investigationTourStep">STEP 1 / 6</div></div>
-            <button class="btn" id="investigationTourClose" type="button" aria-label="Close investigation tour">×</button>
+        <div class="hints">
+          <div class="label">Hints <span id="hintCount"></span></div>
+          <ol id="pHints"></ol>
+          <div class="row">
+            <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; each hint costs XP">Show hint · −25 XP</button>
+            <button class="btn" id="btnRetry" type="button" title="Restore the simulated server to the current mission checkpoint">Restore checkpoint</button>
           </div>
-          <p class="investigation-tour-copy" id="investigationTourCopy" aria-live="polite"></p>
-          <div class="investigation-tour-actions"><button class="btn primary" id="investigationTourAction" type="button" hidden></button><span class="investigation-tour-status" id="investigationTourStatus" role="status" aria-live="polite"></span></div>
-          <div class="investigation-tour-nav"><button class="btn" id="investigationTourBack" type="button">Back</button><button class="btn primary" id="investigationTourNext" type="button">Next</button><button class="btn tour-skip" id="investigationTourSkip" type="button">Skip tour</button></div>
-        </section>
-      </section>
-      <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
-        <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
-        <div class="fs-explorer-path" id="fsExplorerPath" aria-live="polite">/</div>
-        <p class="fs-explorer-help">Explore the same simulated files used by terminal commands. Choose a folder to open it or a file to inspect it.</p>
-        <nav class="fs-explorer-shortcuts" aria-label="Common Linux locations">
-          <button type="button" data-fs-nav="/">/</button><button type="button" data-fs-nav="/etc">/etc</button><button type="button" data-fs-nav="/var/log">/var/log</button><button type="button" data-fs-nav="/home/rookie">/home/rookie</button><button type="button" data-fs-nav="/srv">/srv</button><button type="button" data-fs-nav="/tmp">/tmp</button>
-        </nav>
-        <div class="fs-explorer-list" id="fsExplorerList" role="group" aria-label="Directory contents"></div>
-        <div class="fs-explorer-preview" id="fsExplorerPreview" aria-live="polite"><p class="fs-explorer-help">Select a file to inspect its contents and permissions.</p></div>
-      </section>
-      <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
-      <div class="objective">
-        <div class="label">Objective</div>
-        <p id="pObj"></p>
-      </div>
-      <div class="hints">
-        <div class="label">Hints <span id="hintCount"></span></div>
-        <ol id="pHints"></ol>
-        <div class="row">
-          <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; each hint costs XP">Show hint · −25 XP</button>
-          <button class="btn" id="btnRetry" type="button" title="Restore the simulated server to the current mission checkpoint">Restore checkpoint</button>
         </div>
+        <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
+        <section class="first-run" id="firstRunGuide" aria-labelledby="firstRunTitle" hidden>
+          <div class="first-run-head"><h2 id="firstRunTitle">Your first 2 minutes</h2><button class="btn" id="firstRunDismiss" type="button">Got it</button></div>
+          <p>You're connected to a <strong>simulated Linux server</strong>. Try a command, read the result, and experiment safely — this does not change your computer.</p>
+          <div class="first-run-steps">
+            <div class="first-run-step"><strong>1 · Read the prompt</strong><code>rookie@halcyon-web01:~$</code> means user, server, and current folder. The <code>$</code> is where you type.</div>
+            <div class="first-run-step"><strong>2 · Explore</strong><code>pwd</code> shows where you are; <code>ls</code> lists what is here; <code>whoami</code> shows your user.</div>
+          </div>
+          <div class="first-run-actions" aria-label="Try a starter command">
+            <button class="btn" type="button" data-onboard-command="whoami">Try whoami</button>
+            <button class="btn" type="button" data-onboard-command="pwd">Try pwd</button>
+            <button class="btn" type="button" data-onboard-command="ls -a">Try ls -a</button>
+            <button class="btn primary" id="firstRunInvestigationTour" type="button">Guided investigation</button>
+          </div>
+          <p class="first-run-note">Choose a command to place it in the terminal, then press Enter. You can use <code>help</code>, <code>man COMMAND</code>, or <code>hint</code> whenever you need support.</p>
+        </section>
+        <div id="raceBoard" hidden>
+          <div class="label">Race · live standings <span id="rbMeta"></span></div>
+          <div id="rbBody"></div>
+          <button class="btn" id="btnRaceExit" type="button" style="margin-top:10px">Leave race</button>
+        </div>
+        <div class="finale" id="finale" hidden></div>
       </div>
-      <div class="finale" id="finale" hidden></div>
-      <div>
-        <div class="label">Rack status <span id="doneCount"></span><button class="btn rack-toggle" id="btnRackToggle" type="button" aria-expanded="false">Show all</button></div>
-        <div class="leds" id="leds"></div>
+
+      <div class="panel-pane" id="panelPaneFiles" role="tabpanel" aria-labelledby="tabFiles" hidden>
+        <section class="fs-explorer" id="fsExplorer" aria-labelledby="fsExplorerTitle">
+          <div class="fs-explorer-head"><h2 id="fsExplorerTitle">Filesystem explorer</h2><button class="btn" id="fsExplorerUp" type="button" disabled>Up one level</button></div>
+          <div class="fs-explorer-path" id="fsExplorerPath" aria-live="polite">/</div>
+          <p class="fs-explorer-help">Explore the same simulated files used by terminal commands. Choose a folder to open it or a file to inspect it.</p>
+          <nav class="fs-explorer-shortcuts" aria-label="Common Linux locations">
+            <button type="button" data-fs-nav="/">/</button><button type="button" data-fs-nav="/etc">/etc</button><button type="button" data-fs-nav="/var/log">/var/log</button><button type="button" data-fs-nav="/home/rookie">/home/rookie</button><button type="button" data-fs-nav="/srv">/srv</button><button type="button" data-fs-nav="/tmp">/tmp</button>
+          </nav>
+          <div class="fs-explorer-list" id="fsExplorerList" role="group" aria-label="Directory contents"></div>
+          <div class="fs-explorer-preview" id="fsExplorerPreview" aria-live="polite"><p class="fs-explorer-help">Select a file to inspect its contents and permissions.</p></div>
+        </section>
       </div>
-      <div id="speed" hidden>
-        <div class="label">Speed tracker <span id="spdCount"></span></div>
-        <div id="speedBody"></div>
-      </div>
-      <div id="raceBoard" hidden>
-        <div class="label">Race · live standings <span id="rbMeta"></span></div>
-        <div id="rbBody"></div>
-        <button class="btn" id="btnRaceExit" type="button" style="margin-top:10px">Leave race</button>
-      </div>
-      <div>
-        <div class="label">Commands you've used <span>tap one to read its manual</span><button class="btn chips-toggle" id="btnChipsToggle" type="button" aria-expanded="false">Show all</button></div>
-        <div class="chips" id="chips"></div>
+
+      <div class="panel-pane" id="panelPaneProgress" role="tabpanel" aria-labelledby="tabProgress" hidden>
+        <section class="journey" id="journey" aria-label="Linux learning journey"></section>
+        <section class="skill-progress" id="commandSkillProgress" aria-labelledby="commandSkillTitle">
+          <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Practise core commands and keep your progress between visits.</p></div><span id="commandSkillCount">0/7</span></div>
+          <div class="skill-progress-track" role="progressbar" aria-label="Command skills practised" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0"><span></span></div>
+          <div class="skill-progress-grid" id="commandSkillGrid"></div>
+        </section>
+        <section class="incident-challenge" id="commandIncidentChallenge" aria-labelledby="commandIncidentTitle">
+          <h2 id="commandIncidentTitle">Apply · Service outage</h2>
+          <div class="incident-challenge-lock" id="commandIncidentLocked" hidden>
+            <p id="commandIncidentLockCopy">Unlocks at Chapter 5 (Processes &amp; services) once you've mastered navigation, files, logs, and permissions.</p>
+            <div class="row"><button class="btn" id="commandIncidentUnlock" type="button">Preview challenge early</button><button class="btn" id="commandIncidentLockedTour" type="button">Take the tour</button></div>
+          </div>
+          <div id="commandIncidentBody">
+            <p>A web service is unavailable. Investigate safely before recommending a change. This exercise uses read-only commands in the simulator.</p>
+            <div class="incident-challenge-task" id="commandIncidentTask">Start the challenge when you're ready. You'll inspect service state, recent logs, and listening sockets.</div>
+            <div class="incident-challenge-progress" id="commandIncidentProgress" aria-live="polite">0/3 investigation steps</div>
+            <p class="incident-challenge-feedback" id="commandIncidentFeedback" role="status" aria-live="polite">No changes are made to the simulated server.</p>
+            <div class="row"><button class="btn primary" id="commandIncidentStart" type="button">Start investigation</button><button class="btn" id="commandIncidentTour" type="button">Take the tour</button></div>
+          </div>
+          <section class="investigation-tour" id="investigationTour" aria-label="Guided service investigation" hidden>
+            <div class="investigation-tour-head">
+              <div class="investigation-guide-avatar" id="investigationTourAvatar" aria-hidden="true">🧑‍💻</div>
+              <div class="investigation-tour-heading"><div class="eyebrow">FIELD GUIDE · LINUX SYSADMIN</div><h3 id="investigationTourTitle">Your first investigation</h3><div class="investigation-tour-step" id="investigationTourStep">STEP 1 / 6</div></div>
+              <button class="btn" id="investigationTourClose" type="button" aria-label="Close investigation tour">×</button>
+            </div>
+            <p class="investigation-tour-copy" id="investigationTourCopy" aria-live="polite"></p>
+            <div class="investigation-tour-actions"><button class="btn primary" id="investigationTourAction" type="button" hidden></button><span class="investigation-tour-status" id="investigationTourStatus" role="status" aria-live="polite"></span></div>
+            <div class="investigation-tour-nav"><button class="btn" id="investigationTourBack" type="button">Back</button><button class="btn primary" id="investigationTourNext" type="button">Next</button><button class="btn tour-skip" id="investigationTourSkip" type="button">Skip tour</button></div>
+          </section>
+        </section>
+        <div id="rackWrap">
+          <div class="label">Rack status <span id="doneCount"></span><button class="btn rack-toggle" id="btnRackToggle" type="button" aria-expanded="false">Show all</button></div>
+          <div class="leds" id="leds"></div>
+        </div>
+        <div id="speed" hidden>
+          <div class="label">Speed tracker <span id="spdCount"></span></div>
+          <div id="speedBody"></div>
+        </div>
+        <div id="chipsWrap">
+          <div class="label">Commands you've used <span>tap one to read its manual</span><button class="btn chips-toggle" id="btnChipsToggle" type="button" aria-expanded="false">Show all</button></div>
+          <div class="chips" id="chips"></div>
+        </div>
       </div>
     </aside>
 

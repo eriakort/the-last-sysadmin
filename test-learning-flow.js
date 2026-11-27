@@ -115,6 +115,11 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('#serverHealthDialog [role="dialog"]').count() === 0) ok('dashboard closes cleanly');
   else fail('dashboard did not close');
 
+  if (await page.locator('.objective').isVisible() && await page.locator('.hints').isVisible() && !(await page.locator('#fsExplorer').isVisible()) && !(await page.locator('#journey').isVisible()))
+    ok('Mission tab keeps Objective and Hints visible without sidebar clutter');
+  else fail('Mission tab did not focus on Objective and Hints');
+
+  await page.click('[data-panel-tab="files"]');
   await page.click('[data-fs-nav="/etc"]');
   if ((await page.textContent('#fsExplorerPath')) === '/etc' && (await page.textContent('#fsExplorerList')).includes('passwd')) ok('filesystem explorer opens /etc and lists its simulated configuration files');
   else fail('filesystem explorer did not list /etc');
@@ -135,8 +140,9 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#fsExplorerPath')) === '/var/log') ok('filesystem explorer supports parent-directory navigation');
   else fail('filesystem explorer parent navigation failed');
 
+  await page.click('[data-panel-tab="progress"]');
   const journey = await page.$('#journey');
-  if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible');
+  if (journey && await journey.isVisible()) ok('structured Linux learning journey is visible in Progress tab');
   else fail('structured Linux learning journey is missing or hidden');
   const journeyText = await page.textContent('#journey').catch(() => '');
   for (const level of ['Linux foundations', 'Everyday administration', 'Automation and services', 'Advanced operations', 'Incident response lab']) {
@@ -149,6 +155,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('[data-journey-chapter="1"][data-status="current"]').count()) ok('the current chapter is clearly highlighted');
   else fail('the current chapter is not highlighted');
 
+  await page.click('[data-panel-tab="mission"]');
   const guide = await page.$('#learningPath');
   if (guide && await guide.isVisible()) ok('Chapter 1 learning guide is visible');
   else fail('Chapter 1 learning guide is missing or hidden');
@@ -178,12 +185,17 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.press('#tin', 'Enter');
   if ((await page.textContent('#commandCoachDrillFeedback')).includes('Correct') && (await page.textContent('#commandCoachDrillProgress')).includes('1/7')) ok('correct command completes the drill and updates saved skill progress');
   else fail('command practice drill did not accept the correct command');
+  await page.click('[data-panel-tab="progress"]');
   if ((await page.textContent('#commandSkillProgress')).includes('whoami') && (await page.locator('[data-skill="whoami"][data-complete="true"]').count())) ok('completed command skill appears in the persistent skill tracker');
   else fail('completed command skill was not reflected in the skill tracker');
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(150);
+  await page.click('[data-panel-tab="progress"]');
   if (await page.locator('[data-skill="whoami"][data-complete="true"]').count()) ok('command skill progress survives a browser reload');
   else fail('command skill progress did not persist after reload');
+  if (await page.locator('#commandIncidentLocked').isVisible()) ok('service-outage challenge stays gated until Chapter 5 by default');
+  else fail('service-outage challenge should be gated for Chapter 1 beginners');
+  await page.click('#commandIncidentUnlock');
   await page.click('#commandIncidentStart');
   if ((await page.textContent('#commandIncidentTask')).includes('Inspect the service')) ok('service-outage challenge starts with a clear read-only investigation task');
   else fail('service-outage challenge did not start at the service inspection step');
@@ -200,6 +212,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#commandIncidentProgress')).includes('3/3') && (await page.textContent('#commandIncidentFeedback')).includes('Investigation complete')) ok('three-command service-outage investigation completes with evidence-based feedback');
   else fail('service-outage investigation did not complete');
 
+  await page.click('[data-panel-tab="mission"]');
   await page.fill('#tin', 'pwd');
   await page.press('#tin', 'Enter');
   await page.fill('#tin', 'check');

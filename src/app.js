@@ -2767,9 +2767,29 @@ const COMMAND_INCIDENT_STEPS = [
   { command: 'journalctl', args: ['-u', 'halcyon', '-n', '20'], task: '2 · Review recent logs. Read the latest 20 journal entries for halcyon.', success: 'Recent service logs reviewed. Now check whether the expected ports are listening.' },
   { command: 'ss', args: ['-tuln'], task: '3 · Check network listeners. List listening TCP and UDP sockets with numeric ports.', success: 'Listener state checked. Investigation complete — you have gathered service, log, and socket evidence.' }
 ];
+const COMMAND_INCIDENT_UNLOCK_CH = 4; // Chapter 5: Processes & scheduling
 let commandIncidentActive = false;
 let commandIncidentStep = 0;
+let commandIncidentUnlocked = false;
+function isCommandIncidentUnlocked() {
+  if (commandIncidentUnlocked || commandIncidentActive || commandIncidentStep > 0) return true;
+  if (typeof S === 'undefined') return false;
+  if (S.finished) return true;
+  const current = typeof MISSIONS !== 'undefined' && MISSIONS[S.mission];
+  return !!(current && current.ch >= COMMAND_INCIDENT_UNLOCK_CH);
+}
 function renderCommandIncident() {
+  const unlocked = isCommandIncidentUnlocked();
+  const lockedEl = document.getElementById('commandIncidentLocked');
+  const lockCopy = document.getElementById('commandIncidentLockCopy');
+  const bodyEl = document.getElementById('commandIncidentBody');
+  if (lockedEl) lockedEl.hidden = unlocked;
+  if (bodyEl) bodyEl.hidden = !unlocked;
+  if (!unlocked && lockCopy && typeof S !== 'undefined' && typeof MISSIONS !== 'undefined') {
+    const cur = MISSIONS[S.mission];
+    const chNum = cur ? cur.ch + 1 : 1;
+    lockCopy.textContent = 'Unlocks at Chapter 5 (Processes & services) once you\'ve mastered navigation, files, logs, and permissions. Currently on Chapter ' + chNum + '.';
+  }
   const task = document.getElementById('commandIncidentTask');
   const progress = document.getElementById('commandIncidentProgress');
   const start = document.getElementById('commandIncidentStart');
@@ -3202,8 +3222,52 @@ function histMove(dir) {
   else { if (hIdx === null) return; hIdx++; if (hIdx >= S.history.length) { hIdx = null; tin.value = hDraft; } else tin.value = S.history[hIdx]; }
   const p = tin.value.length; requestAnimationFrame(() => tin.setSelectionRange(p, p));
 }
+function setPanelTab(tabName) {
+  const target = tabName === 'files' || tabName === 'progress' ? tabName : 'mission';
+  const tabs = [...document.querySelectorAll('.panel-tab[data-panel-tab]')];
+  const panes = {
+    mission: document.getElementById('panelPaneMission'),
+    files: document.getElementById('panelPaneFiles'),
+    progress: document.getElementById('panelPaneProgress')
+  };
+  tabs.forEach(tab => {
+    const active = tab.dataset.panelTab === target;
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    tab.setAttribute('tabindex', active ? '0' : '-1');
+  });
+  Object.entries(panes).forEach(([key, pane]) => {
+    if (pane) pane.hidden = key !== target;
+  });
+  const panel = document.getElementById('panel');
+  if (panel) panel.scrollTop = 0;
+}
+(function initPanelTabs() {
+  const tabs = [...document.querySelectorAll('.panel-tab[data-panel-tab]')];
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => setPanelTab(tab.dataset.panelTab));
+    tab.addEventListener('keydown', e => {
+      let next = null;
+      if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = tabs.length - 1;
+      if (next !== null) {
+        e.preventDefault();
+        setPanelTab(tabs[next].dataset.panelTab);
+        tabs[next].focus();
+      }
+    });
+  });
+})();
+const commandIncidentUnlock = $('#commandIncidentUnlock');
+if (commandIncidentUnlock) commandIncidentUnlock.addEventListener('click', () => {
+  commandIncidentUnlocked = true;
+  renderCommandIncident();
+  $('#commandIncidentStart')?.focus({ preventScroll: true });
+});
 const commandIncidentStart = $('#commandIncidentStart');
 if (commandIncidentStart) commandIncidentStart.addEventListener('click', () => {
+  commandIncidentUnlocked = true;
   commandIncidentStep = 0;
   commandIncidentActive = true;
   if (investigationTourOpen) setInvestigationTourStep(2);
@@ -3897,7 +3961,9 @@ function render() {
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
   renderJourney();
   renderFilesystemExplorer();
+  renderCommandIncident();
   if (RACE.active) {
+    setPanelTab('mission');
     show('#learningPath', false);
     renderBoard();
     if (RACE.finished) {
@@ -4064,6 +4130,9 @@ function setInvestigationTourStep(index) {
   renderInvestigationTour();
 }
 function openInvestigationTour() {
+  commandIncidentUnlocked = true;
+  renderCommandIncident();
+  setPanelTab('progress');
   investigationTourOpen = true;
   investigationTourStep = commandIncidentActive ? 2 + commandIncidentStep : 0;
   renderInvestigationTour();
@@ -4122,7 +4191,7 @@ function boot(restored) {
   if(crossButton&&!crossButton.dataset.bound){crossButton.dataset.bound='true';crossButton.addEventListener('click',openCrossTrackCase);}
   (S.commandSkills || []).forEach(name => completedCommandDrills.add(name));
   initFirstRunGuide(restored);
-  for (const id of ['firstRunInvestigationTour', 'commandIncidentTour', 'btnInvestigationTour']) {
+  for (const id of ['firstRunInvestigationTour', 'commandIncidentTour', 'commandIncidentLockedTour', 'btnInvestigationTour']) {
     const button = document.getElementById(id);
     if (button && !button.dataset.bound) {
       button.dataset.bound = 'true';
@@ -4435,6 +4504,7 @@ function raceBuildSandbox(scn) {
   RACE.scenario = scn; RACE.startIdx = startIdx; RACE.endIdx = startIdx + scn.steps - 1; RACE.total = scn.steps;
   RACE.active = true; RACE.finished = false; RACE.myFinishMs = null;
   document.body.classList.add('racing');
+  setPanelTab('mission');
   $('#raceBoard').hidden = false;
   lockTin(true);
 }
@@ -4583,6 +4653,7 @@ function playAuthored(missions, label) {
   bar.hidden = false;
   tout.innerHTML = '';
   emitSys(`<b>Practice mode.</b> ${missions.length > 1 ? missions.length + ' missions' : '1 mission'} from <b>${esc(label || 'your class')}</b>. Nothing here affects your campaign. Click <b>Exit practice</b> any time.`, 'ok');
+  setPanelTab('mission');
   startMission();
   updatePrompt(); render(); scrollEnd(); tin.focus({ preventScroll: true });
 }
