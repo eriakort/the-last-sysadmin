@@ -644,6 +644,16 @@ body.practicing{padding-top:40px}
   #btnNew{width:100%}
 }
 @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}}
+
+.nano-overlay{position:fixed;inset:0;z-index:2400;display:grid;place-items:center;padding:18px;background:#05080ddd}
+.nano-panel{display:flex;flex-direction:column;gap:10px;width:min(900px,96vw);height:min(720px,90vh);padding:14px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:0 24px 80px #000b}
+.nano-header,.nano-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nano-header strong{font:600 14px var(--f-mono);color:var(--amber);overflow-wrap:anywhere}
+.nano-header span,.nano-status{font-size:11px;color:var(--muted)}
+.nano-editor{box-sizing:border-box;flex:1;min-height:0;width:100%;resize:none;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--term);color:var(--term-ink);font:13px/1.6 var(--f-mono);tab-size:2}
+.nano-editor:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.nano-status{margin:0;min-height:18px}.nano-status[data-state="error"]{color:var(--red)}.nano-status[data-state="saved"]{color:var(--green)}
+.nano-actions{justify-content:flex-end}
 </style>
 </head>
 <body>
