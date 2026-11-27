@@ -5,4 +5,6 @@ assert.deepEqual(parseHeader('cat <<EOF > notes.txt'),{command:'cat  > notes.txt
 assert.deepEqual(parseHeader("cat <<'END' > notes.txt"),{command:'cat  > notes.txt',delimiter:'END',quoted:true});
 assert.deepEqual(parseHeader('cat <<"DONE"'),{command:'cat ',delimiter:'DONE',quoted:true});
 assert.equal(parseHeader('cat notes.txt'),null);
+assert.equal(parseHeader("echo '<<EOF'"),null);
+assert.equal(parseHeader('echo \\<<EOF'),null);
 console.log('Heredoc parser tests passed.');
