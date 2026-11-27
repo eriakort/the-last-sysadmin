@@ -83,6 +83,14 @@ const recordDiagnosticEvidence = async page => {
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('a correct guess cannot bypass the evidence requirement');
   else fail('diagnosis should remain locked until evidence is collected');
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  await page.fill('#tin', 'ip link set eth0 up');
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(100);
+  await page.locator('.diag-opt').first().click();
+  if (await page.locator('#check').count()) fail('a configuration command incorrectly counted as investigation evidence');
+  else ok('configuration commands do not satisfy the evidence gate');
   await recordDiagnosticEvidence(page);
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
