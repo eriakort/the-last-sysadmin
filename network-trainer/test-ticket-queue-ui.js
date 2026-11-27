@@ -84,20 +84,26 @@ const recordDiagnosticEvidence = async page => {
     ok('investigating a ticket loads its linked network scenario');
   else fail('ticket did not launch its linked scenario');
 
-  // This incident requires a diagnosis before the configuration check is unlocked.
+  // A correct guess must remain blocked until a successful read-only command is captured.
   // Keep the floating terminal minimized while interacting with the diagnosis panel.
   if (await page.locator('#check').count()) fail('Check appeared before diagnosis evidence');
+  if (!(await page.locator('#diagEvidence').isVisible())) fail('diagnosis evidence status is missing');
   await page.locator('.diag-opt').first().click();
-  if (await page.locator('#check').count()) ok('a correct guess cannot bypass the evidence requirement');
-  else fail('diagnosis should remain locked until evidence is collected');
+  if (!(await page.locator('#check').count())) ok('a correct guess cannot bypass the evidence requirement');
+  else fail('correct guess unlocked diagnosis without evidence');
+  if (/Evidence required/.test(await page.locator('#diagEvidence').innerText()))
+    ok('guessing leaves the evidence requirement active');
+  else fail('guessing changed the evidence status');
+
   await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
   await page.waitForTimeout(120);
   await page.fill('#tin', 'ip link set eth0 up');
   await page.press('#tin', 'Enter');
   await page.waitForTimeout(100);
-  await page.locator('.diag-opt').first().click();
-  if (await page.locator('#check').count()) fail('a configuration command incorrectly counted as investigation evidence');
-  else ok('configuration commands do not satisfy the evidence gate');
+  if (/Evidence required/.test(await page.locator('#diagEvidence').innerText()))
+    ok('configuration commands do not satisfy the evidence gate');
+  else fail('a configuration command incorrectly counted as investigation evidence');
+  await page.locator('#terminalMinimize').click();
   await recordDiagnosticEvidence(page);
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
