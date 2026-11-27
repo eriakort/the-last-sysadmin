@@ -654,7 +654,7 @@ body.practicing{padding-top:40px}
 .nano-editor:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .nano-status{margin:0;min-height:18px}.nano-status[data-state="error"]{color:var(--red)}.nano-status[data-state="saved"]{color:var(--green)}
 .nano-actions{justify-content:flex-end}
-</style>
+#tin{box-sizing:border-box;display:block;flex:1;min-width:0;min-height:1.55em;max-height:8em;resize:vertical;overflow:auto;background:transparent;border:0;outline:0;color:var(--term-ink);font:inherit;line-height:1.55;padding:0}</style>
 </head>
 <body>
 <div id="authGate" hidden role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
@@ -850,7 +850,7 @@ body.practicing{padding-top:40px}
             <p id="commandCoachDrillProgress">Session practice: 0/7 completed</p>
           </div>
         </section>
-        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
+        <div class="tline"><label for="tin" id="tprompt"></label><textarea id="tin" rows="1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></textarea></div>
       </div>
       <div class="keys" aria-label="Terminal keys">
         <button class="key" type="button" data-k="tab">Tab</button>
