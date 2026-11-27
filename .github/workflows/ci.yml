@@ -23,13 +23,22 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # package.json includes Express, but the committed npm lock is currently
+        # missing its dependency graph. Install from the manifest until the lock
+        # is regenerated and committed; npm ci fails before tests can run.
+        run: npm install --no-audit --no-fund
 
       - name: Run Supabase schema and RLS tests
         run: |
           sudo systemctl start postgresql
+          # Wait until PostgreSQL accepts local socket connections before the RLS runner.
+          for attempt in {1..30}; do
+            if pg_isready -q; then break; fi
+            sleep 2
+          done
+          pg_isready
           sudo -u postgres createuser --superuser "$USER" || true
-          supabase/test/run.sh
+          bash supabase/test/run.sh
 
       - name: Install axe-core accessibility scanner
         run: npm install --no-save --package-lock=false axe-core@4.10.3 playwright@1.64.1

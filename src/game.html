@@ -89,6 +89,7 @@ button{font:inherit;cursor:pointer}
 .learning-card b{font:600 10px var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .learning-example{font:12px/1.65 var(--f-mono);white-space:pre-line;color:var(--green);margin-top:5px}
 .learning-question{border-top:1px solid var(--line);padding-top:10px}
+.learning-more{border-top:1px solid var(--line);padding-top:9px}.learning-more summary{cursor:pointer;color:var(--muted);font-size:12px;padding:5px 0}.learning-more summary:focus-visible{outline:2px solid var(--amber);outline-offset:2px}.learning-attention{outline:2px solid var(--amber);outline-offset:4px;box-shadow:0 0 0 6px color-mix(in srgb,var(--amber) 15%,transparent);transition:box-shadow .2s,outline-color .2s}@media(prefers-reduced-motion:reduce){.learning-attention{transition:none}}
 .learning-choices{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
 .learn-choice{border:1px solid var(--line);border-radius:5px;background:var(--raise);color:var(--ink);padding:7px 12px;font:12px var(--f-mono);cursor:pointer}
 .learn-choice:hover{border-color:var(--blue)}
@@ -724,15 +725,15 @@ body.practicing{padding-top:40px}
           <div class="label">Objective</div>
           <p id="pObj"></p>
         </div>
-        <div class="hints">
-          <div class="label">Hints <span id="hintCount"></span></div>
+        <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
+        <details class="hints" id="missionHints">
+          <summary class="label">Hints &amp; recovery <span id="hintCount"></span></summary>
           <ol id="pHints"></ol>
           <div class="row">
             <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; the first hint is free">Show hint · Free</button>
             <button class="btn" id="btnRetry" type="button" title="Restore the simulated server to the current mission checkpoint">Restore checkpoint</button>
           </div>
-        </div>
-        <section class="learning" id="learningPath" aria-label="Chapter learning guide" hidden></section>
+        </details>
         <section class="first-run" id="firstRunGuide" aria-labelledby="firstRunTitle" hidden>
           <div class="first-run-head"><h2 id="firstRunTitle">Your first 2 minutes</h2><button class="btn" id="firstRunDismiss" type="button">Got it</button></div>
           <p>You're connected to a <strong>simulated Linux server</strong>. Try a command, read the result, and experiment safely — this does not change your computer.</p>

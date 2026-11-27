@@ -161,7 +161,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Chapter 1 learning guide is missing or hidden');
 
   const guideText = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (guideText.includes(stage)) ok('learning stage present: ' + stage);
     else fail('learning stage missing: ' + stage);
   }
@@ -215,6 +215,19 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.click('[data-panel-tab="mission"]');
   await page.fill('#tin', 'pwd');
   await page.press('#tin', 'Enter');
+  await page.waitForTimeout(100);
+  const firstTicketNudge = await page.textContent('#tout');
+  const guidedFocus = await page.$eval('#learningPath', el => el.classList.contains('learning-attention'));
+  const focusedCheck = await page.$eval('#learningQuickCheck', el => document.activeElement === el);
+  if (firstTicketNudge.includes('Nice—now answer the quick check below to close your first ticket') && guidedFocus && focusedCheck)
+    ok('Mission 1 automatically guides the learner to the quick check after both commands');
+  else fail('Mission 1 did not guide the learner to the quick check after both commands');
+  if ((await page.textContent('#learningPath')).includes('Quick check · prove your understanding') && (await page.locator('.learning-more').count()) === 1)
+    ok('quick check is prioritized and optional learning detail is collapsible');
+  else fail('quick check is not prioritized or optional learning detail is missing');
+  if ((await page.textContent('#learningPath')).includes('/home/rookie'))
+    ok('Mission 1 learning example matches rookie home directory');
+  else fail('Mission 1 learning example does not match the simulated rookie account');
   await page.fill('#tin', 'check');
   await page.press('#tin', 'Enter');
   await page.waitForTimeout(120);
@@ -253,7 +266,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if (await page.locator('[data-journey-chapter="2"][data-status="current"]').count()) ok('the journey follows the learner into Chapter 2');
   else fail('the journey did not update the current chapter to Chapter 2');
   const ch2Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch2Guide.includes(stage)) ok('Chapter 2 learning stage present: ' + stage);
     else fail('Chapter 2 learning stage missing: ' + stage);
   }
@@ -285,7 +298,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('did not reach the first Chapter 3 mission');
 
   const ch3Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch3Guide.includes(stage)) ok('Chapter 3 learning stage present: ' + stage);
     else fail('Chapter 3 learning stage missing: ' + stage);
   }
@@ -330,7 +343,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('did not reach the first Chapter 4 mission');
 
   const ch4Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch4Guide.includes(stage)) ok('Chapter 4 learning stage present: ' + stage);
     else fail('Chapter 4 learning stage missing: ' + stage);
   }
@@ -390,7 +403,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Chapter 5 did not reach the listening-ports mission');
 
   const ch5Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch5Guide.includes(stage)) ok('Chapter 5 learning stage present: ' + stage);
     else fail('Chapter 5 learning stage missing: ' + stage);
   }
@@ -433,7 +446,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.textContent('#pTitle')) === 'The new disk') ok('Chapter 6 starts after the firewall is enabled');
 
   const ch6Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch6Guide.includes(stage)) ok('Chapter 6 learning stage present: ' + stage);
     else fail('Chapter 6 learning stage missing: ' + stage);
   }
@@ -463,7 +476,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('did not reach the first Chapter 7 mission');
 
   const ch7Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch7Guide.includes(stage)) ok('Chapter 7 learning stage present: ' + stage);
     else fail('Chapter 7 learning stage missing: ' + stage);
   }
@@ -495,7 +508,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('did not reach the first Chapter 8 mission');
 
   const ch8Guide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (ch8Guide.includes(stage)) ok('Chapter 8 learning stage present: ' + stage);
     else fail('Chapter 8 learning stage missing: ' + stage);
   }
@@ -517,7 +530,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Chapter 8 mission did not advance after objective and mastery');
 
   const aptSearchGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (aptSearchGuide.includes(stage)) ok('Chapter 9 package-search learning stage present: ' + stage);
     else fail('Chapter 9 package-search learning stage missing: ' + stage);
   }
@@ -540,7 +553,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
   const aptInstallGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (aptInstallGuide.includes(stage)) ok('Chapter 10 package-install learning stage present: ' + stage);
     else fail('Chapter 10 package-install learning stage missing: ' + stage);
   }
@@ -562,7 +575,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('package-install mission did not advance after objective and mastery');
 
   const serviceGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (serviceGuide.includes(stage)) ok('Chapter 10 service-management learning stage present: ' + stage);
     else fail('Chapter 10 service-management learning stage missing: ' + stage);
   }
@@ -584,7 +597,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('service mission did not advance after objective and mastery');
 
   const versionGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (versionGuide.includes(stage)) ok('Chapter 11 package-version learning stage present: ' + stage);
     else fail('Chapter 11 package-version learning stage missing: ' + stage);
   }
@@ -607,7 +620,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
 
   const auditGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (auditGuide.includes(stage)) ok('Chapter 12 port-audit learning stage present: ' + stage);
     else fail('Chapter 12 port-audit learning stage missing: ' + stage);
   }
@@ -630,7 +643,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
 
   
   const sshRootGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (sshRootGuide.includes(stage)) ok('Chapter 13 SSH root-login learning stage present: ' + stage);
     else fail('Chapter 13 SSH root-login learning stage missing: ' + stage);
   }
@@ -652,7 +665,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('SSH root-login mission did not advance after objective and mastery');
 
   const sshPasswordGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (sshPasswordGuide.includes(stage)) ok('Chapter 13 SSH password-authentication learning stage present: ' + stage);
     else fail('Chapter 13 SSH password-authentication learning stage missing: ' + stage);
   }
@@ -674,7 +687,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('SSH password-authentication mission did not advance after objective and mastery');
 
   const sshRestartGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (sshRestartGuide.includes(stage)) ok('Chapter 13 SSH restart learning stage present: ' + stage);
     else fail('Chapter 13 SSH restart learning stage missing: ' + stage);
   }
@@ -696,7 +709,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('SSH restart mission did not advance after objective and mastery');
 
   const handoverGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (handoverGuide.includes(stage)) ok('Chapter 13 handover learning stage present: ' + stage);
     else fail('Chapter 13 handover learning stage missing: ' + stage);
   }
@@ -721,7 +734,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('handover mission did not advance after objective and mastery');
 
   const firstScriptGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (firstScriptGuide.includes(stage)) ok('first-script learning stage present: ' + stage);
     else fail('first-script learning stage missing: ' + stage);
   }
@@ -744,7 +757,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('first-script mission did not advance after objective and mastery');
 
   const executeGuide = await page.textContent('#learningPath').catch(() => '');
-  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+  for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
     if (executeGuide.includes(stage)) ok('script-execution learning stage present: ' + stage);
     else fail('script-execution learning stage missing: ' + stage);
   }
@@ -772,7 +785,7 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   const checkLearningStages = async (title, wrong, markers) => {
     if ((await page.textContent('#pTitle')) !== title) fail('expected mission: ' + title);
     const text = await page.textContent('#learningPath').catch(() => '');
-    for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Prove your understanding', 'Review']) {
+    for (const stage of ['Learn', 'See it in action', 'Investigate', 'Practise', 'Quick check', 'Review']) {
       if (text.includes(stage)) ok(title + ' learning stage present: ' + stage);
       else fail(title + ' learning stage missing: ' + stage);
     }
