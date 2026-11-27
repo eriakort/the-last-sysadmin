@@ -20,6 +20,21 @@ async function gotoMission(page, re) {
   const browser = await browserType.launch();
   const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
   const errors = [];
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const target = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    return [...document.querySelectorAll('#topo .node')].map(node => node.dataset.dev).find(id => id && id !== current);
+  });
+  if (!target) throw new Error('No second device available for diagnostic evidence');
+  await page.fill('#tin', 'ping ' + target);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence');
+};
+
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(300);
@@ -65,6 +80,7 @@ async function gotoMission(page, re) {
   // This mission is gated behind a diagnosis step; clear it, then the fault
   // checklist must appear (it was computed but never inserted before this fix).
   await gotoMission(page, /Multi-fault — Three things wrong/);
+  await recordDiagnosticEvidence(page);
   const diag = await page.$('.diag-opt[data-di="0"]');   // correct diagnosis index for this mission
   if (diag) { await diag.click(); await page.waitForTimeout(250); }
   if (!(await page.$('[data-fault]'))) throw new Error('multi-fault mission did not render its fault checklist after diagnosis');
