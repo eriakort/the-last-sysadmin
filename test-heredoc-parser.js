@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {parseHeader}=require('./src/heredoc-parser');
 assert.deepEqual(parseHeader('cat <<EOF > notes.txt'),{command:'cat  > notes.txt',delimiter:'EOF',quoted:false});
 assert.deepEqual(parseHeader("cat <<'END' > notes.txt"),{command:'cat  > notes.txt',delimiter:'END',quoted:true});
-assert.deepEqual(parseHeader('cat <<"DONE"'),{command:'cat ',delimiter:'DONE',quoted:true});
+assert.deepEqual(parseHeader('cat <<"DONE"'),{command:'cat',delimiter:'DONE',quoted:true});
 assert.equal(parseHeader('cat notes.txt'),null);
 assert.equal(parseHeader("echo '<<EOF'"),null);
 assert.equal(parseHeader('echo \\<<EOF'),null);
