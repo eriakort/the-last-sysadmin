@@ -23,12 +23,35 @@ async function gotoMission(page, re) {
   // A deliberately short window (at the app's min-height floor) is where the bug bit.
   const page = await browser.newPage({ viewport: { width: 1200, height: 620 } });
   const errors = [];
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const command = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    const node = [...document.querySelectorAll('#topo .node')].find(item => item.dataset.dev === current);
+    const classes = node?.getAttribute('class') || '';
+    if (classes.includes('k-switch')) return 'show vlan brief';
+    if (classes.includes('k-snort')) return 'show snort status';
+    if (classes.includes('k-fw')) return 'show version';
+    if (classes.includes('k-router')) return 'show ip interface brief';
+    return 'ip addr';
+  });
+  await page.fill('#tin', command);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence: ' + command);
+  const minimize = page.locator('#terminalMinimize');
+  if (await minimize.count()) await minimize.click();
+};
+
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(URL, { waitUntil: 'load' });
   await page.waitForTimeout(300);
 
   // A mission with a long brief: diagnose, fix, resolve — the feedback lands at the bottom.
   await gotoMission(page, /Let the logs tell you/);
+  await recordDiagnosticEvidence(page);
   const diag = await page.$('.diag-opt[data-di="0"]');
   if (diag) { await diag.click(); await page.waitForTimeout(250); }
   await page.evaluate(() => { const t = document.querySelector('#terminalRestore'); if (t) t.click(); });

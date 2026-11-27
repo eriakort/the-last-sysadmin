@@ -30,6 +30,28 @@ let URL;
   const browser = await browserType.launch();
   const page = await browser.newPage();
   const errors = [];
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const command = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    const node = [...document.querySelectorAll('#topo .node')].find(item => item.dataset.dev === current);
+    const classes = node?.getAttribute('class') || '';
+    if (classes.includes('k-switch')) return 'show vlan brief';
+    if (classes.includes('k-snort')) return 'show snort status';
+    if (classes.includes('k-fw')) return 'show version';
+    if (classes.includes('k-router')) return 'show ip interface brief';
+    return 'ip addr';
+  });
+  await page.fill('#tin', command);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence: ' + command);
+  const minimize = page.locator('#terminalMinimize');
+  if (await minimize.count()) await minimize.click();
+};
+
   page.on('pageerror', e => errors.push(e.message));
   const ok = message => console.log('  ✓ ' + message);
   const fail = message => { console.error('  ✗ ' + message); errors.push(message); };
@@ -62,8 +84,27 @@ let URL;
     ok('investigating a ticket loads its linked network scenario');
   else fail('ticket did not launch its linked scenario');
 
-  // This incident requires a diagnosis before the configuration check is unlocked.
+  // A correct guess must remain blocked until a successful read-only command is captured.
   // Keep the floating terminal minimized while interacting with the diagnosis panel.
+  if (await page.locator('#check').count()) fail('Check appeared before diagnosis evidence');
+  if (!(await page.locator('#diagEvidence').isVisible())) fail('diagnosis evidence status is missing');
+  await page.locator('.diag-opt').first().click();
+  if (!(await page.locator('#check').count())) ok('a correct guess cannot bypass the evidence requirement');
+  else fail('correct guess unlocked diagnosis without evidence');
+  if (/Evidence required/.test(await page.locator('#diagEvidence').innerText()))
+    ok('guessing leaves the evidence requirement active');
+  else fail('guessing changed the evidence status');
+
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  await page.fill('#tin', 'ip link set eth0 up');
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(100);
+  if (/Evidence required/.test(await page.locator('#diagEvidence').innerText()))
+    ok('configuration commands do not satisfy the evidence gate');
+  else fail('a configuration command incorrectly counted as investigation evidence');
+  await page.locator('#terminalMinimize').click();
+  await recordDiagnosticEvidence(page);
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
   else fail('correct ticket diagnosis did not unlock verification');

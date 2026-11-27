@@ -15,7 +15,30 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
   // Clear the diagnosis gate by clicking options until Check appears (the correct
   // pick re-renders the brief with the Objective + Check; wrong picks don't).
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const command = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    const node = [...document.querySelectorAll('#topo .node')].find(item => item.dataset.dev === current);
+    const classes = node?.getAttribute('class') || '';
+    if (classes.includes('k-switch')) return 'show vlan brief';
+    if (classes.includes('k-snort')) return 'show snort status';
+    if (classes.includes('k-fw')) return 'show version';
+    if (classes.includes('k-router')) return 'show ip interface brief';
+    return 'ip addr';
+  });
+  await page.fill('#tin', command);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence: ' + command);
+  const minimize = page.locator('#terminalMinimize');
+  if (await minimize.count()) await minimize.click();
+};
+
   const clearDiagnosis = async () => {
+    await recordDiagnosticEvidence(page);
     for (let i = 0; i < 4; i++) {
       const btn = await page.$(`#brief .diag-opt[data-di="${i}"]`);
       if (!btn) break;
@@ -43,6 +66,7 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   else fail('Check should be hidden before diagnosis');
 
   // a WRONG diagnosis (first-contact answer is index 0, so index 1 is wrong) does not unlock
+  await recordDiagnosticEvidence(page);
   await page.click('#brief .diag-opt[data-di="1"]'); await page.waitForTimeout(80);
   if (!(await page.$('#check')) && (await page.getAttribute('#diagfb', 'class')) === 'diag-fb bad')
     ok('wrong diagnosis is rejected and does not unlock Check');

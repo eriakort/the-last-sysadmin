@@ -22,6 +22,7 @@ const THEMES = [['', 'Network Ops (cyan)'], ['halcyon', 'Halcyon Dark'], ['amber
 let RUN = null, SEL = null, HINTS = 0, PROG = loadProg(), LAST_COMMAND = null;
 let TSTART = 0, TICK = null, SOLVED_NOW = false;   // per-ticket timer
 let DIAGNOSED = false;                              // diagnosis gate cleared?
+let DIAG_EVIDENCE = [];                              // successful read-only checks before diagnosis
 let HIST = [], HISTI = -1;                         // terminal command history
 let MODE = 'play';                                 // 'play' | 'build' (authoring)
 let AUTHOR = null;                                 // { title, objective, ticket, hints, success:[] } while authoring
@@ -723,14 +724,21 @@ function renderTicket(m) {
     <div class="tk-sym">“${esc(t.symptom)}”</div>
   </div>`;
 }
+function isDiagnosticEvidenceCommand(line) {
+  return /^(?:ping\s+\S+|traceroute\s+\S+|trace\s+\S+|ip\s+(?:addr(?:\s+show(?:\s+\S+)*)?|route(?:\s+(?:show|get)(?:\s+\S+)*)?|link(?:\s+show(?:\s+\S+)*)?|neigh(?:\s+show(?:\s+\S+)*)?)(?:\s*$)|nmap\s+\S+|dig\s+\S+|nslookup\s+\S+|arp(?:\s+(?:-a|-n))?$|tcpdump(?:\s|$)|show\s+\S+)/i.test(String(line || '').trim());
+}
 function renderDiagnose(m) {
   const d = m.diagnose;
-  const opts = d.options.map((o, i) => `<button class="diag-opt" data-di="${i}">${esc(o)}</button>`).join('');
-  return `<div class="label">Triage — locate the fault before you touch anything</div>
-    <p class="diag-q">${esc(d.q)}</p>
-    <div class="diag-opts">${opts}</div>
-    <div id="diagfb" class="diag-fb"></div>
-    <p class="dim diag-tip">Use the terminal (<b>ping</b>, <b>traceroute</b>, <b>ip addr</b>, <b>nmap</b>) to see what's really happening, then choose.</p>`;
+  const opts = d.options.map((o, i) => '<button class="diag-opt" data-di="' + i + '">' + esc(o) + '</button>').join('');
+  const evidence = DIAG_EVIDENCE.length
+    ? 'Evidence captured: ' + DIAG_EVIDENCE.map(esc).join(' · ') + '. You can now submit your diagnosis.'
+    : 'Evidence required: run at least one read-only diagnostic command before choosing.';
+  return '<div class="label">Triage — investigate before you touch anything</div>' +
+    '<p class="diag-q">' + esc(d.q) + '</p>' +
+    '<div id="diagEvidence" class="diag-evidence" role="status" aria-live="polite">' + evidence + '</div>' +
+    '<div class="diag-opts">' + opts + '</div>' +
+    '<div id="diagfb" class="diag-fb" role="status" aria-live="polite"></div>' +
+    '<p class="dim diag-tip">Use read-only checks such as <b>ping</b>, <b>traceroute</b>, <b>ip addr</b>, <b>ip route</b>, <b>nmap</b> or the relevant <b>show</b> command. Configuration changes do not count as investigation.</p>';
 }
 function renderReview(m) {
   const r = m.review;
@@ -1181,7 +1189,7 @@ function runMission(m, solvedKey, options = {}) {
   showWorkspaceView('workbench', options); RUN = startMission(m); SEL = RUN.mission.console;
   TERM_SESSIONS = {}; HIST = []; HISTI = -1; TOPO_VIEW = null; PAN = null; INSPECTOR_TAB = 'overview';
   TERM_SESSIONS[SEL] = { history: [], index: -1, output: '' };
-  HINTS = 0; LAST_COMMAND = null; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]);
+  HINTS = 0; LAST_COMMAND = null; SOLVED_NOW = false; DIAGNOSED = !RUN.requiresDiagnosis || !!(solvedKey && PROG.done[solvedKey]); DIAG_EVIDENCE = [];
   startTimer(); $('#brief').innerHTML = renderBrief(); wireBrief(); refresh(); updateHud(); termClear();
   termEcho(`— ${RUN.mission.title} — you are on ${SEL || '(pick or add a device)'}. Try: ping, traceroute, ip addr, nmap`);
 }
@@ -1905,9 +1913,14 @@ function wireBrief() {
   const hb = $('#hint'); if (hb) hb.addEventListener('click', () => { if (HINTS < RUN.mission.hints.length) HINTS++; $('#brief').innerHTML = renderBrief(); wireBrief(); });
   const cb = $('#check'); if (cb) cb.addEventListener('click', doCheck);
   document.querySelectorAll('#brief .diag-opt').forEach(b => b.addEventListener('click', () => {
+    const fb = $('#diagfb');
+    if (!DIAG_EVIDENCE.length) {
+      if (fb) { fb.className = 'diag-fb bad'; fb.textContent = 'Not yet — run a successful read-only diagnostic command first. A configuration change or a guess is not evidence.'; }
+      return;
+    }
     const res = RUN.gradeDiagnosis(+b.dataset.di);
     if (res.ok) { DIAGNOSED = true; $('#brief').innerHTML = renderBrief(); wireBrief(); }
-    else { b.classList.add('wrong'); const fb = $('#diagfb'); if (fb) { fb.className = 'diag-fb bad'; fb.textContent = "Not quite — that's not where it's failing. Investigate with the terminal tools and pick again."; } }
+    else { b.classList.add('wrong'); if (fb) { fb.className = 'diag-fb bad'; fb.textContent = "Not quite — that's not where it's failing. Compare the evidence with the topology and try again."; } }
   }));
 }
 function wireConfig() {
@@ -2640,7 +2653,13 @@ function wireTerm() {
     }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowLeft') { e.preventDefault(); cycleDeviceSession(-1); return; }
     if ((e.altKey || e.ctrlKey) && e.key === 'ArrowRight') { e.preventDefault(); cycleDeviceSession(1); return; }
-    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); LAST_COMMAND = { line, accepted: r.code === 0 }; if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
+    if (e.key === 'Enter') { const line = inp.value; inp.value = ''; if (!line.trim()) return; HIST.push(line); HISTI = HIST.length; const cli = RUN.cli.on(SEL); const dev = RUN.net.devices[SEL]; const suffix = dev.firewallOS === 'asa' ? (cli.asaMode === 'interface' ? '(config-if)#' : cli.asaMode === 'object' ? '(config-network-object)#' : cli.asaMode === 'config' ? '(config)#' : cli.asaMode === 'privileged' ? '#' : '>') : (cli.iosMode === 'interface' ? '(config-if)#' : cli.iosMode === 'vlan' ? '(config-vlan)#' : cli.iosMode === 'acl' ? '(config-ext-nacl)#' : cli.iosMode === 'config' ? '(config)#' : cli.iosMode === 'privileged' ? '#' : '>'); termEcho(`${dev.hostname || SEL}${suffix} ${line}`); const r = cli.run(line); LAST_COMMAND = { line, accepted: r.code === 0 };
+    if (RUN && RUN.requiresDiagnosis && !DIAGNOSED && r.code === 0 && isDiagnosticEvidenceCommand(line)) {
+      if (!DIAG_EVIDENCE.includes(line.trim())) DIAG_EVIDENCE.push(line.trim());
+      const evidence = $('#diagEvidence');
+      if (evidence) evidence.textContent = 'Evidence captured: ' + DIAG_EVIDENCE.join(' · ') + '. You can now submit your diagnosis.';
+    }
+    if (r.out) termEcho(r.out); if (r.code !== 0) explainNetworkMistake(line, r.out); else clearNetworkMistake(); addJournalEntry({ type: 'command', device: SEL || '', command: line, result: r.code === 0 ? 'success' : 'error', output: r.out || (r.code === 0 ? 'Command completed without output.' : 'Command failed.') }); refresh(); return; }
     if (e.key === 'ArrowUp' && HIST.length) { HISTI = Math.max(0, HISTI - 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
     if (e.key === 'ArrowDown' && HIST.length) { HISTI = Math.min(HIST.length, HISTI + 1); inp.value = HIST[HISTI] || ''; e.preventDefault(); persistTerminalSession(); }
   });
