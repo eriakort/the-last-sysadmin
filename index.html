@@ -6897,10 +6897,18 @@ function afterCommand() {
         const guide = document.getElementById('learningPath');
         const quickCheck = document.getElementById('learningQuickCheck');
         if (guide && quickCheck) {
-          guide.classList.add('learning-attention');
-          const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-          guide.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
-          quickCheck.focus({ preventScroll: true });
+          // submitLine renders the interface after afterCommand; defer the
+          // visual cue and focus until that render has settled so the newly
+          // rendered guide receives the focus, not a node about to be replaced.
+          setTimeout(() => {
+            const currentGuide = document.getElementById('learningPath');
+            const currentQuickCheck = document.getElementById('learningQuickCheck');
+            if (!currentGuide || !currentQuickCheck) return;
+            currentGuide.classList.add('learning-attention');
+            const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            currentGuide.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+            currentQuickCheck.focus({ preventScroll: true });
+          }, 0);
         }
       }
     }
