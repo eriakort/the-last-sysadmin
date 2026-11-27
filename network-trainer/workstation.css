@@ -735,8 +735,11 @@ aside{scrollbar-color:#344a60 transparent}
 .ct-track i{display:block;height:100%;background:var(--amber);border-radius:3px}
 .curriculum-tier.tier-complete .ct-track i{background:var(--good)}
 .ct-blurb{font-size:11px;color:var(--muted);margin:0;line-height:1.45}
-.ct-capstone{font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:7px;margin-top:auto}
+.ct-capstone{display:block;width:100%;text-align:left;font:inherit;font-size:11px;color:var(--muted);background:transparent;border:0;border-top:1px solid var(--line);padding:7px 0 0;margin-top:auto;cursor:pointer}
+.ct-capstone:hover{color:var(--amber)}
 .ct-capstone.cap-done{color:var(--good)}
+.ct-actions{display:flex;gap:6px;margin-top:4px}
+.ct-actions .btn{width:100%;justify-content:center}
 @media(max-width:900px){.curriculum-tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.curriculum-tiers{grid-template-columns:1fr}}
 
