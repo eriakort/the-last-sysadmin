@@ -190,6 +190,7 @@ aside{scrollbar-color:#344a60 transparent}
 .inspector-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0 13px;border-bottom:1px solid var(--line)}
 .inspector-head h2{font-size:17px;margin:2px 0 0;letter-spacing:-.02em}
 .inspector-head p{font-size:10px;color:var(--muted);margin:2px 0 0;text-transform:capitalize}
+.inspector-head-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .inspector-state{font:9px ui-monospace,monospace;color:var(--good);border:1px solid color-mix(in srgb,var(--good) 30%,var(--line));padding:5px 7px;border-radius:6px;white-space:nowrap}
 .inspector-tabs{display:flex;gap:4px;padding:10px 0 7px;border-bottom:1px solid var(--line);overflow-x:auto}
 .inspector-tab{padding:6px 9px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap}
@@ -199,6 +200,8 @@ aside{scrollbar-color:#344a60 transparent}
 .inspector-panel .label2{margin-top:12px}
 .desk-tools{display:flex;align-items:center;gap:4px}
 .desk-tools .btn{min-width:28px;padding:4px 7px;font-size:10px}
+.desk-tools .console-launch{font-weight:700;white-space:nowrap}
+.desk-tools .console-launch.active{border-color:var(--good);color:var(--good)}
 #topo{touch-action:none;cursor:grab;user-select:none}
 #topo.panning{cursor:grabbing}
 #topo .node{cursor:grab}

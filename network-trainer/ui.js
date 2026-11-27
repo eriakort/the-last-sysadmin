@@ -910,7 +910,7 @@ function renderConfig() {
   const brandRow = (canBuild() && brandable)
     ? `<label class="brand-row">Command set <select id="deviceBrand" aria-label="Device command set">${brandOpts.map(b => `<option value="${b}"${brand === b ? ' selected' : ''}>${esc(BRANDS[b].label)}</option>`).join('')}</select></label>`
     : '';
-  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}${brandChip}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span></div>
+  return pal + `<div class="inspector-head"><div><span class="eyebrow">Selected device</span><h2>${esc(SEL)} · ${esc(d.kind)}${brandChip}</h2><p>${esc(primaryIp(d) || 'No primary IP')}</p></div><div class="inspector-head-actions"><span class="inspector-state">${Object.values(d.ifaces || {}).filter(f => f.up !== false && f.errDisabled !== true).length}/${Object.keys(d.ifaces || {}).length} ports up</span><button type="button" class="btn sm primary" id="inspectorOpenConsole" title="Open the device console for ${esc(SEL)}">&gt;_ Console</button></div></div>
     ${brandRow}
     <div class="inspector-tabs" role="group" aria-label="Device inspector sections">${tabs}</div>
     <section class="inspector-panel" role="region" aria-label="${esc(panel.label)}">${panel.html}</section>`;
@@ -1161,6 +1161,7 @@ function refresh() {
   const tabs = $('#sessionTabs'); if (tabs) tabs.innerHTML = renderSessionTabs();
   wireTopo(); wireConfig(); wireSessionTabs();
   const target = $('#termTarget'); if (target) target.textContent = SEL || 'NO DEVICE';
+  syncTerminalToggleButtons();
   refreshOverview(); refreshInfrastructureView();
   if (MODE === 'build') persistBuilderDraft();
 }
@@ -1897,7 +1898,8 @@ function wireBrief() {
   }));
 }
 function wireConfig() {
-  document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; input.focus(); } }));
+  const openConsoleBtn = $('#inspectorOpenConsole'); if (openConsoleBtn) openConsoleBtn.addEventListener('click', () => openTerminalWindow(true));
+  document.querySelectorAll('#config [data-iface-command]').forEach(b => b.addEventListener('click', () => { const input = $('#tin'); if (input) { input.value = 'show interfaces ' + b.dataset.ifaceCommand; openTerminalWindow(true); } }));
   document.querySelectorAll('#config .inspector-tab').forEach(b => b.addEventListener('click', () => { INSPECTOR_TAB = b.dataset.inspectorTab; refresh(); }));
   const brandSel = $('#deviceBrand'); if (brandSel) brandSel.addEventListener('change', () => {
     if (!SEL || !RUN.net.devices[SEL]) return;
@@ -2523,9 +2525,26 @@ function mountTerminalWindow() {
     observer.observe(win);
   }
 }
+function syncTerminalToggleButtons() {
+  const open = !!($('#terminalWindow') && !$('#terminalWindow').hidden);
+  const wb = $('#workbenchTerminalBtn');
+  if (wb) {
+    wb.setAttribute('aria-pressed', open ? 'true' : 'false');
+    wb.classList.toggle('primary', !open);
+    wb.classList.toggle('active', open);
+    wb.textContent = (open ? '▾ Console' : '>_ Console') + (SEL ? ' · ' + SEL : '');
+    wb.title = (open ? 'Hide device console' : 'Open device console') + (SEL ? ' (' + SEL + ')' : '');
+  }
+  const ic = $('#inspectorOpenConsole');
+  if (ic) {
+    ic.setAttribute('aria-pressed', open ? 'true' : 'false');
+    ic.textContent = open ? '▾ Console open' : '>_ Console';
+  }
+}
 function collapseTerminalWindow() {
   const win = $('#terminalWindow');
   if (win) win.hidden = true;
+  syncTerminalToggleButtons();
 }
 function openTerminalWindow(focusInput = false) {
   const win = $('#terminalWindow');
@@ -2533,6 +2552,7 @@ function openTerminalWindow(focusInput = false) {
   if (win.classList.contains('terminal-expanded')) setTerminalExpanded(false);
   applyTerminalLayout(win);
   win.hidden = false;
+  syncTerminalToggleButtons();
   if (focusInput) setTimeout(() => { const input = $('#tin'); if (input) input.focus(); }, 0);
 }
 // Top-bar "Build ▾" dropdown: a menu anchored in the fixed header, so its
@@ -3099,7 +3119,7 @@ function boot() {
     <section id="changeView" aria-label="Change management" hidden></section>
     <div id="cols" hidden>
       <aside id="brief"></aside>
-      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Select a device to inspect it · run commands to collect evidence</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm" id="topoZoomOut" type="button" title="Zoom out" aria-label="Zoom out topology">−</button><button class="btn sm" id="topoZoomIn" type="button" title="Zoom in" aria-label="Zoom in topology">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" type="button" title="Previous device session" aria-label="Previous device session">‹</button><button class="btn sm" id="sessionNext" type="button" title="Next device session" aria-label="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><label class="term-evidence-ticket">Incident <select id="termEvidenceTicket" aria-label="Link evidence to incident"><option value="">Unlinked evidence</option></select></label><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
+      <main class="workbench"><div class="deskbar"><div><span class="eyebrow">Operations floor</span><strong>Live network topology</strong><span class="desk-hint">Double-click a device or click Console to run CLI commands</span></div><div class="desk-tools" aria-label="Topology controls"><button class="btn sm primary console-launch" id="workbenchTerminalBtn" type="button" aria-pressed="false" title="Toggle the floating device console">&gt;_ Console</button><button class="btn sm" id="topoZoomOut" type="button" title="Zoom out" aria-label="Zoom out topology">−</button><button class="btn sm" id="topoZoomIn" type="button" title="Zoom in" aria-label="Zoom in topology">＋</button><button class="btn sm" id="topoFit" title="Fit topology">Fit</button><button class="btn sm" id="topoFocus" title="Center selected device">Focus</button><button class="btn sm" id="topoPorts" title="Toggle interface labels on links">Ports</button><button class="btn sm" id="topoArrange" title="Auto-arrange devices">Arrange</button></div><span class="live-indicator"><i></i> SIMULATION LIVE</span></div><div id="topoWrap"></div><div id="flows"></div><section id="term"><div id="sessionBar" class="session-bar"><div class="session-meta"><span class="session-label">DEVICE SESSIONS</span><span class="session-shortcuts">Alt + ← / → to switch</span></div><div id="sessionTabs"></div><div class="session-actions"><button class="btn sm" id="sessionPrev" type="button" title="Previous device session" aria-label="Previous device session">‹</button><button class="btn sm" id="sessionNext" type="button" title="Next device session" aria-label="Next device session">›</button><button class="btn sm" id="sessionClear" title="Clear output; keep command history">Clear output</button></div></div><div class="term-head"><b>DEVICE CONSOLE</b><span>Per-device history and output</span><button class="btn sm" id="termCopyOutput">Copy output</button><label class="term-evidence-ticket">Incident <select id="termEvidenceTicket" aria-label="Link evidence to incident"><option value="">Unlinked evidence</option></select></label><button class="btn sm" id="termSaveEvidence">Save evidence</button><button class="btn sm" id="termDownload">Download</button><button class="btn sm" id="termConfigSave">Save checkpoint</button><button class="btn sm" id="termConfigReview">Review drift</button><button class="btn sm" id="termConfigHistory">History</button><button class="btn sm" id="termConfigExport">Export archive</button><button class="btn sm" id="termHelp">Command help</button><span id="termEvidenceStatus" role="status" aria-live="polite"></span></div><pre id="tout"></pre><div class="tline"><span id="termTarget">—</span><input id="tin" autocomplete="off" placeholder="Enter a command for the selected device…"/></div></section></main>
       <aside id="config"></aside>
     </div>
       </div>
@@ -3138,6 +3158,7 @@ function boot() {
   $('#topoArrange').addEventListener('click', autoArrange);
   $('#topoFocus').addEventListener('click', focusSelectedTopology);
   $('#topoPorts').addEventListener('click', toggleTopologyPorts);
+  $('#workbenchTerminalBtn').addEventListener('click', () => { const w = $('#terminalWindow'); if (w && !w.hidden) collapseTerminalWindow(); else openTerminalWindow(true); });
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnQueue').addEventListener('click', openTicketQueue);
   $('#termHelp').addEventListener('click', openHelp);
@@ -3152,6 +3173,7 @@ function boot() {
   const initialWorkspaceView = workspaceViewFromUrl();
   if (initialWorkspaceView === 'build') enterBuild({historyMode:'replace'});
   else { reloadMission(0, { historyMode: 'none' }); showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' }); }
+  syncTerminalToggleButtons();
   if (initialWorkspaceView === 'knowledge' && new URLSearchParams(window.location.search).get('dailyReview') === '1') startNetworkRecall();
   renderOverview();
   initCloud();

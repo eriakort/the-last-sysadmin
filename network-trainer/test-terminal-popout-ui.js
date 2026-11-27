@@ -20,7 +20,21 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html?view=workbench');
   if (await page.locator('#terminalWindow').isHidden()) ok('device console starts collapsed so the topology has full height');
   else fail('device console was not collapsed on load');
 
-  // The opener is a menu item in the top-bar "Build ▾" dropdown, closed by default.
+  // Direct console toggle right on the Workbench deskbar & Device Inspector.
+  if (await page.locator('#workbenchTerminalBtn').isVisible()) ok('Workbench toolbar exposes a direct Console toggle button');
+  else fail('Workbench toolbar is missing #workbenchTerminalBtn');
+  await page.click('#workbenchTerminalBtn');
+  await page.waitForFunction(() => document.activeElement?.id === 'tin');
+  if (await page.locator('#terminalWindow').isVisible() && await page.locator('#workbenchTerminalBtn').getAttribute('aria-pressed') === 'true')
+    ok('Workbench Console button opens the floating console and focuses the input');
+  else fail('Workbench Console button did not open the console');
+  await page.click('#workbenchTerminalBtn');
+  await page.waitForFunction(() => document.querySelector('#terminalWindow')?.hidden === true);
+  if (await page.locator('#workbenchTerminalBtn').getAttribute('aria-pressed') === 'false')
+    ok('Workbench Console button collapses the console on second click');
+  else fail('Workbench Console button did not update aria-pressed when collapsed');
+
+  // The opener is also available in the top-bar "Build ▾" dropdown, closed by default.
   if (await page.locator('#buildMenu').isHidden()) ok('Build dropdown is closed by default');
   else fail('Build dropdown was open on load');
   if (await page.locator('#terminalRestore').evaluate(el => !!el.closest('#top .build-menu'))) ok('Device terminal can still be restored from the fixed top-bar Build menu');
