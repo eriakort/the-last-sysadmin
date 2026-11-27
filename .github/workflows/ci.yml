@@ -61,6 +61,9 @@ jobs:
       - name: Linux browser smoke test
         run: npm run smoke
 
+      - name: Linux nano and heredoc browser tests
+        run: node test-nano-heredoc-ui.js
+
       - name: Firefox browser compatibility tests
         run: npm run test:ui:firefox
 
