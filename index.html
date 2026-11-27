@@ -718,7 +718,7 @@ body.practicing{padding-top:40px}
           <div class="label">Hints <span id="hintCount"></span></div>
           <ol id="pHints"></ol>
           <div class="row">
-            <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; each hint costs XP">Show hint · −25 XP</button>
+            <button class="btn" id="btnHint" type="button" title="Reveal the next hint for this mission; the first hint is free">Show hint · Free</button>
             <button class="btn" id="btnRetry" type="button" title="Restore the simulated server to the current mission checkpoint">Restore checkpoint</button>
           </div>
         </div>
@@ -6840,7 +6840,7 @@ function afterCommand() {
   if (m.nudge) { const n = m.nudge(); if (n && !S.nudged.includes(n)) { S.nudged.push(n); emitSys(md(n), 'nudge'); } }
   if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
-const rewardFor = m => Math.max(25, 100 - 25 * (S.hints[m.id] || 0));
+const rewardFor = m => Math.max(25, 100 - 25 * Math.max(0, (S.hints[m.id] || 0) - 1));
 function fmtDur(ms) {
   const t = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
@@ -7858,7 +7858,7 @@ function render() {
   $('#hintCount').textContent = `${used} of ${m.hints.length} shown`;
   const hb = $('#btnHint');
   hb.disabled = used >= m.hints.length;
-  hb.textContent = used >= m.hints.length ? 'No more hints' : (rewardFor(m) > 25 ? 'Show hint · −25 XP' : 'Show hint');
+  hb.textContent = used >= m.hints.length ? 'No more hints' : (used === 0 ? 'Show hint · Free' : (rewardFor(m) > 25 ? 'Show hint · −25 XP' : 'Show hint'));
 }
 $('#btnHint').addEventListener('click', () => { showHint(); scrollEnd(); });
 $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });

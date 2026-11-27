@@ -3015,7 +3015,7 @@ function afterCommand() {
   if (m.nudge) { const n = m.nudge(); if (n && !S.nudged.includes(n)) { S.nudged.push(n); emitSys(md(n), 'nudge'); } }
   if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
-const rewardFor = m => Math.max(25, 100 - 25 * (S.hints[m.id] || 0));
+const rewardFor = m => Math.max(25, 100 - 25 * Math.max(0, (S.hints[m.id] || 0) - 1));
 function fmtDur(ms) {
   const t = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
@@ -4033,7 +4033,7 @@ function render() {
   $('#hintCount').textContent = `${used} of ${m.hints.length} shown`;
   const hb = $('#btnHint');
   hb.disabled = used >= m.hints.length;
-  hb.textContent = used >= m.hints.length ? 'No more hints' : (rewardFor(m) > 25 ? 'Show hint · −25 XP' : 'Show hint');
+  hb.textContent = used >= m.hints.length ? 'No more hints' : (used === 0 ? 'Show hint · Free' : (rewardFor(m) > 25 ? 'Show hint · −25 XP' : 'Show hint'));
 }
 $('#btnHint').addEventListener('click', () => { showHint(); scrollEnd(); });
 $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });

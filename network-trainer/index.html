@@ -6827,7 +6827,7 @@ function renderBrief() {
     return `<optgroup label="Tier ${t.order} · ${t.name} (${doneN}/${ms.length})">${ms.map(opt).join('')}</optgroup>`;
   }).join('');
   const hints = m.hints.slice(0, HINTS).map(h => `<li>${esc(h)}</li>`).join('');
-  const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">Show hint · −${HINT_COST} XP</button>`;
+  const hintBtn = HINTS >= m.hints.length ? '<button class="btn" disabled>No more hints</button>' : `<button id="hint" class="btn">${HINTS === 0 ? 'Show hint · Free' : (Math.max(25, REWARD - HINT_COST * Math.max(0, HINTS - 1)) > 25 ? `Show hint · −${HINT_COST} XP` : 'Show hint')}</button>`;
   const gated = RUN.requiresDiagnosis && !DIAGNOSED;
   const review = m.review ? renderReview(m) : '';
   const faults = m.faults ? renderFaults(m) : '';
@@ -7253,10 +7253,11 @@ function doCheck() {
     const ticketId = RUN.mission.ticket && RUN.mission.ticket.id; if (ticketId) setTicketState(ticketId, 'resolved', 'You');
     let msg = '✓ ' + c.line;
     if (!PROG.done[id]) {
-      const reward = Math.max(25, REWARD - HINT_COST * HINTS);
+      const paidHints = Math.max(0, HINTS - 1);
+      const reward = Math.max(25, REWARD - HINT_COST * paidHints);
       PROG.done[id] = { xp: reward, hints: HINTS, ms }; PROG.xp += reward; saveProg(); updateHud();
       addJournalEntry({ type: c.signoff, device: SEL || '', text: `${c.past}: ${RUN.mission.ticket && RUN.mission.ticket.id || RUN.mission.id} in ${fmtTime(ms)}. Earned ${reward} XP.` });
-      msg = `✓ ${c.past} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${HINTS ? ` (−${HINT_COST * HINTS} for hints)` : ''}.`;
+      msg = `✓ ${c.past} in <b>${fmtTime(ms)}</b> — <b>+${reward} XP</b>${paidHints ? ` (−${HINT_COST * paidHints} for hints)` : ''}.`;
       const eb = $('#brief').querySelector('.eyebrow'); if (eb) eb.innerHTML += ' · <span class="done">solved</span>';
     } else if (PROG.done[id].ms == null || ms < PROG.done[id].ms) { PROG.done[id].ms = ms; saveProg(); }
     const ni = nextUnsolved(), allDone = chapters.every(c => PROG.done[c.id]);
