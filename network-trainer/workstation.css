@@ -642,8 +642,10 @@ aside{scrollbar-color:#344a60 transparent}
 /* Shared evidence-led mistake coaching in the network console. */
 .network-mistake-coach{flex:none;margin:8px 12px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:7px;background:var(--panel);font-size:12px;line-height:1.5}
 .network-mistake-coach[hidden]{display:none!important}
-.network-mistake-title{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.network-mistake-title strong{color:var(--ink)}.network-mistake-title span{color:var(--amber);font-weight:700}
+.network-mistake-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.network-mistake-title strong{color:var(--ink)}.network-mistake-title span{color:var(--amber);font-weight:700;margin-left:auto}
+.network-mistake-close{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:5px;padding:1px 7px;font:inherit;cursor:pointer;line-height:1.3}
+.network-mistake-close:hover,.network-mistake-close:focus-visible{color:var(--ink);border-color:var(--amber);outline:none}
 .network-mistake-coach p{margin:5px 0;color:var(--muted)}.network-mistake-next{margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}
 .network-mistake-next b,.network-mistake-coach small{color:var(--amber);font-size:10px;letter-spacing:.04em}
 

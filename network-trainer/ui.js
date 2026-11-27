@@ -304,6 +304,7 @@ function showWorkspaceView(view, options = {}) {
   });
   const buildButton = $('#btnBuild');
   if (buildButton) { if (view === 'build') buildButton.setAttribute('aria-current', 'page'); else buildButton.removeAttribute('aria-current'); }
+  if (view === 'overview') renderOverview();
   if (view === 'workbench') setTimeout(() => $('#tin') && $('#tin').focus(), 0);
   if (view === 'incidents') renderIncidentCenter();
   if (view === 'infrastructure') renderInfrastructureView();
@@ -358,9 +359,10 @@ function renderOverview() {
       ${targetIdx >= 0 ? `<div class="ct-actions"><button type="button" class="btn sm ${isActive ? 'primary' : ''}" data-tier-mission="${targetIdx}">${actionLabel}</button></div>` : ''}
     </article>`;
   }).join('');
+  const dueRecall = networkRecallDueCount();
   root.innerHTML = `
     <div class="overview-heading"><div><div class="eyebrow">Network operations · training lab</div><h1>Operations overview</h1><p>Start your shift here. Review the simulated network, take ownership of incidents and continue hands-on work.</p></div><div class="overview-live"><i></i> SIMULATION DATA · LIVE</div></div>
-    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button></div>
+    <div class="overview-actions"><button class="btn primary" id="overviewWorkbench">⌘ Open workbench</button><button class="btn" id="overviewIncidents">◈ Incident queue <span class="overview-count">${d.active.length}</span></button><button class="btn" id="overviewInfrastructure">▤ Infrastructure</button><button class="btn" id="overviewHelp">? Command help</button><button class="btn" id="overviewJournal">▧ Work journal</button>${dueRecall ? `<button class="btn" id="overviewRecall">↻ Recall review <span class="overview-count">${dueRecall}</span></button>` : ''}</div>
     <section class="overview-metrics" aria-label="Network summary">
       <article class="overview-metric"><span>Devices healthy</span><strong>${count('healthy')}<small> / ${d.devices.length}</small></strong><em>${count('degraded')} degraded · ${count('offline')} offline</em></article>
       <article class="overview-metric"><span>Links operational</span><strong>${d.linksUp}<small> / ${d.linksTotal}</small></strong><em>${d.linksTotal - d.linksUp} links down</em></article>
@@ -403,6 +405,7 @@ function renderOverview() {
   click('overviewInfrastructure', () => showWorkspaceView('infrastructure'));
   ['overviewHelp'].forEach(id => click(id, openHelp));
   ['overviewJournal','allJournal'].forEach(id => click(id, openJournal));
+  click('overviewRecall', () => { showWorkspaceView('knowledge'); startNetworkRecall(); });
   click('progressStats', openStats);
   click('curriculumResume', () => { if (recIndex >= 0) { showWorkspaceView('workbench'); reloadMission(recIndex); } });
   root.querySelectorAll('[data-tier-mission]').forEach(btn => btn.addEventListener('click', () => {
@@ -2286,6 +2289,7 @@ function startNetworkRecall() {
   NETWORK_RECALL_QUEUE = networkRecallItems().filter(item => item.dueAt <= Date.now()).map(item => item.command);
   NETWORK_RECALL_INDEX = 0;
   renderNetworkRecallCard();
+  $('#networkRecallCard')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderNetworkLearningPlan() {
@@ -2311,20 +2315,23 @@ function renderKnowledgeCenter() {
     </section>
     <p class="knowledge-caveat">Simulator reference only: this is not a complete Cisco IOS / IOS XE command catalogue. Commands vary by device and CLI context; unsupported commands should be treated as unavailable, not assumed to work on production equipment.</p>`;
   const search=root.querySelector('#knowledgeSearch'), category=root.querySelector('#knowledgeCategory'), list=root.querySelector('#knowledgeCommands');
-  root.addEventListener('click', event => {
-    if (event.target.closest('#networkRecallStart')) startNetworkRecall();
-    else if (event.target.closest('#networkRecallReveal')) { const answer = root.querySelector('#networkRecallAnswer'); if (answer) { answer.hidden = false; event.target.closest('#networkRecallReveal').disabled = true; } }
-    else if (event.target.closest('#networkRecallRemembered') || event.target.closest('#networkRecallAgain')) {
-      const remembered = !!event.target.closest('#networkRecallRemembered'), command = NETWORK_RECALL_QUEUE[NETWORK_RECALL_INDEX];
-      if (command) networkRecallReview(command, remembered);
-      NETWORK_RECALL_INDEX++;
-      if (NETWORK_RECALL_INDEX >= NETWORK_RECALL_QUEUE.length) NETWORK_RECALL_QUEUE = [];
-      const due = root.querySelector('#networkRecallDue'), start = root.querySelector('#networkRecallStart');
-      if (due) due.textContent = networkRecallDueCount() + ' due · ' + networkRecallItems().length + ' saved';
-      if (start) { const count = networkRecallDueCount(); start.disabled = !count; start.textContent = 'Start review' + (count ? ' · ' + count + ' due' : ''); }
-      renderNetworkRecallCard();
-    }
-  });
+  if (!root.dataset.recallBound) {
+    root.dataset.recallBound = 'true';
+    root.addEventListener('click', event => {
+      if (event.target.closest('#networkRecallStart')) startNetworkRecall();
+      else if (event.target.closest('#networkRecallReveal')) { const answer = root.querySelector('#networkRecallAnswer'); if (answer) { answer.hidden = false; event.target.closest('#networkRecallReveal').disabled = true; } }
+      else if (event.target.closest('#networkRecallRemembered') || event.target.closest('#networkRecallAgain')) {
+        const remembered = !!event.target.closest('#networkRecallRemembered'), command = NETWORK_RECALL_QUEUE[NETWORK_RECALL_INDEX];
+        if (command) networkRecallReview(command, remembered);
+        NETWORK_RECALL_INDEX++;
+        if (NETWORK_RECALL_INDEX >= NETWORK_RECALL_QUEUE.length) NETWORK_RECALL_QUEUE = [];
+        const due = root.querySelector('#networkRecallDue'), start = root.querySelector('#networkRecallStart');
+        if (due) due.textContent = networkRecallDueCount() + ' due · ' + networkRecallItems().length + ' saved';
+        if (start) { const count = networkRecallDueCount(); start.disabled = !count; start.textContent = 'Start review' + (count ? ' · ' + count + ' due' : ''); }
+        renderNetworkRecallCard();
+      }
+    });
+  }
   const filter=()=>{const q=search.value.trim().toLowerCase(), cat=category.value; const matches=KNOWLEDGE_COMMANDS.filter(x=>(cat==='all'||x.cat===cat)&&(!q||[x.cmd,x.cat,x.desc].join(' ').toLowerCase().includes(q))); list.innerHTML=renderKnowledgeCommands(matches); wireKnowledgeCommands(root);};
   search.addEventListener('input',filter); category.addEventListener('change',filter); wireKnowledgeCommands(root);
   const practice = root.querySelector('#coachPracticeFocus');
@@ -2355,6 +2362,7 @@ function renderNetworkCommandCoach(command) {
   root.querySelector('#networkCoachPractice').addEventListener('click', () => { showWorkspaceView('workbench'); const input = $('#tin'); if (input) { input.value = item.cmd; openTerminalWindow(true); } });
   root.querySelector('#networkCoachRecallAdd').addEventListener('click', () => { networkRecallAdd(command); renderNetworkCommandCoach(command); const due = $('#networkRecallDue'); if (due) due.textContent = networkRecallDueCount() + ' due · ' + networkRecallItems().length + ' saved'; });
   root.querySelector('#networkCoachClose').addEventListener('click', () => { KNOWLEDGE_COACH_COMMAND = null; root.innerHTML = '<div class="coach-empty">Choose <b>Coach</b> beside a command to get a guided explanation and a safe practice prompt.</div>'; });
+  root.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function wireKnowledgeCommands(root) {
   root.querySelectorAll('[data-knowledge-cmd]').forEach(b=>b.addEventListener('click',()=>{showWorkspaceView('workbench'); const input=$('#tin'); if(input){input.value=b.dataset.knowledgeCmd; openTerminalWindow(true);}}));
@@ -2612,9 +2620,10 @@ function wireTerm() {
   mistakePanel.hidden = true;
   mistakePanel.setAttribute('aria-label', 'Command feedback');
   mistakePanel.setAttribute('aria-live', 'polite');
-  mistakePanel.innerHTML = '<div class="network-mistake-title"><strong>Learn from this result</strong><span data-network-mistake-category></span></div><p data-network-mistake-reason></p><div class="network-mistake-next"><b>Try next</b><p data-network-mistake-next></p></div><small>Learning loop: Understand → Inspect → Correct → Verify</small>';
+  mistakePanel.innerHTML = '<div class="network-mistake-title"><strong>Learn from this result</strong><span data-network-mistake-category></span><button type="button" class="network-mistake-close" id="networkMistakeClose" aria-label="Dismiss command feedback">×</button></div><p data-network-mistake-reason></p><div class="network-mistake-next"><b>Try next</b><p data-network-mistake-next></p></div><small>Learning loop: Understand → Inspect → Correct → Verify</small>';
   const terminalInputRow = inp.closest('.tline');
   if (terminalInputRow) terminalInputRow.before(mistakePanel);
+  mistakePanel.querySelector('#networkMistakeClose')?.addEventListener('click', () => { clearNetworkMistake(); inp.focus(); });
   inp.addEventListener('keydown', e => {
     if (e.key === 'Tab') {
       e.preventDefault();
