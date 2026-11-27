@@ -18,16 +18,21 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
 const recordDiagnosticEvidence = async page => {
   await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
   await page.waitForTimeout(120);
-  const target = await page.evaluate(() => {
+  const command = await page.evaluate(() => {
     const current = (document.querySelector('#termTarget')?.textContent || '').trim();
-    return [...document.querySelectorAll('#topo .node')].map(node => node.dataset.dev).find(id => id && id !== current);
+    const node = [...document.querySelectorAll('#topo .node')].find(item => item.dataset.dev === current);
+    const classes = node?.getAttribute('class') || '';
+    if (classes.includes('k-switch')) return 'show vlan brief';
+    if (classes.includes('k-snort')) return 'show snort status';
+    if (classes.includes('k-fw')) return 'show version';
+    if (classes.includes('k-router')) return 'show ip interface brief';
+    return 'ip addr';
   });
-  if (!target) throw new Error('No second device available for diagnostic evidence');
-  await page.fill('#tin', 'ping ' + target);
+  await page.fill('#tin', command);
   await page.press('#tin', 'Enter');
   await page.waitForTimeout(120);
   if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
-    throw new Error('successful diagnostic command was not recorded as evidence');
+    throw new Error('successful diagnostic command was not recorded as evidence: ' + command);
 };
 
   const clearDiagnosis = async () => {
