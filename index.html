@@ -7369,7 +7369,7 @@ tin.addEventListener('keydown', e => {
         pendingHeredoc = null;
         emit('> ' + value + '\n');
         let body = capture.lines.length ? capture.lines.join('\n') + '\n' : '';
-        if (!capture.quoted) body = body.replace(/\$(?:\{([A-Za-z_]\\w*|[?#])\}|([A-Za-z_]\\w*|[?#]))/g, (_, braced, bare) => String(varVal(braced || bare)));
+        if (!capture.quoted) body = body.replace(/\$(?:\{([A-Za-z_]\w*|[?#])\}|([A-Za-z_]\w*|[?#]))/g, (_, braced, bare) => String(varVal(braced || bare)));
         submitLine(capture.command, body);
       } else {
         pendingHeredoc.lines.push(value);
