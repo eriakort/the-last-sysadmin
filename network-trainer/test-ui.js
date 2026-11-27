@@ -37,7 +37,23 @@ let URL;
   const fail = m => { console.error('  ✗ ' + m); errors.push(m); };
   // Clear the diagnosis gate by clicking options until Check appears (the correct
   // pick re-renders the brief with the Objective + Check; wrong picks don't).
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const target = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    return [...document.querySelectorAll('#topo .node')].map(node => node.dataset.dev).find(id => id && id !== current);
+  });
+  if (!target) throw new Error('No second device available for diagnostic evidence');
+  await page.fill('#tin', 'ping ' + target);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence');
+};
+
   const clearDiagnosis = async () => {
+    await recordDiagnosticEvidence(page);
     for (let i = 0; i < 4; i++) {
       const btn = await page.$(`#brief .diag-opt[data-di="${i}"]`);
       if (!btn) break;
@@ -66,6 +82,7 @@ let URL;
   else fail('Check should be hidden before diagnosis');
 
   // a WRONG diagnosis (first-contact answer is index 0, so index 1 is wrong) does not unlock
+  await recordDiagnosticEvidence(page);
   await page.click('#brief .diag-opt[data-di="1"]'); await page.waitForTimeout(80);
   if (!(await page.$('#check')) && (await page.getAttribute('#diagfb', 'class')) === 'diag-fb bad')
     ok('wrong diagnosis is rejected and does not unlock Check');
