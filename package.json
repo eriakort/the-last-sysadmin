@@ -4,6 +4,9 @@
   "private": true,
   "description": "A browser game that teaches Linux administration in a simulated terminal.",
   "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "lint": "node --check server.js && node --check build.js && node verify.js",
     "build": "node build.js",
     "verify": "node verify.js",
     "test": "node test-feedback-model.js && node test-feedback-integration.js && node test-helpers.js && node test-helper-source-parity.js && node test-filesystem.js && node test-path-utils.js && node test-permission-utils.js && node test-shell-parser.js && node test-shell-script-parser.js && node test-shell-lexer.js && node test-story-data.js && node test-missions.js && node test-command-options.js && node test-glob-pattern.js && node test-text-pattern-utils.js && node test-sed-parser.js && node test-checkers.js && node test-progress-sync.js && node test-service-worker.js && node test-accessibility-foundation.js && node test-investigation-tour.js && node test-performance-budget.js",
@@ -24,5 +27,8 @@
   "devDependencies": {
     "playwright": "^1.65.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "express": "^5.3.0"
+  }
 }
