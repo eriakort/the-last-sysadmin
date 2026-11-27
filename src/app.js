@@ -3037,7 +3037,23 @@ function afterCommand() {
   const m = MISSIONS[S.mission];
   if (pendingComplete) { pendingComplete = false; completeMission(); return; }
   if (m.fail) { const f = m.fail(); if (f && !S.nudged.includes('F:' + f)) { S.nudged.push('F:' + f); emitSys('⚠ ' + md(f), 'warn'); } }
-  if (m.nudge) { const n = m.nudge(); if (n && !S.nudged.includes(n)) { S.nudged.push(n); emitSys(md(n), 'nudge'); } }
+  if (m.nudge) {
+    const n = m.nudge();
+    if (n && !S.nudged.includes(n)) {
+      S.nudged.push(n);
+      emitSys(md(n), 'nudge');
+      if (m.id === 'bearings' && !learningMasteryPassed) {
+        const guide = document.getElementById('learningPath');
+        const quickCheck = document.getElementById('learningQuickCheck');
+        if (guide && quickCheck) {
+          guide.classList.add('learning-attention');
+          const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          guide.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+          quickCheck.focus({ preventScroll: true });
+        }
+      }
+    }
+  }
   if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
 const rewardFor = m => Math.max(25, 100 - 25 * Math.max(0, (S.hints[m.id] || 0) - 1));
@@ -4036,14 +4052,15 @@ function render() {
   show('#learningPath', !!m.learning);
   if (m.learning) {
     const choices = m.learning.choices.map(c => '<button type="button" class="learn-choice" data-learning-choice="' + c.value + '">' + c.label + '</button>').join('');
-    guide.innerHTML = '<h2>Learn the basics · then prove it</h2>' +
+    guide.innerHTML = '<h2>Quick check · prove your understanding</h2>' +
+      '<div class="learning-question" id="learningQuickCheck" tabindex="-1"><b>Quick check</b><p>' + m.learning.question + '</p><div class="learning-choices">' + choices + '</div>' +
+      '<div class="learning-feedback" id="learningFeedback" role="status" aria-live="polite">' + (learningMasteryPassed ? 'Correct — you can now complete the mission.' : 'Choose an answer to check your understanding.') + '</div></div>' +
+      '<details class="learning-more"><summary>Learn more · examples, practice and review</summary>' +
       '<div class="learning-card"><b>Learn</b><p>' + m.learning.concept + '</p></div>' +
       '<div class="learning-grid"><div class="learning-card"><b>See it in action</b><div class="learning-example">' + m.learning.example + '</div></div>' +
       '<div class="learning-card"><b>Investigate</b><p>' + m.learning.investigate + '</p></div></div>' +
       '<div class="learning-card"><b>Practise</b><p>' + m.learning.practice + '</p></div>' +
-      '<div class="learning-question"><b>Prove your understanding</b><p>' + m.learning.question + '</p><div class="learning-choices">' + choices + '</div>' +
-      '<div class="learning-feedback" id="learningFeedback" role="status" aria-live="polite">' + (learningMasteryPassed ? 'Correct — you can now complete the mission.' : 'Choose an answer to check your understanding.') + '</div></div>' +
-      '<div class="learning-card"><b>Review</b><p>' + m.learning.review + '</p></div>';
+      '<div class="learning-card"><b>Review</b><p>' + m.learning.review + '</p></div></details>';
     guide.querySelectorAll('[data-learning-choice]').forEach(button => button.addEventListener('click', () => {
       const correct = button.dataset.learningChoice === m.learning.answer;
       guide.querySelectorAll('[data-learning-choice]').forEach(choice => {
