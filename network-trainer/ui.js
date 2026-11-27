@@ -725,7 +725,7 @@ function renderTicket(m) {
   </div>`;
 }
 function isDiagnosticEvidenceCommand(line) {
-  return /^(?:ping\s+\S+|traceroute\s+\S+|trace\s+\S+|ip\s+(?:addr(?:\s+show)?|route(?:\s+(?:show|get))?|link(?:\s+show)?|neigh(?:\s+show)?)(?:\s|$)|nmap\s+\S+|dig\s+\S+|nslookup\s+\S+|arp(?:\s+(?:-a|-n))?$|tcpdump(?:\s|$)|show\s+\S+)/i.test(String(line || '').trim());
+  return /^(?:ping\s+\S+|traceroute\s+\S+|trace\s+\S+|ip\s+(?:addr(?:\s+show(?:\s+\S+)*)?|route(?:\s+(?:show|get)(?:\s+\S+)*)?|link(?:\s+show(?:\s+\S+)*)?|neigh(?:\s+show(?:\s+\S+)*)?)(?:\s*$)|nmap\s+\S+|dig\s+\S+|nslookup\s+\S+|arp(?:\s+(?:-a|-n))?$|tcpdump(?:\s|$)|show\s+\S+)/i.test(String(line || '').trim());
 }
 function renderDiagnose(m) {
   const d = m.diagnose;
