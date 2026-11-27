@@ -48,6 +48,8 @@ const recordDiagnosticEvidence = async page => {
   await page.waitForTimeout(120);
   if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
     throw new Error('successful diagnostic command was not recorded as evidence: ' + command);
+  const minimize = page.locator('#terminalMinimize');
+  if (await minimize.count()) await minimize.click();
 };
 
   page.on('pageerror', e => errors.push(e.message));
