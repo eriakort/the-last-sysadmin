@@ -53,6 +53,32 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
   });
   if (termReachable) throw new Error('the game terminal is focusable while the gate is up');
 
+  // Guest / practice-locally bypass is available on the gate and unlocks the app.
+  const guestBtn = await page.$('#authGate #auGuest');
+  if (!guestBtn) throw new Error('gate is missing the Continue as Guest button');
+  await guestBtn.click();
+  await page.waitForTimeout(150);
+
+  const gateStillVisible = await page.evaluate(() => {
+    const g = document.getElementById('authGate');
+    return !!(g && !g.hidden);
+  });
+  if (gateStillVisible) throw new Error('gate did not close after clicking Continue as Guest');
+  const appUnlocked = await page.evaluate(() => {
+    const a = document.querySelector('.app');
+    const t = document.getElementById('tin');
+    return !!(a && !a.hasAttribute('inert') && t && document.activeElement === t);
+  });
+  if (!appUnlocked) throw new Error('app/terminal did not unlock after clicking Continue as Guest');
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(200);
+  const gateAfterReload = await page.evaluate(() => {
+    const g = document.getElementById('authGate');
+    return !!(g && !g.hidden);
+  });
+  if (gateAfterReload) throw new Error('guest bypass did not persist across reload');
+
   if (errors.length) throw new Error('page errors on the gated page: ' + errors.join('; '));
   await page.close();
 

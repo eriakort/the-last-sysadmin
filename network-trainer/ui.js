@@ -405,7 +405,7 @@ function renderOverview() {
   click('remoteAdminStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-remote-admin-network'); if(index>=0) reloadMission(index); });
   click('remoteAdminLinux', () => { window.location.href='../index.html?crossTrack=remote-admin'; });
   click('sshHardeningStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-ssh-hardening-network'); if(index>=0) reloadMission(index); });
-  click('sshHardeningLinux', () => { window.location.href='../index.html?crossTrack=remote-admin'; });
+  click('sshHardeningLinux', () => { window.location.href='../index.html?crossTrack=ssh-hardening'; });
   click('contractorContainmentStart', () => { const index=chapters.findIndex(m => m.id === 'cross-track-contractor-containment-network'); if(index>=0) reloadMission(index); });
   click('contractorContainmentLinux', () => { window.location.href='../index.html?crossTrack=contractor-containment'; });
   root.querySelectorAll('[data-overview-ticket]').forEach(btn => btn.addEventListener('click', () => {
@@ -1590,13 +1590,13 @@ function wireTopo() {
           : focusedNote ? $('#topo .topo-note[data-note-index="'+focusedNote.dataset.noteIndex+'"]')
           : null;
         if (next) next.focus();
-        flashStatus('Moved ' + moved + ' item' + (moved===1?'':'s') + ' with arrow keys.');
+        flashStatus('Moved ' + moved + ' item' + (moved===1?'':'s') + ' with arrow keys.', 'info');
       }
     }, true);
     window._topoArrowBound = true;
   }
 
-  if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.');}});TEXT_INSERT_CANCEL_BOUND=true;}
+  if(!TEXT_INSERT_CANCEL_BOUND){document.addEventListener('keydown',e=>{if(TEXT_INSERT_MODE&&e.key==='Escape'){TEXT_INSERT_MODE=false;refresh();flashStatus('Text insertion cancelled.', 'info');}});TEXT_INSERT_CANCEL_BOUND=true;}
   if (svg) svg.oncontextmenu = e => {
     if (!canBuild()) return;
     const node = e.target.closest && e.target.closest('.node');
@@ -1702,11 +1702,11 @@ function wireTopo() {
       const openMenu=()=>showTopologyContextMenu({preventDefault(){},stopPropagation(){},clientX:rect.left+rect.width/2,clientY:rect.bottom},'device',{id});
       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); openMenu(); return; }
 
-      if (canBuild() && (e.key==='c'||e.key==='C')) { e.preventDefault(); WIRE=id; flashStatus('Connection started from '+id+'. Focus another device and press Enter.'); return; }
+      if (canBuild() && (e.key==='c'||e.key==='C')) { e.preventDefault(); WIRE=id; flashStatus('Connection started from '+id+'. Focus another device and press Enter.', 'info'); return; }
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         if (canBuild() && WIRE) {
-          if(WIRE!==id){try{rememberTopology();B.addLink(RUN.net,WIRE,id);flashStatus('Connected '+WIRE+' to '+id+'.');}catch(err){flashStatus(err.message);}}
+          if(WIRE!==id){try{rememberTopology();B.addLink(RUN.net,WIRE,id);flashStatus('Connected '+WIRE+' to '+id+'.', 'ok');}catch(err){flashStatus(err.message);}}
           WIRE=null;refresh();const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]');if(next)next.focus();return;
         }
         selectDevice(id); const next=$('#topo .node[data-dev="'+CSS.escape(id)+'"]');if(next)next.focus();
@@ -1853,7 +1853,7 @@ function zoomTopologyAt(svg, factor, clientX, clientY) {
   TOPO_VIEW=[p[0]-rx*w,p[1]-ry*h,w,h]; svg.setAttribute('viewBox',TOPO_VIEW.join(' '));
 }
 function autoArrange() { if (RUN && RUN.net) { delete RUN.net.pos; TOPO_VIEW = null; refresh(); } }
-function flashStatus(msg) { const b = $('#status'); if (b) { b.className = 'bad'; b.textContent = msg; } }
+function flashStatus(msg, tone = 'bad') { const b = $('#status'); if (b) { b.className = (tone === 'ok' || tone === 'info') ? tone : 'bad'; b.textContent = msg; } }
 function wireBrief() {
   if (MODE === 'build') {                              // authoring panel
     renderCheckArgs();
@@ -1903,7 +1903,7 @@ function wireConfig() {
     if (!SEL || !RUN.net.devices[SEL]) return;
     rememberTopology();
     if (brandSel.value === 'generic') delete RUN.net.devices[SEL].brand; else RUN.net.devices[SEL].brand = brandSel.value;
-    flashStatus(SEL + ' now uses the ' + ((BRANDS[brandSel.value] || BRANDS.generic).label) + ' command set.');
+    flashStatus(SEL + ' now uses the ' + ((BRANDS[brandSel.value] || BRANDS.generic).label) + ' command set.', 'info');
     refresh();
   });
   document.querySelectorAll('#config .pal[data-add]').forEach(b => b.addEventListener('click', () => {
@@ -1911,7 +1911,7 @@ function wireConfig() {
   }));
   const dup=$('#duplicateDev'); if(dup)dup.addEventListener('click',()=>{if(!SEL)return;try{rememberTopology(); const id=B.cloneDevice(RUN.net,SEL);TOPO_SELECTED=new Set([id]);LINK_SEL=null;selectDevice(id);refresh();}catch(e){flashStatus(e.message);}});
   const noteBtn=$('#noteBtn'); if(noteBtn)noteBtn.addEventListener('click',()=>{const text=prompt('Topology note (max 120 characters):','Network note');if(text===null||!text.trim())return;rememberTopology();RUN.net.notes=RUN.net.notes||[];const p=SEL?nodePos(SEL):[60,60];RUN.net.notes.push({text:text.trim().slice(0,120),x:p[0]+70,y:p[1]});refresh();});
-  const textBtn=$('#textBtn');if(textBtn)textBtn.addEventListener('click',()=>{TEXT_INSERT_MODE=!TEXT_INSERT_MODE;DRAW_TOOL='select';textBtn.classList.toggle('active',TEXT_INSERT_MODE);flashStatus(TEXT_INSERT_MODE?'Click anywhere on the topology canvas to place text.':'Text insertion cancelled.');});
+  const textBtn=$('#textBtn');if(textBtn)textBtn.addEventListener('click',()=>{TEXT_INSERT_MODE=!TEXT_INSERT_MODE;DRAW_TOOL='select';textBtn.classList.toggle('active',TEXT_INSERT_MODE);flashStatus(TEXT_INSERT_MODE?'Click anywhere on the topology canvas to place text.':'Text insertion cancelled.', 'info');});
   const labelDev=$('#labelDev');if(labelDev)labelDev.addEventListener('click',()=>{if(!SEL||!RUN.net.devices[SEL])return;const d=RUN.net.devices[SEL],value=prompt('Device display label (leave blank to use its ID):',d.label||'');if(value===null)return;rememberTopology();if(value.trim())d.label=value.trim().slice(0,32);else delete d.label;refresh();});
   const zoneBtn=$('#zoneBtn');if(zoneBtn)zoneBtn.addEventListener('click',()=>{const ids=[...TOPO_SELECTED].filter(id=>RUN.net.devices[id]);if(!ids.length&&SEL)ids.push(SEL);if(!ids.length)return;const name=prompt('Zone name (max 32 characters):','Core network');if(name===null||!name.trim())return;const points=ids.map(id=>nodePos(id));const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);const x=Math.max(0,Math.min(...xs)-24),y=Math.max(0,Math.min(...ys)-28),right=Math.max(...xs)+84,bottom=Math.max(...ys)+96;rememberTopology();RUN.net.zones=RUN.net.zones||[];RUN.net.zones.push({name:name.trim().slice(0,32),x,y,w:Math.max(140,right-x),h:Math.max(110,bottom-y),color:'#60a5fa',devices:ids});refresh();});
   document.querySelectorAll('#config [data-topo-layer]').forEach(c=>c.addEventListener('change',()=>{TOPO_LAYERS[c.dataset.topoLayer]=c.checked;RUN.net.layerVisibility=RUN.net.layerVisibility||{};RUN.net.layerVisibility[c.dataset.topoLayer]=c.checked;refresh();}));
@@ -1924,7 +1924,7 @@ function wireConfig() {
   const delLink=$('#delLink');if(delLink)delLink.addEventListener('click',()=>{const index=Number(delLink.dataset.linkIndex);if(!Number.isInteger(index)||index<0)return;rememberTopology();B.removeLink(RUN.net,index);LINK_SEL=null;refresh();});
   const ub=$('#topoUndo');if(ub)ub.addEventListener('click',undoTopology);const rb=$('#topoRedo');if(rb)rb.addEventListener('click',redoTopology);const cp=$('#topoCopy');if(cp)cp.addEventListener('click',copyTopologySelection);const ps=$('#topoPaste');if(ps)ps.addEventListener('click',pasteTopologySelection);
   const wb = $('#wireBtn'); if (wb) wb.addEventListener('click', () => {
-    if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.'); }
+    if (WIRE) { WIRE = null; } else if (SEL) { WIRE = SEL; } else { flashStatus('Select a device first, then Wire.', 'info'); }
     refresh();
   });
   const dd = $('#delDev'); if (dd) dd.addEventListener('click', () => { if (SEL) { rememberTopology(); B.removeDevice(RUN.net, SEL); TOPO_SELECTED.delete(SEL); delete TERM_SESSIONS[SEL]; SEL = null; WIRE = null; LINK_SEL=null; refresh(); } });

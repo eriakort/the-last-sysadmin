@@ -84,7 +84,7 @@ const MISSIONS = [
   { ch: 0, id: 'bearings', title: 'Get your bearings',
     learning: {
       concept: 'A shell is your text-based control point. Every command runs as a user and from a current working directory. Knowing both helps you avoid changing the wrong files or using the wrong level of access.',
-      example: 'whoami  →  halcyon\npwd     →  /home/halcyon',
+      example: 'whoami  →  rookie\npwd     →  /home/rookie',
       practice: 'Use the terminal on the right to run the two commands in the objective. Read each result before moving on.',
       investigate: 'Priya asks you to inspect a log file. Before touching it, confirm which account you are using and where your shell is starting from. That context can change what you can access and which relative paths will work.',
       review: 'whoami answers “which user am I?” · pwd answers “which directory am I in?” The first is identity; the second is location.',
@@ -95,7 +95,10 @@ const MISSIONS = [
     story: "08:52, your first morning at Halcyon Freight. The web server crashed overnight, and Dana, the admin who ran it, left on Thursday without a word. Priya, the CTO, hands you a login. \"Before you touch anything,\" she says, \"find out where you are.\"",
     objective: 'Run `whoami` to see which user you are, and `pwd` to see which directory you are in.',
     hints: ['Type a command at the prompt and press Enter.', '`whoami` prints your user name. `pwd` means "print working directory".', 'Type `whoami`, press Enter, then type `pwd` and press Enter.'],
-    check: () => state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && masteryPassed() },
+    check: () => state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && masteryPassed(),
+    nudge: () => (state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && !masteryPassed())
+      ? 'Both commands run! Answer the **Prove your understanding** check on the left to finish this ticket.'
+      : null },
   { ch: 0, id: 'handover', title: 'The handover note',
     story: "Priya says Dana left a note for whoever came next, somewhere in your home directory. A plain `ls` doesn't show it.",
     objective: 'Find the hidden file in your home directory and read it.',

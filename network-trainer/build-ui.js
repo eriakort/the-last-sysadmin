@@ -176,6 +176,7 @@ table.stats td{padding:5px 6px;border-bottom:1px solid var(--line)}
 .addrow input{flex:1;min-width:70px}
 #status{margin-top:12px;padding:10px;border-radius:8px;font-size:13px}
 #status.ok{background:rgba(125,255,158,.1);border:1px solid var(--good);color:var(--good)}
+#status.info{background:color-mix(in srgb,var(--host) 12%,transparent);border:1px solid color-mix(in srgb,var(--host) 55%,var(--line));color:var(--ink)}
 #status.bad{background:rgba(255,128,128,.08);border:1px solid #5a3b3b;color:#ffbcbc}
 #status ul{margin:6px 0 0;padding-left:18px}
 :root[data-theme="halcyon"]{--bg:#0f141c;--panel:#161d28;--raise:#1d2634;--line:#2a3545;--ink:#e6ecf5;--muted:#8da1bd;--amber:#f2b04b;--good:#7dff9e;--bad:#ff8080;--host:#3b82f6;--switch:#8b5cf6;--router:#f2b04b;--fw:#ef4444}

@@ -22,6 +22,9 @@
     return ctx;
   }
 
+  const DEFAULT_SB_URL = "https://yhzefqoplunmseuwcwku.supabase.co";
+  const DEFAULT_SB_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InloemVmcW9wbHVubXNldXdjd2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNDM0NTQsImV4cCI6MjEwODgxOTQ1NH0.5CWs0AtbFtrAYOYiPjgKfvWivAMPeXGXSzOblZMCS3c";
+
   async function ask(messages) {
     let url = "", key = "";
     try {
@@ -30,14 +33,14 @@
     } catch (_) {}
     if (!url || !key) {
       // Fall back to the Linux app's committed project when running from the same origin
-      url = url || "https://yhzefqoplunmseuwcwku.supabase.co";
-      key = key || "";
+      url = url || DEFAULT_SB_URL;
+      key = key || DEFAULT_SB_ANON_KEY;
     }
-    if (!url || !key) throw new Error("Supabase not configured — open Settings and connect a project");
+    if (!url || !key) throw new Error("Supabase not configured — open Class settings and connect a project.");
     const sb = window.supabase && window.supabase.createClient(url, key);
-    if (!sb) throw new Error("Supabase client unavailable");
+    if (!sb) throw new Error("Cloud assistant requires the Supabase client script (check your connection).");
     const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error("Sign in to use the assistant");
+    if (!session) throw new Error("Sign in via 🎓 Class (or ⚙ Settings in Linux Sysadmin) to use the AI assistant.");
     const r = await fetch(`${url}/functions/v1/ai-assist`, {
       method: "POST",
       headers: {
@@ -124,7 +127,7 @@
       } catch (err) {
         pending.remove();
         const msg = String(err.message || err);
-        add("assistant", "Error: " + msg);
+        add("assistant", /^Sign in/i.test(msg) ? msg : "Error: " + msg);
         if (/disabled/i.test(msg)) {
           const btn = $("#aiAssistBtn");
           if (btn) btn.hidden = true;

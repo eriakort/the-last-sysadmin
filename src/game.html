@@ -315,7 +315,7 @@ body.practicing{padding-top:40px}
 .auth-gate-brand .mark{width:32px;height:32px;flex:0 0 auto}
 .auth-gate-brand b{font-family:var(--f-display);letter-spacing:.04em;font-size:15px}
 .auth-gate-oauth{display:flex;flex-direction:column;gap:7px;margin-top:2px}
-.auth-gate-oauth .btn{width:100%;justify-content:center}
+.auth-gate-oauth .btn,.auth-gate-guest{width:100%;justify-content:center}
 .auth-gate-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:18px 0 10px}
 .auth-gate-sep::before,.auth-gate-sep::after{content:'';flex:1;height:1px;background:var(--line)}
 .scenarios{display:flex;flex-direction:column;gap:7px;margin-top:4px}
@@ -600,6 +600,7 @@ body.practicing{padding-top:40px}
 .ops-lab-summary{color:var(--muted);font-size:13px;max-width:72ch;margin:8px 0 16px}
 .ops-lab-card{border:1px solid var(--line);background:var(--raise);border-radius:10px;padding:14px;min-width:0}
 .ops-lab-card.complete{border-color:var(--green)}
+.ops-lab-card.focused{border-color:var(--amber);box-shadow:0 0 0 1px color-mix(in srgb,var(--amber) 45%,transparent)}
 .ops-lab-card h3{font-size:15px;margin:5px 0}
 .ops-lab-card p{font-size:12px;color:var(--muted);margin:6px 0}
 .ops-lab-card .ops-lab-status{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}

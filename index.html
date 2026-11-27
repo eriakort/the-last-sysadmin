@@ -330,7 +330,7 @@ body.practicing{padding-top:40px}
 .auth-gate-brand .mark{width:32px;height:32px;flex:0 0 auto}
 .auth-gate-brand b{font-family:var(--f-display);letter-spacing:.04em;font-size:15px}
 .auth-gate-oauth{display:flex;flex-direction:column;gap:7px;margin-top:2px}
-.auth-gate-oauth .btn{width:100%;justify-content:center}
+.auth-gate-oauth .btn,.auth-gate-guest{width:100%;justify-content:center}
 .auth-gate-sep{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:18px 0 10px}
 .auth-gate-sep::before,.auth-gate-sep::after{content:'';flex:1;height:1px;background:var(--line)}
 .scenarios{display:flex;flex-direction:column;gap:7px;margin-top:4px}
@@ -615,6 +615,7 @@ body.practicing{padding-top:40px}
 .ops-lab-summary{color:var(--muted);font-size:13px;max-width:72ch;margin:8px 0 16px}
 .ops-lab-card{border:1px solid var(--line);background:var(--raise);border-radius:10px;padding:14px;min-width:0}
 .ops-lab-card.complete{border-color:var(--green)}
+.ops-lab-card.focused{border-color:var(--amber);box-shadow:0 0 0 1px color-mix(in srgb,var(--amber) 45%,transparent)}
 .ops-lab-card h3{font-size:15px;margin:5px 0}
 .ops-lab-card p{font-size:12px;color:var(--muted);margin:6px 0}
 .ops-lab-card .ops-lab-status{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
@@ -1828,7 +1829,7 @@ const MISSIONS = [
   { ch: 0, id: 'bearings', title: 'Get your bearings',
     learning: {
       concept: 'A shell is your text-based control point. Every command runs as a user and from a current working directory. Knowing both helps you avoid changing the wrong files or using the wrong level of access.',
-      example: 'whoami  →  halcyon\npwd     →  /home/halcyon',
+      example: 'whoami  →  rookie\npwd     →  /home/rookie',
       practice: 'Use the terminal on the right to run the two commands in the objective. Read each result before moving on.',
       investigate: 'Priya asks you to inspect a log file. Before touching it, confirm which account you are using and where your shell is starting from. That context can change what you can access and which relative paths will work.',
       review: 'whoami answers “which user am I?” · pwd answers “which directory am I in?” The first is identity; the second is location.',
@@ -1839,7 +1840,10 @@ const MISSIONS = [
     story: "08:52, your first morning at Halcyon Freight. The web server crashed overnight, and Dana, the admin who ran it, left on Thursday without a word. Priya, the CTO, hands you a login. \"Before you touch anything,\" she says, \"find out where you are.\"",
     objective: 'Run `whoami` to see which user you are, and `pwd` to see which directory you are in.',
     hints: ['Type a command at the prompt and press Enter.', '`whoami` prints your user name. `pwd` means "print working directory".', 'Type `whoami`, press Enter, then type `pwd` and press Enter.'],
-    check: () => state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && masteryPassed() },
+    check: () => state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && masteryPassed(),
+    nudge: () => (state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && !masteryPassed())
+      ? 'Both commands run! Answer the **Prove your understanding** check on the left to finish this ticket.'
+      : null },
   { ch: 0, id: 'handover', title: 'The handover note',
     story: "Priya says Dana left a note for whoever came next, somewhere in your home directory. A plain `ls` doesn't show it.",
     objective: 'Find the hidden file in your home directory and read it.',
@@ -7693,20 +7697,21 @@ const CROSS_TRACK_CONTAINMENT_LINUX_MISSION=[{
  check_type:'group_not_member',check_arg1:'sudo',check_arg2:'jmorrow'
 }];
 function closeCrossTrackCase(){const root=document.getElementById('crossTrackCaseDialog');if(root)root.remove();}
-function openCrossTrackCase(){
+function openCrossTrackCase(focusCase){
  closeCrossTrackCase();const state=crossTrackRead();
+ const isFocused=id=>focusCase===id?' focused':'';
  const root=document.createElement('div');root.id='crossTrackCaseDialog';root.className='bash-workshop-backdrop';
  root.innerHTML='<section class="bash-workshop-dialog" role="dialog" aria-modal="true" aria-labelledby="crossTrackCaseTitle">'
  +'<div class="bash-workshop-head"><div><div class="eyebrow">Integrated operations · P1 service incident</div><h2 id="crossTrackCaseTitle">The unavailable Halcyon portal</h2></div><button class="btn" type="button" data-cross-close aria-label="Close integrated case">Close</button></div>'
  +'<p class="ops-lab-summary">Restore service end-to-end by completing two investigations: repair the application service on Linux, then correct the client-side network name record and verify delivery. Each half is graded by its own simulator; completing one does not auto-complete the other.</p>'
- +'<div class="ops-lab-card'+(state.linux?' complete':'')+'"><div class="ops-lab-status">'+(state.linux?'✓ Linux task demonstrated':'1 · Linux Sysadmin')+'</div><h3>Restore the application service</h3><p>Inspect the simulated systemd service, restart it and verify its state. Campaign progress is untouched.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-cross-linux>Start Linux task</button></div></div>'
- +'<div class="ops-lab-card'+(state.network?' complete':'')+'"><div class="ops-lab-status">'+(state.network?'✓ Network task demonstrated':'2 · Network Sysadmin')+'</div><h3>Restore client access</h3><p>Correct the stale local name record, then verify name resolution, IP reachability and the web service port.</p><div class="ops-lab-actions"><button class="btn" type="button" data-cross-network>Open Network task</button></div></div>'
- +'<div class="ops-lab-card'+(state.remoteLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteLinux?'✓ Linux task demonstrated':'3 · Linux Sysadmin')+'</div><h3>Restore SSH on jump01</h3><p>Inspect the SSH daemon, restart it safely and confirm the service is active.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-remote-linux>Start Linux task</button></div></div>'
- +'<div class="ops-lab-card'+(state.remoteNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.remoteNetwork?'✓ Network task demonstrated':'4 · Network Sysadmin')+'</div><h3>Repair the management access policy</h3><p>Correct ACL order to permit SSH while continuing to deny unrelated services.</p><div class="ops-lab-actions"><button class="btn" type="button" data-remote-network>Open Network task</button></div></div>'
- +'<div class="ops-lab-card'+(state.hardeningLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningLinux?'✓ Linux task demonstrated':'5 · Linux Sysadmin')+'</div><h3>Restore brute-force protection</h3><p>Inspect the Fail2Ban unit, restore the service and verify its state.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-hardening-linux>Start Linux task</button></div></div>'
- +'<div class="ops-lab-card'+(state.hardeningNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.hardeningNetwork?'✓ Network task demonstrated':'6 · Network Sysadmin')+'</div><h3>Limit SSH to the operations subnet</h3><p>Apply least-privilege ACL rules while preserving client web access.</p><div class="ops-lab-actions"><button class="btn" type="button" data-hardening-network>Open Network task</button></div></div>'
- +'<div class="ops-lab-card'+(state.contractorLinux?' complete':'')+'"><div class="ops-lab-status">'+(state.contractorLinux?'✓ Linux task demonstrated':'7 · Linux Sysadmin')+'</div><h3>Revoke compromised contractor privileges</h3><p>Correlate SSH evidence and remove the former contractor from sudo without destroying the account.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-contractor-linux>Start Linux task</button></div></div>'
- +'<div class="ops-lab-card'+(state.contractorNetwork?' complete':'')+'"><div class="ops-lab-status">'+(state.contractorNetwork?'✓ Network task demonstrated':'8 · Network Sysadmin')+'</div><h3>Contain the suspicious SSH source</h3><p>Block the confirmed source IP from jump-host SSH while preserving operations access and public HTTPS.</p><div class="ops-lab-actions"><button class="btn" type="button" data-contractor-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.linux?' complete':'')+isFocused('web-availability')+'" data-cross-case="web-availability"><div class="ops-lab-status">'+(state.linux?'✓ Linux task demonstrated':'1 · Linux Sysadmin')+'</div><h3>Restore the application service</h3><p>Inspect the simulated systemd service, restart it and verify its state. Campaign progress is untouched.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-cross-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.network?' complete':'')+isFocused('web-availability')+'" data-cross-case="web-availability"><div class="ops-lab-status">'+(state.network?'✓ Network task demonstrated':'2 · Network Sysadmin')+'</div><h3>Restore client access</h3><p>Correct the stale local name record, then verify name resolution, IP reachability and the web service port.</p><div class="ops-lab-actions"><button class="btn" type="button" data-cross-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.remoteLinux?' complete':'')+isFocused('remote-admin')+'" data-cross-case="remote-admin"><div class="ops-lab-status">'+(state.remoteLinux?'✓ Linux task demonstrated':'3 · Linux Sysadmin')+'</div><h3>Restore SSH on jump01</h3><p>Inspect the SSH daemon, restart it safely and confirm the service is active.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-remote-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.remoteNetwork?' complete':'')+isFocused('remote-admin')+'" data-cross-case="remote-admin"><div class="ops-lab-status">'+(state.remoteNetwork?'✓ Network task demonstrated':'4 · Network Sysadmin')+'</div><h3>Repair the management access policy</h3><p>Correct ACL order to permit SSH while continuing to deny unrelated services.</p><div class="ops-lab-actions"><button class="btn" type="button" data-remote-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.hardeningLinux?' complete':'')+isFocused('ssh-hardening')+'" data-cross-case="ssh-hardening"><div class="ops-lab-status">'+(state.hardeningLinux?'✓ Linux task demonstrated':'5 · Linux Sysadmin')+'</div><h3>Restore brute-force protection</h3><p>Inspect the Fail2Ban unit, restore the service and verify its state.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-hardening-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.hardeningNetwork?' complete':'')+isFocused('ssh-hardening')+'" data-cross-case="ssh-hardening"><div class="ops-lab-status">'+(state.hardeningNetwork?'✓ Network task demonstrated':'6 · Network Sysadmin')+'</div><h3>Limit SSH to the operations subnet</h3><p>Apply least-privilege ACL rules while preserving client web access.</p><div class="ops-lab-actions"><button class="btn" type="button" data-hardening-network>Open Network task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.contractorLinux?' complete':'')+isFocused('contractor-containment')+'" data-cross-case="contractor-containment"><div class="ops-lab-status">'+(state.contractorLinux?'✓ Linux task demonstrated':'7 · Linux Sysadmin')+'</div><h3>Revoke compromised contractor privileges</h3><p>Correlate SSH evidence and remove the former contractor from sudo without destroying the account.</p><div class="ops-lab-actions"><button class="btn primary" type="button" data-contractor-linux>Start Linux task</button></div></div>'
+ +'<div class="ops-lab-card'+(state.contractorNetwork?' complete':'')+isFocused('contractor-containment')+'" data-cross-case="contractor-containment"><div class="ops-lab-status">'+(state.contractorNetwork?'✓ Network task demonstrated':'8 · Network Sysadmin')+'</div><h3>Contain the suspicious SSH source</h3><p>Block the confirmed source IP from jump-host SSH while preserving operations access and public HTTPS.</p><div class="ops-lab-actions"><button class="btn" type="button" data-contractor-network>Open Network task</button></div></div>'
  +'<details class="ops-lab-card" data-incident-debrief><summary><strong>Incident debrief · evidence and learning outcomes</strong></summary><p>Use this review after attempting the cases. Completion records show which simulator objectives you demonstrated; they are not a substitute for retaining the investigation evidence.</p><div class="cross-track-status"><span>'+(state.linux?'✓':'○')+' Halcyon service recovery</span><span>'+(state.network?'✓':'○')+' Client connectivity recovery</span><span>'+(state.remoteLinux?'✓':'○')+' SSH service recovery</span><span>'+(state.remoteNetwork?'✓':'○')+' Management ACL repair</span><span>'+(state.hardeningLinux?'✓':'○')+' Fail2Ban restoration</span><span>'+(state.hardeningNetwork?'✓':'○')+' Least-privilege SSH policy</span><span>'+(state.contractorLinux?'✓':'○')+' Contractor privilege removal</span><span>'+(state.contractorNetwork?'✓':'○')+' Suspicious-source containment</span></div><h3>Evidence to preserve</h3><ul><li>Before-and-after service state, relevant journal/authentication lines, and the exact verification command.</li><li>Network path tests, ACL contents and order, interface attachment, and the permitted business traffic that remained available.</li><li>A short timeline linking the observed symptom, evidence, change, and post-change validation.</li></ul><h3>Debrief questions</h3><ol><li>Which observation established the likely root cause rather than merely describing the symptom?</li><li>What was the smallest safe change, and what evidence proves it worked?</li><li>Which legitimate user or service path did you deliberately protect?</li><li>What would you monitor next, and what would trigger escalation or rollback?</li></ol><p>Learning outcomes: evidence-led diagnosis, least-privilege containment, change validation, service continuity, and clear incident handover.</p></details>'
  +'<p class="ops-lab-safety">Simulation only. Both environments run in the browser and do not connect to real servers or network devices. Completion is stored locally in this browser profile.</p></section>';
  root.addEventListener('click',function(event){
@@ -7721,7 +7726,9 @@ function openCrossTrackCase(){
   if(event.target.closest('[data-contractor-network]')){window.location.href='network-trainer/index.html?crossTrack=contractor-containment';return;}
  });
  root.addEventListener('keydown',function(event){if(event.key==='Escape')closeCrossTrackCase();});
- document.body.appendChild(root);const close=root.querySelector('[data-cross-close]');if(close)close.focus();
+ document.body.appendChild(root);
+ if(focusCase){const target=root.querySelector('[data-cross-case="'+focusCase+'"]');if(target&&target.scrollIntoView)target.scrollIntoView({block:'nearest'});}
+ const close=root.querySelector('[data-cross-close]');if(close)close.focus();
 }
 
 function render() {
@@ -7829,7 +7836,17 @@ function render() {
       learningMasteryPassed = correct;
       const feedback = $('#learningFeedback');
       feedback.className = 'learning-feedback ' + (correct ? 'ok' : 'bad');
-      feedback.textContent = correct ? (m.learning.correctFeedback || 'Correct. You can now complete the mission objective in the terminal.') : (m.learning.incorrectFeedback || 'Not quite. Re-read the explanation and try again.');
+      const readyNow = correct && m.check && m.check();
+      feedback.textContent = correct
+        ? (m.learning.correctFeedback || (readyNow ? 'Correct — objective and understanding verified! Advancing to the next ticket…' : 'Correct. You can now complete the mission objective in the terminal.'))
+        : (m.learning.incorrectFeedback || 'Not quite. Re-read the explanation and try again.');
+      if (readyNow) {
+        setTimeout(() => {
+          if (!S.finished && MISSIONS[S.mission] === m && learningMasteryPassed && m.check && m.check()) {
+            afterCommand(); updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
+          }
+        }, 350);
+      }
     }));
   }
   $('#pChapter').textContent = `${CHAPTERS[m.ch].label} · ${CHAPTERS[m.ch].name}`;
@@ -8031,7 +8048,8 @@ function boot(restored) {
   if (S.tracker && !S.finished) S.missionStart = Date.now();
   ensureClock();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
-  if(['web-availability','remote-admin','contractor-containment'].includes(new URLSearchParams(window.location.search).get('crossTrack')))openCrossTrackCase();
+  const crossTrackParam = new URLSearchParams(window.location.search).get('crossTrack');
+  if (['web-availability', 'remote-admin', 'ssh-hardening', 'contractor-containment'].includes(crossTrackParam)) openCrossTrackCase(crossTrackParam);
   if (window.matchMedia && matchMedia('(pointer:fine)').matches) tin.focus({ preventScroll: true });
 }
 /* ============================================================
@@ -8538,7 +8556,7 @@ function applyUser(u, initial) {
    This is a UI/account gate, not content protection — the app is a static page,
    so it controls what a visitor sees first and enables cross-device progress sync. */
 function gateBypassed() {
-  try { if (localStorage.getItem('lsa-e2e') === '1') return true; } catch (e) {}
+  try { if (localStorage.getItem('lsa-e2e') === '1' || localStorage.getItem('lsa-guest') === '1') return true; } catch (e) {}
   return typeof navigator !== 'undefined' && navigator.webdriver === true;
 }
 function gateNeeded() { return !!supaConfig() && !gateBypassed(); }
@@ -8548,7 +8566,7 @@ function renderGate() {
   const oauthBtns = OAUTH_PROVIDERS.map(p => `<button class="btn" data-oauth="${p.id}" type="button">${esc(p.label)}</button>`).join('');
   body.innerHTML = `<div class="auth-gate-brand"><span class="mark"><svg viewBox="74 88 364 364"><g fill="#f2b04b"><rect x="112" y="104" width="288" height="96" rx="24"/><rect x="112" y="212" width="288" height="96" rx="24"/></g><g fill="#0f141c"><circle cx="160" cy="152" r="15"/><circle cx="160" cy="260" r="15"/><rect x="320" y="142" width="44" height="11" rx="5.5"/><rect x="320" y="160" width="44" height="11" rx="5.5"/><rect x="320" y="250" width="44" height="11" rx="5.5"/><rect x="320" y="268" width="44" height="11" rx="5.5"/></g><path d="M150 336 L214 378 L150 420" fill="none" stroke="#f2b04b" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/><rect x="250" y="361" width="112" height="34" rx="17" fill="#f2b04b"/></svg></span><b>The Last Sysadmin</b></div>
     <h2 id="authGateTitle">Sign in to continue</h2>
-    <p class="rlead">An account keeps your campaign progress in sync across devices. Sign in or create one to begin.</p>
+    <p class="rlead">Sign in to sync campaign progress across devices, or practice locally right away as a guest.</p>
     <div class="rlabel">Email</div>
     <input id="auEmail" type="text" inputmode="email" placeholder="you@example.com" value="${esc(saved)}" autocomplete="email" aria-label="Email">
     <div class="rlabel" style="margin-top:8px">Password</div>
@@ -8561,11 +8579,20 @@ function renderGate() {
     </div>
     <div class="auth-gate-sep">or continue with</div>
     <div class="auth-gate-oauth">${oauthBtns}</div>
-    <div class="race-note">Google, Microsoft, GitHub and LinkedIn each need the matching provider enabled in the project's Supabase dashboard (Authentication → Providers). Email and password work as soon as the project is connected.</div>`;
+    <div class="auth-gate-sep">or start right away</div>
+    <button class="btn auth-gate-guest" id="auGuest" type="button">Continue as Guest (practice locally)</button>
+    <div class="race-note">Guest progress saves automatically in this browser. You can sign in anytime via <b>⚙ Settings</b> to sync across devices.</div>`;
   body.querySelectorAll('[data-oauth]').forEach(btn => btn.addEventListener('click', () => doOAuth(btn.dataset.oauth)));
   const si = document.getElementById('auSignin'); if (si) si.addEventListener('click', () => doPasswordAuth(false));
   const su = document.getElementById('auSignup'); if (su) su.addEventListener('click', () => doPasswordAuth(true));
   const lk = document.getElementById('auLink'); if (lk) lk.addEventListener('click', doMagicLink);
+  const gu = document.getElementById('auGuest'); if (gu) gu.addEventListener('click', () => {
+    try { localStorage.setItem('lsa-guest', '1'); } catch (e) {}
+    hideGate();
+    renderAuthBtn();
+    emitSys('<b>Practicing locally as Guest.</b> Progress saves in this browser; sign in anytime via <b>⚙ Settings</b>.', 'hint');
+    tin.focus({ preventScroll: true });
+  });
 }
 function showGate() {
   const g = document.getElementById('authGate'); if (!g) return;
@@ -8586,6 +8613,7 @@ function renderAuthBtn() {
   b.title = authUser ? `Signed in as ${authUser.name} — themes, avatar, account` : 'Themes, avatar, and account';
 }
 async function onLogin() {
+  try { localStorage.removeItem('lsa-guest'); } catch (e) {}
   emitSys(`<b>Signed in as ${esc(authUser.name)}.</b> Your progress now syncs to this account.`, 'ok');
   const sb = await getSB(); if (!sb) return;
   let nm = ''; try { nm = localStorage.getItem('lsa-race-name') || ''; } catch (e) {}
