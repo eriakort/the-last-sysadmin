@@ -1,0 +1,17 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { createModel } = require('./src/nano-editor');
+let written = null;
+const model = createModel('first line\n', value => { written = value; return null; });
+assert.equal(model.value, 'first line\n');
+assert.equal(model.dirty, false);
+model.setValue('first line\nsecond line\n');
+assert.equal(model.dirty, true);
+assert.equal(model.save(), null);
+assert.equal(written, 'first line\nsecond line\n');
+assert.equal(model.dirty, false);
+const denied = createModel('protected', () => 'Permission denied');
+denied.setValue('changed');
+assert.equal(denied.save(), 'Permission denied');
+assert.equal(denied.dirty, true);
+console.log('Nano editor model tests passed.');
