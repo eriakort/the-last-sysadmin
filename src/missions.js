@@ -97,7 +97,7 @@ const MISSIONS = [
     hints: ['Type a command at the prompt and press Enter.', '`whoami` prints your user name. `pwd` means "print working directory".', 'Type `whoami`, press Enter, then type `pwd` and press Enter.'],
     check: () => state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && masteryPassed(),
     nudge: () => (state().cmdsM.includes('whoami') && state().cmdsM.includes('pwd') && !masteryPassed())
-      ? 'Both commands run! Answer the **Prove your understanding** check on the left to finish this ticket.'
+      ? 'Nice—now answer the quick check below to close your first ticket.'
       : null },
   { ch: 0, id: 'handover', title: 'The handover note',
     story: "Priya says Dana left a note for whoever came next, somewhere in your home directory. A plain `ls` doesn't show it.",
