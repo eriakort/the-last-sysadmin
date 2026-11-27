@@ -1586,7 +1586,7 @@ CMDS.help = (a, ctx) => {
   System info      whoami  hostname  uname  date  history  clear
 
 Game commands
-  hint             reveal the next hint for this ticket (costs XP)
+  hint             reveal the next hint (first free, then 25 XP)
   submit ANSWER    answer a question ticket
   check [ITEM]     say why this ticket hasn't advanced; or inspect a file/service
   tracker          turn the optional speed tracker on or off
@@ -3100,6 +3100,7 @@ async function recordAttempt(m) {
     }, { onConflict: 'user_id,mission_id' });
   } catch (e) {}
 }
+let lastResolvedBanner = null;
 function completeMission() {
   const m = MISSIONS[S.mission], gain = rewardFor(m);
   const elapsedMs = S.missionStart ? Date.now() - S.missionStart : null;
@@ -3120,12 +3121,15 @@ function completeMission() {
   if (PRACTICE.active && m.id === 'cross-track-remote-admin-linux') crossTrackWrite('remoteLinux');
   if (PRACTICE.active && m.id === 'cross-track-ssh-hardening-linux') crossTrackWrite('hardeningLinux');
   if (PRACTICE.active && m.id === 'cross-track-contractor-containment-linux') crossTrackWrite('contractorLinux');
-  emitSys(`<b>✓ ${ticketId(S.mission)} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
+  const resolvedId = ticketId(S.mission);
+  emitSys(`<b>✓ ${resolvedId} resolved</b> · ${esc(m.title)} · +${gain} XP${timeStr}`, 'ok');
   S.mission++;
   if (RACE.active) { raceAdvance(); updatePrompt(); render(); return; }
   if (typeof PRACTICE !== 'undefined' && PRACTICE.active) { practiceAdvance(); updatePrompt(); render(); return; }
   const next = MISSIONS[S.mission];
-  if (!next || next.ch !== m.ch) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
+  const chapterDone = !next || next.ch !== m.ch;
+  lastResolvedBanner = { ticket: resolvedId, title: m.title, gain, chapterOutro: chapterDone ? `${CHAPTERS[m.ch].label} complete` : '' };
+  if (chapterDone) emitSys(md(CHAPTERS[m.ch].outro), 'ok');
   if (!next) S.finished = true;
   else startMission();
 }
@@ -3182,7 +3186,7 @@ function doRetry() {
   S.fs = JSON.parse(S.checkpoint);
   repairWorld();
   if (!getNode(S.cwd)) S.cwd = HOME;
-  S.nudged = [];
+  S.nudged = []; lastResolvedBanner = null;
   emitSys('Restored the server from backup to how it was when this ticket opened.', 'hint');
   render(); save();
 }
@@ -3962,6 +3966,15 @@ function render() {
   if (cbtn) cbtn.hidden = sorted.length <= CHIPS_DEFAULT;
   const fin = $('#finale');
   const show = (sel, on) => { const el = $(sel); el.hidden = !on; };
+  const mrb = $('#missionResolvedBanner');
+  if (mrb) {
+    const showBanner = !!(lastResolvedBanner && !RACE.active && !PRACTICE.active);
+    mrb.hidden = !showBanner;
+    if (showBanner) {
+      $('#mrbTitle').textContent = `✓ ${lastResolvedBanner.ticket} resolved · +${lastResolvedBanner.gain} XP`;
+      $('#mrbMeta').textContent = lastResolvedBanner.title + (lastResolvedBanner.chapterOutro ? ` · ${lastResolvedBanner.chapterOutro}` : '');
+    }
+  }
   renderJourney();
   renderFilesystemExplorer();
   renderCommandIncident();
@@ -4037,6 +4050,7 @@ function render() {
 }
 $('#btnHint').addEventListener('click', () => { showHint(); scrollEnd(); });
 $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });
+$('#mrbClose')?.addEventListener('click', () => { lastResolvedBanner = null; render(); tin.focus({ preventScroll: true }); });
 $('#btnTimer').addEventListener('click', () => { toggleTracker(); scrollEnd(); tin.focus({ preventScroll: true }); });
 let newTimer = null;
 $('#btnNew').addEventListener('click', e => {
@@ -4048,6 +4062,7 @@ $('#btnNew').addEventListener('click', e => {
     return;
   }
   clearTimeout(newTimer); b.classList.remove('danger'); b.textContent = 'New game';
+  lastResolvedBanner = null;
   S = freshState(); tout.innerHTML = ''; boot(false);
 });
 
@@ -4323,9 +4338,19 @@ function raceSafeName(s) { s = (s || '').trim().replace(/[^\x20-\x7e]/g, '').sli
 function raceCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
 function lockTin(on) { tin.disabled = !!on; }
 const roEl = () => $('#raceOverlay');
-function showOverlay() { roEl().hidden = false; }
-function hideOverlay() { roEl().hidden = true; }
+function showOverlay(wide) { roEl().hidden = false; roEl().querySelector('.race-modal')?.classList.toggle('wide', !!wide); }
+function hideOverlay() { roEl().hidden = true; roEl().querySelector('.race-modal')?.classList.remove('wide'); }
 function renderContent(html) { $('#raceContent').innerHTML = html; }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !roEl().hidden && !RACE.active && (!RACE.phase || RACE.phase === 'idle')) {
+    hideOverlay(); tin.focus({ preventScroll: true });
+  }
+});
+roEl().addEventListener('click', e => {
+  if (e.target === roEl() && !RACE.active && (!RACE.phase || RACE.phase === 'idle')) {
+    hideOverlay(); tin.focus({ preventScroll: true });
+  }
+});
 
 async function openRace() {
   if (RACE.active || RACE.phase === 'lobby' || RACE.phase === 'countdown') { showOverlay(); return; }
@@ -5109,6 +5134,76 @@ function openAbout() {
   $('#aboutDone')?.addEventListener('click', hideOverlay);
 }
 $('#btnAbout').addEventListener('click', openAbout);
+
+const CMD_REF_GROUPS = [
+  ['Navigation & files', 'pwd ls cd tree cat less head tail wc mkdir touch cp mv rm rmdir find du df'],
+  ['Text & integrity', 'grep sort uniq cut sed awk tr echo nl diff sha256sum'],
+  ['Users & permissions', 'whoami id groups getent chmod chown chgrp sudo usermod useradd passwd umask getfacl setfacl'],
+  ['Processes & services', 'ps top kill pkill uptime free lsof systemctl journalctl crontab'],
+  ['Networking & storage', 'ip ss ping curl ufw dig nc traceroute lsblk mount umount findmnt tee tar gzip'],
+  ['Scripting & tools', 'bash sh export alias make apt dpkg docker git sysctl dmesg uname']
+];
+function openCommandReference() {
+  document.querySelectorAll('.top-menu[open]').forEach(menu => menu.removeAttribute('open'));
+  showOverlay(true);
+  let activeCmd = 'ls';
+  const renderGroups = q => {
+    const term = (q || '').trim().toLowerCase();
+    return CMD_REF_GROUPS.map(([title, list]) => {
+      const cmds = list.split(' ').filter(c => !term || c.includes(term) || ((MAN[c] && MAN[c][0]) || '').toLowerCase().includes(term));
+      if (!cmds.length) return '';
+      return `<div class="cmdref-group"><h3>${title}</h3><div class="cmdref-chips">${cmds.map(c => `<button type="button" class="cmdref-chip${c === activeCmd ? ' active' : ''}" data-ref-cmd="${c}">${c}</button>`).join('')}</div></div>`;
+    }).join('') || '<p class="empty">No matching commands.</p>';
+  };
+  const renderDetail = cmd => {
+    const entry = MAN[cmd];
+    return entry
+      ? `<strong><code>${esc(cmd)}</code> — ${esc(entry[0])}</strong><pre>${esc(renderMan(cmd))}</pre><div class="race-row"><button type="button" class="btn primary" id="cmdRefInsert">Use in terminal</button><button type="button" class="btn" id="cmdRefMan">Print <code>man ${esc(cmd)}</code></button></div>`
+      : '<p class="empty">Select any command above to view syntax, options, and examples.</p>';
+  };
+  renderContent(`<h2>Command &amp; shortcut reference</h2>
+    <p class="rlead">Filter commands or select one to read its manual without leaving your ticket.</p>
+    <input id="cmdRefFilter" type="text" placeholder="Filter by command or task (e.g. grep, permission, socket, tar)…" autocomplete="off">
+    <div class="rlabel">Keyboard shortcuts</div>
+    <div class="cmdref-keys">
+      <span class="cmdref-key"><code>Tab</code> autocomplete</span>
+      <span class="cmdref-key"><code>↑ / ↓</code> history</span>
+      <span class="cmdref-key"><code>Ctrl+L</code> clear</span>
+      <span class="cmdref-key"><code>Ctrl+C</code> cancel</span>
+    </div>
+    <div class="rlabel">Ticket commands</div>
+    <div class="cmdref-keys">
+      <button type="button" class="cmdref-chip" data-run-game="check">check</button>
+      <button type="button" class="cmdref-chip" data-run-game="hint">hint (1st free)</button>
+      <button type="button" class="cmdref-chip" data-run-game="mission">mission</button>
+      <button type="button" class="cmdref-chip" data-run-game="retry">retry</button>
+      <button type="button" class="cmdref-chip" data-run-game="repair">repair</button>
+    </div>
+    <div class="cmdref-groups" id="cmdRefGroups">${renderGroups('')}</div>
+    <div class="cmdref-detail" id="cmdRefDetail" aria-live="polite">${renderDetail(activeCmd)}</div>
+    <div class="race-row" style="margin-top:14px"><button class="btn primary" id="cmdRefDone" type="button">Done</button></div>`);
+  const wireChips = () => {
+    $('#cmdRefGroups').querySelectorAll('[data-ref-cmd]').forEach(btn => btn.addEventListener('click', () => {
+      activeCmd = btn.dataset.refCmd;
+      $('#cmdRefGroups').querySelectorAll('[data-ref-cmd]').forEach(x => x.classList.toggle('active', x.dataset.refCmd === activeCmd));
+      $('#cmdRefDetail').innerHTML = renderDetail(activeCmd);
+      wireDetail();
+    }));
+  };
+  const wireDetail = () => {
+    $('#cmdRefInsert')?.addEventListener('click', () => { tin.value = activeCmd + ' '; hideOverlay(); tin.focus({ preventScroll: true }); });
+    $('#cmdRefMan')?.addEventListener('click', () => { hideOverlay(); submitLine('man ' + activeCmd); tin.focus({ preventScroll: true }); });
+  };
+  wireChips(); wireDetail();
+  $('#cmdRefFilter')?.addEventListener('input', e => { $('#cmdRefGroups').innerHTML = renderGroups(e.target.value); wireChips(); });
+  $('#raceContent').querySelectorAll('[data-run-game]').forEach(btn => btn.addEventListener('click', () => {
+    const cmd = btn.dataset.runGame; hideOverlay(); submitLine(cmd); tin.focus({ preventScroll: true });
+  }));
+  $('#cmdRefDone')?.addEventListener('click', () => { hideOverlay(); tin.focus({ preventScroll: true }); });
+  $('#cmdRefFilter')?.focus({ preventScroll: true });
+}
+$('#btnCmdRef')?.addEventListener('click', openCommandReference);
+$('#termCmdRef')?.addEventListener('click', openCommandReference);
 
 /* ---------- Classroom (M2: create class + join by code + enrollment) ---------- */
 async function cxLoad() {
