@@ -33,7 +33,7 @@ function tokenize(line, deps) {
         else { op = '2>'; adv = 1; }
       } else {
         push();
-        if (two === '||' || two === '&&' || two === '>>') { op = two; adv = 2; }
+        if (two === '||' || two === '&&' || two === '>>' || two === '<<') { op = two; adv = 2; }
       }
       toks.push({ t: 'op', v: op }); i += adv; continue;
     }
