@@ -3372,7 +3372,7 @@ const coachDrillStart = $('#commandCoachDrillStart');
 if (coachDrillStart) coachDrillStart.addEventListener('click', () => startSkillDrill($('#commandCoachSummary').dataset.command));
 let pendingHeredoc = null;
 tin.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter') {
     e.preventDefault();
     const value = tin.value;
     tin.value = '';
@@ -3383,11 +3383,11 @@ tin.addEventListener('keydown', e => {
         pendingHeredoc = null;
         emit('> ' + value + '\n');
         let body = capture.lines.length ? capture.lines.join('\n') + '\n' : '';
-        if (!capture.quoted) body = expandVars(body);
+        if (!capture.quoted) body = body.replace(/\$(?:\{([A-Za-z_]\\w*|[?#])\}|([A-Za-z_]\\w*|[?#]))/g, (_, braced, bare) => String(varVal(braced || bare)));
         submitLine(capture.command, body);
       } else {
         pendingHeredoc.lines.push(value);
-        emit('> ' + value + '\n');
+        emit('> ' + value + '\n> ');
       }
       return;
     }
