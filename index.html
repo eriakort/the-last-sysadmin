@@ -6915,7 +6915,7 @@ function afterCommand() {
   }
   if (m.check && m.check() && (!m.learning || learningMasteryPassed)) completeMission();
 }
-const rewardFor = m => Math.max(25, 100 - 25 * Math.max(0, (S.hints[m.id] || 0) - 1));
+const rewardFor = m => window.LSAFeedback ? window.LSAFeedback.calculateMissionReward(S.hints[m.id] || 0) : Math.max(25, 100 - 25 * Math.max(0, (S.hints[m.id] || 0) - 1));
 function fmtDur(ms) {
   const t = Math.max(0, Math.round(ms / 1000));
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
@@ -7951,7 +7951,14 @@ function render() {
   $('#hintCount').textContent = `${used} of ${m.hints.length} shown`;
   const hb = $('#btnHint');
   hb.disabled = used >= m.hints.length;
-  hb.textContent = used >= m.hints.length ? 'No more hints' : (used === 0 ? 'Show hint · Free' : (rewardFor(m) > 25 ? 'Show hint · −25 XP' : 'Show hint'));
+  const rewardBeforeHint = rewardFor(m);
+  const rewardAfterHint = window.LSAFeedback
+    ? window.LSAFeedback.calculateMissionReward(used + 1)
+    : Math.max(25, 100 - 25 * Math.max(0, used));
+  const hintPenalty = Math.max(0, rewardBeforeHint - rewardAfterHint);
+  hb.textContent = used >= m.hints.length
+    ? 'No more hints'
+    : (used === 0 ? 'Show hint · Free' : (hintPenalty ? `Show hint · −${hintPenalty} XP reward` : 'Show hint · reward unchanged'));
 }
 $('#btnHint').addEventListener('click', () => { showHint(); scrollEnd(); });
 $('#btnRetry').addEventListener('click', () => { doRetry(); scrollEnd(); });

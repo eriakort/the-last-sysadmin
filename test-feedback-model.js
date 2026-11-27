@@ -13,10 +13,21 @@ const tests = [
  ['Network privilege',()=>F.classifyCommandFailure({discipline:'network',output:'Insufficient privilege'}),'permission'],
  ['Network missing interface',()=>F.classifyCommandFailure({discipline:'network',output:'Interface does not exist'}),'target-state'],
  ['Unknown failure is cautious',()=>F.classifyCommandFailure({discipline:'network',output:'unexpected failure'}),'unknown'],
+ ['Shell parse error',()=>F.classifyCommandFailure({discipline:'linux',output:'bash: syntax error near unexpected token'}),'syntax'],
+ ['Full filesystem',()=>F.classifyCommandFailure({discipline:'linux',output:'No space left on device'}),'capacity'],
+ ['Read-only mount',()=>F.classifyCommandFailure({discipline:'linux',output:'Read-only file system'}),'permission'],
+ ['Busy resource',()=>F.classifyCommandFailure({discipline:'linux',output:'Device or resource busy'}),'target-state'],
+ ['Sudo policy denial',()=>F.classifyCommandFailure({discipline:'linux',output:'user is not in the sudoers file'}),'permission'],
+ ['Cannot stat missing path',()=>F.classifyCommandFailure({discipline:'linux',output:'cannot stat file: No such file or directory'}),'target-state'],
  ['Valid but incorrect configuration',()=>F.classifyOutcome({commandAccepted:true,configurationValid:true,objectiveMet:false}),'valid-but-incorrect'],
  ['Unmet objective',()=>F.classifyOutcome({objectiveMet:false}),'objective-unmet'],
  ['Unintended side effect takes priority',()=>F.classifyOutcome({objectiveMet:true,sideEffects:['service stopped']}),'side-effect'],
  ['Verified objective',()=>F.classifyOutcome({objectiveMet:true}),'success']
 ];
 for(const [name,run,expected] of tests){const r=run();assert.equal(r.category,expected,name);assert.ok(r.title&&r.reason&&r.next,name+' actionable');assert.ok(['high','low'].includes(r.confidence),name+' confidence');console.log('  ✓ '+name);}
-assert.ok(Object.isFrozen(F));console.log('SHARED FEEDBACK MODEL OK ('+tests.length+' cases).');
+assert.equal(F.calculateMissionReward(0),100,'no hints keeps the full reward');
+assert.equal(F.calculateMissionReward(1),100,'the first hint is free');
+assert.equal(F.calculateMissionReward(2),75,'the second hint reduces the reward by 25 XP');
+assert.equal(F.calculateMissionReward(3),50,'each additional hint reduces the reward by 25 XP');
+assert.equal(F.calculateMissionReward(10),25,'hint penalties never reduce the reward below 25 XP');
+assert.ok(Object.isFrozen(F));console.log('SHARED FEEDBACK MODEL OK ('+tests.length+' cases + 5 reward checks).');

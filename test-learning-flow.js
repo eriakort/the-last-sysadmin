@@ -53,6 +53,13 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   await page.goto(INDEX, { waitUntil: 'load' });
   await page.waitForTimeout(250);
 
+  await page.locator('#missionHints summary').click();
+  if ((await page.textContent('#btnHint')).includes('Free')) ok('first mission hint is clearly marked free');
+  else fail('first mission hint should be marked free');
+  await page.click('#btnHint');
+  if ((await page.textContent('#btnHint')).includes('−25 XP reward')) ok('next hint clearly explains its reduction to the mission XP reward');
+  else fail('hint cost does not explain that XP is deducted from the mission reward');
+
   const firstRun = page.locator('#firstRunGuide');
   if (await firstRun.isVisible()) ok('first-session orientation is visible for a new learner');
   else fail('first-session orientation is missing for a new learner');
@@ -78,6 +85,11 @@ const INDEX = 'file://' + path.join(process.cwd(), 'index.html');
   if ((await page.locator('#mistakeCoach').innerText()).includes('Understand → Inspect → Correct → Verify') && (await page.locator('#mistakeCoach').innerText()).includes('Try next'))
     ok('Linux mistake feedback gives a shared learning cycle and actionable next step');
   else fail('Linux mistake feedback omitted the learning cycle or next step');
+  await page.locator('#tin').fill('cat /etc/shadow');
+  await page.locator('#tin').press('Enter');
+  if ((await page.locator('#mistakeCoach').innerText()).includes('Permission · access') && (await page.locator('#mistakeCoach').innerText()).includes('does not automatically mean'))
+    ok('permission coaching recommends inspecting identity and permissions before escalating');
+  else fail('permission coaching did not discourage reflexive sudo use');
   await page.locator('#tin').fill('true');
   await page.locator('#tin').press('Enter');
   if (!(await page.locator('#mistakeCoach').isVisible())) ok('mistake feedback clears after the next command');

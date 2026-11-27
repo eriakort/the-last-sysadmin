@@ -11,4 +11,9 @@ assert.match(network, /LAST_COMMAND = \{ line, accepted: r\.code === 0 \}/, 'Net
 assert.equal(feedback.classifyOutcome({commandAccepted:true,configurationValid:true,objectiveMet:false}).category, 'valid-but-incorrect');
 assert.equal(feedback.classifyOutcome({objectiveMet:false}).category, 'objective-unmet');
 assert.equal(feedback.classifyOutcome({objectiveMet:true}).category, 'success');
-console.log('SHARED FEEDBACK INTEGRATION OK (6 assertions).');
+assert.match(linux, /LSAFeedback\.calculateMissionReward\(S\.hints\[m\.id\] \|\| 0\)/, 'Linux mission rewards use the shared hint calculation');
+assert.match(linux, /hintPenalty \? `Show hint · −\$\{hintPenalty\} XP reward`/, 'hint button explains the actual XP reward reduction');
+assert.equal(feedback.calculateMissionReward(1), 100, 'one hint remains free');
+assert.equal(feedback.calculateMissionReward(2), 75, 'second hint reduces the reward by 25 XP');
+assert.equal(feedback.calculateMissionReward(8), 25, 'reward floor is enforced');
+console.log('SHARED FEEDBACK INTEGRATION OK (12 assertions).');
