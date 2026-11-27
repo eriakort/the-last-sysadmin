@@ -39,13 +39,17 @@ function build() {
   const commandOptionsScript = read('command-options.js');
   const missionsScript = read('missions.js');
   const nanoEditorScript = read('nano-editor.js');
+  const heredocParserScript = read('heredoc-parser.js');
   const appScript = read('app.js');
   if (!gameTemplate.includes('<!--APP_SCRIPT-->')) throw new Error('src/game.html is missing the app script insertion point');
   const game = gameTemplate
     .replace('<!--APP_SCRIPT-->', () => '<script>\n' + helperScript + '\n</script>\n<script>\n' + filesystemScript + '\n</script>\n<script>\n' + pathUtilsScript + '\n</script>\n<script>\n' + permissionUtilsScript + '\n</script>\n<script>\n' + globPatternScript + '\n</script>\n<script>\n' + textPatternScript + '\n</script>\n<script>\n' + sedParserScript + '\n</script>\n<script>\n' + shellParserScript + '\n</script>\n<script>\n' + shellScriptParserScript + '\n</script>\n<script>\n' + shellLexerScript + '\n</script>\n<script>\n' + checkerScript + '\n</script>\n<script>\n' + storyDataScript + '\n</script>\n<script>\n' + commandOptionsScript + '\n</script>
 <script>
 ' + nanoEditorScript + '
-</script>\n<script>\n' + missionsScript + '\n</script>\n<script>\n' + appScript + '\n</script>')
+</script>\n<script>\n' + missionsScript + '\n</script>
+<script>
+' + heredocParserScript + '
+</script>\n<script>\n' + appScript + '\n</script>')
     .replace(/__APP_VERSION__/g, packageVersion)
     .replace(/__APP_BUILD__/g, version);
   const tail = read('shell-tail.html');
