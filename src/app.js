@@ -2843,14 +2843,71 @@ function renderCommandSkills() {
   const countLabel = document.getElementById('commandSkillCount');
   const summary = document.getElementById('commandSkillSummary');
   if (countLabel) countLabel.textContent = count + '/' + names.length;
-  if (summary) summary.textContent = count === names.length ? 'All core command skills practised. Revisit any skill from the command coach.' : count + ' core command skill' + (count === 1 ? '' : 's') + ' practised. Your progress is saved on this device.';
+  if (summary) summary.textContent = count === names.length ? 'All core command skills practised. Select any skill to practise it again.' : count + ' core command skill' + (count === 1 ? '' : 's') + ' practised. Select a command below to practise it in the terminal.';
   if (bar) bar.style.width = (count / names.length * 100) + '%';
   if (progress) progress.setAttribute('aria-valuenow', String(count));
   const grid = document.getElementById('commandSkillGrid');
-  if (grid) grid.innerHTML = names.map(name => {
-    const done = completed.has(name);
-    return '<div class="skill-progress-item" data-skill="' + name + '" data-complete="' + done + '"><span class="skill-progress-mark" aria-hidden="true">' + (done ? '✓' : '○') + '</span><span class="skill-progress-name">' + name + '</span><span class="skill-progress-state">' + (done ? 'Practised' : 'Not yet') + '</span></div>';
+  if (grid) {
+    grid.innerHTML = names.map(name => {
+      const done = completed.has(name);
+      return '<button type="button" class="skill-progress-item" data-skill="' + name + '" data-complete="' + done + '" title="Practise ' + name + ' in the terminal"><span class="skill-progress-mark" aria-hidden="true">' + (done ? '✓' : '○') + '</span><span class="skill-progress-name">' + name + '</span><span class="skill-progress-state">' + (done ? 'Practised' : 'Practise') + '</span></button>';
+    }).join('');
+    if (!grid.dataset.bound) {
+      grid.dataset.bound = 'true';
+      grid.addEventListener('click', e => {
+        const btn = e.target.closest('[data-skill]');
+        if (btn) startSkillDrill(btn.dataset.skill);
+      });
+    }
+  }
+}
+function renderCoachPanel(name, args, forceOpen) {
+  const panel = document.getElementById('commandCoach');
+  const toggle = document.getElementById('commandCoachToggle');
+  if (!panel || !toggle || GAME_CMDS.includes(name)) return;
+  const guide = COMMAND_COACH[name];
+  const manual = MAN[name];
+  if (!guide && !manual) return;
+  const summary = guide ? guide.summary : manual[0] + '. Use the manual for options and syntax.';
+  const example = guide ? guide.example : (manual[3] && manual[3][0]) || (name + ' --help');
+  const pitfall = guide ? guide.pitfall : 'Check the target and options before running a command; try man ' + name + ' for details.';
+  const tokens = [name, ...(args || [])];
+  const parts = tokens.map((token, index) => {
+    let kind = index === 0 ? 'command' : token.startsWith('-') ? 'option' :
+      (COACH_ACTIONS.has(name) && index === 1) ? 'action' :
+      (/^(\/|~|\.\.?($|\/))/.test(token) ? 'path' : 'argument');
+    return '<span class="coach-part"><small>' + kind + '</small><code>' + esc(token) + '</code></span>';
   }).join('');
+  document.getElementById('commandCoachSummary').textContent = summary;
+  document.getElementById('commandCoachSummary').dataset.command = name;
+  const drillButton = document.getElementById('commandCoachDrillStart');
+  if (drillButton) {
+    drillButton.hidden = !COMMAND_DRILLS[name];
+    drillButton.textContent = completedCommandDrills.has(name) ? 'Practise this skill again' : 'Practice this skill';
+  }
+  document.getElementById('commandCoachDrillProgress').textContent = 'Saved skills: ' + (S.commandSkills || []).length + '/7 practised';
+  document.getElementById('commandCoachParts').innerHTML = parts || '<span class="empty">No arguments</span>';
+  document.getElementById('commandCoachExample').textContent = example;
+  document.getElementById('commandCoachPitfall').textContent = 'Watch out: ' + pitfall;
+  commandCoachLastExample = example;
+  toggle.hidden = false;
+  const open = forceOpen || !commandCoachSeen.has(name);
+  commandCoachSeen.add(name);
+  panel.hidden = !open;
+  toggle.setAttribute('aria-expanded', String(open));
+}
+function startSkillDrill(name) {
+  const drill = COMMAND_DRILLS[name];
+  if (!drill) return;
+  renderCoachPanel(name, drill.args, true);
+  activeCommandDrill = name;
+  const task = document.getElementById('commandCoachDrillTask');
+  const feedback = document.getElementById('commandCoachDrillFeedback');
+  const btn = document.getElementById('commandCoachDrillStart');
+  if (task) { task.textContent = 'Your task: ' + drill.task; task.hidden = false; }
+  if (feedback) feedback.hidden = true;
+  if (btn) btn.textContent = 'Drill in progress…';
+  tin.focus({ preventScroll: true });
 }
 function updateCommandCoach(name, args) {
   updateCommandIncident(name, args);
@@ -2877,39 +2934,7 @@ function updateCommandCoach(name, args) {
       document.getElementById('commandCoachDrillProgress').textContent = 'Saved skills: ' + (S.commandSkills || []).length + '/7 practised';
     }
   }
-  const panel = document.getElementById('commandCoach');
-  const toggle = document.getElementById('commandCoachToggle');
-  if (!panel || !toggle || GAME_CMDS.includes(name)) return;
-  const guide = COMMAND_COACH[name];
-  const manual = MAN[name];
-  if (!guide && !manual) return;
-  const summary = guide ? guide.summary : manual[0] + '. Use the manual for options and syntax.';
-  const example = guide ? guide.example : (manual[3] && manual[3][0]) || (name + ' --help');
-  const pitfall = guide ? guide.pitfall : 'Check the target and options before running a command; try man ' + name + ' for details.';
-  const tokens = [name, ...args];
-  const parts = tokens.map((token, index) => {
-    let kind = index === 0 ? 'command' : token.startsWith('-') ? 'option' :
-      (COACH_ACTIONS.has(name) && index === 1) ? 'action' :
-      (/^(\/|~|\.\.?($|\/))/.test(token) ? 'path' : 'argument');
-    return '<span class="coach-part"><small>' + kind + '</small><code>' + esc(token) + '</code></span>';
-  }).join('');
-  document.getElementById('commandCoachSummary').textContent = summary;
-  document.getElementById('commandCoachSummary').dataset.command = name;
-  const drillButton = document.getElementById('commandCoachDrillStart');
-  if (drillButton) {
-    drillButton.hidden = !COMMAND_DRILLS[name];
-    drillButton.textContent = completedCommandDrills.has(name) ? 'Practise this skill again' : 'Practice this skill';
-  }
-  document.getElementById('commandCoachDrillProgress').textContent = 'Saved skills: ' + (S.commandSkills || []).length + '/7 practised';
-  document.getElementById('commandCoachParts').innerHTML = parts || '<span class="empty">No arguments</span>';
-  document.getElementById('commandCoachExample').textContent = example;
-  document.getElementById('commandCoachPitfall').textContent = 'Watch out: ' + pitfall;
-  commandCoachLastExample = example;
-  toggle.hidden = false;
-  const firstUse = !commandCoachSeen.has(name);
-  commandCoachSeen.add(name);
-  panel.hidden = !firstUse;
-  toggle.setAttribute('aria-expanded', String(firstUse));
+  renderCoachPanel(name, args, false);
 }
 
 function renderMan(n) {
@@ -3299,17 +3324,7 @@ if (coachUse) coachUse.addEventListener('click', () => {
   tin.setSelectionRange(tin.value.length, tin.value.length);
 });
 const coachDrillStart = $('#commandCoachDrillStart');
-if (coachDrillStart) coachDrillStart.addEventListener('click', () => {
-  const name = $('#commandCoachSummary').dataset.command;
-  const drill = COMMAND_DRILLS[name];
-  if (!drill) return;
-  activeCommandDrill = name;
-  $('#commandCoachDrillTask').textContent = 'Your task: ' + drill.task;
-  $('#commandCoachDrillTask').hidden = false;
-  $('#commandCoachDrillFeedback').hidden = true;
-  $('#commandCoachDrillStart').textContent = 'Drill in progress…';
-  tin.focus({ preventScroll: true });
-});
+if (coachDrillStart) coachDrillStart.addEventListener('click', () => startSkillDrill($('#commandCoachSummary').dataset.command));
 tin.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); histMove(-1); }
@@ -3354,10 +3369,10 @@ function renderJourney() {
       const complete = done === chapterMissions.length;
       const status = complete ? 'complete' : ci === currentChapter ? 'current' : ci === currentChapter + 1 ? 'next' : 'locked';
       const statusText = complete ? 'Complete' : status === 'current' ? 'You are here' : status === 'next' ? 'Up next' : 'Later';
-      return '<div class="journey-chapter" data-journey-chapter="' + (ci + 1) + '" data-status="' + status + '">' +
+      return '<button type="button" class="journey-chapter" data-journey-chapter="' + (ci + 1) + '" data-status="' + status + '">' +
         '<span class="journey-chapter-mark" aria-hidden="true">' + (complete ? '✓' : String(ci + 1).padStart(2, '0')) + '</span>' +
         '<span class="journey-chapter-name"><strong>' + esc(chapter.name) + '</strong><span>' + esc(chapter.topic) + ' · ' + done + '/' + chapterMissions.length + ' missions</span></span>' +
-        '<span class="journey-chapter-status">' + statusText + '</span></div>';
+        '<span class="journey-chapter-status">' + statusText + '</span></button>';
     }).join('');
     const levelDone = CHAPTERS.slice(level.first, level.last + 1).filter((_, offset) => {
       const chapterMissions = MISSIONS.filter(m => m.ch === level.first + offset);
@@ -3370,7 +3385,19 @@ function renderJourney() {
   const now = currentMission ? 'Now learning: Chapter ' + (currentChapter + 1) + ' · ' + CHAPTERS[currentChapter].name : 'All chapters complete — excellent work.';
   root.innerHTML = '<div class="journey-summary"><div><strong>Your Linux learning journey</strong><p id="journeyProgress">' + completedMissions + ' of ' + totalMissions + ' missions complete · ' + completedChapters + ' of ' + CHAPTERS.length + ' chapters</p></div><span class="journey-level-count">LEVEL ' + (currentLevel + 1) + ' / ' + LEARNING_LEVELS.length + '</span></div>' +
     '<div class="journey-track" role="progressbar" aria-label="Overall Linux learning progress" aria-valuemin="0" aria-valuemax="' + totalMissions + '" aria-valuenow="' + completedMissions + '"><span style="width:' + pct + '%"></span></div>' +
-    '<div class="journey-now">' + esc(now) + '</div>' + levelMarkup;
+    '<div class="journey-now" id="journeyNow" aria-live="polite">' + esc(now) + '</div>' + levelMarkup;
+  if (!root.dataset.bound) {
+    root.dataset.bound = 'true';
+    root.addEventListener('click', e => {
+      const row = e.target.closest('.journey-chapter');
+      if (!row) return;
+      if (row.dataset.status === 'current') { setPanelTab('mission'); tin.focus({ preventScroll: true }); return; }
+      const chIdx = Number(row.dataset.journeyChapter) - 1;
+      const ch = CHAPTERS[chIdx];
+      const box = document.getElementById('journeyNow');
+      if (ch && box) box.textContent = 'Chapter ' + (chIdx + 1) + ' · ' + ch.name + ' — ' + ch.topic + ' (' + (row.dataset.status === 'complete' ? 'Completed — review commands with ? Commands' : 'Unlocks sequentially as you resolve prior chapters') + ')';
+    });
+  }
   root.dataset.initialized = 'true';
 }
 let fsExplorerPath = '/', fsExplorerSelected = '';
@@ -3552,8 +3579,10 @@ function renderServerHealth() {
     if(input){input.value=button.dataset.healthCommand||'';closeServerHealth();input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);}
   }));
 }
-function openServerHealth(){let root=document.getElementById('serverHealthDialog');if(!root){root=document.createElement('div');root.id='serverHealthDialog';document.body.appendChild(root);}renderServerHealth();root.querySelector('.health-dialog button')?.focus();}
-function closeServerHealth(){const root=document.getElementById('serverHealthDialog');if(root)root.innerHTML='';}
+let serverHealthReturnFocus=null;
+function onServerHealthKey(e){if(e.key==='Escape'){e.preventDefault();closeServerHealth();}}
+function openServerHealth(){serverHealthReturnFocus=document.activeElement;let root=document.getElementById('serverHealthDialog');if(!root){root=document.createElement('div');root.id='serverHealthDialog';document.body.appendChild(root);}renderServerHealth();document.addEventListener('keydown',onServerHealthKey);root.querySelector('.health-dialog button')?.focus();}
+function closeServerHealth(){document.removeEventListener('keydown',onServerHealthKey);const root=document.getElementById('serverHealthDialog');if(root)root.innerHTML='';if(serverHealthReturnFocus&&serverHealthReturnFocus.isConnected){serverHealthReturnFocus.focus({preventScroll:true});serverHealthReturnFocus=null;}}
 
 
 /* Bash scripting workshop — guided practice on the simulated shell */

@@ -167,7 +167,9 @@ button{font:inherit;cursor:pointer}
 .skill-progress-track{height:6px;background:var(--led-off);border-radius:5px;overflow:hidden}
 .skill-progress-track span{display:block;height:100%;width:0;background:var(--green);transition:width .2s}
 .skill-progress-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
-.skill-progress-item{display:flex;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--raise);font-size:11px;min-width:0}
+.skill-progress-item{display:flex;align-items:center;gap:7px;padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--raise);color:inherit;font:inherit;font-size:11px;text-align:left;width:100%;cursor:pointer;min-width:0;transition:border-color .15s}
+.skill-progress-item:hover{border-color:var(--amber)}
+.skill-progress-item:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
 .skill-progress-item[data-complete="true"]{border-color:color-mix(in srgb,var(--green) 55%,var(--line))}
 .skill-progress-mark{font:600 11px var(--f-mono);color:var(--muted);flex:none}
 .skill-progress-item[data-complete="true"] .skill-progress-mark{color:var(--green)}
@@ -219,7 +221,9 @@ button{font:inherit;cursor:pointer}
 .journey-level summary:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 .journey-level-name{flex:1}
 .journey-chapters{display:flex;flex-direction:column;gap:4px;padding:0 7px 7px}
-.journey-chapter{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 8px;border-radius:5px;font-size:12px}
+.journey-chapter{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;padding:7px 8px;border-radius:5px;font-size:12px;cursor:pointer;border:0;background:transparent;color:inherit;font:inherit;text-align:left;width:100%}
+.journey-chapter:hover{background:color-mix(in srgb,var(--ink) 5%,var(--raise))}
+.journey-chapter:focus-visible{outline:2px solid var(--amber);outline-offset:-1px}
 .journey-chapter[data-status="current"]{background:color-mix(in srgb,var(--amber) 13%,var(--raise));outline:1px solid color-mix(in srgb,var(--amber) 45%,transparent)}
 .journey-chapter[data-status="current"] .journey-chapter-mark,.journey-chapter[data-status="current"] .journey-chapter-name span{color:var(--ink)}
 .journey-chapter[data-status="complete"] .journey-chapter-mark{color:var(--green)}
@@ -768,7 +772,7 @@ body.practicing{padding-top:40px}
       <div class="panel-pane" id="panelPaneProgress" role="tabpanel" aria-labelledby="tabProgress" hidden>
         <section class="journey" id="journey" aria-label="Linux learning journey"></section>
         <section class="skill-progress" id="commandSkillProgress" aria-labelledby="commandSkillTitle">
-          <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Practise core commands and keep your progress between visits.</p></div><span id="commandSkillCount">0/7</span></div>
+          <div class="skill-progress-head"><div><h2 id="commandSkillTitle">Command skills</h2><p id="commandSkillSummary">Select any core command below to practise it in the terminal.</p></div><span id="commandSkillCount">0/7</span></div>
           <div class="skill-progress-track" role="progressbar" aria-label="Command skills practised" aria-valuemin="0" aria-valuemax="7" aria-valuenow="0"><span></span></div>
           <div class="skill-progress-grid" id="commandSkillGrid"></div>
         </section>
