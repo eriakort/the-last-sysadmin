@@ -30,6 +30,21 @@ let URL;
   const browser = await browserType.launch();
   const page = await browser.newPage();
   const errors = [];
+const recordDiagnosticEvidence = async page => {
+  await page.evaluate(() => { const restore = document.querySelector('#terminalRestore'); if (restore) restore.click(); });
+  await page.waitForTimeout(120);
+  const target = await page.evaluate(() => {
+    const current = (document.querySelector('#termTarget')?.textContent || '').trim();
+    return [...document.querySelectorAll('#topo .node')].map(node => node.dataset.dev).find(id => id && id !== current);
+  });
+  if (!target) throw new Error('No second device available for diagnostic evidence');
+  await page.fill('#tin', 'ping ' + target);
+  await page.press('#tin', 'Enter');
+  await page.waitForTimeout(120);
+  if (!/Evidence captured/.test(await page.locator('#diagEvidence').innerText()))
+    throw new Error('successful diagnostic command was not recorded as evidence');
+};
+
   page.on('pageerror', e => errors.push(e.message));
   const ok = message => console.log('  ✓ ' + message);
   const fail = message => { console.error('  ✗ ' + message); errors.push(message); };
@@ -64,6 +79,11 @@ let URL;
 
   // This incident requires a diagnosis before the configuration check is unlocked.
   // Keep the floating terminal minimized while interacting with the diagnosis panel.
+  if (await page.locator('#check').count()) fail('Check appeared before diagnosis evidence');
+  await page.locator('.diag-opt').first().click();
+  if (await page.locator('#check').count()) ok('a correct guess cannot bypass the evidence requirement');
+  else fail('diagnosis should remain locked until evidence is collected');
+  await recordDiagnosticEvidence(page);
   await page.locator('.diag-opt').first().click();
   if (await page.locator('#check').count()) ok('correct ticket diagnosis unlocks verification');
   else fail('correct ticket diagnosis did not unlock verification');
