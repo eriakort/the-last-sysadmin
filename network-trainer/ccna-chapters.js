@@ -53,7 +53,12 @@ const ccnaChapters = [
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('h2', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'reachable', a: 'h1', b: 'h2' }],
-    solution: [['sw1', '/* set p1 and p2 to vlan 20 */']]
+    solution: [
+      ['sw1', 'enable'], ['sw1', 'configure terminal'], ['sw1', 'vlan 20'],
+      ['sw1', 'interface p1'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'],
+      ['sw1', 'interface p2'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'],
+      ['sw1', 'end'], ['sw1', 'show vlan brief']
+    ]
   },
 
   { id: 'ccna-static-route',
@@ -83,7 +88,11 @@ const ccnaChapters = [
       ]
     }),
     success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.50.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['r1', 'ip route add 10.0.50.0/24 via 10.1.1.2']]
+    solution: [
+      ['r1', 'enable'], ['r1', 'configure terminal'],
+      ['r1', 'ip route 10.0.50.0 255.255.255.0 10.1.1.2'], ['r1', 'end'],
+      ['r1', 'show ip route']
+    ]
   }
 
 ];
