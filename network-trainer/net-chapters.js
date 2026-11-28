@@ -837,6 +837,48 @@ const chapters = [
     ]
   }
 ,
+
+  { id: 'dhcp-correct-the-default-gateway', chapter: 'Enterprise network services',
+    title: 'The client has a lease but cannot leave the subnet',
+    story: 'The branch DHCP service is responding and new workstations receive valid 10.0.1.0/24 addresses. They can reach local printers, but the internal portal in the server VLAN is unreachable. The router and transit link are healthy. A recent pool change may have handed clients an incorrect default gateway.',
+    objective: 'Identify the incorrect gateway advertised by DHCP, correct the pool to use the router LAN address, renew the client lease, and verify access to the remote portal.',
+    ticket: { id: 'INC-3436', from: 'Branch service desk · network access', priority: 'P2', symptom: 'New laptops receive an address and can reach local devices, but cannot open the internal portal at 10.0.2.20. Existing manually configured devices are unaffected.' },
+    diagnose: { q: 'A client has a valid address in 10.0.1.0/24 and can reach local peers, but its default route points to 10.0.1.254. The router LAN interface is 10.0.1.1. What is the likely fault?', options: ['The DHCP pool advertises the wrong default-router address', 'The portal DNS record is missing', 'The access switch has learned the wrong MAC address'], answer: 0, because: 'A valid lease proves DHCP allocation is working, but the client cannot route off-subnet when its default gateway is not the router interface. Correct the pool option and renew the lease; changing DNS or switching would not fix the missing next hop.' },
+    console: 'r1',
+    hints: ['On h1, inspect ip route and confirm the default route points to 10.0.1.254 rather than the router at 10.0.1.1.', 'On r1, inspect show running-config and locate the BRANCH-USERS DHCP pool. Correct its default-router option to 10.0.1.1.', 'Renew h1 with dhclient eth0, confirm the new default route, then ping portal and verify the client still has a valid 10.0.1.0/24 lease.'],
+    build: () => {
+      const r1 = R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) });
+      r1.dhcp = {
+        name: 'BRANCH-USERS',
+        network: { net: ip('10.0.1.0'), prefix: 24 },
+        defaultRouter: ip('10.0.1.254'),
+        dnsServer: ip('10.0.2.10'),
+        excluded: [{ start: ip('10.0.1.1'), end: ip('10.0.1.20') }],
+        bindings: {}
+      };
+      return { devices: {
+        h1: H('h1'),
+        portal: SRV('portal', '10.0.2.20', 24, '10.0.2.1', { 443: 'https' }),
+        dns: SRV('dns', '10.0.2.10', 24, '10.0.2.1', { 53: 'dns' }),
+        r1,
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      }, links: [
+        L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('portal', 'eth0', 'sw2', 'p1'), L('dns', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')
+      ] };
+    },
+    success: [
+      { type: 'dhcp_lease', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'portal' }
+    ],
+    solution: [
+      ['h1', 'dhclient eth0'], ['h1', 'ip route'],
+      ['r1', 'enable'], ['r1', 'configure terminal'], ['r1', 'ip dhcp pool BRANCH-USERS'],
+      ['r1', 'default-router 10.0.1.1'], ['r1', 'exit'], ['r1', 'end'],
+      ['h1', 'dhclient eth0'], ['h1', 'ip route'], ['h1', 'ping portal']
+    ]
+  },
   { id: 'restore-ospf-branch-connectivity', chapter: 'Enterprise routing',
     title: 'The remote branch has disappeared from the route table',
     story: 'A maintenance window replaced a static-routing design with OSPF. The routers can reach their directly connected neighbors, but the remote branch LAN is missing from the route table. The help desk reports that users at HQ cannot reach the inventory application in the branch.',
