@@ -269,7 +269,7 @@ const recordDiagnosticEvidence = async page => {
     const brief = await page.locator('#brief').innerText();
     if (brief.includes(expectedTitle)) ok('cross-track deep link opens ' + caseKey + ' directly');
     else fail('cross-track deep link did not open ' + caseKey + ': ' + brief.slice(0,180));
-    if (!(await page.locator('#workbenchView').isHidden())) ok('cross-track deep link opens the Workbench for ' + caseKey);
+    if (!(await page.locator('#cols').isHidden())) ok('cross-track deep link opens the Workbench for ' + caseKey);
     else fail('cross-track deep link did not select Workbench for ' + caseKey);
     if (!(await page.evaluate(() => new URLSearchParams(location.search).has('crossTrack')))) ok('cross-track deep link is consumed after launch for ' + caseKey);
     else fail('cross-track deep link remained in the URL for ' + caseKey);
