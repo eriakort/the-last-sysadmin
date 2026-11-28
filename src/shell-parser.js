@@ -6,10 +6,10 @@ function parse(toks) {
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k];
     if (t.t === 'w') { cmd.words.push(t); continue; }
-    if (['>', '>>', '<', '2>', '2>>'].includes(t.v)) {
+    if (['>', '>>', '<', '<<', '2>', '2>>'].includes(t.v)) {
       const nx = toks[k + 1];
       if (!nx || nx.t !== 'w') throw new Error(`syntax error near unexpected token \`${nx ? nx.v : 'newline'}'`);
-      cmd.redir.push({ op: t.v, target: nx.v }); k++; continue;
+      cmd.redir.push(t.v === '<<' ? { op: t.v, target: nx.v, quoted: !!nx.quoted } : { op: t.v, target: nx.v }); k++; continue;
     }
     if (t.v === '2>&1') { cmd.redir.push({ op: '2>&1' }); continue; }
     if (t.v === '&') throw new Error('background jobs (&) are not part of this game yet');

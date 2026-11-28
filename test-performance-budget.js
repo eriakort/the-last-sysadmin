@@ -10,7 +10,7 @@ assert.equal(isWithinBudget(101, 100), false, 'a size above the limit should fai
 assert.deepEqual(
   targets.map(({ file, gzipBudget, brotliBudget }) => ({ file, gzipBudget, brotliBudget })),
   [
-    { file: 'index.html', gzipBudget: 240 * 1024, brotliBudget: 200 * 1024 },
+    { file: 'index.html', gzipBudget: 242 * 1024, brotliBudget: 200 * 1024 },
     { file: 'network-trainer/index.html', gzipBudget: 224 * 1024, brotliBudget: 182 * 1024 }
   ],
   'both generated pages should retain explicit compressed-transfer budgets'

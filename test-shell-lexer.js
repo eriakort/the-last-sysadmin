@@ -25,6 +25,7 @@ assert.deepEqual(kinds('a ; b'), ['w:a', 'op:;', 'w:b'], 'sequence');
 assert.deepEqual(tok('echo > out').filter(t => t.t === 'op').map(t => t.v), ['>'], 'truncate redirect');
 assert.deepEqual(tok('echo >> out').filter(t => t.t === 'op').map(t => t.v), ['>>'], 'append redirect');
 assert.deepEqual(tok('cat < in').filter(t => t.t === 'op').map(t => t.v), ['<'], 'input redirect');
+assert.deepEqual(tok('cat <<EOF').filter(t => t.t === 'op').map(t => t.v), ['<<'], 'heredoc redirect');
 assert.deepEqual(tok('x 2> err').filter(t => t.t === 'op').map(t => t.v), ['2>'], 'stderr redirect');
 assert.deepEqual(tok('x 2>> err').filter(t => t.t === 'op').map(t => t.v), ['2>>'], 'stderr append');
 assert.deepEqual(tok('x 2>&1').filter(t => t.t === 'op').map(t => t.v), ['2>&1'], 'stderr to stdout');

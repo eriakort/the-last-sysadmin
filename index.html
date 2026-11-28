@@ -659,7 +659,17 @@ body.practicing{padding-top:40px}
   #btnNew{width:100%}
 }
 @media(max-width:380px){.stats{grid-template-columns:1fr 1fr}}
-</style>
+
+.nano-overlay{position:fixed;inset:0;z-index:2400;display:grid;place-items:center;padding:18px;background:#05080ddd}
+.nano-panel{display:flex;flex-direction:column;gap:10px;width:min(900px,96vw);height:min(720px,90vh);padding:14px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:0 24px 80px #000b}
+.nano-header,.nano-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.nano-header strong{font:600 14px var(--f-mono);color:var(--amber);overflow-wrap:anywhere}
+.nano-header span,.nano-status{font-size:11px;color:var(--muted)}
+.nano-editor{box-sizing:border-box;flex:1;min-height:0;width:100%;resize:none;padding:12px;border:1px solid var(--line);border-radius:6px;background:var(--term);color:var(--term-ink);font:13px/1.6 var(--f-mono);tab-size:2}
+.nano-editor:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.nano-status{margin:0;min-height:18px}.nano-status[data-state="error"]{color:var(--red)}.nano-status[data-state="saved"]{color:var(--green)}
+.nano-actions{justify-content:flex-end}
+#tin{box-sizing:border-box;display:block;flex:1;min-width:0;min-height:1.55em;max-height:8em;resize:vertical;overflow:auto;background:transparent;border:0;outline:0;color:var(--term-ink);font:inherit;line-height:1.55;padding:0}</style>
 </head>
 <body>
 <div id="authGate" hidden role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
@@ -855,7 +865,7 @@ body.practicing{padding-top:40px}
             <p id="commandCoachDrillProgress">Session practice: 0/7 completed</p>
           </div>
         </section>
-        <div class="tline"><label for="tin" id="tprompt"></label><input id="tin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></div>
+        <div class="tline"><label for="tin" id="tprompt"></label><textarea id="tin" rows="1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command"></textarea></div>
       </div>
       <div class="keys" aria-label="Terminal keys">
         <button class="key" type="button" data-k="tab">Tab</button>
@@ -1243,10 +1253,10 @@ function parse(toks) {
   for (let k = 0; k < toks.length; k++) {
     const t = toks[k];
     if (t.t === 'w') { cmd.words.push(t); continue; }
-    if (['>', '>>', '<', '2>', '2>>'].includes(t.v)) {
+    if (['>', '>>', '<', '<<', '2>', '2>>'].includes(t.v)) {
       const nx = toks[k + 1];
       if (!nx || nx.t !== 'w') throw new Error(`syntax error near unexpected token \`${nx ? nx.v : 'newline'}'`);
-      cmd.redir.push({ op: t.v, target: nx.v }); k++; continue;
+      cmd.redir.push(t.v === '<<' ? { op: t.v, target: nx.v, quoted: !!nx.quoted } : { op: t.v, target: nx.v }); k++; continue;
     }
     if (t.v === '2>&1') { cmd.redir.push({ op: '2>&1' }); continue; }
     if (t.v === '&') throw new Error('background jobs (&) are not part of this game yet');
@@ -1344,7 +1354,7 @@ function tokenize(line, deps) {
         else { op = '2>'; adv = 1; }
       } else {
         push();
-        if (two === '||' || two === '&&' || two === '>>') { op = two; adv = 2; }
+        if (two === '||' || two === '&&' || two === '>>' || two === '<<') { op = two; adv = 2; }
       }
       toks.push({ t: 'op', v: op }); i += adv; continue;
     }
@@ -1766,6 +1776,10 @@ const api = { parseOptions };
 root.LSACommandOptions = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+(function(r){'use strict';function createModel(v,w){let value=String(v==null?'':v),dirty=false;return{get value(){return value},get dirty(){return dirty},setValue(n){value=String(n);dirty=true},save(){const e=w(value);if(e)return e;dirty=false;return null}}}function open(o){const d=r.document;if(!d||!o||typeof o.write!=='function')return false;const m=createModel(o.value,o.write),f=d.activeElement,x=d.createElement('div');x.className='nano-overlay';x.setAttribute('role','dialog');x.setAttribute('aria-modal','true');x.setAttribute('aria-labelledby','nanoTitle');const p=d.createElement('section');p.className='nano-panel';const h=d.createElement('header');h.className='nano-header';const t=d.createElement('strong');t.id='nanoTitle';t.textContent='GNU nano · '+o.path;const help=d.createElement('span');help.textContent='Ctrl+S Save · Esc Exit';h.append(t,help);const a=d.createElement('textarea');a.className='nano-editor';a.setAttribute('aria-label','File contents');a.spellcheck=false;a.value=m.value;const s=d.createElement('p');s.className='nano-status';s.setAttribute('role','status');s.setAttribute('aria-live','polite');s.textContent='Editing '+o.path;const b=d.createElement('footer');b.className='nano-actions';const q=d.createElement('button');q.type='button';q.className='btn';q.textContent='Exit without saving';const z=d.createElement('button');z.type='button';z.className='btn primary';z.textContent='Save';b.append(q,z);p.append(h,a,s,b);x.append(p);d.body.append(x);let closed=false;function close(){if(closed)return;closed=true;d.removeEventListener('keydown',key,true);x.remove();if(o.onClose)o.onClose();if(f&&f.isConnected)f.focus({preventScroll:true})}function save(){m.setValue(a.value);const e=m.save();if(e){s.textContent='Save failed: '+e;s.dataset.state='error';return}s.textContent='Saved '+o.path;s.dataset.state='saved';if(o.onSave)o.onSave()}function key(e){if(e.key==='Escape'){e.preventDefault();close()}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();save()}else if(e.key==='Tab'&&e.target===a){e.preventDefault();a.setRangeText('  ',a.selectionStart,a.selectionEnd,'end')}}z.addEventListener('click',save);q.addEventListener('click',close);d.addEventListener('keydown',key,true);a.focus();return true}const api={createModel,open};r.LSANanoEditor=api;if(typeof module!=='undefined'&&module.exports)module.exports=api})(typeof globalThis!=='undefined'?globalThis:this);
 
 </script>
 <script>
@@ -3849,6 +3863,37 @@ if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
 </script>
 <script>
+(function(root){
+'use strict';
+function parseHeader(line){
+  line=String(line);let quote=null,escaped=false;
+  for(let i=0;i<line.length-1;i++){
+    const ch=line[i];
+    if(escaped){escaped=false;continue;}
+    if(ch==='\\'&&quote!=="'"){escaped=true;continue;}
+    if(quote){if(ch===quote)quote=null;continue;}
+    if(ch==="'"||ch==='"'){quote=ch;continue;}
+    if(ch!=='<'||line[i+1]!=='<')continue;
+    const start=i;i+=2;while(i<line.length&&/\s/.test(line[i]))i++;
+    let delimiter='',quoted=false;
+    if(line[i]==="'"||line[i]==='"'){
+      quoted=true;const q=line[i++],end=line.indexOf(q,i);if(end<0)return null;
+      delimiter=line.slice(i,end);i=end+1;
+    }else{
+      const end=i;while(i<line.length&&!/[\s;|&<>]/.test(line[i]))i++;
+      delimiter=line.slice(end,i);
+    }
+    if(!delimiter)return null;
+    return {command:(line.slice(0,start)+line.slice(i)).trimEnd(),delimiter,quoted};
+  }
+  return null;
+}
+const api={parseHeader};root.LSAHeredocParser=api;
+if(typeof module!=='undefined'&&module.exports)module.exports=api;
+})(typeof globalThis!=='undefined'?globalThis:this);
+
+</script>
+<script>
 (() => {
 'use strict';
 try { const _th = localStorage.getItem('lsa-theme'); if (_th) document.documentElement.setAttribute('data-theme', _th); } catch (e) {}
@@ -4350,7 +4395,7 @@ function expandWords(words) {
 }
 
 let clearRequested = false;
-function runLine(line) {
+function runLine(line, heredocInput) {
   clearMistakeCoach();
   let seq;
   try { seq = parse(tokenize(line)); } catch (e) { emit('bash: ' + e.message + '\n', 'err'); S.lastStatus = 2; return; }
@@ -4359,18 +4404,18 @@ function runLine(line) {
     const prevOp = k > 0 ? seq[k - 1].op : null;
     if (prevOp === '&&' && status !== 0) continue;
     if (prevOp === '||' && status === 0) continue;
-    status = runPipeline(seq[k].pipe);
+    status = runPipeline(seq[k].pipe, k === 0 ? heredocInput : null);
     S.lastStatus = status;
   }
   S.lastStatus = status;
 }
-function runPipeline(cmds) {
+function runPipeline(cmds, heredocInput) {
   let input = null, status = 0;
   for (let j = 0; j < cmds.length; j++) {
     const c = cmds[j], last = j === cmds.length - 1;
     const argv = expandWords(c.words);
     let out = '', errs = '';
-    const ctx = { stdin: j > 0 ? input : null, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
+    const ctx = { stdin: j > 0 ? input : heredocInput, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
     let rOut = null, rErr = null, errToOut = false, bad = false;
     for (const r0 of c.redir) {
       const r = r0.target === undefined ? r0 : { ...r0, target: expandVars(r0.target) };
@@ -4837,6 +4882,26 @@ CMDS.tree = (a, ctx) => {
   };
   if (canRead(L.node)) rec(L.node, '');
   ctx.out(lines.join('\n') + `\n\n${nd} director${nd === 1 ? 'y' : 'ies'}${f.d ? '' : `, ${nf} file${nf === 1 ? '' : 's'}`}\n`);
+};
+
+CMDS.nano = (a, ctx) => {
+  const path = a.find(x => !x.startsWith('-'));
+  if (!path) { ctx.err('nano: usage: nano FILE\n'); return 2; }
+  const abs = norm(path, S.cwd), current = lookup(abs);
+  if (!current.err && current.node.type !== 'file') { ctx.err('nano: ' + path + ': Is a directory\n'); return 1; }
+  if (!current.err && !canRead(current.node)) { ctx.err('nano: ' + path + ': Permission denied\n'); return 1; }
+  if (current.err && current.err !== 'No such file or directory') { ctx.err('nano: ' + path + ': ' + current.err + '\n'); return 1; }
+  const parent = lookup(parentOf(abs));
+  if (parent.err || parent.node.type !== 'dir') { ctx.err('nano: ' + path + ': ' + (parent.err || 'Not a directory') + '\n'); return 1; }
+  if (!globalThis.LSANanoEditor) { ctx.err('nano: editor is unavailable\n'); return 1; }
+  const opened = globalThis.LSANanoEditor.open({
+    path: abs,
+    value: current.node ? current.node.content : '',
+    write: value => writeFile(abs, value, false),
+    onSave: () => { save(); emit('[ Saved ' + abs + ' ]\n', 'sys'); }
+  });
+  if (!opened) { ctx.err('nano: unable to open editor\n'); return 1; }
+  return 0;
 };
 
 CMDS.cat = (a, ctx) => {
@@ -6464,6 +6529,7 @@ const MAN = {
   cd: ['change the working directory', 'cd [DIR]', [['(no DIR)', 'go to your home directory'], ['~', 'your home directory'], ['..', 'the parent directory'], ['-', 'the previous directory']], ['cd /srv/halcyon', 'cd ..', 'cd -']],
   tree: ['list a directory as a tree', 'tree [-a] [-d] [DIR]', [['-a', 'include hidden files'], ['-d', 'list directories only']], ['tree ~', 'tree -d /srv']],
   cat: ['concatenate files and print them', 'cat [OPTION]... [FILE]...', [['-n', 'number every output line']], ['cat notes.txt', 'cat a.txt b.txt > both.txt']],
+  nano: ['edit a file in the simulated text editor', 'nano FILE', [], ['nano ~/notes.txt', 'nano /etc/ssh/sshd_config'], 'Save with Ctrl+S. Permissions are enforced when saving; Esc exits without saving'],
   less: ['view a file', 'less FILE', [], ['less /var/log/halcyon/app.log'], 'On a real system less shows one screen at a time (q quits, / searches). In this game it prints the whole file.'],
   more: ['view a file', 'more FILE', [], ['more README'], 'In this game, more prints the whole file.'],
   head: ['print the first lines of files', 'head [-n N] [FILE]...', [['-n N', 'print the first N lines (default 10)'], ['-N', 'same as -n N']], ['head -n 5 app.log', 'head -3 access.log']],
@@ -6874,11 +6940,11 @@ function updatePrompt() { tprompt.innerHTML = promptHTML(); }
 function scrollEnd() { tbody.scrollTop = tbody.scrollHeight; }
 
 let pendingComplete = false;
-function submitLine(line) {
+function submitLine(line, heredocInput) {
   echoCmd(line);
   if (line.trim()) { S.history.push(line); if (S.history.length > 300) S.history.shift(); }
   pendingComplete = false;
-  try { runLine(line); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
+  try { runLine(line, heredocInput); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
   if (clearRequested) { tout.innerHTML = ''; clearRequested = false; }
   afterCommand();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
@@ -7200,13 +7266,45 @@ if (coachUse) coachUse.addEventListener('click', () => {
 });
 const coachDrillStart = $('#commandCoachDrillStart');
 if (coachDrillStart) coachDrillStart.addEventListener('click', () => startSkillDrill($('#commandCoachSummary').dataset.command));
+let pendingHeredoc = null;
 tin.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); histMove(-1); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); histMove(1); }
-  else if (e.key === 'Tab') { e.preventDefault(); complete(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const value = tin.value;
+    tin.value = '';
+    hIdx = null;
+    if (pendingHeredoc) {
+      if (value === pendingHeredoc.delimiter) {
+        const capture = pendingHeredoc;
+        pendingHeredoc = null;
+        emit('> ' + value + '\n');
+        let body = capture.lines.length ? capture.lines.join('\n') + '\n' : '';
+        if (!capture.quoted) body = body.replace(/\$(?:\{([A-Za-z_]\w*|[?#])\}|([A-Za-z_]\w*|[?#]))/g, (_, braced, bare) => String(varVal(braced || bare)));
+        submitLine(capture.command, body);
+      } else {
+        pendingHeredoc.lines.push(value);
+        emit('> ' + value + '\n> ');
+      }
+      return;
+    }
+    const request = globalThis.LSAHeredocParser && globalThis.LSAHeredocParser.parseHeader(value);
+    if (request) {
+      pendingHeredoc = { ...request, lines: [] };
+      emit('> ');
+      return;
+    }
+    submitLine(value);
+  }
+  else if (e.key === 'ArrowUp' && !pendingHeredoc) { e.preventDefault(); histMove(-1); }
+  else if (e.key === 'ArrowDown' && !pendingHeredoc) { e.preventDefault(); histMove(1); }
+  else if (e.key === 'Tab' && !pendingHeredoc) { e.preventDefault(); complete(); }
   else if (e.ctrlKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); tout.innerHTML = ''; }
-  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) { e.preventDefault(); echoCmd(tin.value + '^C'); tin.value = ''; hIdx = null; scrollEnd(); }
+  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) {
+    e.preventDefault();
+    if (pendingHeredoc) { emit('^C\n', 'err'); pendingHeredoc = null; }
+    else echoCmd(tin.value + '^C');
+    tin.value = ''; hIdx = null; scrollEnd();
+  }
 });
 tbody.addEventListener('mouseup', () => { if (!String(window.getSelection()).length) tin.focus({ preventScroll: true }); });
 document.querySelectorAll('.key').forEach(b => b.addEventListener('click', () => {

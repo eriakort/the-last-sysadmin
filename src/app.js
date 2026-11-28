@@ -499,7 +499,7 @@ function expandWords(words) {
 }
 
 let clearRequested = false;
-function runLine(line) {
+function runLine(line, heredocInput) {
   clearMistakeCoach();
   let seq;
   try { seq = parse(tokenize(line)); } catch (e) { emit('bash: ' + e.message + '\n', 'err'); S.lastStatus = 2; return; }
@@ -508,18 +508,18 @@ function runLine(line) {
     const prevOp = k > 0 ? seq[k - 1].op : null;
     if (prevOp === '&&' && status !== 0) continue;
     if (prevOp === '||' && status === 0) continue;
-    status = runPipeline(seq[k].pipe);
+    status = runPipeline(seq[k].pipe, k === 0 ? heredocInput : null);
     S.lastStatus = status;
   }
   S.lastStatus = status;
 }
-function runPipeline(cmds) {
+function runPipeline(cmds, heredocInput) {
   let input = null, status = 0;
   for (let j = 0; j < cmds.length; j++) {
     const c = cmds[j], last = j === cmds.length - 1;
     const argv = expandWords(c.words);
     let out = '', errs = '';
-    const ctx = { stdin: j > 0 ? input : null, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
+    const ctx = { stdin: j > 0 ? input : heredocInput, out: s => { out += s; }, err: s => { errs += s; }, tty: false };
     let rOut = null, rErr = null, errToOut = false, bad = false;
     for (const r0 of c.redir) {
       const r = r0.target === undefined ? r0 : { ...r0, target: expandVars(r0.target) };
@@ -986,6 +986,26 @@ CMDS.tree = (a, ctx) => {
   };
   if (canRead(L.node)) rec(L.node, '');
   ctx.out(lines.join('\n') + `\n\n${nd} director${nd === 1 ? 'y' : 'ies'}${f.d ? '' : `, ${nf} file${nf === 1 ? '' : 's'}`}\n`);
+};
+
+CMDS.nano = (a, ctx) => {
+  const path = a.find(x => !x.startsWith('-'));
+  if (!path) { ctx.err('nano: usage: nano FILE\n'); return 2; }
+  const abs = norm(path, S.cwd), current = lookup(abs);
+  if (!current.err && current.node.type !== 'file') { ctx.err('nano: ' + path + ': Is a directory\n'); return 1; }
+  if (!current.err && !canRead(current.node)) { ctx.err('nano: ' + path + ': Permission denied\n'); return 1; }
+  if (current.err && current.err !== 'No such file or directory') { ctx.err('nano: ' + path + ': ' + current.err + '\n'); return 1; }
+  const parent = lookup(parentOf(abs));
+  if (parent.err || parent.node.type !== 'dir') { ctx.err('nano: ' + path + ': ' + (parent.err || 'Not a directory') + '\n'); return 1; }
+  if (!globalThis.LSANanoEditor) { ctx.err('nano: editor is unavailable\n'); return 1; }
+  const opened = globalThis.LSANanoEditor.open({
+    path: abs,
+    value: current.node ? current.node.content : '',
+    write: value => writeFile(abs, value, false),
+    onSave: () => { save(); emit('[ Saved ' + abs + ' ]\n', 'sys'); }
+  });
+  if (!opened) { ctx.err('nano: unable to open editor\n'); return 1; }
+  return 0;
 };
 
 CMDS.cat = (a, ctx) => {
@@ -2613,6 +2633,7 @@ const MAN = {
   cd: ['change the working directory', 'cd [DIR]', [['(no DIR)', 'go to your home directory'], ['~', 'your home directory'], ['..', 'the parent directory'], ['-', 'the previous directory']], ['cd /srv/halcyon', 'cd ..', 'cd -']],
   tree: ['list a directory as a tree', 'tree [-a] [-d] [DIR]', [['-a', 'include hidden files'], ['-d', 'list directories only']], ['tree ~', 'tree -d /srv']],
   cat: ['concatenate files and print them', 'cat [OPTION]... [FILE]...', [['-n', 'number every output line']], ['cat notes.txt', 'cat a.txt b.txt > both.txt']],
+  nano: ['edit a file in the simulated text editor', 'nano FILE', [], ['nano ~/notes.txt', 'nano /etc/ssh/sshd_config'], 'Save with Ctrl+S. Permissions are enforced when saving; Esc exits without saving'],
   less: ['view a file', 'less FILE', [], ['less /var/log/halcyon/app.log'], 'On a real system less shows one screen at a time (q quits, / searches). In this game it prints the whole file.'],
   more: ['view a file', 'more FILE', [], ['more README'], 'In this game, more prints the whole file.'],
   head: ['print the first lines of files', 'head [-n N] [FILE]...', [['-n N', 'print the first N lines (default 10)'], ['-N', 'same as -n N']], ['head -n 5 app.log', 'head -3 access.log']],
@@ -3023,11 +3044,11 @@ function updatePrompt() { tprompt.innerHTML = promptHTML(); }
 function scrollEnd() { tbody.scrollTop = tbody.scrollHeight; }
 
 let pendingComplete = false;
-function submitLine(line) {
+function submitLine(line, heredocInput) {
   echoCmd(line);
   if (line.trim()) { S.history.push(line); if (S.history.length > 300) S.history.shift(); }
   pendingComplete = false;
-  try { runLine(line); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
+  try { runLine(line, heredocInput); } catch (e) { emit('bash: internal error: ' + e.message, 'err'); }
   if (clearRequested) { tout.innerHTML = ''; clearRequested = false; }
   afterCommand();
   updatePrompt(); render(); renderCommandSkills(); save(); scrollEnd();
@@ -3349,13 +3370,45 @@ if (coachUse) coachUse.addEventListener('click', () => {
 });
 const coachDrillStart = $('#commandCoachDrillStart');
 if (coachDrillStart) coachDrillStart.addEventListener('click', () => startSkillDrill($('#commandCoachSummary').dataset.command));
+let pendingHeredoc = null;
 tin.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); const v = tin.value; tin.value = ''; hIdx = null; submitLine(v); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); histMove(-1); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); histMove(1); }
-  else if (e.key === 'Tab') { e.preventDefault(); complete(); }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const value = tin.value;
+    tin.value = '';
+    hIdx = null;
+    if (pendingHeredoc) {
+      if (value === pendingHeredoc.delimiter) {
+        const capture = pendingHeredoc;
+        pendingHeredoc = null;
+        emit('> ' + value + '\n');
+        let body = capture.lines.length ? capture.lines.join('\n') + '\n' : '';
+        if (!capture.quoted) body = body.replace(/\$(?:\{([A-Za-z_]\w*|[?#])\}|([A-Za-z_]\w*|[?#]))/g, (_, braced, bare) => String(varVal(braced || bare)));
+        submitLine(capture.command, body);
+      } else {
+        pendingHeredoc.lines.push(value);
+        emit('> ' + value + '\n> ');
+      }
+      return;
+    }
+    const request = globalThis.LSAHeredocParser && globalThis.LSAHeredocParser.parseHeader(value);
+    if (request) {
+      pendingHeredoc = { ...request, lines: [] };
+      emit('> ');
+      return;
+    }
+    submitLine(value);
+  }
+  else if (e.key === 'ArrowUp' && !pendingHeredoc) { e.preventDefault(); histMove(-1); }
+  else if (e.key === 'ArrowDown' && !pendingHeredoc) { e.preventDefault(); histMove(1); }
+  else if (e.key === 'Tab' && !pendingHeredoc) { e.preventDefault(); complete(); }
   else if (e.ctrlKey && (e.key === 'l' || e.key === 'L')) { e.preventDefault(); tout.innerHTML = ''; }
-  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) { e.preventDefault(); echoCmd(tin.value + '^C'); tin.value = ''; hIdx = null; scrollEnd(); }
+  else if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && tin.selectionStart === tin.selectionEnd) {
+    e.preventDefault();
+    if (pendingHeredoc) { emit('^C\n', 'err'); pendingHeredoc = null; }
+    else echoCmd(tin.value + '^C');
+    tin.value = ''; hIdx = null; scrollEnd();
+  }
 });
 tbody.addEventListener('mouseup', () => { if (!String(window.getSelection()).length) tin.focus({ preventScroll: true }); });
 document.querySelectorAll('.key').forEach(b => b.addEventListener('click', () => {

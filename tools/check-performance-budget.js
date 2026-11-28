@@ -9,7 +9,9 @@ const targets = [
   {
     label: 'Linux platform',
     file: 'index.html',
-    gzipBudget: 240 * 1024,
+    // Allow a small, bounded gzip increase for the nano editor and heredoc
+    // support in this PR. Brotli remains at 200 KiB as the tighter size guard.
+    gzipBudget: 242 * 1024,
     brotliBudget: 200 * 1024
   },
   {
