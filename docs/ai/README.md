@@ -15,10 +15,10 @@ From the repo root (Supabase CLI linked to the project):
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/m14-ai-assist-rate-limits.sql
 supabase functions deploy ai-assist --no-verify-jwt
-supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=grok-3 SUPABASE_SERVICE_ROLE_KEY=... AI_ALLOWED_ORIGINS=https://eriakort.github.io
+supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=grok-3 AI_ALLOWED_ORIGINS=https://eriakort.github.io
 ```
 
-`AI_API_BASE`, `AI_MODEL`, and `AI_SEARCH_ENDPOINT` are optional. `SUPABASE_SERVICE_ROLE_KEY` is required for the private rate-limit RPC and must remain an Edge Function secret; never expose it in the browser or commit it. `AI_ALLOWED_ORIGINS` is a comma-separated origin allow-list. The default allows the GitHub Pages origin and common local development origins. Otherwise DuckDuckGo instant answers are used.
+`AI_API_BASE`, `AI_MODEL`, and `AI_SEARCH_ENDPOINT` are optional. Supabase provides `SUPABASE_SERVICE_ROLE_KEY` to Edge Functions automatically; it is used only server-side for the private rate-limit RPC and must never be exposed in the browser or committed. `AI_ALLOWED_ORIGINS` is a comma-separated origin allow-list. The default allows the GitHub Pages origin and common local development origins. Otherwise DuckDuckGo instant answers are used.
 
 ## Client
 
