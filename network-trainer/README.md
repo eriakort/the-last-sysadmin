@@ -360,6 +360,11 @@ The IOS-style switch profile supports access-port MAC security using `switchport
 
 
 
+
+## DHCP default-gateway incident
+
+Incident **INC-3436 — The client has a lease but cannot leave the subnet** isolates a common DHCP option error. The client receives a valid subnet lease and can communicate locally, but the pool advertises a non-existent default gateway. Learners inspect the client route, correct the router's DHCP pool, renew the lease, and verify access to a remote service. The mission distinguishes address allocation from successful off-subnet routing.
+
 ## Switch access-layer port-security recovery
 
 Incident **INC-2653 — The switch shut the port** practises a common access-layer recovery workflow. A rogue MAC triggers shutdown-mode port security and err-disables an access port. The incident begins after the unauthorised device has been removed and the approved workstation is reconnected. Learners inspect the violation and secure-MAC evidence, recover the interface with no shutdown, and verify endpoint reachability. The mission deliberately checks that recovery preserves the port-security policy and the approved sticky MAC; disabling security is not an accepted fix.
