@@ -6152,6 +6152,13 @@ const { startMission } = require('./net-mission');
 let { chapters, TIERS, missionsInTier } = require('./net-chapters');
 // CCNA selectable track — switch mission set when ?track=ccna
 const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+// Cross-track links from Linux carry a case key so the matching network task opens directly.
+const CROSS_TRACK_MISSION_IDS = Object.freeze({
+  'web-availability': 'cross-track-web-availability-network',
+  'remote-admin': 'cross-track-remote-admin-network',
+  'ssh-hardening': 'cross-track-ssh-hardening-network',
+  'contractor-containment': 'cross-track-contractor-containment-network'
+});
 if (urlParams.get('track') === 'ccna') {
   try {
     const { ccnaChapters } = require('./ccna-chapters');
@@ -9363,8 +9370,22 @@ function boot() {
   document.addEventListener('pointerup', onDragUp);
   document.addEventListener('pointercancel', onDragUp);
   const initialWorkspaceView = workspaceViewFromUrl();
+  const crossTrackKey = new URLSearchParams(window.location.search).get('crossTrack');
+  const crossTrackMissionId = CROSS_TRACK_MISSION_IDS[crossTrackKey];
+  const crossTrackMissionIndex = crossTrackMissionId ? chapters.findIndex(m => m.id === crossTrackMissionId) : -1;
   if (initialWorkspaceView === 'build') enterBuild({historyMode:'replace'});
-  else { reloadMission(0, { historyMode: 'none' }); showWorkspaceView(initialWorkspaceView, { historyMode: 'replace' }); }
+  else if (crossTrackMissionIndex >= 0) {
+    // Consume the deep link after opening the exact linked task so refreshes do not
+    // repeatedly reset the learner's active mission.
+    reloadMission(crossTrackMissionIndex, {historyMode:'none'});
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('crossTrack');
+    cleanUrl.searchParams.set('view', 'workbench');
+    window.history.replaceState({networkWorkspaceView:'workbench'}, '', cleanUrl);
+  } else {
+    reloadMission(0, {historyMode:'none'});
+    showWorkspaceView(initialWorkspaceView, {historyMode:'replace'});
+  }
   syncTerminalToggleButtons();
   if (initialWorkspaceView === 'knowledge' && new URLSearchParams(window.location.search).get('dailyReview') === '1') startNetworkRecall();
   renderOverview();
