@@ -1384,6 +1384,36 @@ const chapters = [
     ],
     solution: [['h1', 'ping web -p tcp --dport 443'], ['h1', 'ping web -p tcp --dport 23'], ['r1', 'show flows']]
   },
+
+  { id: 'switch-port-security-recovery', chapter: 'Switching · Access security', mode: 'diagnose',
+    title: 'The switch shut the port',
+    story: 'A contractor connected an unmanaged device to the Finance access port. The switch detected an unauthorised source MAC and placed p1 into err-disabled state. The contractor device has been removed and the approved Finance workstation is back on the port, but users still cannot reach the file server.',
+    objective: 'Verify the port-security violation, recover the approved access port without removing its security policy, and confirm the workstation can reach the file server.',
+    ticket: { id: 'INC-2653', from: 'Service desk · Finance floor', priority: 'P2', symptom: 'The Finance workstation was disconnected after a contractor plugged in an unmanaged device. The device is gone, but the switch port still shows down and the shared drive is unavailable.' },
+    diagnose: { q: 'The interface is err-disabled and show port-security interface p1 reports one violation. The approved workstation is now connected. What is the safest next action?', options: ['Confirm the unauthorised device is removed, inspect the secure MAC and violation evidence, then recover p1 with no shutdown', 'Disable port security permanently so any device can connect', 'Move the workstation to a different VLAN to bypass the port policy'], answer: 0, because: 'Err-disabled with a recorded port-security violation means the switch shut the port after an unauthorised MAC appeared. Once the offending device is removed and the approved endpoint is verified, an operator can administratively recover the port while retaining the secure-MAC policy.' },
+    console: 'sw1',
+    hints: ['Run show port-security interface p1 and confirm the port is err-disabled with a violation count.', 'The approved workstation is already reconnected and its MAC is the secure sticky address. Do not remove the port-security configuration.', 'Enter configuration mode, select p1, run no shutdown, then test reachability from h1 to srv.'],
+    build: () => {
+      const h1 = H('h1', '10.0.1.10', 24);
+      h1.mac = '02:00:00:00:00:10';
+      const sw1 = SW('sw1', [{ n: 'p1' }, { n: 'p2' }]);
+      sw1.ifaces.p1.portSecurity = { enabled: true, maximum: 1, sticky: true, violation: 'shutdown', secureMacs: [h1.mac], stickyMacs: [h1.mac], violations: 1 };
+      sw1.ifaces.p1.errDisabled = true;
+      return {
+        devices: { h1, srv: SRV('srv', '10.0.1.5', 24, null, { 445: 'smb' }), sw1 },
+        links: [L('h1', 'eth0', 'sw1', 'p1'), L('srv', 'eth0', 'sw1', 'p2')]
+      };
+    },
+    success: [
+      { type: 'reachable', a: 'h1', b: 'srv' },
+      { type: 'mac_entry', dev: 'sw1', device: 'h1', vlan: 1, port: 'p1' }
+    ],
+    solution: [
+      ['sw1', 'show port-security interface p1'],
+      ['sw1', 'enable'], ['sw1', 'configure terminal'], ['sw1', 'interface p1'], ['sw1', 'no shutdown'], ['sw1', 'end'],
+      ['h1', 'ping srv']
+    ]
+  },
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
@@ -1400,7 +1430,7 @@ const chapters = [
 const TIERS = [
   { id: 't1', name: 'Foundations', order: 1,
     blurb: 'Get a host on the network, address it correctly, and understand the switched layer-2 fabric it lives on.',
-    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Observability · logs & metrics', 'Switching · VLANs', 'Switching · STP & MAC learning'],
+    chapters: ['Getting on the network', 'Interfaces', 'Subnetting', 'IPv6 · dual-stack', 'Observability · logs & metrics', 'Switching · VLANs', 'Switching · STP & MAC learning', 'Switching · Access security'],
     capstone: 'break-the-switching-loop' },
   { id: 't2', name: 'Routing', order: 2,
     blurb: 'Move packets between networks: default gateways, static routes, dynamic OSPF, and first-hop redundancy.',
