@@ -5500,6 +5500,31 @@ const chapters = [
     ]
   },
 
+
+  { id: 'dns-wrong-resolver-address', chapter: 'DNS / naming', mode: 'diagnose',
+    title: 'The DNS server is configured, but names still fail',
+    story: 'The intranet at 10.0.2.10 is reachable by IP from h1, but intranet.corp.local does not resolve. The resolver is configured, so the help desk has ruled out an empty DNS setting. A recent workstation image may have left an outdated resolver address behind.',
+    objective: 'Use resolver diagnostics and direct reachability tests to identify the stale DNS server address, configure the correct resolver at 10.0.2.53, and verify that the intranet name resolves.',
+    ticket: { id: 'INC-1159', from: 'Help desk · workstation deployment', priority: 'P2', symptom: 'Several newly imaged workstations can reach the intranet by IP but fail when users enter its hostname. The DNS server itself is healthy.' },
+    diagnose: { q: 'h1 can ping 10.0.2.10, but dig intranet.corp.local reports that it cannot reach DNS server 10.0.2.54. The authoritative DNS server is dns1 at 10.0.2.53. What is the fault?', options: ['The workstation points to a stale, unreachable DNS resolver address', 'The intranet web service is down', 'The router is missing a default route'], answer: 0, because: 'Successful access by IP proves the route and web host are available. The dig error identifies the configured resolver as unreachable; update the workstation to use the live DNS server at 10.0.2.53.' },
+    console: 'h1',
+    hints: ['Run resolvectl status and note the configured resolver address.', 'Test the intranet by IP and query the hostname with dig. The resolver address is not the same as the authoritative server.', 'Set the resolver on eth0 to 10.0.2.53 with resolvectl dns eth0 10.0.2.53, then repeat dig intranet.corp.local.'],
+    build: () => ({
+      devices: {
+        h1: Object.assign(H('h1', '10.0.1.10', 24, '10.0.1.1'), { resolver: ip('10.0.2.54') }),
+        www: SRV('www', '10.0.2.10', 24, '10.0.2.1', { 80: 'http' }),
+        dns1: Object.assign(SRV('dns1', '10.0.2.53', 24, '10.0.2.1', { 53: 'dns' }),
+          { dns: { 'intranet.corp.local': ip('10.0.2.10') } }),
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      },
+      links: [L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'), L('www', 'eth0', 'sw2', 'p1'), L('dns1', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')]
+    }),
+    success: [{ type: 'resolves', dev: 'h1', name: 'intranet.corp.local', ip: '10.0.2.10' }],
+    solution: [['h1', 'resolvectl status'], ['h1', 'ping 10.0.2.10'], ['h1', 'dig intranet.corp.local'], ['h1', 'resolvectl dns eth0 10.0.2.53'], ['h1', 'dig intranet.corp.local']]
+  },
+
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
