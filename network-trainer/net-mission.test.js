@@ -164,6 +164,24 @@ test('port-security recovery mission restores the approved endpoint without weak
   assert(s.done() === true, 'recovered workstation should reach the file server');
 });
 
+
+test('DHCP gateway incident renews a valid lease with the corrected router next hop', () => {
+  const mission = chapters.find(m => m.id === 'dhcp-correct-the-default-gateway');
+  assert(!!mission, 'DHCP gateway incident should be registered');
+  const s = startMission(mission);
+  const first = s.on('h1').run('dhclient eth0');
+  assert(first.code === 0, 'client should receive an initial DHCP lease');
+  assert(s.net.devices.h1.routes.some(r => r.mask === 0 && r.via === require('./net-model').ip('10.0.1.254')), 'initial lease should expose the incorrect gateway');
+  assert(s.done() === false, 'wrong DHCP gateway must leave the incident unresolved');
+  for (const [dev, cmd] of mission.solution.slice(1)) {
+    const result = s.on(dev).run(cmd);
+    assert(result.code === 0, 'reference recovery command failed: ' + cmd + ' -> ' + result.out);
+  }
+  const route = s.net.devices.h1.routes.find(r => r.mask === 0);
+  assert(route && route.via === require('./net-model').ip('10.0.1.1'), 'renewed lease should install the correct router gateway');
+  assert(s.done() === true, 'client should reach the remote portal after renewal');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
