@@ -5676,7 +5676,12 @@ const ccnaChapters = [
       links: [L('h1', 'eth0', 'sw1', 'p1'), L('h2', 'eth0', 'sw1', 'p2')]
     }),
     success: [{ type: 'reachable', a: 'h1', b: 'h2' }],
-    solution: [['sw1', '/* set p1 and p2 to vlan 20 */']]
+    solution: [
+      ['sw1', 'enable'], ['sw1', 'configure terminal'], ['sw1', 'vlan 20'],
+      ['sw1', 'interface p1'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'],
+      ['sw1', 'interface p2'], ['sw1', 'switchport mode access'], ['sw1', 'switchport access vlan 20'],
+      ['sw1', 'end'], ['sw1', 'show vlan brief']
+    ]
   },
 
   { id: 'ccna-static-route',
@@ -5706,7 +5711,11 @@ const ccnaChapters = [
       ]
     }),
     success: [{ type: 'route_exists', dev: 'r1', cidr: '10.0.50.0/24' }, { type: 'reachable', a: 'h1', b: 'srv' }],
-    solution: [['r1', 'ip route add 10.0.50.0/24 via 10.1.1.2']]
+    solution: [
+      ['r1', 'enable'], ['r1', 'configure terminal'],
+      ['r1', 'ip route 10.0.50.0 255.255.255.0 10.1.1.2'], ['r1', 'end'],
+      ['r1', 'show ip route']
+    ]
   }
 
 ];
@@ -6322,8 +6331,14 @@ const M = require('./net-model');
 const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
 let { chapters, TIERS, missionsInTier } = require('./net-chapters');
-// CCNA selectable track — switch mission set when ?track=ccna
+// Network learning tracks are registered here; adding a track should only require
+// metadata + its curriculum module, not another application-level navigation tab.
+const NETWORK_TRACKS = Object.freeze([
+  { id: 'network', label: 'Network Sysadmin', description: 'General network operations and incident practice' },
+  { id: 'ccna', label: 'CCNA 200-301', description: 'Cisco-oriented CCNA exam preparation' }
+]);
 const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+const ACTIVE_TRACK_ID = NETWORK_TRACKS.some(track => track.id === urlParams.get('track')) ? urlParams.get('track') : 'network';
 // Cross-track links from Linux carry a case key so the matching network task opens directly.
 const CROSS_TRACK_MISSION_IDS = Object.freeze({
   'web-availability': 'cross-track-web-availability-network',
@@ -6331,7 +6346,7 @@ const CROSS_TRACK_MISSION_IDS = Object.freeze({
   'ssh-hardening': 'cross-track-ssh-hardening-network',
   'contractor-containment': 'cross-track-contractor-containment-network'
 });
-if (urlParams.get('track') === 'ccna') {
+if (ACTIVE_TRACK_ID === 'ccna') {
   try {
     const { ccnaChapters } = require('./ccna-chapters');
     chapters = ccnaChapters;
@@ -9449,7 +9464,6 @@ function boot() {
         <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
         <nav class="apptabs" aria-label="Application navigation">
           <a class="apptab" href="../" title="Return to Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
-          <a class="apptab" href="?track=ccna" title="CCNA 200-301 exam practice track">CCNA Prep</a>
           <a class="apptab on" href="#" aria-current="page" title="Current Network Sysadmin workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
         </nav>
       </div>
@@ -9465,6 +9479,12 @@ function boot() {
     <div id="shell">
       <aside id="navRail" aria-label="Network workspace navigation">
         <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
+        <div class="nav-section">Learning track</div>
+        <label for="networkTrackSelect">Currently working on</label>
+        <select id="networkTrackSelect" aria-label="Select learning track">
+          <option value="network">Network Sysadmin</option>
+          <option value="ccna">CCNA 200-301</option>
+        </select>
         <div class="nav-section">Workspace</div>
         <button class="nav-item" id="navOverview" title="Overview of the current lab and recent activity" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
         <button class="nav-item" id="navIncidents" title="Review and work incident tickets" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
@@ -9513,6 +9533,16 @@ function boot() {
     if (view==='build') { enterBuild({historyMode:'none'}); return; }
     if (view==='workbench' && MODE==='build') { reloadMission(0,{historyMode:'none'}); return; }
     showWorkspaceView(view,{historyMode:'none'});
+  });
+  const trackSelect = $('#networkTrackSelect');
+  trackSelect.value = ACTIVE_TRACK_ID;
+  trackSelect.addEventListener('change', e => {
+    const nextTrack = NETWORK_TRACKS.find(track => track.id === e.target.value);
+    if (!nextTrack || nextTrack.id === ACTIVE_TRACK_ID) return;
+    const nextUrl = new URL(window.location.href);
+    if (nextTrack.id === 'network') nextUrl.searchParams.delete('track');
+    else nextUrl.searchParams.set('track', nextTrack.id);
+    window.location.assign(nextUrl.toString());
   });
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => { if (MODE==='build') reloadMission(0); else showWorkspaceView('workbench'); });

@@ -4,12 +4,13 @@
 // mission is provably solvable, and provably not already solved.
 const { startMission } = require('./net-mission');
 const { chapters } = require('./net-chapters');
+const { ccnaChapters } = require('./ccna-chapters');
 
 let passed = 0; const tests = [];
 const test = (n, f) => tests.push([n, f]);
 const assert = (c, m) => { if (!c) throw new Error(m); };
 
-for (const m of chapters) {
+for (const m of [...chapters, ...ccnaChapters]) {
   test(`[${m.id}] starts unsolved, solution resolves it`, () => {
     const s = startMission(m);
     assert(s.done() === false, `mission "${m.id}" is already solved before any action:\n${s.status()}`);
