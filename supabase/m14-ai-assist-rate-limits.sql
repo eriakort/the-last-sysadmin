@@ -12,6 +12,7 @@ create table if not exists public.ai_assist_rate_limits (
 );
 
 alter table public.ai_assist_rate_limits enable row level security;
+create index if not exists ai_assist_rate_limits_window on public.ai_assist_rate_limits (window_start);
 revoke all on public.ai_assist_rate_limits from public, anon, authenticated;
 grant all on public.ai_assist_rate_limits to service_role;
 
