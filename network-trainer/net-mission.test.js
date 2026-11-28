@@ -225,6 +225,27 @@ test('stale DNS resolver incident restores name resolution without changing rout
 });
 
 
+
+test('stale NTP peer incident restores synchronization without changing routes', () => {
+  const mission = chapters.find(m => m.id === 'ntp-stale-peer-recovery');
+  assert(!!mission, 'stale NTP peer incident should be registered');
+  const s = startMission(mission);
+  const model = require('./net-model');
+  const initial = model.ntpStatus(s.net, 'r1');
+  assert(initial.synchronized === false, 'router clock should begin unsynchronized');
+  assert(initial.associations.length === 1 && initial.associations[0].reachable === false, 'configured stale peer should be unreachable');
+  assert(s.done() === false, 'unreachable NTP peer must leave the incident unresolved');
+  const routesBefore = JSON.stringify(s.net.devices.r1.routes);
+  for (const [dev, cmd] of mission.solution) {
+    const result = s.on(dev).run(cmd);
+    assert(result.code === 0, 'reference NTP recovery command failed: ' + cmd + ' -> ' + result.out);
+  }
+  const status = model.ntpStatus(s.net, 'r1');
+  assert(status.synchronized && status.source === '10.0.2.53', 'router should synchronize to the approved time source');
+  assert(JSON.stringify(s.net.devices.r1.routes) === routesBefore, 'NTP repair must not change routing');
+  assert(s.done() === true, 'time synchronization should resolve the incident');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
