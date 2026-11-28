@@ -6,8 +6,14 @@ const M = require('./net-model');
 const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
 let { chapters, TIERS, missionsInTier } = require('./net-chapters');
-// CCNA selectable track — switch mission set when ?track=ccna
+// Network learning tracks are registered here; adding a track should only require
+// metadata + its curriculum module, not another application-level navigation tab.
+const NETWORK_TRACKS = Object.freeze([
+  { id: 'network', label: 'Network Sysadmin', description: 'General network operations and incident practice' },
+  { id: 'ccna', label: 'CCNA 200-301', description: 'Cisco-oriented CCNA exam preparation' }
+]);
 const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+const ACTIVE_TRACK_ID = NETWORK_TRACKS.some(track => track.id === urlParams.get('track')) ? urlParams.get('track') : 'network';
 // Cross-track links from Linux carry a case key so the matching network task opens directly.
 const CROSS_TRACK_MISSION_IDS = Object.freeze({
   'web-availability': 'cross-track-web-availability-network',
@@ -15,7 +21,7 @@ const CROSS_TRACK_MISSION_IDS = Object.freeze({
   'ssh-hardening': 'cross-track-ssh-hardening-network',
   'contractor-containment': 'cross-track-contractor-containment-network'
 });
-if (urlParams.get('track') === 'ccna') {
+if (ACTIVE_TRACK_ID === 'ccna') {
   try {
     const { ccnaChapters } = require('./ccna-chapters');
     chapters = ccnaChapters;
@@ -3148,8 +3154,12 @@ function boot() {
     <div id="shell">
       <aside id="navRail" aria-label="Network workspace navigation">
         <div class="nav-brand"><span class="nav-brand-mark" aria-hidden="true">N</span><div><strong>NETWORK OPS</strong><small>Engineering workstation</small></div></div>
-        <div class="nav-section">Learning tracks</div>
-        <a class="nav-item" href="?track=ccna" title="CCNA 200-301 exam practice track"><span class="nav-glyph">◎</span>CCNA Practice Track</a>
+        <div class="nav-section">Learning track</div>
+        <label for="networkTrackSelect">Currently working on</label>
+        <select id="networkTrackSelect" aria-label="Select learning track">
+          <option value="network">Network Sysadmin</option>
+          <option value="ccna">CCNA 200-301</option>
+        </select>
         <div class="nav-section">Workspace</div>
         <button class="nav-item" id="navOverview" title="Overview of the current lab and recent activity" data-view="overview" type="button" aria-current="page"><span class="nav-glyph">▦</span>Overview</button>
         <button class="nav-item" id="navIncidents" title="Review and work incident tickets" data-view="incidents" type="button"><span class="nav-glyph">◈</span>Incidents</button>
@@ -3198,6 +3208,16 @@ function boot() {
     if (view==='build') { enterBuild({historyMode:'none'}); return; }
     if (view==='workbench' && MODE==='build') { reloadMission(0,{historyMode:'none'}); return; }
     showWorkspaceView(view,{historyMode:'none'});
+  });
+  const trackSelect = $('#networkTrackSelect');
+  trackSelect.value = ACTIVE_TRACK_ID;
+  trackSelect.addEventListener('change', e => {
+    const nextTrack = NETWORK_TRACKS.find(track => track.id === e.target.value);
+    if (!nextTrack || nextTrack.id === ACTIVE_TRACK_ID) return;
+    const nextUrl = new URL(window.location.href);
+    if (nextTrack.id === 'network') nextUrl.searchParams.delete('track');
+    else nextUrl.searchParams.set('track', nextTrack.id);
+    window.location.assign(nextUrl.toString());
   });
   $('#navOverview').addEventListener('click', () => showWorkspaceView('overview'));
   $('#navWorkbench').addEventListener('click', () => { if (MODE==='build') reloadMission(0); else showWorkspaceView('workbench'); });
