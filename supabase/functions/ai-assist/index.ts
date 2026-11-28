@@ -80,6 +80,9 @@ serve(async (req) => {
   } catch {
     return json({ error: "invalid request body" }, 400, origin);
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ error: "invalid request body" }, 400, origin);
+  }
 
   if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > 12) {
     return json({ error: "send between 1 and 12 recent messages" }, 400, origin);
