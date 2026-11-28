@@ -5886,6 +5886,18 @@ async function openClassroom() {
     <div class="race-err" id="cxErr" hidden></div>
     ${tabs.map((t,i) => `<div id="cxt-${t.id}" ${i? 'hidden':''}>${t.html}</div>`).join('')}
     <div class="race-row" style="margin-top:16px"><button class="btn" id="cxBack" type="button">Back</button></div>`);
+  function openPrintDocument(html) {
+    const w = window.open('', '_blank');
+    if (!w) return false;
+    // The print document contains only fixed markup and HTML-escaped data.
+    // Sever the opener relationship before writing any document content.
+    w.opener = null;
+    w.addEventListener('load', () => { w.focus(); w.print(); }, { once: true });
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    return true;
+  }
   document.querySelectorAll('[data-cert]').forEach(btn => btn.addEventListener('click', () => {
     const name = authUser.name || authUser.email || 'Student';
     const title = btn.dataset.cert;
@@ -5898,11 +5910,10 @@ async function openClassroom() {
       .name{font-size:28px;margin:24px 0;border-bottom:1px solid #ccc;display:inline-block;padding:0 24px 4px}
       .meta{margin-top:24px;color:#444}</style></head><body>
       <div class="box"><div class="sub">The Last Sysadmin</div><h1>Certificate</h1>
-      <p>This certifies that</p><div class="name">${name}</div>
-      <p>has completed</p><p><b>${title}</b></p>
-      <p class="meta">${cls}<br>${new Date().toLocaleDateString()}</p></div>
-      <script>window.print()<\/script></body></html>`;
-    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+      <p>This certifies that</p><div class="name">${esc(name)}</div>
+      <p>has completed</p><p><b>${esc(title)}</b></p>
+      <p class="meta">${esc(cls)}<br>${new Date().toLocaleDateString()}</p></div></body></html>`;
+    openPrintDocument(html);
   }));
   // Play custom (authored) class missions in the isolated practice sandbox
   document.querySelectorAll('[data-playclass]').forEach(btn => btn.addEventListener('click', () => {
@@ -5933,9 +5944,9 @@ async function openClassroom() {
     const ids = new Set([...document.querySelectorAll('#qbList input:checked')].map(i => i.dataset.qid));
     const items = qbData.filter(x => ids.has(x.id));
     if (!items.length) return;
-    const body = items.map((x,i) => `<div style="margin:0 0 16px"><b>${i+1}. ${x.question}</b><div style="color:#555;font-size:13px">${x.category} · ${x.difficulty}</div>${withAns ? '<div style="margin-top:4px"><i>Answer:</i> '+x.answer+'</div>' : ''}</div>`).join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Question bank</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#111} h1{font-size:22px}</style></head><body><h1>Linux Admin Questions</h1>${body}<script>window.print()<\/script></body></html>`;
-    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+    const body = items.map((x,i) => `<div style="margin:0 0 16px"><b>${i+1}. ${esc(x.question)}</b><div style="color:#555;font-size:13px">${esc(x.category)} · ${esc(x.difficulty)}</div>${withAns ? '<div style="margin-top:4px"><i>Answer:</i> '+esc(x.answer)+'</div>' : ''}</div>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Question bank</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#111} h1{font-size:22px}</style></head><body><h1>Linux Admin Questions</h1>${body}</body></html>`;
+    openPrintDocument(html);
   }
   const qbTab = document.querySelector('[data-cxtab="qbank"]');
   if (qbTab) qbTab.addEventListener('click', async () => { await loadQB(); renderQB(); });
