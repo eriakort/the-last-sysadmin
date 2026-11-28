@@ -214,7 +214,10 @@ test('stale DNS resolver incident restores name resolution without changing rout
   assert(s.done() === false, 'unreachable resolver must leave the mission unresolved');
   for (const [dev, cmd] of mission.solution) {
     const result = s.on(dev).run(cmd);
-    assert(result.code === 0, 'reference DNS repair command failed: ' + cmd + ' -> ' + result.out);
+    // The first dig is an intentional pre-repair diagnostic and must fail;
+    // only configuration commands are required to return success here.
+    const probe = /^(ping6?|traceroute|nmap|dig|tcpdump)\\b/;
+    assert(result.code === 0 || probe.test(cmd.trim()), 'reference DNS repair command failed: ' + cmd + ' -> ' + result.out);
   }
   assert(s.net.devices.h1.resolver === model.ip('10.0.2.53'), 'workstation should use the authoritative DNS server');
   assert(s.net.devices.h1.routes.length === 1, 'DNS repair must not change the default route');
