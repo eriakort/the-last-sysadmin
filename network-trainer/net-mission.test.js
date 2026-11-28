@@ -145,6 +145,25 @@ test('a mission with no diagnose block is not gated', () => {
   assert(s.gradeDiagnosis(99).ok === true, 'ungated grader accepts any index');
 });
 
+
+test('port-security recovery mission restores the approved endpoint without weakening the policy', () => {
+  const mission = chapters.find(m => m.id === 'switch-port-security-recovery');
+  assert(!!mission, 'port-security recovery mission should be registered');
+  const s = startMission(mission);
+  const port = s.net.devices.sw1.ifaces.p1;
+  assert(port.errDisabled === true, 'the incident should start with p1 err-disabled');
+  assert(port.portSecurity && port.portSecurity.enabled === true, 'port security should remain enabled');
+  assert(port.portSecurity.secureMacs.includes('02:00:00:00:00:10'), 'the approved workstation MAC should remain secured');
+  for (const [dev, cmd] of mission.solution) {
+    const result = s.on(dev).run(cmd);
+    assert(result.code === 0, 'reference recovery command failed: ' + cmd + ' -> ' + result.out);
+  }
+  assert(port.errDisabled === false, 'no shutdown should recover p1');
+  assert(port.portSecurity.enabled === true, 'recovery must not disable port security');
+  assert(port.portSecurity.secureMacs.length === 1 && port.portSecurity.secureMacs[0] === '02:00:00:00:00:10', 'recovery must preserve the approved secure MAC');
+  assert(s.done() === true, 'recovered workstation should reach the file server');
+});
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
