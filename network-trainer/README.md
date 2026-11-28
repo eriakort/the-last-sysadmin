@@ -427,3 +427,8 @@ The Build canvas includes selectable drawing tools for straight lines, direction
 ## DHCP relay recovery incident
 
 **INC-3442 — The branch clients cannot find the DHCP server** isolates a missing DHCP relay on the router's client-facing interface. The DHCP pool and server are already healthy in another VLAN; learners verify the server state, configure `ip helper-address` under the correct interface, obtain a client lease, and test portal reachability. A regression test proves the initial DHCP request fails before relay configuration and succeeds afterward without changing the server pool.
+
+
+## DNS resolver recovery incident
+
+**INC-1159 — The DNS server is configured, but names still fail** teaches learners to distinguish a stale, unreachable resolver from an empty resolver setting or a web-service outage. The workstation can reach the intranet by IP, but its resolver points to `10.0.2.54` instead of the authoritative server at `10.0.2.53`. Learners inspect resolver state, compare IP and name-based tests, correct the resolver, and verify resolution without changing routing.
