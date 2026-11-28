@@ -1216,9 +1216,10 @@ function termClear() { const o = $('#tout'); if (o) o.textContent = ''; persistT
 function nextUnsolved() { const cur = chapters.findIndex(c => c.id === RUN.mission.id); for (let k = 1; k <= chapters.length; k++) { const i = (cur + k) % chapters.length; if (!PROG.done[chapters[i].id]) return i; } return -1; }
 function missionOutcomeFeedback(done) {
   const last = LAST_COMMAND;
-  const configCommand = !!(last && /^(?:hostname|interface|ip address|ip route|ip access-list|access-list|switchport|vlan|router|network|router-id|passive-interface|bgp|standby|ntp|logging|no )\b/i.test(last.line.trim()));
-  const result = F.classifyOutcome({ commandAccepted: !!(last && last.accepted && configCommand), configurationValid: !!(last && last.accepted && configCommand), objectiveMet: done });
-  return '<div class="mission-feedback"><b>' + esc(result.title) + '</b><div>' + esc(result.reason) + '</div><div><b>Next step:</b> ' + esc(result.next) + '</div></div>';
+  const configCommand = !!(last && F.isNetworkConfigurationCommand(last.line));
+  const acceptedConfiguration = !!(last && last.accepted && configCommand);
+  const result = F.classifyOutcome({ commandAccepted: acceptedConfiguration, configurationValid: acceptedConfiguration, objectiveMet: done });
+  return '<div class="mission-feedback" data-feedback-category="' + esc(result.category) + '"><b>' + esc(result.title) + '</b><div>' + esc(result.reason) + '</div><div><b>Next step:</b> ' + esc(result.next) + '</div></div>';
 }
 function doCheck() {
   const box = $('#status'); const done = RUN.done(), feedback = missionOutcomeFeedback(done);
