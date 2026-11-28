@@ -1,6 +1,6 @@
 # AI learning assistant
 
-A signed-in assistant that understands the simulator and can search the web.
+A signed-in assistant that understands the simulator and can search the web. It sends the current view, selected device, recent console output, and lab brief to the configured AI provider along with the messages in the chat.
 
 ## What it does
 
@@ -13,12 +13,12 @@ A signed-in assistant that understands the simulator and can search the web.
 From the repo root (Supabase CLI linked to the project):
 
 ```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/m14-ai-assist-rate-limits.sql
 supabase functions deploy ai-assist --no-verify-jwt
-# or with JWT verification left to the function itself
-supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=grok-3
+supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=grok-3 SUPABASE_SERVICE_ROLE_KEY=... AI_ALLOWED_ORIGINS=https://eriakort.github.io
 ```
 
-`AI_API_BASE` and `AI_MODEL` are optional. Set `AI_SEARCH_ENDPOINT` if you want a custom search URL; otherwise DuckDuckGo instant answers are used.
+`AI_API_BASE`, `AI_MODEL`, and `AI_SEARCH_ENDPOINT` are optional. `SUPABASE_SERVICE_ROLE_KEY` is required for the private rate-limit RPC and must remain an Edge Function secret; never expose it in the browser or commit it. `AI_ALLOWED_ORIGINS` is a comma-separated origin allow-list. The default allows the GitHub Pages origin and common local development origins. Otherwise DuckDuckGo instant answers are used.
 
 ## Client
 
@@ -26,7 +26,7 @@ supabase secrets set AI_API_KEY=sk-... AI_API_BASE=https://api.x.ai/v1 AI_MODEL=
 
 ## Safety
 
-The system prompt states this is an educational simulator. The function requires a valid Supabase session. Do not put the LLM key in the browser.
+The function requires a valid Supabase session and an allowed browser origin. Requests are limited to 20 per user per minute, 12 recent messages, 2,000 characters per message, 12,000 total message characters, and a 24 KB request body. Provider calls time out after 30 seconds and responses are capped. The UI discloses which simulator context is sent. Do not include passwords, personal data, or secrets in prompts or lab output. The LLM key and service-role key remain server-side. The rate-limit migration must be applied before deploying the updated function; if its RPC or required secrets are unavailable, requests fail closed.
 
 ## Disable the assistant
 
