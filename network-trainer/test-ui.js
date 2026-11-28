@@ -256,6 +256,25 @@ const recordDiagnosticEvidence = async page => {
   if ((await page.locator('#networkRecallCard').innerText()).includes('route')) ok('network recall challenge is rendered without changing its schedule');
   else fail('network recall challenge content was not rendered');
 
+  // --- Linux-to-Network cross-track deep links open the matching SSH case directly ---
+  const crossTrackCases = [
+    ['remote-admin', 'Restore secure SSH access to jump01'],
+    ['ssh-hardening', 'Restrict SSH to the operations subnet'],
+    ['contractor-containment', 'Contain the suspicious SSH source'],
+    ['web-availability', 'Restore client access to the Halcyon portal']
+  ];
+  for (const [caseKey, expectedTitle] of crossTrackCases) {
+    await page.goto('http://127.0.0.1:' + port + '/index.html?crossTrack=' + caseKey, {waitUntil:'load'});
+    await page.waitForTimeout(150);
+    const brief = await page.locator('#brief').innerText();
+    if (brief.includes(expectedTitle)) ok('cross-track deep link opens ' + caseKey + ' directly');
+    else fail('cross-track deep link did not open ' + caseKey + ': ' + brief.slice(0,180));
+    if (!(await page.locator('#workbenchView').isHidden())) ok('cross-track deep link opens the Workbench for ' + caseKey);
+    else fail('cross-track deep link did not select Workbench for ' + caseKey);
+    if (!(await page.evaluate(() => new URLSearchParams(location.search).has('crossTrack')))) ok('cross-track deep link is consumed after launch for ' + caseKey);
+    else fail('cross-track deep link remained in the URL for ' + caseKey);
+  }
+
   await browser.close();
   await new Promise(resolve => server.close(resolve));
   if (errors.length) { console.error('\nUI TEST FAILED (' + errors.length + ')'); process.exit(1); }
