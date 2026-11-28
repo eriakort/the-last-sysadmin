@@ -18,7 +18,7 @@ const assetUrl = f => './' + f + '?v=' + crypto.createHash('sha256').update(read
 // one level down in network-trainer/, so it references them with a ../ prefix.
 const rootAsset = f => '../' + f + '?v=' + crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', f))).digest('hex').slice(0, 10);
 
-const MODULES = ['../src/feedback.js', 'net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'net-builder.js', 'net-scenario.js', 'net-classroom.js', 'net-design-academy.js', 'net-automation-workshop.js', 'net-learning-coach.js', 'net-spaced-recall.js'];
+const MODULES = ['../src/feedback.js', 'net-model.js', 'net-checks.js', 'net-cli.js', 'net-mission.js', 'net-chapters.js', 'ccna-chapters.js', 'net-builder.js', 'net-scenario.js', 'net-classroom.js', 'net-design-academy.js', 'net-automation-workshop.js', 'net-learning-coach.js', 'net-spaced-recall.js'];
 const wrap = f => { const id = f === '../src/feedback.js' ? './src/feedback' : './' + f.replace(/\.js$/, ''); return `__def(${JSON.stringify(id)}, function(module, exports, require){\n${read(f)}\n});`; };
 
 const bundle = `
