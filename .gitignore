@@ -9,3 +9,7 @@ Thumbs.db
 # logs / scratch
 *.log
 node_modules/
+
+# Supabase local project metadata and CLI state
+supabase/.temp/
+supabase/.branches/

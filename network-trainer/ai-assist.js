@@ -77,9 +77,10 @@
     panel.setAttribute("aria-label", "Learning assistant");
     panel.innerHTML = `
       <header><strong>Learning assistant</strong><button type="button" id="aiAssistClose" aria-label="Close">✕</button></header>
+      <p class="ai-privacy">Your message and recent simulator context (selected device, view, console output, and lab brief) are sent to the configured AI provider to answer. Do not include passwords, personal data, or secrets.</p>
       <div id="aiAssistLog" class="ai-log"></div>
       <form id="aiAssistForm">
-        <input id="aiAssistInput" autocomplete="off" placeholder="Ask about this lab, a command, or a concept…" />
+        <input id="aiAssistInput" autocomplete="off" maxlength="2000" placeholder="Ask about this lab, a command, or a concept…" />
         <button type="submit" class="btn primary">Send</button>
       </form>`;
     document.body.appendChild(panel);
@@ -89,6 +90,7 @@
       #aiAssistPanel{position:fixed;right:18px;bottom:18px;width:380px;max-width:calc(100vw - 24px);height:460px;z-index:10050;background:#0b1220;color:#e2e8f0;border:1px solid #334155;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
       #aiAssistPanel[hidden]{display:none}
       #aiAssistPanel header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid #1e293b;font-size:14px}
+      #aiAssistPanel .ai-privacy{margin:0;padding:8px 12px;background:#172033;color:#cbd5e1;font-size:11px;line-height:1.4}
       #aiAssistLog{flex:1;overflow:auto;padding:10px 12px;font-size:13.5px;line-height:1.45}
       #aiAssistLog .ai-msg{margin:8px 0;white-space:pre-wrap}
       #aiAssistLog .ai-msg.user{color:#7dd3fc}
@@ -111,9 +113,13 @@
       e.preventDefault();
       const input = $("#aiAssistInput");
       const text = input.value.trim();
-      if (!text) return;
+      if (!text || text.length > 2000) return;
+      const submit = $("#aiAssistForm button[type=submit]");
+      if (submit && submit.disabled) return;
+      if (submit) submit.disabled = true;
       input.value = "";
       history.push({ role: "user", content: text });
+      if (history.length > 12) history.splice(0, history.length - 12);
       add("user", text);
       const pending = document.createElement("div");
       pending.className = "ai-msg";
@@ -133,6 +139,8 @@
           if (btn) btn.hidden = true;
           panel.hidden = true;
         }
+      } finally {
+        if (submit) submit.disabled = false;
       }
     });
   }

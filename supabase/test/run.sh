@@ -91,6 +91,13 @@ echo "Running transactional progress-sync tests (M11)..."
 echo "Running Network Trainer scenario isolation and delivery tests..."
 "${PSQL[@]}" -d "$DB" -f "$HERE/net-scenarios-test.sql"
 
+echo "Applying m14-ai-assist-rate-limits.sql..."
+run "$REPO/supabase/m14-ai-assist-rate-limits.sql" >/dev/null
+echo "Re-applying m14-ai-assist-rate-limits.sql (idempotency check)..."
+run "$REPO/supabase/m14-ai-assist-rate-limits.sql" >/dev/null 2>&1
+echo "Running AI assistant rate-limit tests..."
+"${PSQL[@]}" -d "$DB" -f "$HERE/m14-ai-assist-rate-limits-test.sql"
+
 echo "Cleaning up..."
 "${ADMIN[@]}" -c "drop database if exists $DB with (force);" >/dev/null
 echo "Done."
