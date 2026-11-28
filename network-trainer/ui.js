@@ -5,7 +5,15 @@
 const M = require('./net-model');
 const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
-const { chapters, TIERS, missionsInTier } = require('./net-chapters');
+let { chapters, TIERS, missionsInTier } = require('./net-chapters');
+// CCNA selectable track — switch mission set when ?track=ccna
+const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+if (urlParams.get('track') === 'ccna') {
+  try {
+    const { ccnaChapters } = require('./ccna-chapters');
+    chapters = ccnaChapters;
+  } catch (e) { console.warn('CCNA chapters not available', e); }
+}
 const LC = require('./net-learning-coach');
 const NR = require('./net-spaced-recall');
 const { makeCLI, BRANDS, brandsForKind, completions } = require('./net-cli');
@@ -3117,6 +3125,7 @@ function boot() {
         <div class="brand"><span class="mark" aria-hidden="true"></span><div><div class="name">THE LAST SYSADMIN</div><div class="sub">Learn Network Administration</div></div></div>
         <nav class="apptabs" aria-label="Application navigation">
           <a class="apptab" href="../" title="Return to Linux system administration"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3"/><path d="M13 16h4"/></svg>Linux Sysadmin</a>
+          <a class="apptab" href="?track=ccna" title="CCNA 200-301 exam practice track">CCNA Prep</a>
           <a class="apptab on" href="#" aria-current="page" title="Current Network Sysadmin workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/><path d="M8 7h8M7.4 7.8 11 16M16.6 7.8 13 16"/></svg>Network Sysadmin</a>
         </nav>
       </div>
