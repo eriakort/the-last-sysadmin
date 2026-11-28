@@ -1499,6 +1499,32 @@ const chapters = [
   },
 
 
+
+  { id: 'ntp-stale-peer-recovery', chapter: 'Enterprise network services', mode: 'diagnose',
+    title: 'The router clock has drifted out of sync',
+    story: 'The branch router r1 is reporting an unsynchronized clock. Monitoring shows its configured NTP peer is an old address left behind during a server migration. The replacement time source is online, and ordinary routed traffic is healthy.',
+    objective: 'Inspect NTP status and associations, remove the stale peer at 10.0.2.54, configure the live time source at 10.0.2.53, and verify r1 synchronizes.',
+    ticket: { id: 'INC-1183', from: 'Network monitoring · time service', priority: 'P2', symptom: 'The branch router reports an unsynchronized clock after the server migration. Please restore time synchronization without changing routing or disabling NTP.' },
+    diagnose: { q: 'show ntp associations reports the configured peer 10.0.2.54 as unreachable. The active NTP master is time1 at 10.0.2.53, and the router can reach that subnet. What should you change?', options: ['Replace the stale NTP peer with the reachable, approved time source', 'Remove the router default route so it retries NTP', 'Configure r1 as an NTP master to hide the peer failure'], answer: 0, because: 'The peer address is obsolete, not a routing or clock-master problem. Replace only the NTP association with the known time source, then verify synchronization and stratum.' },
+    console: 'r1',
+    hints: ['Run show ntp status and show ntp associations. The current peer should be listed but unreachable.', 'The replacement time source time1 is 10.0.2.53 and advertises NTP on UDP/123.', 'Remove the old peer with no ntp server 10.0.2.54, add ntp server 10.0.2.53, then verify show ntp status.'],
+    build: () => ({
+      devices: {
+        r1: Object.assign(R('r1', 'router', { eth0: iface('10.0.2.1', 24) }), { ntp: { servers: [ip('10.0.2.54')] } }),
+        time1: Object.assign(SRV('time1', '10.0.2.53', 24, null, { 123: 'ntp' }), { ntp: { master: true, stratum: 3 } }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }])
+      },
+      links: [L('r1', 'eth0', 'sw1', 'p1'), L('time1', 'eth0', 'sw1', 'p2')]
+    }),
+    success: [{ type: 'ntp_sync', dev: 'r1' }],
+    solution: [
+      ['r1', 'show ntp status'], ['r1', 'show ntp associations'],
+      ['r1', 'enable'], ['r1', 'configure terminal'],
+      ['r1', 'no ntp server 10.0.2.54'], ['r1', 'ntp server 10.0.2.53'],
+      ['r1', 'show ntp status'], ['r1', 'show ntp associations']
+    ]
+  },
+
   { id: 'dns-wrong-resolver-address', chapter: 'DNS / naming', mode: 'diagnose',
     title: 'The DNS server is configured, but names still fail',
     story: 'The intranet at 10.0.2.10 is reachable by IP from h1, but intranet.corp.local does not resolve. The resolver is configured, so the help desk has ruled out an empty DNS setting. A recent workstation image may have left an outdated resolver address behind.',
