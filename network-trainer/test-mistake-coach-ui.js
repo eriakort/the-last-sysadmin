@@ -35,6 +35,22 @@ const URL = 'file://' + path.join(process.cwd(), 'index.html');
     console.log('  ✓ successful follow-up can clear stale mistake feedback');
   else errors.push('network mistake feedback did not clear');
 
+  // Accepted configuration commands that miss the task should be distinguished
+  // from read-only probes that simply leave an objective unfinished.
+  const outcomes = await page.evaluate(() => {
+    LAST_COMMAND = { line: 'ip addr add 10.0.9.10/24 dev eth0', accepted: true };
+    const configured = missionOutcomeFeedback(false);
+    LAST_COMMAND = { line: 'show ip route', accepted: true };
+    const inspected = missionOutcomeFeedback(false);
+    return { configured, inspected };
+  });
+  if (outcomes.configured.includes('data-feedback-category="valid-but-incorrect"'))
+    console.log('  ✓ accepted address changes that miss the objective are identified as valid-but-incorrect');
+  else errors.push('accepted network configuration did not receive valid-but-incorrect feedback');
+  if (outcomes.inspected.includes('data-feedback-category="objective-unmet"'))
+    console.log('  ✓ read-only inspection does not get mislabelled as a configuration change');
+  else errors.push('read-only network command was mislabelled as a configuration change');
+
   await browser.close();
   if (errors.length) { console.error(errors.join('\\n')); process.exit(1); }
   console.log('NETWORK MISTAKE COACH OK.');
