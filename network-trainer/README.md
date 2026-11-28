@@ -436,3 +436,8 @@ The Build canvas includes selectable drawing tools for straight lines, direction
 ## DNS resolver recovery incident
 
 **INC-1159 — The DNS server is configured, but names still fail** teaches learners to distinguish a stale, unreachable resolver from an empty resolver setting or a web-service outage. The workstation can reach the intranet by IP, but its resolver points to `10.0.2.54` instead of the authoritative server at `10.0.2.53`. Learners inspect resolver state, compare IP and name-based tests, correct the resolver, and verify resolution without changing routing.
+
+
+## CCNA 200-301 practice track
+
+The CCNA Practice Track is a subsection of Network Sysadmin and reuses the same deterministic simulator, CLI, mission runner, and browser-local progress store. Open **CCNA Practice Track** in the Network workspace navigation (or use `?track=ccna`). Its initial practice set is organised around Network Fundamentals, Network Access, and IP Connectivity. The track is an independent curriculum view; it does not replace the general Network Sysadmin incident queue or existing learner progress. The simulator is an educational IOS-style subset, not Cisco IOS/IOS XE software or an exam replica. Each mission's reference solution is covered by the Network mission regression suite.
