@@ -18,7 +18,7 @@ const cacheFor = name => {
     store.set(name, {
       entries,
       async addAll(items) {
-              for (const item of items) entries.set(String(item), makeResponse('cached:' + item));
+        for (const item of items) entries.set(String(item), makeResponse('cached:' + item));
       },
       async put(request, response) { entries.set(request.url || String(request), response); },
       async match(request) { return entries.get(request.url || String(request)) || entries.get(String(request)); }
@@ -70,6 +70,10 @@ async function dispatch(name, properties) {
   await dispatch('install', {});
   assert.strictEqual(calls.skipWaiting, 1, 'successful precache activates the new worker');
   assert(store.has('last-sysadmin-vtest'), 'install creates the versioned cache');
+  const precache = cacheFor('last-sysadmin-vtest').entries;
+  assert(precache.has('network-trainer/'), 'Network workspace directory is included in the atomic precache');
+  assert(precache.has('network-trainer/index.html'), 'Network workspace document is included in the atomic precache');
+  assert.strictEqual(precache.get('network-trainer/index.html').body, 'cached:network-trainer/index.html', 'Network workspace document is available offline immediately after install');
 
   store.set('last-sysadmin-vold', { entries: new Map() });
   store.set('unrelated-app-cache', { entries: new Map() });
@@ -116,5 +120,5 @@ async function dispatch(name, properties) {
   await assert.rejects(installPromise, /precache failed/);
   assert.strictEqual(calls.skipWaiting, 1, 'failed precache does not skip waiting');
 
-  console.log('Service worker OK: install atomicity, cache ownership/upgrade, online refresh, offline navigation, static cache strategy, and request bypass.');
+  console.log('Service worker OK: install atomicity, Network Trainer offline precache, cache ownership/upgrade, online refresh, offline navigation, static cache strategy, and request bypass.');
 })().catch(error => { console.error(error); process.exit(1); });

@@ -1,29 +1,34 @@
 #!/usr/bin/env node
 /*
- * Staleness guard. This is the check that would have caught the build-drift bug:
- * index.html stopped being regenerated from src/ while the sources kept changing,
- * so the deployed page silently fell behind.
- *
- * It rebuilds from src/ and fails if the committed index.html / service-worker.js
- * differ from what a fresh build produces — i.e. someone edited the generated
- * files by hand, or forgot to run `npm run build` after editing src/.
- *
- * Requires a git working tree (uses `git diff`). In CI this runs after build.
+ * Staleness guard for every generated deployable application entry point.
+ * Rebuild from source and fail if committed artifacts drift from that output.
+ * Requires a git working tree (uses git diff); CI runs this after build.
  */
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
+const path = require('path');
 const build = require('../build.js');
 
-build(); // regenerate index.html and service-worker.js from src/
+build(); // regenerate root index.html and service-worker.js from src/
+
+const networkBuild = spawnSync(process.execPath, [path.join(__dirname, '..', 'network-trainer', 'build-ui.js')], {
+  cwd: path.join(__dirname, '..'),
+  encoding: 'utf8',
+});
+if (networkBuild.status !== 0) {
+  console.error('  ✗ Network Trainer generated bundle could not be rebuilt.');
+  console.error(networkBuild.stderr || networkBuild.stdout || 'Unknown build failure.');
+  process.exit(networkBuild.status || 1);
+}
 
 try {
-  execSync('git diff --exit-code -- index.html service-worker.js', { stdio: 'pipe' });
-  console.log('  ✓ index.html / service-worker.js are in sync with src/.');
+  execSync('git diff --exit-code -- index.html service-worker.js network-trainer/index.html', { stdio: 'pipe' });
+  console.log('  ✓ root app, service worker, and Network Trainer bundle are in sync with their sources.');
 } catch (e) {
   const diff = (e.stdout || Buffer.from('')).toString();
   console.error('  ✗ Generated files are STALE.');
-  console.error('    index.html or service-worker.js differ from a fresh build of src/.');
-  console.error('    Edit the sources under src/, run `npm run build`, and commit the result.');
-  console.error('    Never edit index.html or service-worker.js by hand.\n');
-  if (diff.trim()) console.error(diff.split('\n').slice(0, 40).join('\n'));
+  console.error('    index.html, service-worker.js, or network-trainer/index.html differ from a fresh build.');
+  console.error('    Edit source files, run npm run build and npm run build:net, then commit generated output.');
+  console.error('    Never edit generated files by hand.\n');
+  if (diff.trim()) console.error(diff.split('\n').slice(0, 60).join('\n'));
   process.exit(1);
 }
