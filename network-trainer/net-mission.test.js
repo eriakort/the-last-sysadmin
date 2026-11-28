@@ -182,6 +182,26 @@ test('DHCP gateway incident renews a valid lease with the corrected router next 
   assert(s.done() === true, 'client should reach the remote portal after renewal');
 });
 
+
+test('missing DHCP relay incident restores branch client addressing without changing the pool', () => {
+  const mission = chapters.find(m => m.id === 'dhcp-relay-missing-helper');
+  assert(!!mission, 'DHCP relay incident should be registered');
+  const s = startMission(mission);
+  const initial = s.on('h1').run('dhclient eth0');
+  assert(initial.code === 1, 'client should receive no lease before relay is configured');
+  assert(/no DHCP server responded/.test(initial.out), 'initial failure should identify the missing relay path');
+  assert(s.net.devices.srv.dhcp && s.net.devices.srv.dhcp.name === 'BRANCH-USERS', 'server pool should already be configured');
+  assert(s.done() === false, 'missing relay must leave the incident unresolved');
+  for (const [dev, cmd] of mission.solution) {
+    const result = s.on(dev).run(cmd);
+    assert(result.code === 0, 'reference relay command failed: ' + cmd + ' -> ' + result.out);
+  }
+  assert(s.net.devices.r1.ifaces.eth0.helperAddress === require('./net-model').ip('10.0.2.10'), 'client-facing interface should relay to srv');
+  assert(s.net.devices.h1.ifaces.eth0.ip != null, 'client should receive an address after relay is configured');
+  assert(s.done() === true, 'leased client should reach the portal after relay recovery');
+});
+
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);

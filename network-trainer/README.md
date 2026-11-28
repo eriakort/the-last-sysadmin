@@ -422,3 +422,8 @@ The Build workspace has its own `?view=build` route. Refreshing or bookmarking t
 ## Topology drawing primitives
 
 The Build canvas includes selectable drawing tools for straight lines, directional arrows, rectangles, ellipses and freehand paths. Drawings are stored as topology presentation metadata, can be selected and removed, participate in topology undo/redo, and are included in browser-local Build draft recovery and scenario export. The dedicated Drawings layer can be hidden or restored without deleting annotations. These objects are diagram annotations only: they do not create simulator links, devices, routes or packet behavior.
+
+
+## DHCP relay recovery incident
+
+**INC-3442 — The branch clients cannot find the DHCP server** isolates a missing DHCP relay on the router's client-facing interface. The DHCP pool and server are already healthy in another VLAN; learners verify the server state, configure `ip helper-address` under the correct interface, obtain a client lease, and test portal reachability. A regression test proves the initial DHCP request fails before relay configuration and succeeds afterward without changing the server pool.
