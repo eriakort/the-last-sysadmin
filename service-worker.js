@@ -1,6 +1,6 @@
 /* The Last Sysadmin - offline service worker */
 const CACHE_PREFIX = 'last-sysadmin-v';
-const CACHE = CACHE_PREFIX + '99';
+const CACHE = CACHE_PREFIX + '100';
 // Keep both the directory navigation and concrete document in the atomic
 // precache: GitHub Pages may serve either URL form for the Network workspace.
 const ASSETS = ['.', 'index.html', 'network-trainer/', 'network-trainer/index.html', 'manifest.webmanifest', 'questions.json', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png', 'src/feedback.js', 'daily-practice.js'];
