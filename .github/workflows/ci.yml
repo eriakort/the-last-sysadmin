@@ -23,10 +23,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        # package.json includes Express, but the committed npm lock is currently
-        # missing its dependency graph. Install from the manifest until the lock
-        # is regenerated and committed; npm ci fails before tests can run.
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Run Supabase schema and RLS tests
         run: |
