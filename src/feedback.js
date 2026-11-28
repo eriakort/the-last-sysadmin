@@ -12,8 +12,8 @@
       if (/incomplete command/.test(message)) return make('syntax','Incomplete command · missing argument','The device recognises the command, but it needs another keyword or value before it can run.','Use ? at the current prompt to discover the required next argument, then enter the complete command.');
       if (/ambiguous command/.test(message)) return make('syntax','Ambiguous command · be specific','The abbreviation matches more than one command or keyword.','Use the full keyword instead of an abbreviation, then retry without changing configuration.');
       if (/invalid input|invalid command|unknown command|unrecognized command/.test(message)) return make('context','Invalid input · syntax or mode','The device does not recognise this command at the current prompt. Network CLIs expose different commands in user, privileged and configuration modes.','Check the prompt suffix and use ? to inspect commands available in this mode; do not assume a configuration command is valid everywhere.');
-      if (/not authorized|authorization|insufficient privilege|permission denied/.test(message)) return make('permission','Privilege · access','The current CLI privilege level does not permit this operation.','Check the current privilege level and authenticate through the intended training workflow before retrying.');
-      if (/interface.*(not found|does not exist|invalid)|vlan.*(not found|does not exist|invalid)/.test(message)) return make('target-state','Target not found · device state','The interface, VLAN or other named object was not found on the selected device.','Verify the selected device and inspect its existing interfaces or VLANs before referencing the target again.');
+      if (/not authorized|authorization|insufficient privilege|permission denied|access denied/.test(message)) return make('permission','Privilege · access','The current CLI privilege level does not permit this operation.','Check the current privilege level and authenticate through the intended training workflow before retrying.');
+      if (/(?:interface|port|vlan|access-list|route|neighbor|peer).*(?:not found|does not exist|invalid|unknown)|(?:not found|does not exist).*(?:interface|port|vlan|route|neighbor|peer)|cannot find (?:interface|port|vlan)/.test(message)) return make('target-state','Target not found · device state','The interface, VLAN, route, neighbour or other named object was not found in the selected device context.','Verify the selected device and inspect its current interfaces, VLANs, routes or neighbours before referencing the target again.');
       return make('unknown','Command failed · inspect context','The device rejected the command, but the exact cause is not clear from this response. Avoid changing configuration until you inspect the prompt and device state.','Check the selected device and current prompt, then use its command help to confirm which commands are valid in this mode.','low');
     }
     if (/no space left on device/.test(message)) return make('capacity','Filesystem full · capacity','The filesystem has no free space for this write. Repeating the same command or deleting arbitrary files could make the incident worse.','Inspect usage with df -h and identify large or temporary files with du before choosing a safe cleanup target.');
@@ -35,9 +35,16 @@
     if (input.objectiveMet === false) return make('objective-unmet','Objective not yet met','The current state does not satisfy the learning objective, even though no command error was reported.','Inspect the relevant state and compare it with each acceptance condition before making another change.');
     return make('success','Objective verified','The observed state satisfies the requested outcome.','Capture the evidence and continue to the next task.');
   }
+  // Only classify commands that can change network state; observational commands
+  // such as show, ping, traceroute and configure-terminal mode changes are excluded.
+  function isNetworkConfigurationCommand(command) {
+    const line = String(command || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!line) return false;
+    return /^(?:ip\s+(?:addr(?:ess)?\s+(?:add|replace|del|delete)\b|route\s+(?:add|replace|del|delete)\b|address\s+\d|access-list\s+(?:standard|extended)\b)|iptables\s+(?:-[aidfp]|--(?:append|insert|delete|flush|policy))\b|nft\s+(?:add|delete|insert|replace|flush)\b|hostname\s+\S|interface\s+\S|switchport\s+\S|vlan\s+\d|router\s+\S|network\s+\S|router-id\s+\S|passive-interface\s+\S|bgp\s+\S|standby\s+\S|ntp\s+\S|logging\s+\S|no\s+\S|ipv6\s+\S|spanning-tree\s+\S|channel-group\s+\S|service\s+\S|access-list\s+\S|crypto\s+\S|dhcp\s+\S)/i.test(line);
+  }
   function calculateMissionReward(hints = 0, base = 100, penalty = 25, floor = 25) {
     const count = Number.isFinite(Number(hints)) ? Math.max(0, Math.floor(Number(hints))) : 0;
     return Math.max(floor, base - penalty * Math.max(0, count - 1));
   }
-  return Object.freeze({ classifyCommandFailure, classifyOutcome, calculateMissionReward });
+  return Object.freeze({ classifyCommandFailure, classifyOutcome, isNetworkConfigurationCommand, calculateMissionReward });
 });
