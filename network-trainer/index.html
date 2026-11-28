@@ -5458,6 +5458,48 @@ const chapters = [
       ['h1', 'ping srv']
     ]
   },
+
+  { id: 'dhcp-relay-missing-helper', chapter: 'Enterprise network services', mode: 'diagnose',
+    title: 'The branch clients cannot find the DHCP server',
+    story: 'The DHCP service host srv is healthy in the server VLAN and its branch-users pool is ready. A new workstation on the client VLAN receives no address, while devices with static addressing can still reach the portal. The router connects both VLANs, but its client-facing interface may not be relaying DHCP broadcasts.',
+    objective: 'Prove the DHCP server and pool are healthy, configure the missing relay on the client-facing router interface, obtain a valid lease, and verify portal connectivity.',
+    ticket: { id: 'INC-3442', from: 'Branch service desk · DHCP outage', priority: 'P2', symptom: 'New branch laptops show no network address. The DHCP server is online in the server VLAN, but clients in the user VLAN receive no lease.' },
+    diagnose: { q: 'The DHCP pool is configured and the server is reachable from r1, but h1 receives no lease. What must the router do with client broadcasts crossing the subnet boundary?', options: ['Relay the DHCP request from the client-facing interface to the server with ip helper-address', 'Add a default route to h1 before it has an address', 'Disable DHCP snooping on every switch'], answer: 0, because: 'DHCP discovery begins as a local broadcast and routers do not forward broadcasts by default. A relay configured on the client-facing interface forwards the request to the server in the other subnet.' },
+    console: 'r1',
+    hints: ['On srv, inspect show ip dhcp pool and show ip dhcp server statistics. The pool and DHCP service are already ready.', 'On r1, enter interface eth0 (the 10.0.1.0/24 client VLAN) and configure ip helper-address 10.0.2.10.', 'Run dhclient eth0 on h1. Confirm it receives a 10.0.1.0/24 lease with gateway 10.0.1.1, then ping portal.'],
+    build: () => {
+      const srv = SRV('srv', '10.0.2.10', 24, '10.0.2.1', { 67: 'dhcp' });
+      srv.dhcp = {
+        name: 'BRANCH-USERS',
+        network: { net: ip('10.0.1.0'), prefix: 24 },
+        defaultRouter: ip('10.0.1.1'),
+        excluded: [{ start: ip('10.0.1.1'), end: ip('10.0.1.20') }],
+        bindings: {}
+      };
+      return { devices: {
+        h1: H('h1'),
+        portal: SRV('portal', '10.0.2.20', 24, '10.0.2.1', { 443: 'https' }),
+        srv,
+        r1: R('r1', 'router', { eth0: iface('10.0.1.1', 24), eth1: iface('10.0.2.1', 24) }),
+        sw1: SW('sw1', [{ n: 'p1' }, { n: 'p2' }]),
+        sw2: SW('sw2', [{ n: 'p1' }, { n: 'p2' }, { n: 'p3' }])
+      }, links: [
+        L('h1', 'eth0', 'sw1', 'p1'), L('r1', 'eth0', 'sw1', 'p2'),
+        L('portal', 'eth0', 'sw2', 'p1'), L('srv', 'eth0', 'sw2', 'p2'), L('r1', 'eth1', 'sw2', 'p3')
+      ] };
+    },
+    success: [
+      { type: 'dhcp_lease', dev: 'h1', iface: 'eth0', cidr: '10.0.1.0/24' },
+      { type: 'reachable', a: 'h1', b: 'portal' }
+    ],
+    solution: [
+      ['srv', 'show ip dhcp pool'], ['srv', 'show ip dhcp server statistics'],
+      ['r1', 'enable'], ['r1', 'configure terminal'], ['r1', 'interface eth0'],
+      ['r1', 'ip helper-address 10.0.2.10'], ['r1', 'end'],
+      ['h1', 'dhclient eth0'], ['h1', 'ip route'], ['h1', 'ping portal']
+    ]
+  },
+
 ];
 
 // ---------- Phase 2: curriculum tiers & competencies ----------
