@@ -202,6 +202,26 @@ test('missing DHCP relay incident restores branch client addressing without chan
 });
 
 
+
+test('stale DNS resolver incident restores name resolution without changing routing', () => {
+  const mission = chapters.find(m => m.id === 'dns-wrong-resolver-address');
+  assert(!!mission, 'stale DNS resolver incident should be registered');
+  const s = startMission(mission);
+  const model = require('./net-model');
+  assert(s.on('h1').run('ping 10.0.2.10').code === 0, 'intranet should be reachable by IP before DNS repair');
+  const before = s.on('h1').run('dig intranet.corp.local');
+  assert(before.code !== 0 && /cannot reach DNS server 10.0.2.54/.test(before.out), 'initial lookup should identify the stale resolver');
+  assert(s.done() === false, 'unreachable resolver must leave the mission unresolved');
+  for (const [dev, cmd] of mission.solution) {
+    const result = s.on(dev).run(cmd);
+    assert(result.code === 0, 'reference DNS repair command failed: ' + cmd + ' -> ' + result.out);
+  }
+  assert(s.net.devices.h1.resolver === model.ip('10.0.2.53'), 'workstation should use the authoritative DNS server');
+  assert(s.net.devices.h1.routes.length === 1, 'DNS repair must not change the default route');
+  assert(s.done() === true, 'intranet hostname should resolve after resolver repair');
+});
+
+
 let failed = 0;
 for (const [n, f] of tests) { try { f(); passed++; console.log('  ✓ ' + n); } catch (e) { failed++; console.error('  ✗ ' + n + '\n      ' + e.message); } }
 console.log(`\n${passed} passed, ${failed} failed, ${tests.length} total.`);
