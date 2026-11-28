@@ -5,7 +5,15 @@
 const M = require('./net-model');
 const F = require('./src/feedback');
 const { startMission } = require('./net-mission');
-const { chapters, TIERS, missionsInTier } = require('./net-chapters');
+let { chapters, TIERS, missionsInTier } = require('./net-chapters');
+// CCNA selectable track — switch mission set when ?track=ccna
+const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+if (urlParams.get('track') === 'ccna') {
+  try {
+    const { ccnaChapters } = require('./ccna-chapters');
+    chapters = ccnaChapters;
+  } catch (e) { console.warn('CCNA chapters not available', e); }
+}
 const LC = require('./net-learning-coach');
 const NR = require('./net-spaced-recall');
 const { makeCLI, BRANDS, brandsForKind, completions } = require('./net-cli');
