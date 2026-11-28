@@ -37,7 +37,7 @@ const BUILD = fs.readFileSync(path.join(process.cwd(), 'src/version.txt'), 'utf8
   else fail('About does not clearly explain the app purpose and simulation boundary');
   await page.locator('#aboutDone').click();
 
-  if (await page.locator('nav.apptabs a[title]').count() === 2 && await page.locator('#btnNew').getAttribute('title'))
+  if (await page.locator('nav.apptabs a[title]').count() === 3 && await page.locator('#btnNew').getAttribute('title'))
     ok('primary navigation and destructive action provide tooltips');
   else fail('navigation tooltips are missing');
 
