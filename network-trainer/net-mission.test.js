@@ -216,7 +216,7 @@ test('stale DNS resolver incident restores name resolution without changing rout
     const result = s.on(dev).run(cmd);
     // The first dig is an intentional pre-repair diagnostic and must fail;
     // only configuration commands are required to return success here.
-    const probe = /^(ping6?|traceroute|nmap|dig|tcpdump)\\b/;
+    const probe = /^(ping6?|traceroute|nmap|dig|tcpdump)\b/;
     assert(result.code === 0 || probe.test(cmd.trim()), 'reference DNS repair command failed: ' + cmd + ' -> ' + result.out);
   }
   assert(s.net.devices.h1.resolver === model.ip('10.0.2.53'), 'workstation should use the authoritative DNS server');
